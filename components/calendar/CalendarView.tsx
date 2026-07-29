@@ -36,6 +36,8 @@ export default function CalendarView({ tasks, statuses, onOpenTask, onRequestCre
   const [focusDate, setFocusDate] = useState(() => startOfDay(new Date()));
   const [weekDrag, setWeekDrag] = useState<DragState | null>(null);
   const gridContainerRef = useRef<HTMLDivElement>(null);
+  // Sticky lane memory across renders — see assignLanes' doc comment for why this matters.
+  const previousLanesRef = useRef<Map<string, number>>(new Map());
 
   const today = useMemo(() => startOfDay(new Date()), []);
   const statusColorOf = (name: string) => statuses.find((s) => s.name === name)?.color || '#94a3b8';
@@ -88,7 +90,8 @@ export default function CalendarView({ tasks, statuses, onOpenTask, onRequestCre
     const gridStart = days[0];
     const gridEnd = days[days.length - 1];
     const visibleRanges = ranges.filter((r) => r.end >= gridStart && r.start <= gridEnd);
-    lanes = assignLanes(visibleRanges);
+    lanes = assignLanes(visibleRanges, previousLanesRef.current);
+    previousLanesRef.current = lanes;
     segmentsByWeek = weeks.map((weekDays) =>
       visibleRanges
         .map((r) => clipRangeToWeek(r, weekDays, lanes.get(r.id) ?? 0))
@@ -220,7 +223,7 @@ export default function CalendarView({ tasks, statuses, onOpenTask, onRequestCre
     <div className="flex flex-col h-full">
       <div className="flex items-center justify-between px-1 pb-3 shrink-0">
         <div className="flex items-center gap-2">
-          <button onClick={() => step(-1)} className="p-1.5 rounded text-slate-400 hover:text-white hover:bg-slate-800/60 cursor-pointer">
+          <button onClick={() => step(-1)} className="p-1.5 rounded text-neutral-400 hover:text-white hover:bg-neutral-800/60 cursor-pointer">
             <ChevronLeft className="w-4 h-4" />
           </button>
           <button
@@ -229,7 +232,7 @@ export default function CalendarView({ tasks, statuses, onOpenTask, onRequestCre
           >
             Today
           </button>
-          <button onClick={() => step(1)} className="p-1.5 rounded text-slate-400 hover:text-white hover:bg-slate-800/60 cursor-pointer">
+          <button onClick={() => step(1)} className="p-1.5 rounded text-neutral-400 hover:text-white hover:bg-neutral-800/60 cursor-pointer">
             <ChevronRight className="w-4 h-4" />
           </button>
           <span className="text-sm font-semibold text-white ml-1">{headerLabel}</span>
@@ -242,13 +245,13 @@ export default function CalendarView({ tasks, statuses, onOpenTask, onRequestCre
           >
             <Plus className="w-3.5 h-3.5" /> New task
           </button>
-          <div className="flex items-center gap-1 bg-slate-900 border border-slate-800 rounded p-0.5">
+          <div className="flex items-center gap-1 bg-neutral-900 border border-neutral-800 rounded p-0.5">
             {(['month', 'week', 'day'] as Granularity[]).map((g) => (
               <button
                 key={g}
                 onClick={() => setGranularity(g)}
                 className={`text-[11px] px-2.5 py-1 rounded cursor-pointer capitalize transition ${
-                  granularity === g ? 'bg-neutral-800 text-blue-400' : 'text-slate-400 hover:text-slate-200'
+                  granularity === g ? 'bg-neutral-800 text-blue-400' : 'text-neutral-400 hover:text-neutral-200'
                 }`}
               >
                 {g}
@@ -258,7 +261,7 @@ export default function CalendarView({ tasks, statuses, onOpenTask, onRequestCre
         </div>
       </div>
 
-      <div className="flex-1 min-h-0 bg-slate-900/60 border border-slate-800/80 rounded overflow-hidden">
+      <div className="flex-1 min-h-0 bg-neutral-900/60 border border-neutral-800/80 rounded overflow-hidden">
         {granularity === 'day' ? (
           <DayTimeline
             day={focusDate}
@@ -306,7 +309,7 @@ export default function CalendarView({ tasks, statuses, onOpenTask, onRequestCre
                     }}
                   >
                     <div
-                      className={`h-full flex items-center text-[10px] text-white font-medium truncate px-2 border-2 border-dashed border-white/80 ${
+                      className={`h-full flex items-center text-[9px] leading-none text-white font-medium truncate px-1.5 border border-dashed border-white/80 ${
                         seg.isStartEdge ? 'rounded-l' : ''
                       } ${seg.isEndEdge ? 'rounded-r' : ''}`}
                       style={{ backgroundColor: statusColorOf(draggedTask.status), opacity: 0.85 }}

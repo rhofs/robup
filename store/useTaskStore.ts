@@ -50,6 +50,8 @@ export type TaskDoc = {
 export type HierarchyFolder = {
   id: string;
   name: string;
+  color: string | null;
+  icon: string | null;
   spaceId: string;
   parentId: string | null;
   order: number;
@@ -140,6 +142,11 @@ interface TaskStore {
 
   createFolder: (spaceId: string, name: string, parentId?: string | null) => Promise<void>;
   renameFolder: (spaceId: string, folderId: string, name: string) => Promise<void>;
+  updateFolder: (
+    spaceId: string,
+    folderId: string,
+    patch: { name?: string; color?: string | null; icon?: string | null }
+  ) => Promise<void>;
   moveFolder: (spaceId: string, folderId: string, parentId: string | null) => Promise<void>;
   deleteFolder: (spaceId: string, folderId: string) => Promise<void>;
 
@@ -595,6 +602,22 @@ export const useTaskStore = create<TaskStore>((set, get) => ({
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ name }),
+    });
+  },
+
+  updateFolder: async (spaceId, folderId, patch) => {
+    set((state) => ({
+      workspaces: state.workspaces.map((ws) => ({
+        ...ws,
+        spaces: ws.spaces.map((s) =>
+          s.id === spaceId ? { ...s, folders: s.folders.map((f) => (f.id === folderId ? { ...f, ...patch } : f)) } : s
+        ),
+      })),
+    }));
+    await fetch(`/api/folders/${folderId}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(patch),
     });
   },
 

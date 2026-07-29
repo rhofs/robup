@@ -33,6 +33,8 @@ model Space {
 model Folder {
   id        String   @id @default(uuid())
   name      String
+  color     String?
+  icon      String?
   spaceId   String   @map("space_id")
   space     Space    @relation(fields: [spaceId], references: [id], onDelete: Cascade)
   parentId  String?  @map("parent_id")

@@ -18,6 +18,7 @@ import { CSS } from '@dnd-kit/utilities';
 import {
   Globe,
   List as ListIcon,
+  Folder as FolderIconLucide,
   Calendar as CalendarIcon,
   Users,
   Zap,
@@ -46,7 +47,7 @@ import DatePickerPopover from '../components/DatePickerPopover';
 import ConfirmDialog from '../components/ConfirmDialog';
 import FloatingPopover from '../components/FloatingPopover';
 import TaskRow, { ColumnDef } from '../components/TaskRow';
-import FolderTree from '../components/FolderTree';
+import FolderTree, { FOLDER_ICON_CHOICES, FOLDER_ICON_MAP } from '../components/FolderTree';
 import CalendarView from '../components/calendar/CalendarView';
 import CreateTaskModal from '../components/CreateTaskModal';
 
@@ -73,7 +74,7 @@ function DocTab({
       <button
         onClick={onSelect}
         className={`text-[11px] px-2.5 py-1 rounded cursor-pointer transition ${
-          isActive ? 'bg-neutral-800 text-blue-400' : 'bg-slate-900 text-slate-400 hover:text-slate-200'
+          isActive ? 'bg-neutral-800 text-blue-400' : 'bg-neutral-900 text-neutral-400 hover:text-neutral-200'
         }`}
       >
         {doc.title || 'Untitled'}
@@ -83,7 +84,7 @@ function DocTab({
           e.stopPropagation();
           onDelete();
         }}
-        className="absolute -top-1.5 -right-1.5 w-3.5 h-3.5 rounded-full bg-slate-800 text-slate-400 hover:text-red-400 text-[8px] flex items-center justify-center opacity-0 group-hover/doc:opacity-100 cursor-pointer"
+        className="absolute -top-1.5 -right-1.5 w-3.5 h-3.5 rounded-full bg-neutral-800 text-neutral-400 hover:text-red-400 text-[8px] flex items-center justify-center opacity-0 group-hover/doc:opacity-100 cursor-pointer"
       >
         <X className="w-2.5 h-2.5" />
       </button>
@@ -126,7 +127,7 @@ function SortableColumnHeader({
       className="relative text-center flex items-center justify-center gap-1 cursor-grab active:cursor-grabbing select-none"
       title="Drag to reorder, right-click for more options"
     >
-      <button onClick={onToggleSort} className="hover:text-slate-300 cursor-pointer flex items-center gap-1">
+      <button onClick={onToggleSort} className="hover:text-neutral-300 cursor-pointer flex items-center gap-1">
         {col.label} {sortIcon}
       </button>
       <ColumnResizeHandle onResize={onResize} onReset={onResetWidth} />
@@ -186,12 +187,12 @@ function SortableStatusRow({
   return (
     <div ref={setNodeRef} style={style} className="space-y-1">
       <div className="flex items-center gap-2">
-        <span {...attributes} {...listeners} className="text-slate-600 hover:text-slate-400 cursor-grab active:cursor-grabbing shrink-0">
+        <span {...attributes} {...listeners} className="text-neutral-600 hover:text-neutral-400 cursor-grab active:cursor-grabbing shrink-0">
           <GripVertical className="w-3.5 h-3.5" />
         </span>
         <button
           onClick={() => setPaletteOpen((o) => !o)}
-          className="w-4 h-4 rounded-full shrink-0 cursor-pointer ring-1 ring-slate-700"
+          className="w-4 h-4 rounded-full shrink-0 cursor-pointer ring-1 ring-neutral-700"
           style={{ backgroundColor: status.color }}
         />
         <input
@@ -204,9 +205,9 @@ function SortableStatusRow({
           onKeyDown={(e) => {
             if (e.key === 'Enter') (e.target as HTMLInputElement).blur();
           }}
-          className="flex-1 min-w-0 bg-slate-950 border border-slate-700 rounded px-2 py-1 text-[11px] text-white focus:outline-none focus:border-blue-500"
+          className="flex-1 min-w-0 bg-neutral-950 border border-neutral-700 rounded px-2 py-1 text-[11px] text-white focus:outline-none focus:border-blue-500"
         />
-        <button onClick={onDelete} className="text-slate-500 hover:text-red-400 text-xs cursor-pointer shrink-0">
+        <button onClick={onDelete} className="text-neutral-500 hover:text-red-400 text-xs cursor-pointer shrink-0">
           <Trash2 className="w-3.5 h-3.5" />
         </button>
       </div>
@@ -260,20 +261,20 @@ function SortableFieldOption({
   return (
     <div ref={setNodeRef} style={style} className="space-y-1">
       <div className="flex items-center gap-2">
-        <span {...attributes} {...listeners} className="text-slate-600 hover:text-slate-400 cursor-grab active:cursor-grabbing shrink-0">
+        <span {...attributes} {...listeners} className="text-neutral-600 hover:text-neutral-400 cursor-grab active:cursor-grabbing shrink-0">
           <GripVertical className="w-3.5 h-3.5" />
         </span>
         <button
           onClick={() => setPaletteOpen((o) => !o)}
-          className="w-5 h-5 rounded-full shrink-0 cursor-pointer ring-1 ring-slate-700"
+          className="w-5 h-5 rounded-full shrink-0 cursor-pointer ring-1 ring-neutral-700"
           style={{ backgroundColor: option.color }}
         />
         <input
           value={option.label}
           onChange={(e) => onChangeLabel(e.target.value)}
-          className="flex-1 min-w-0 bg-slate-950 border border-slate-700 rounded px-2 py-1 text-xs text-white focus:outline-none focus:border-blue-500"
+          className="flex-1 min-w-0 bg-neutral-950 border border-neutral-700 rounded px-2 py-1 text-xs text-white focus:outline-none focus:border-blue-500"
         />
-        <button onClick={onDelete} className="text-slate-500 hover:text-red-400 text-xs cursor-pointer shrink-0">
+        <button onClick={onDelete} className="text-neutral-500 hover:text-red-400 text-xs cursor-pointer shrink-0">
           <Trash2 className="w-3.5 h-3.5" />
         </button>
       </div>
@@ -296,14 +297,17 @@ function SortableFieldOption({
   );
 }
 
+// Muted/pastel variants of the base Tailwind accent hues — same hues, lower saturation
+// and slightly lifted lightness so status pills, calendar bars, and sidebar color dots
+// read as soft accents instead of solid neon fills.
 const DEFAULT_STATUSES: StatusDef[] = [
-  { id: 'default-todo', name: 'To Do', color: '#f59e0b', order: 0 },
-  { id: 'default-progress', name: 'In Progress', color: '#3b82f6', order: 1 },
-  { id: 'default-review', name: 'Review', color: '#a855f7', order: 2 },
-  { id: 'default-done', name: 'Done', color: '#10b981', order: 3 },
+  { id: 'default-todo', name: 'To Do', color: '#c89642', order: 0 },
+  { id: 'default-progress', name: 'In Progress', color: '#618cd1', order: 1 },
+  { id: 'default-review', name: 'Review', color: '#9a61d1', order: 2 },
+  { id: 'default-done', name: 'Done', color: '#349f7c', order: 3 },
 ];
 
-const FIELD_COLOR_CHOICES = ['#f59e0b', '#3b82f6', '#a855f7', '#10b981', '#ef4444', '#06b6d4', '#ec4899', '#94a3b8'];
+const FIELD_COLOR_CHOICES = ['#c89642', '#618cd1', '#9a61d1', '#349f7c', '#cd6565', '#31a0b3', '#cb6798', '#8d97a5'];
 
 const initialsFromName = (name: string) =>
   name
@@ -367,6 +371,7 @@ export default function Home() {
     updateSpace,
     moveList,
     moveFolder,
+    updateFolder,
     deleteFolder,
     fetchComments,
     addComment,
@@ -420,6 +425,12 @@ export default function Home() {
   const [spaceEditTarget, setSpaceEditTarget] = useState<HierarchySpace | null>(null);
   const [editSpaceName, setEditSpaceName] = useState('');
   const [editSpaceColor, setEditSpaceColor] = useState(FIELD_COLOR_CHOICES[0]);
+
+  const [folderMenu, setFolderMenu] = useState<{ x: number; y: number; folder: HierarchyFolder } | null>(null);
+  const [folderEditTarget, setFolderEditTarget] = useState<HierarchyFolder | null>(null);
+  const [editFolderName, setEditFolderName] = useState('');
+  const [editFolderColor, setEditFolderColor] = useState<string | null>(null);
+  const [editFolderIcon, setEditFolderIcon] = useState<string | null>(null);
 
   const [columnMenu, setColumnMenu] = useState<{ x: number; y: number; col: ColumnDef } | null>(null);
   const [fieldEditTarget, setFieldEditTarget] = useState<CustomFieldDef | null>(null);
@@ -583,6 +594,7 @@ export default function Home() {
     setStatusMenuOpen(false);
     setTaskMenu(null);
     setSpaceMenu(null);
+    setFolderMenu(null);
     setBulkMoveOpen(false);
   };
 
@@ -851,6 +863,28 @@ export default function Home() {
     setSpaceEditTarget(null);
   };
 
+  const openFolderMenu = (e: React.MouseEvent, folder: HierarchyFolder) => {
+    setFolderMenu({ x: e.clientX, y: e.clientY, folder });
+  };
+
+  const startEditFolder = (folder: HierarchyFolder) => {
+    setFolderEditTarget(folder);
+    setEditFolderName(folder.name);
+    setEditFolderColor(folder.color);
+    setEditFolderIcon(folder.icon);
+    setFolderMenu(null);
+  };
+
+  const saveFolderEdit = () => {
+    if (!folderEditTarget) return;
+    updateFolder(folderEditTarget.spaceId, folderEditTarget.id, {
+      name: editFolderName.trim() || folderEditTarget.name,
+      color: editFolderColor,
+      icon: editFolderIcon,
+    });
+    setFolderEditTarget(null);
+  };
+
   // ---- Bulk-valg ----
   const toggleSelect = (taskId: string) => {
     setSelectedIds((prev) => {
@@ -880,14 +914,34 @@ export default function Home() {
   // ---- Drag & drop for tasks (row → another row / list / space) ----
   const taskSensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 5 } }));
   const [activeDragTask, setActiveDragTask] = useState<Task | null>(null);
+  const [activeDragEntity, setActiveDragEntity] = useState<{ kind: 'folder' | 'list'; name: string; color?: string | null } | null>(
+    null
+  );
 
   const handleTaskDragStart = (event: DragStartEvent) => {
-    const task = tasks.find((t) => t.id === event.active.id) || null;
+    const draggedId = event.active.id as string;
+
+    if (draggedId.startsWith('folder-drag:') || draggedId.startsWith('list-drag:')) {
+      const isFolder = draggedId.startsWith('folder-drag:');
+      const treeId = isFolder ? draggedId.slice('folder-drag:'.length) : draggedId.slice('list-drag:'.length);
+      const allSpaces = workspaces.flatMap((w) => w.spaces);
+      if (isFolder) {
+        const folder = allSpaces.flatMap((s) => s.folders).find((f) => f.id === treeId);
+        if (folder) setActiveDragEntity({ kind: 'folder', name: folder.name, color: folder.color });
+      } else {
+        const list = allSpaces.flatMap((s) => s.lists).find((l) => l.id === treeId);
+        if (list) setActiveDragEntity({ kind: 'list', name: list.name });
+      }
+      return;
+    }
+
+    const task = tasks.find((t) => t.id === draggedId) || null;
     setActiveDragTask(task);
   };
 
   const handleTaskDragEnd = (event: DragEndEvent) => {
     setActiveDragTask(null);
+    setActiveDragEntity(null);
     const { active, over } = event;
     if (!over) return;
     const draggedId = active.id as string;
@@ -972,7 +1026,7 @@ export default function Home() {
 
   if (isLoading) {
     return (
-      <div className="flex h-screen w-screen items-center justify-center bg-slate-950 text-blue-400 font-mono text-sm">
+      <div className="flex h-screen w-screen items-center justify-center bg-neutral-950 text-blue-400 font-mono text-sm">
         <div className="flex items-center gap-3">
           <div className="w-5 h-5 border-2 border-blue-500 border-t-transparent rounded-full animate-spin"></div>
           <span>Loading RobUp...</span>
@@ -991,11 +1045,26 @@ export default function Home() {
   // when we're just switching which list of tasks is shown.
   const taskListNavKey = `${activeSpaceId}|${activeListId}|${showArchived}|${modalTaskStack.length > 0}`;
 
+  // Scopes TaskRow's shared layoutId to the current Space/List — Framer Motion matches
+  // layoutId globally, so without this a task visible in two different nav contexts
+  // (e.g. "Everything" and its own List) would FLIP-animate between their screen
+  // positions when switching views instead of just snapping. Same task id, same nav
+  // context (e.g. clicking a row open) still shares an id, so the row-into-modal
+  // expand animation is unaffected.
+  const navScope = `${activeSpaceId}|${activeListId}`;
+
+  // Which scope the currently-open task modal's layoutId should match: the main list's
+  // navScope if opened from there, or the parent task's subtask-table scope if opened
+  // by drilling into a subtask (so the "row grows into modal" animation still connects
+  // to whichever row was actually clicked).
+  const modalLayoutScope =
+    modalTaskStack.length > 1 ? `subtasks-${modalTaskStack[modalTaskStack.length - 2]}` : navScope;
+
   return (
     <DndContext sensors={taskSensors} collisionDetection={closestCenter} onDragStart={handleTaskDragStart} onDragEnd={handleTaskDragEnd}>
-    <div className="flex h-screen bg-slate-950 text-slate-100 font-sans overflow-hidden select-none">
+    <div className="flex h-screen bg-neutral-950 text-neutral-100 font-sans overflow-hidden select-none">
       {/* ================= ICON RAIL ================= */}
-      <nav className="w-14 bg-slate-950 border-r border-slate-800/80 flex flex-col items-center py-4 gap-2 shrink-0 select-none">
+      <nav className="w-14 bg-neutral-950 border-r border-neutral-800/80 flex flex-col items-center py-4 gap-2 shrink-0 select-none">
         <div className="w-8 h-8 rounded bg-gradient-to-br from-blue-500 to-blue-700 flex items-center justify-center font-black text-white shadow-lg shadow-blue-500/20 mb-3">
           R
         </div>
@@ -1003,7 +1072,7 @@ export default function Home() {
           onClick={() => setActiveView('board')}
           title="Tasks"
           className={`w-10 h-10 rounded flex flex-col items-center justify-center gap-0.5 transition cursor-pointer ${
-            activeView === 'board' ? 'bg-neutral-800 text-blue-400' : 'text-slate-500 hover:bg-slate-800/60 hover:text-slate-200'
+            activeView === 'board' ? 'bg-neutral-800 text-blue-400' : 'text-neutral-500 hover:bg-neutral-800/60 hover:text-neutral-200'
           }`}
         >
           <ListIcon className="w-4 h-4" />
@@ -1011,20 +1080,20 @@ export default function Home() {
         </button>
         <button
           onClick={() => setActiveView('calendar')}
-          title="Calendar"
+          title="Planner"
           className={`w-10 h-10 rounded flex flex-col items-center justify-center gap-0.5 transition cursor-pointer ${
-            activeView === 'calendar' ? 'bg-neutral-800 text-blue-400' : 'text-slate-500 hover:bg-slate-800/60 hover:text-slate-200'
+            activeView === 'calendar' ? 'bg-neutral-800 text-blue-400' : 'text-neutral-500 hover:bg-neutral-800/60 hover:text-neutral-200'
           }`}
         >
           <CalendarIcon className="w-4 h-4" />
-          <span className="text-[8px] font-medium leading-none">Cal.</span>
+          <span className="text-[8px] font-medium leading-none">Planner</span>
         </button>
       </nav>
 
       {/* ================= LEFT MENU (SIDEBAR) ================= */}
-      <aside className="w-64 bg-slate-900/90 border-r border-slate-800/80 flex flex-col justify-between shrink-0 select-none">
+      <aside className="w-64 bg-neutral-900/90 border-r border-neutral-800/80 flex flex-col justify-between shrink-0 select-none">
         <div>
-          <div className="px-4 py-4 border-b border-slate-800/80">
+          <div className="px-4 py-4 border-b border-neutral-800/80">
             <h1 className="font-bold tracking-tight text-white leading-tight text-sm">
               {workspaces[0]?.name || 'RobUp Workspace'}
             </h1>
@@ -1043,13 +1112,13 @@ export default function Home() {
               className={`w-full text-left px-3 py-2 rounded text-xs font-semibold transition flex items-center justify-between cursor-pointer ${
                 activeSpaceId === 'everything' && modalTaskStack.length === 0
                   ? 'bg-neutral-800 text-blue-400'
-                  : 'text-slate-400 hover:bg-slate-800/60 hover:text-slate-200'
+                  : 'text-neutral-400 hover:bg-neutral-800/60 hover:text-neutral-200'
               }`}
             >
               <span className="flex items-center gap-2">
                 <Globe className="w-3.5 h-3.5" /> Everything
               </span>
-              <span className="text-[10px] bg-slate-950/60 px-2 py-0.5 rounded font-mono text-slate-400">
+              <span className="text-[10px] bg-neutral-950/60 px-2 py-0.5 rounded font-mono text-neutral-400">
                 {tasks.filter((t) => t.parentId === null && !t.archived).length}
               </span>
             </button>
@@ -1057,7 +1126,7 @@ export default function Home() {
 
             <div className="space-y-3">
               <div className="flex items-center justify-between px-2">
-                <p className="text-[10px] font-bold text-slate-500 uppercase tracking-wider">
+                <p className="text-[10px] font-bold text-neutral-500 uppercase tracking-wider">
                   {activeView === 'calendar' ? 'Filter Spaces & Lists' : 'Spaces & Lists'}
                 </p>
                 {activeView === 'calendar' && (
@@ -1074,7 +1143,7 @@ export default function Home() {
                     </button>
                     <button
                       onClick={() => setCalendarVisibleListIds(new Set())}
-                      className="text-[9px] text-slate-500 hover:text-slate-300 cursor-pointer"
+                      className="text-[9px] text-neutral-500 hover:text-neutral-300 cursor-pointer"
                     >
                       None
                     </button>
@@ -1106,10 +1175,10 @@ export default function Home() {
                           onContextMenu={(e) => openSpaceMenu(e, space)}
                           className={`w-full text-left px-2.5 py-1.5 rounded text-xs font-medium transition flex items-center justify-between cursor-pointer group ${
                             isSpaceActive
-                              ? 'bg-slate-800 text-blue-400 font-semibold border-l-2 border-blue-500'
+                              ? 'bg-neutral-800 text-blue-400 font-semibold border-l-2 border-blue-500'
                               : activeView === 'calendar' && spaceAllChecked
                               ? 'text-blue-400'
-                              : 'text-slate-300 hover:bg-slate-800/40'
+                              : 'text-neutral-300 hover:bg-neutral-800/40'
                           } ${isOver ? 'ring-1 ring-inset ring-neutral-500 bg-neutral-700/40' : ''}`}
                         >
                           <span className="flex items-center gap-2 truncate">
@@ -1117,10 +1186,10 @@ export default function Home() {
                               <span
                                 className={`w-3.5 h-3.5 rounded border flex items-center justify-center shrink-0 transition ${
                                   spaceAllChecked
-                                    ? 'bg-blue-500 border-blue-500 text-white'
+                                    ? 'bg-blue-500/20 border-blue-500/60 text-blue-400'
                                     : spaceSomeChecked
-                                    ? 'bg-blue-500/30 border-blue-500'
-                                    : 'border-slate-600'
+                                    ? 'bg-blue-500/10 border-blue-500/40'
+                                    : 'border-neutral-600'
                                 }`}
                               >
                                 {spaceAllChecked && <Check className="w-2.5 h-2.5" />}
@@ -1129,7 +1198,7 @@ export default function Home() {
                             <span className="w-2.5 h-2.5 rounded-full shrink-0" style={{ backgroundColor: space.color || '#6366f1' }}></span>
                             <span className="truncate">{space.name}</span>
                           </span>
-                          {activeView === 'board' && <span className="text-[10px] text-slate-500 font-mono">{spaceTasksCount}</span>}
+                          {activeView === 'board' && <span className="text-[10px] text-neutral-500 font-mono">{spaceTasksCount}</span>}
                         </button>
                       )}
                     </DroppableSidebarItem>
@@ -1147,6 +1216,7 @@ export default function Home() {
                       toggleCalendarList={toggleCalendarList}
                       toggleCalendarFolder={(folderId) => toggleCalendarFolder(space, folderId)}
                       onDeleteFolderRequest={setFolderToDelete}
+                      onFolderContextMenu={openFolderMenu}
                     />
                   </div>
                 );
@@ -1158,12 +1228,12 @@ export default function Home() {
         <div className="p-3 m-3 space-y-2">
           <button
             onClick={() => setTeamOpen(true)}
-            className="w-full flex items-center justify-between bg-slate-950/60 rounded border border-slate-800/80 px-3 py-2 text-[11px] text-slate-300 hover:border-slate-700 cursor-pointer"
+            className="w-full flex items-center justify-between bg-neutral-950/60 rounded border border-neutral-800/80 px-3 py-2 text-[11px] text-neutral-300 hover:border-neutral-700 cursor-pointer"
           >
             <span className="flex items-center gap-2"><Users className="w-3.5 h-3.5" /> Team</span>
-            <span className="text-slate-500 font-mono">{users.length}</span>
+            <span className="text-neutral-500 font-mono">{users.length}</span>
           </button>
-          <div className="bg-slate-950/60 rounded border border-slate-800/80 px-3 py-2 text-[11px] text-slate-400 flex items-center justify-between">
+          <div className="bg-neutral-950/60 rounded border border-neutral-800/80 px-3 py-2 text-[11px] text-neutral-400 flex items-center justify-between">
             <span className="flex items-center gap-1.5"><Zap className="w-3.5 h-3.5" /> RobUp</span>
             <span className="text-emerald-400 font-mono">Flat List</span>
           </div>
@@ -1171,13 +1241,13 @@ export default function Home() {
       </aside>
 
       {/* ================= MAIN AREA ================= */}
-      <main className="flex-1 flex flex-col h-full overflow-hidden bg-slate-950 relative">
-        <header className="border-b border-slate-800/80 bg-slate-900/40 shrink-0">
-          <div className="h-11 px-6 flex items-center justify-between border-b border-slate-800/40">
+      <main className="flex-1 flex flex-col h-full overflow-hidden bg-neutral-950 relative">
+        <header className="border-b border-neutral-800/80 bg-neutral-900/40 shrink-0">
+          <div className="h-11 px-6 flex items-center justify-between border-b border-neutral-800/40">
             <div className="flex items-center gap-2 text-xs font-medium">
-              <span className="text-slate-500">Workspace</span>
-              <span className="text-slate-600">/</span>
-              <span className={`flex items-center gap-1.5 ${activeSpaceId === 'everything' ? 'text-blue-400 font-semibold' : 'text-slate-300'}`}>
+              <span className="text-neutral-500">Workspace</span>
+              <span className="text-neutral-600">/</span>
+              <span className={`flex items-center gap-1.5 ${activeSpaceId === 'everything' ? 'text-blue-400 font-semibold' : 'text-neutral-300'}`}>
                 {activeSpaceId === 'everything' ? (
                   <>
                     <Globe className="w-3.5 h-3.5" /> Everything
@@ -1188,9 +1258,9 @@ export default function Home() {
               </span>
               {activeListId && (
                 <>
-                  <span className="text-slate-600">/</span>
+                  <span className="text-neutral-600">/</span>
                   <span className="text-white font-semibold flex items-center gap-1.5">
-                    <span className="w-2 h-2 rounded-full bg-slate-400"></span>
+                    <span className="w-2 h-2 rounded-full bg-neutral-400"></span>
                     {currentSpace?.lists.find((l) => l.id === activeListId)?.name}
                   </span>
                 </>
@@ -1202,7 +1272,7 @@ export default function Home() {
               className={`text-[11px] px-2.5 py-1 rounded border cursor-pointer transition flex items-center gap-1.5 ${
                 showArchived
                   ? 'bg-neutral-800 text-blue-400 border-neutral-700'
-                  : 'text-slate-400 border-slate-800 hover:bg-slate-800/60'
+                  : 'text-neutral-400 border-neutral-800 hover:bg-neutral-800/60'
               }`}
             >
               <Archive className="w-3.5 h-3.5" /> {showArchived ? 'Viewing archive' : 'Archive'}
@@ -1213,7 +1283,7 @@ export default function Home() {
         <div className="flex-1 overflow-auto p-6" onClick={closeAllMenus}>
           <div className="max-w-6xl mx-auto space-y-2">
             <div className="flex items-center justify-between">
-              <div className="text-slate-500 font-mono text-[10px]">{filteredTasks.length} tasks</div>
+              <div className="text-neutral-500 font-mono text-[10px]">{filteredTasks.length} tasks</div>
               <div className="flex items-center gap-1.5">
                 {activeView === 'board' && (
                 <div className="relative">
@@ -1228,41 +1298,41 @@ export default function Home() {
                     title={!currentSpace ? 'Select a specific Space to customize columns' : ''}
                     className={`text-[11px] rounded px-2.5 py-1 flex items-center gap-1 border ${
                       currentSpace
-                        ? 'text-slate-300 bg-slate-900 border-slate-800 hover:border-slate-700 cursor-pointer'
-                        : 'text-slate-600 bg-slate-900/50 border-slate-800/50 cursor-not-allowed'
+                        ? 'text-neutral-300 bg-neutral-900 border-neutral-800 hover:border-neutral-700 cursor-pointer'
+                        : 'text-neutral-600 bg-neutral-900/50 border-neutral-800/50 cursor-not-allowed'
                     }`}
                   >
                     <Plus className="w-3 h-3" /> Column
                   </button>
                   {columnMenuOpen && currentSpace && (
-                    <div onClick={(e) => e.stopPropagation()} className="absolute z-20 top-9 right-0 w-60 bg-slate-900 border border-slate-800 rounded shadow-xl p-2 space-y-1">
-                      <div className="flex items-center gap-2 text-[10px] text-slate-500 px-2 pb-1">Built-in (can be hidden, not deleted)</div>
+                    <div onClick={(e) => e.stopPropagation()} className="absolute z-20 top-9 right-0 w-60 bg-neutral-900 border border-neutral-800 rounded shadow-xl p-2 space-y-1">
+                      <div className="flex items-center gap-2 text-[10px] text-neutral-500 px-2 pb-1">Built-in (can be hidden, not deleted)</div>
                       {availableColumns.filter((c) => c.kind !== 'custom').map((col) => (
-                        <label key={col.key} className="flex items-center gap-2 text-[11px] text-slate-300 px-2 py-1 rounded hover:bg-slate-800/60 cursor-pointer">
+                        <label key={col.key} className="flex items-center gap-2 text-[11px] text-neutral-300 px-2 py-1 rounded hover:bg-neutral-800/60 cursor-pointer">
                           <input type="checkbox" checked={visibleColumns.includes(col.key)} onChange={() => toggleColumn(col.key)} />
                           {col.label}
                         </label>
                       ))}
                       {availableColumns.some((c) => c.kind === 'custom') && (
-                        <div className="flex items-center gap-2 text-[10px] text-slate-500 px-2 pt-2 pb-1 border-t border-slate-800">Custom fields</div>
+                        <div className="flex items-center gap-2 text-[10px] text-neutral-500 px-2 pt-2 pb-1 border-t border-neutral-800">Custom fields</div>
                       )}
                       {availableColumns.filter((c) => c.kind === 'custom').map((col) => (
-                        <div key={col.key} className="flex items-center gap-2 px-2 py-1 rounded hover:bg-slate-800/60">
-                          <label className="flex items-center gap-2 text-[11px] text-slate-300 cursor-pointer flex-1">
+                        <div key={col.key} className="flex items-center gap-2 px-2 py-1 rounded hover:bg-neutral-800/60">
+                          <label className="flex items-center gap-2 text-[11px] text-neutral-300 cursor-pointer flex-1">
                             <input type="checkbox" checked={visibleColumns.includes(col.key)} onChange={() => toggleColumn(col.key)} />
                             {col.label}
                           </label>
-                          <button onClick={() => col.field && setFieldEditTarget(col.field)} className="text-slate-500 hover:text-blue-400 text-[10px] cursor-pointer">
+                          <button onClick={() => col.field && setFieldEditTarget(col.field)} className="text-neutral-500 hover:text-blue-400 text-[10px] cursor-pointer">
                             <Pencil className="w-3 h-3" />
                           </button>
-                          <button onClick={() => handleDeleteField(col.key, col.label)} className="text-slate-500 hover:text-red-400 text-[10px] cursor-pointer">
+                          <button onClick={() => handleDeleteField(col.key, col.label)} className="text-neutral-500 hover:text-red-400 text-[10px] cursor-pointer">
                             <Trash2 className="w-3 h-3" />
                           </button>
                         </div>
                       ))}
-                      <div className="border-t border-slate-800 pt-2 mt-1">
+                      <div className="border-t border-neutral-800 pt-2 mt-1">
                         {!newFieldOpen ? (
-                          <button onClick={() => setNewFieldOpen(true)} className="w-full text-left text-[11px] text-blue-400 px-2 py-1 rounded hover:bg-slate-800/60 cursor-pointer">
+                          <button onClick={() => setNewFieldOpen(true)} className="w-full text-left text-[11px] text-blue-400 px-2 py-1 rounded hover:bg-neutral-800/60 cursor-pointer">
                             + New field
                           </button>
                         ) : (
@@ -1272,12 +1342,12 @@ export default function Home() {
                               value={newFieldName}
                               onChange={(e) => setNewFieldName(e.target.value)}
                               placeholder="Field name (e.g. Budget)"
-                              className="w-full bg-slate-950 border border-slate-700 rounded px-2 py-1 text-[11px] text-white focus:outline-none"
+                              className="w-full bg-neutral-950 border border-neutral-700 rounded px-2 py-1 text-[11px] text-white focus:outline-none"
                             />
                             <select
                               value={newFieldType}
                               onChange={(e) => setNewFieldType(e.target.value as any)}
-                              className="w-full bg-slate-950 border border-slate-700 rounded px-2 py-1 text-[11px] text-slate-300"
+                              className="w-full bg-neutral-950 border border-neutral-700 rounded px-2 py-1 text-[11px] text-neutral-300"
                             >
                               <option value="text">Text</option>
                               <option value="number">Number</option>
@@ -1288,7 +1358,7 @@ export default function Home() {
                               <button onClick={handleAddField} className="flex-1 bg-blue-600 hover:bg-blue-500 text-white text-[11px] py-1 rounded cursor-pointer">
                                 Create field
                               </button>
-                              <button onClick={() => setNewFieldOpen(false)} className="text-[11px] text-slate-400 px-2 cursor-pointer">
+                              <button onClick={() => setNewFieldOpen(false)} className="text-[11px] text-neutral-400 px-2 cursor-pointer">
                                 Cancel
                               </button>
                             </div>
@@ -1316,16 +1386,16 @@ export default function Home() {
                 />
               </div>
             ) : (
-            <div className="bg-slate-900/60 border border-slate-800/80 rounded overflow-x-auto shadow-sm">
+            <div className="bg-neutral-900/60 border border-neutral-800/80 rounded overflow-x-auto shadow-sm">
               <div style={{ minWidth: tableMinWidth }}>
               <div
-                className="grid items-center px-4 py-2.5 text-[10px] font-semibold text-slate-500 uppercase tracking-wider border-b border-slate-800 bg-slate-950/40"
+                className="grid items-center px-4 py-2.5 text-[10px] font-semibold text-neutral-500 uppercase tracking-wider border-b border-neutral-800 bg-neutral-950/40"
                 style={{ gridTemplateColumns: rowGridTemplate }}
               >
                 <div></div>
                 <div></div>
                 <div className="relative flex items-center pr-2">
-                  <button onClick={() => toggleSort('name')} className="flex items-center gap-1 hover:text-slate-300 cursor-pointer text-left">
+                  <button onClick={() => toggleSort('name')} className="flex items-center gap-1 hover:text-neutral-300 cursor-pointer text-left">
                     Name <SortIcon field="name" />
                   </button>
                   <ColumnResizeHandle onResize={(d) => resizeColumn('name', d)} onReset={() => resetColumnWidth('name')} />
@@ -1348,12 +1418,13 @@ export default function Home() {
                 <div className="text-right">Action</div>
               </div>
 
-              <div className="divide-y divide-slate-800/50">
+              <div className="divide-y divide-neutral-800/50">
                 <AnimatePresence mode="popLayout" initial={false} key={taskListNavKey}>
                   {filteredTasks.map((task) => (
                     <TaskRow
                       key={task._localId || task.id}
                       task={task}
+                      navScope={navScope}
                       onOpen={() => setModalTaskStack([task.id])}
                       columns={activeColumns}
                       gridTemplate={rowGridTemplate}
@@ -1369,7 +1440,7 @@ export default function Home() {
                 </AnimatePresence>
 
                 {activeAdd ? (
-                  <div className="p-2.5 bg-slate-950/40 flex gap-2 items-center">
+                  <div className="p-2.5 bg-neutral-950/40 flex gap-2 items-center">
                     <input
                       type="text"
                       autoFocus
@@ -1380,12 +1451,12 @@ export default function Home() {
                         if (e.key === 'Enter') handleQuickAdd();
                         if (e.key === 'Escape') setActiveAdd(false);
                       }}
-                      className="flex-1 bg-slate-900 border border-blue-500/80 rounded px-3 py-1 text-xs text-white focus:outline-none"
+                      className="flex-1 bg-neutral-900 border border-blue-500/80 rounded px-3 py-1 text-xs text-white focus:outline-none"
                     />
                     <button onClick={handleQuickAdd} className="bg-blue-600 text-white text-xs px-3 py-1 rounded font-medium cursor-pointer">
                       Add
                     </button>
-                    <button onClick={() => setActiveAdd(false)} className="text-slate-400 text-xs px-2 cursor-pointer">
+                    <button onClick={() => setActiveAdd(false)} className="text-neutral-400 text-xs px-2 cursor-pointer">
                       Cancel
                     </button>
                   </div>
@@ -1393,7 +1464,7 @@ export default function Home() {
                   !showArchived && (
                     <button
                       onClick={() => setActiveAdd(true)}
-                      className="w-full text-left px-4 py-2 text-xs font-medium text-slate-400 hover:bg-slate-800/40 hover:text-blue-400 transition flex items-center gap-2 cursor-pointer"
+                      className="w-full text-left px-4 py-2 text-xs font-medium text-neutral-400 hover:bg-neutral-800/40 hover:text-blue-400 transition flex items-center gap-2 cursor-pointer"
                     >
                       <span className="font-bold text-blue-400">+</span> Add Task
                     </button>
@@ -1409,10 +1480,10 @@ export default function Home() {
 
       {/* ================= BULK ACTION BAR ================= */}
       {selectedIds.size > 0 && (
-        <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-40 bg-slate-900 border border-slate-700 rounded shadow-2xl px-4 py-2.5 flex items-center gap-3">
-          <span className="text-xs text-slate-300 font-medium">{selectedIds.size} selected</span>
-          <div className="w-px h-5 bg-slate-700"></div>
-          <button onClick={() => bulkArchive(true)} className="text-xs text-slate-300 hover:text-white px-2 py-1 rounded hover:bg-slate-800 cursor-pointer flex items-center gap-1.5">
+        <div className="fixed bottom-6 left-1/2 -tranneutral-x-1/2 z-40 bg-neutral-900 border border-neutral-700 rounded shadow-2xl px-4 py-2.5 flex items-center gap-3">
+          <span className="text-xs text-neutral-300 font-medium">{selectedIds.size} selected</span>
+          <div className="w-px h-5 bg-neutral-700"></div>
+          <button onClick={() => bulkArchive(true)} className="text-xs text-neutral-300 hover:text-white px-2 py-1 rounded hover:bg-neutral-800 cursor-pointer flex items-center gap-1.5">
             <Archive className="w-3.5 h-3.5" /> Archive
           </button>
           <div className="relative">
@@ -1421,19 +1492,19 @@ export default function Home() {
                 e.stopPropagation();
                 setBulkMoveOpen(!bulkMoveOpen);
               }}
-              className="text-xs text-slate-300 hover:text-white px-2 py-1 rounded hover:bg-slate-800 cursor-pointer flex items-center gap-1.5"
+              className="text-xs text-neutral-300 hover:text-white px-2 py-1 rounded hover:bg-neutral-800 cursor-pointer flex items-center gap-1.5"
             >
               <FolderInput className="w-3.5 h-3.5" /> Move to...
             </button>
             {bulkMoveOpen && (
-              <div onClick={(e) => e.stopPropagation()} className="absolute z-20 bottom-9 left-1/2 -translate-x-1/2 w-56 bg-slate-900 border border-slate-800 rounded shadow-xl p-1.5 max-h-56 overflow-y-auto">
+              <div onClick={(e) => e.stopPropagation()} className="absolute z-20 bottom-9 left-1/2 -tranneutral-x-1/2 w-56 bg-neutral-900 border border-neutral-800 rounded shadow-xl p-1.5 max-h-56 overflow-y-auto">
                 {allListsFlat.map((l) => (
                   <button
                     key={l.id}
                     onClick={() => bulkMoveToList(l.id)}
-                    className="w-full text-left text-[11px] text-slate-300 px-2 py-1.5 rounded hover:bg-slate-800/60 cursor-pointer"
+                    className="w-full text-left text-[11px] text-neutral-300 px-2 py-1.5 rounded hover:bg-neutral-800/60 cursor-pointer"
                   >
-                    <span className="text-slate-500">{l.spaceName} /</span> {l.name}
+                    <span className="text-neutral-500">{l.spaceName} /</span> {l.name}
                   </button>
                 ))}
               </div>
@@ -1442,8 +1513,8 @@ export default function Home() {
           <button onClick={bulkDelete} className="text-xs text-red-400 hover:text-red-300 px-2 py-1 rounded hover:bg-red-500/10 cursor-pointer flex items-center gap-1.5">
             <Trash2 className="w-3.5 h-3.5" /> Delete
           </button>
-          <div className="w-px h-5 bg-slate-700"></div>
-          <button onClick={clearSelection} className="text-xs text-slate-500 hover:text-slate-300 px-2 py-1 cursor-pointer">
+          <div className="w-px h-5 bg-neutral-700"></div>
+          <button onClick={clearSelection} className="text-xs text-neutral-500 hover:text-neutral-300 px-2 py-1 cursor-pointer">
             <X className="w-3.5 h-3.5" />
           </button>
         </div>
@@ -1453,13 +1524,13 @@ export default function Home() {
       {taskMenu && (
         <>
           <div className="fixed inset-0 z-[60]" onClick={() => setTaskMenu(null)} onContextMenu={(e) => { e.preventDefault(); setTaskMenu(null); }} />
-          <div className="fixed z-[61] w-48 bg-slate-900 border border-slate-800 rounded shadow-2xl py-1" style={{ top: taskMenu.y, left: taskMenu.x }}>
+          <div className="fixed z-[61] w-48 bg-neutral-900 border border-neutral-800 rounded shadow-2xl py-1" style={{ top: taskMenu.y, left: taskMenu.x }}>
             <button
               onClick={() => {
                 setModalTaskStack([taskMenu.task.id]);
                 setTaskMenu(null);
               }}
-              className="w-full text-left px-3 py-1.5 text-xs text-slate-300 hover:bg-slate-800/60 cursor-pointer flex items-center gap-2"
+              className="w-full text-left px-3 py-1.5 text-xs text-neutral-300 hover:bg-neutral-800/60 cursor-pointer flex items-center gap-2"
             >
               <Maximize2 className="w-3.5 h-3.5" /> Open
             </button>
@@ -1468,7 +1539,7 @@ export default function Home() {
                 setRenamingTaskId(taskMenu.task.id);
                 setTaskMenu(null);
               }}
-              className="w-full text-left px-3 py-1.5 text-xs text-slate-300 hover:bg-slate-800/60 cursor-pointer flex items-center gap-2"
+              className="w-full text-left px-3 py-1.5 text-xs text-neutral-300 hover:bg-neutral-800/60 cursor-pointer flex items-center gap-2"
             >
               <Pencil className="w-3.5 h-3.5" /> Rename
             </button>
@@ -1477,7 +1548,7 @@ export default function Home() {
                 handleArchiveClick(taskMenu.task);
                 setTaskMenu(null);
               }}
-              className="w-full text-left px-3 py-1.5 text-xs text-slate-300 hover:bg-slate-800/60 cursor-pointer flex items-center gap-2"
+              className="w-full text-left px-3 py-1.5 text-xs text-neutral-300 hover:bg-neutral-800/60 cursor-pointer flex items-center gap-2"
             >
               {taskMenu.task.archived ? (
                 <>
@@ -1489,7 +1560,7 @@ export default function Home() {
                 </>
               )}
             </button>
-            <div className="border-t border-slate-800 my-1"></div>
+            <div className="border-t border-neutral-800 my-1"></div>
             <button onClick={() => handleDeleteTask(taskMenu.task)} className="w-full text-left px-3 py-1.5 text-xs text-red-400 hover:bg-red-500/10 cursor-pointer flex items-center gap-2">
               <Trash2 className="w-3.5 h-3.5" /> Delete
             </button>
@@ -1501,8 +1572,20 @@ export default function Home() {
       {spaceMenu && (
         <>
           <div className="fixed inset-0 z-[60]" onClick={() => setSpaceMenu(null)} onContextMenu={(e) => { e.preventDefault(); setSpaceMenu(null); }} />
-          <div className="fixed z-[61] w-48 bg-slate-900 border border-slate-800 rounded shadow-2xl py-1" style={{ top: spaceMenu.y, left: spaceMenu.x }}>
-            <button onClick={() => startEditSpace(spaceMenu.space)} className="w-full text-left px-3 py-1.5 text-xs text-slate-300 hover:bg-slate-800/60 cursor-pointer flex items-center gap-2">
+          <div className="fixed z-[61] w-48 bg-neutral-900 border border-neutral-800 rounded shadow-2xl py-1" style={{ top: spaceMenu.y, left: spaceMenu.x }}>
+            <button onClick={() => startEditSpace(spaceMenu.space)} className="w-full text-left px-3 py-1.5 text-xs text-neutral-300 hover:bg-neutral-800/60 cursor-pointer flex items-center gap-2">
+              <Pencil className="w-3.5 h-3.5" /> Edit appearance
+            </button>
+          </div>
+        </>
+      )}
+
+      {/* ================= CONTEXT MENU: FOLDER ================= */}
+      {folderMenu && (
+        <>
+          <div className="fixed inset-0 z-[60]" onClick={() => setFolderMenu(null)} onContextMenu={(e) => { e.preventDefault(); setFolderMenu(null); }} />
+          <div className="fixed z-[61] w-48 bg-neutral-900 border border-neutral-800 rounded shadow-2xl py-1" style={{ top: folderMenu.y, left: folderMenu.x }}>
+            <button onClick={() => startEditFolder(folderMenu.folder)} className="w-full text-left px-3 py-1.5 text-xs text-neutral-300 hover:bg-neutral-800/60 cursor-pointer flex items-center gap-2">
               <Pencil className="w-3.5 h-3.5" /> Edit appearance
             </button>
           </div>
@@ -1513,13 +1596,13 @@ export default function Home() {
       {columnMenu && (
         <>
           <div className="fixed inset-0 z-[60]" onClick={() => setColumnMenu(null)} onContextMenu={(e) => { e.preventDefault(); setColumnMenu(null); }} />
-          <div className="fixed z-[61] w-48 bg-slate-900 border border-slate-800 rounded shadow-2xl py-1" style={{ top: columnMenu.y, left: columnMenu.x }}>
+          <div className="fixed z-[61] w-48 bg-neutral-900 border border-neutral-800 rounded shadow-2xl py-1" style={{ top: columnMenu.y, left: columnMenu.x }}>
             <button
               onClick={() => {
                 toggleColumn(columnMenu.col.key);
                 setColumnMenu(null);
               }}
-              className="w-full text-left px-3 py-1.5 text-xs text-slate-300 hover:bg-slate-800/60 cursor-pointer flex items-center gap-2"
+              className="w-full text-left px-3 py-1.5 text-xs text-neutral-300 hover:bg-neutral-800/60 cursor-pointer flex items-center gap-2"
             >
               <EyeOff className="w-3.5 h-3.5" /> Hide column
             </button>
@@ -1529,7 +1612,7 @@ export default function Home() {
                   setStatusMenuOpen(true);
                   setColumnMenu(null);
                 }}
-                className="w-full text-left px-3 py-1.5 text-xs text-slate-300 hover:bg-slate-800/60 cursor-pointer flex items-center gap-2"
+                className="w-full text-left px-3 py-1.5 text-xs text-neutral-300 hover:bg-neutral-800/60 cursor-pointer flex items-center gap-2"
               >
                 <Palette className="w-3.5 h-3.5" /> Manage statuses
               </button>
@@ -1541,11 +1624,11 @@ export default function Home() {
                     setFieldEditTarget(columnMenu.col.field!);
                     setColumnMenu(null);
                   }}
-                  className="w-full text-left px-3 py-1.5 text-xs text-slate-300 hover:bg-slate-800/60 cursor-pointer flex items-center gap-2"
+                  className="w-full text-left px-3 py-1.5 text-xs text-neutral-300 hover:bg-neutral-800/60 cursor-pointer flex items-center gap-2"
                 >
                   <Pencil className="w-3.5 h-3.5" /> Edit field
                 </button>
-                <div className="border-t border-slate-800 my-1"></div>
+                <div className="border-t border-neutral-800 my-1"></div>
                 <button
                   onClick={() => {
                     handleDeleteField(columnMenu.col.key, columnMenu.col.label);
@@ -1563,26 +1646,26 @@ export default function Home() {
 
       {/* ================= EDIT SPACE MODAL ================= */}
       {spaceEditTarget && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/70 backdrop-blur-xs" onClick={() => setSpaceEditTarget(null)}>
-          <div onClick={(e) => e.stopPropagation()} className="w-[380px] bg-slate-900 border border-slate-800 rounded shadow-2xl overflow-hidden">
-            <div className="px-5 py-4 border-b border-slate-800 flex items-center justify-between">
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-neutral-950/70 backdrop-blur-xs" onClick={() => setSpaceEditTarget(null)}>
+          <div onClick={(e) => e.stopPropagation()} className="w-[380px] bg-neutral-900 border border-neutral-800 rounded shadow-2xl overflow-hidden">
+            <div className="px-5 py-4 border-b border-neutral-800 flex items-center justify-between">
               <h3 className="font-bold text-sm text-white">Edit Space</h3>
-              <button onClick={() => setSpaceEditTarget(null)} className="text-slate-400 hover:text-white cursor-pointer">
+              <button onClick={() => setSpaceEditTarget(null)} className="text-neutral-400 hover:text-white cursor-pointer">
                 <X className="w-3.5 h-3.5" />
               </button>
             </div>
             <div className="p-5 space-y-3">
               <div>
-                <label className="text-[11px] text-slate-400 mb-1 block">Name (you can type emoji directly into the text)</label>
+                <label className="text-[11px] text-neutral-400 mb-1 block">Name (you can type emoji directly into the text)</label>
                 <input
                   value={editSpaceName}
                   onChange={(e) => setEditSpaceName(e.target.value)}
                   placeholder="🚀 Product Dev"
-                  className="w-full bg-slate-950 border border-slate-700 rounded px-3 py-2 text-xs text-white focus:outline-none focus:border-blue-500"
+                  className="w-full bg-neutral-950 border border-neutral-700 rounded px-3 py-2 text-xs text-white focus:outline-none focus:border-blue-500"
                 />
               </div>
               <div>
-                <label className="text-[11px] text-slate-400 mb-1 block">Color</label>
+                <label className="text-[11px] text-neutral-400 mb-1 block">Color</label>
                 <div className="flex gap-1.5">
                   {FIELD_COLOR_CHOICES.map((c) => (
                     <button
@@ -1594,9 +1677,9 @@ export default function Home() {
                   ))}
                 </div>
               </div>
-              <div className="flex items-center gap-2 bg-slate-950/60 border border-slate-800 rounded px-3 py-2">
+              <div className="flex items-center gap-2 bg-neutral-950/60 border border-neutral-800 rounded px-3 py-2">
                 <span className="w-2.5 h-2.5 rounded-full" style={{ backgroundColor: editSpaceColor }}></span>
-                <span className="text-xs text-slate-300">{editSpaceName || 'Preview'}</span>
+                <span className="text-xs text-neutral-300">{editSpaceName || 'Preview'}</span>
               </div>
               <button onClick={saveSpaceEdit} className="w-full bg-blue-600 hover:bg-blue-500 text-white text-xs py-2 rounded font-medium cursor-pointer">
                 Save
@@ -1606,29 +1689,114 @@ export default function Home() {
         </div>
       )}
 
+      {/* ================= EDIT FOLDER MODAL ================= */}
+      {folderEditTarget && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-neutral-950/70 backdrop-blur-xs" onClick={() => setFolderEditTarget(null)}>
+          <div onClick={(e) => e.stopPropagation()} className="w-[380px] bg-neutral-900 border border-neutral-800 rounded shadow-2xl overflow-hidden">
+            <div className="px-5 py-4 border-b border-neutral-800 flex items-center justify-between">
+              <h3 className="font-bold text-sm text-white">Edit Folder</h3>
+              <button onClick={() => setFolderEditTarget(null)} className="text-neutral-400 hover:text-white cursor-pointer">
+                <X className="w-3.5 h-3.5" />
+              </button>
+            </div>
+            <div className="p-5 space-y-3">
+              <div>
+                <label className="text-[11px] text-neutral-400 mb-1 block">Name</label>
+                <input
+                  value={editFolderName}
+                  onChange={(e) => setEditFolderName(e.target.value)}
+                  placeholder="Folder name"
+                  className="w-full bg-neutral-950 border border-neutral-700 rounded px-3 py-2 text-xs text-white focus:outline-none focus:border-blue-500"
+                />
+              </div>
+              <div>
+                <label className="text-[11px] text-neutral-400 mb-1 block">Color</label>
+                <div className="flex flex-wrap gap-1.5">
+                  <button
+                    onClick={() => setEditFolderColor(null)}
+                    title="Default"
+                    className={`w-6 h-6 rounded-full cursor-pointer bg-neutral-700 flex items-center justify-center ${
+                      editFolderColor === null ? 'ring-2 ring-white' : ''
+                    }`}
+                  >
+                    {editFolderColor === null && <Check className="w-3 h-3 text-white" />}
+                  </button>
+                  {FIELD_COLOR_CHOICES.map((c) => (
+                    <button
+                      key={c}
+                      onClick={() => setEditFolderColor(c)}
+                      className={`w-6 h-6 rounded-full cursor-pointer ${editFolderColor === c ? 'ring-2 ring-white' : ''}`}
+                      style={{ backgroundColor: c }}
+                    />
+                  ))}
+                </div>
+              </div>
+              <div>
+                <label className="text-[11px] text-neutral-400 mb-1 block">Icon</label>
+                <div className="flex flex-wrap gap-1.5">
+                  <button
+                    onClick={() => setEditFolderIcon(null)}
+                    title="Default"
+                    className={`w-7 h-7 rounded bg-neutral-950 border border-neutral-700 flex items-center justify-center cursor-pointer text-neutral-300 ${
+                      editFolderIcon === null ? 'border-blue-500 text-blue-400' : ''
+                    }`}
+                  >
+                    <FolderIconLucide className="w-3.5 h-3.5" />
+                  </button>
+                  {FOLDER_ICON_CHOICES.map((iconKey) => {
+                    const Icon = FOLDER_ICON_MAP[iconKey];
+                    return (
+                      <button
+                        key={iconKey}
+                        onClick={() => setEditFolderIcon(iconKey)}
+                        className={`w-7 h-7 rounded bg-neutral-950 border border-neutral-700 flex items-center justify-center cursor-pointer text-neutral-300 ${
+                          editFolderIcon === iconKey ? 'border-blue-500 text-blue-400' : ''
+                        }`}
+                      >
+                        <Icon className="w-3.5 h-3.5" />
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+              <div className="flex items-center gap-2 bg-neutral-950/60 border border-neutral-800 rounded px-3 py-2">
+                {(() => {
+                  const PreviewIcon = editFolderIcon ? FOLDER_ICON_MAP[editFolderIcon] : FolderIconLucide;
+                  return <PreviewIcon className="w-3.5 h-3.5" style={{ color: editFolderColor || undefined }} />;
+                })()}
+                <span className="text-xs text-neutral-300">{editFolderName || 'Preview'}</span>
+              </div>
+              <button onClick={saveFolderEdit} className="w-full bg-blue-600 hover:bg-blue-500 text-white text-xs py-2 rounded font-medium cursor-pointer">
+                Save
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* ================= EDIT FIELD MODAL ================= */}
       {fieldEditTarget && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/70 backdrop-blur-xs" onClick={() => setFieldEditTarget(null)}>
-          <div onClick={(e) => e.stopPropagation()} className="w-[420px] bg-slate-900 border border-slate-800 rounded shadow-2xl overflow-hidden">
-            <div className="px-5 py-4 border-b border-slate-800 flex items-center justify-between">
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-neutral-950/70 backdrop-blur-xs" onClick={() => setFieldEditTarget(null)}>
+          <div onClick={(e) => e.stopPropagation()} className="w-[420px] bg-neutral-900 border border-neutral-800 rounded shadow-2xl overflow-hidden">
+            <div className="px-5 py-4 border-b border-neutral-800 flex items-center justify-between">
               <h3 className="font-bold text-sm text-white">Edit field</h3>
-              <button onClick={() => setFieldEditTarget(null)} className="text-slate-400 hover:text-white cursor-pointer">
+              <button onClick={() => setFieldEditTarget(null)} className="text-neutral-400 hover:text-white cursor-pointer">
                 <X className="w-3.5 h-3.5" />
               </button>
             </div>
             <div className="p-5 space-y-3 max-h-[70vh] overflow-y-auto">
               <div>
-                <label className="text-[11px] text-slate-400 mb-1 block">Name</label>
+                <label className="text-[11px] text-neutral-400 mb-1 block">Name</label>
                 <input
                   value={fieldNameDraft}
                   onChange={(e) => setFieldNameDraft(e.target.value)}
-                  className="w-full bg-slate-950 border border-slate-700 rounded px-3 py-2 text-xs text-white focus:outline-none focus:border-blue-500"
+                  className="w-full bg-neutral-950 border border-neutral-700 rounded px-3 py-2 text-xs text-white focus:outline-none focus:border-blue-500"
                 />
               </div>
 
               {fieldEditTarget.type === 'dropdown' && (
                 <div>
-                  <label className="text-[11px] text-slate-400 mb-1 block">Options</label>
+                  <label className="text-[11px] text-neutral-400 mb-1 block">Options</label>
                   <DndContext sensors={fieldOptionSensors} collisionDetection={closestCenter} onDragEnd={handleFieldOptionDragEnd}>
                     <SortableContext items={fieldOptionsDraft.map((o) => o.id)} strategy={verticalListSortingStrategy}>
                       <div className="space-y-2">
@@ -1665,11 +1833,11 @@ export default function Home() {
 
       {/* ================= MANAGE STATUSES MODAL (opens via right-click on the Status column) ================= */}
       {statusMenuOpen && currentSpace && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/70 backdrop-blur-xs" onClick={() => setStatusMenuOpen(false)}>
-          <div onClick={(e) => e.stopPropagation()} className="w-[380px] bg-slate-900 border border-slate-800 rounded shadow-2xl overflow-hidden">
-            <div className="px-5 py-4 border-b border-slate-800 flex items-center justify-between">
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-neutral-950/70 backdrop-blur-xs" onClick={() => setStatusMenuOpen(false)}>
+          <div onClick={(e) => e.stopPropagation()} className="w-[380px] bg-neutral-900 border border-neutral-800 rounded shadow-2xl overflow-hidden">
+            <div className="px-5 py-4 border-b border-neutral-800 flex items-center justify-between">
               <h3 className="font-bold text-sm text-white">Manage statuses</h3>
-              <button onClick={() => setStatusMenuOpen(false)} className="text-slate-400 hover:text-white cursor-pointer">
+              <button onClick={() => setStatusMenuOpen(false)} className="text-neutral-400 hover:text-white cursor-pointer">
                 <X className="w-3.5 h-3.5" />
               </button>
             </div>
@@ -1694,20 +1862,20 @@ export default function Home() {
               ) : (
                 <>
                   {statuses.map((s) => (
-                    <div key={s.id} className="flex items-center gap-2 text-[11px] text-slate-300 px-2 py-1">
+                    <div key={s.id} className="flex items-center gap-2 text-[11px] text-neutral-300 px-2 py-1">
                       <span className="w-2.5 h-2.5 rounded-full" style={{ backgroundColor: s.color }}></span>
                       {s.name}
                     </div>
                   ))}
-                  <p className="text-[10px] text-slate-500 px-2">Default statuses are shown until you create your own.</p>
+                  <p className="text-[10px] text-neutral-500 px-2">Default statuses are shown until you create your own.</p>
                 </>
               )}
-              <div className="border-t border-slate-800 pt-3 mt-1 space-y-1.5">
+              <div className="border-t border-neutral-800 pt-3 mt-1 space-y-1.5">
                 <input
                   value={newStatusName}
                   onChange={(e) => setNewStatusName(e.target.value)}
                   placeholder="New status (e.g. Blocked)"
-                  className="w-full bg-slate-950 border border-slate-700 rounded px-2 py-1.5 text-xs text-white focus:outline-none focus:border-blue-500"
+                  className="w-full bg-neutral-950 border border-neutral-700 rounded px-2 py-1.5 text-xs text-white focus:outline-none focus:border-blue-500"
                 />
                 <div className="flex gap-1">
                   {FIELD_COLOR_CHOICES.map((c) => (
@@ -1737,14 +1905,14 @@ export default function Home() {
           animate={{ opacity: 1 }}
           exit={{ opacity: 0 }}
           transition={{ duration: 0.2 }}
-          className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/55 backdrop-blur-[3px] p-6 md:p-10"
+          className="fixed inset-0 z-50 flex items-center justify-center bg-neutral-950/55 backdrop-blur-[3px] p-6 md:p-10"
           onClick={() => setModalTaskStack([])}
         >
           <motion.div
-            layoutId={`task-${activeModalTask.id}`}
+            layoutId={`task-${modalLayoutScope}-${activeModalTask.id}`}
             onClick={(e) => e.stopPropagation()}
             transition={{ duration: 0.32, ease: [0.32, 0.72, 0, 1] }}
-            className="w-full max-w-6xl h-[88vh] bg-slate-900 border border-slate-800 rounded shadow-2xl overflow-hidden"
+            className="w-full max-w-6xl h-[88vh] bg-neutral-900 border border-neutral-800 rounded shadow-2xl overflow-hidden"
           >
           <motion.div
             initial={{ opacity: 0 }}
@@ -1753,8 +1921,8 @@ export default function Home() {
             transition={{ duration: 0.15, delay: 0.15 }}
             className="flex flex-col h-full"
           >
-            <div className="px-6 py-4 border-b border-slate-800 flex items-center justify-between bg-slate-950/40 shrink-0">
-              <div className="flex items-center gap-2 text-xs text-slate-400 font-mono overflow-x-auto">
+            <div className="px-6 py-4 border-b border-neutral-800 flex items-center justify-between bg-neutral-950/40 shrink-0">
+              <div className="flex items-center gap-2 text-xs text-neutral-400 font-mono overflow-x-auto">
                 <button onClick={() => setModalTaskStack([])} className="hover:text-blue-400 cursor-pointer shrink-0 inline-flex items-center gap-1.5">
                   {activeSpaceId === 'everything' ? (
                     <>
@@ -1773,7 +1941,7 @@ export default function Home() {
                       <button
                         onClick={() => setModalTaskStack(modalTaskStack.slice(0, idx + 1))}
                         className={`cursor-pointer truncate max-w-[220px] ${
-                          idx === modalTaskStack.length - 1 ? 'text-blue-400 font-bold' : 'hover:text-slate-200'
+                          idx === modalTaskStack.length - 1 ? 'text-blue-400 font-bold' : 'hover:text-neutral-200'
                         }`}
                       >
                         {t.title}
@@ -1789,14 +1957,14 @@ export default function Home() {
                   className={`text-[11px] px-2.5 py-1 rounded border cursor-pointer transition flex items-center gap-1.5 ${
                     showActivityPanel
                       ? 'bg-neutral-800 text-blue-400 border-neutral-700'
-                      : 'text-slate-400 border-slate-800 hover:bg-slate-800/60'
+                      : 'text-neutral-400 border-neutral-800 hover:bg-neutral-800/60'
                   }`}
                 >
                   <MessageSquare className="w-3.5 h-3.5" />
                 </button>
                 <button
                   onClick={() => setModalTaskStack([])}
-                  className="w-8 h-8 rounded bg-slate-800 hover:bg-slate-700 text-slate-300 flex items-center justify-center font-bold text-sm cursor-pointer shrink-0"
+                  className="w-8 h-8 rounded bg-neutral-800 hover:bg-neutral-700 text-neutral-300 flex items-center justify-center font-bold text-sm cursor-pointer shrink-0"
                 >
                   <X className="w-3.5 h-3.5" />
                 </button>
@@ -1804,7 +1972,7 @@ export default function Home() {
             </div>
 
             <div className="flex-1 overflow-hidden flex">
-              <div className={`flex-1 min-w-0 overflow-y-auto p-8 space-y-6 ${showActivityPanel ? 'border-r border-slate-800' : ''}`}>
+              <div className={`flex-1 min-w-0 overflow-y-auto p-8 space-y-6 ${showActivityPanel ? 'border-r border-neutral-800' : ''}`}>
                 <div>
                   {editingModalTitle ? (
                     <input
@@ -1820,7 +1988,7 @@ export default function Home() {
                         if (e.key === 'Enter') (e.target as HTMLInputElement).blur();
                         if (e.key === 'Escape') setEditingModalTitle(false);
                       }}
-                      className="w-full text-2xl font-extrabold text-white tracking-tight bg-slate-950/60 border border-blue-500 rounded px-2 py-1 focus:outline-none"
+                      className="w-full text-2xl font-extrabold text-white tracking-tight bg-neutral-950/60 border border-blue-500 rounded px-2 py-1 focus:outline-none"
                     />
                   ) : (
                     <h2
@@ -1834,15 +2002,15 @@ export default function Home() {
                       {activeModalTask.title}
                     </h2>
                   )}
-                  <p className="text-[11px] text-slate-500 font-mono mt-1">ID: {activeModalTask.id}</p>
+                  <p className="text-[11px] text-neutral-500 font-mono mt-1">ID: {activeModalTask.id}</p>
                 </div>
 
-                <div className="flex items-center gap-3 bg-slate-950/40 p-3 rounded border border-slate-800">
-                  <span className="text-xs text-slate-400 font-medium">Status:</span>
+                <div className="flex items-center gap-3 bg-neutral-950/40 p-3 rounded border border-neutral-800">
+                  <span className="text-xs text-neutral-400 font-medium">Status:</span>
                   <FloatingPopover
                     open={modalStatusOpen}
                     onClose={() => setModalStatusOpen(false)}
-                    panelClassName="w-40 bg-slate-900 border border-slate-800 rounded shadow-xl p-1.5"
+                    panelClassName="w-40 bg-neutral-900 border border-neutral-800 rounded shadow-xl p-1.5"
                     anchor={
                       <button
                         onClick={() => setModalStatusOpen((o) => !o)}
@@ -1864,7 +2032,7 @@ export default function Home() {
                           optimisticMoveTask(activeModalTask.id, s.name);
                           setModalStatusOpen(false);
                         }}
-                        className="w-full flex items-center gap-2 text-[11px] text-slate-300 px-2 py-1 rounded hover:bg-slate-800/60 cursor-pointer"
+                        className="w-full flex items-center gap-2 text-[11px] text-neutral-300 px-2 py-1 rounded hover:bg-neutral-800/60 cursor-pointer"
                       >
                         <span className="w-2.5 h-2.5 rounded-full" style={{ backgroundColor: s.color }}></span>
                         {s.name}
@@ -1874,15 +2042,15 @@ export default function Home() {
                 </div>
 
                 {/* Docs — multiple named documents with autosave */}
-                <div className="space-y-2 pt-4 border-t border-slate-800">
+                <div className="space-y-2 pt-4 border-t border-neutral-800">
                   <div className="flex items-center justify-between">
-                    <h3 className="text-xs font-bold text-slate-400 uppercase tracking-wider flex items-center gap-1.5"><FileText className="w-3.5 h-3.5" /> Documents</h3>
+                    <h3 className="text-xs font-bold text-neutral-400 uppercase tracking-wider flex items-center gap-1.5"><FileText className="w-3.5 h-3.5" /> Documents</h3>
                     {docSaveStatus !== 'idle' && activeDocId && (
-                      <span className="text-[10px] text-slate-500 flex items-center gap-1">{docSaveStatus === 'saving' ? 'Saving...' : (<><Check className="w-3 h-3" /> Saved</>)}</span>
+                      <span className="text-[10px] text-neutral-500 flex items-center gap-1">{docSaveStatus === 'saving' ? 'Saving...' : (<><Check className="w-3 h-3" /> Saved</>)}</span>
                     )}
                   </div>
-                  <div className="bg-slate-950/40 border border-slate-800 rounded overflow-hidden">
-                    <div className="flex items-center gap-1.5 px-3 py-2 border-b border-slate-800 overflow-x-auto">
+                  <div className="bg-neutral-950/40 border border-neutral-800 rounded overflow-hidden">
+                    <div className="flex items-center gap-1.5 px-3 py-2 border-b border-neutral-800 overflow-x-auto">
                       <DndContext sensors={docSensors} collisionDetection={closestCenter} onDragEnd={handleDocDragEnd}>
                         <SortableContext items={activeTaskDocs.map((d) => d.id)} strategy={horizontalListSortingStrategy}>
                           {activeTaskDocs.map((d) => (
@@ -1900,7 +2068,7 @@ export default function Home() {
                           ))}
                         </SortableContext>
                       </DndContext>
-                      <button onClick={handleNewDoc} className="text-[11px] text-blue-400 px-2.5 py-1 rounded hover:bg-slate-800/60 cursor-pointer shrink-0">
+                      <button onClick={handleNewDoc} className="text-[11px] text-blue-400 px-2.5 py-1 rounded hover:bg-neutral-800/60 cursor-pointer shrink-0">
                         + New
                       </button>
                     </div>
@@ -1918,25 +2086,25 @@ export default function Home() {
                           onChange={(e) => handleDocDraftChange(e.target.value)}
                           rows={8}
                           placeholder="Write notes, specs, anything — saved automatically as you type..."
-                          className="w-full bg-transparent text-xs text-slate-300 focus:outline-none resize-y leading-relaxed"
+                          className="w-full bg-transparent text-xs text-neutral-300 focus:outline-none resize-y leading-relaxed"
                         />
                       </div>
                     ) : (
-                      <p className="text-[11px] text-slate-500 p-4">No documents yet — press "+ New" to add one.</p>
+                      <p className="text-[11px] text-neutral-500 p-4">No documents yet — press "+ New" to add one.</p>
                     )}
                   </div>
                 </div>
 
-                <div className="space-y-2 pt-4 border-t border-slate-800">
-                  <h3 className="text-xs font-bold text-slate-400 uppercase tracking-wider">
+                <div className="space-y-2 pt-4 border-t border-neutral-800">
+                  <h3 className="text-xs font-bold text-neutral-400 uppercase tracking-wider">
                     Subtasks ({currentSubtasks.length})
                   </h3>
 
-                  <div className="bg-slate-950/40 border border-slate-800 rounded overflow-x-auto">
+                  <div className="bg-neutral-950/40 border border-neutral-800 rounded overflow-x-auto">
                     <div style={{ minWidth: currentSubtasks.length > 0 ? tableMinWidth : undefined }}>
                     {currentSubtasks.length > 0 && (
                       <div
-                        className="grid items-center px-3 py-1.5 text-[9px] font-semibold text-slate-500 uppercase tracking-wider border-b border-slate-800"
+                        className="grid items-center px-3 py-1.5 text-[9px] font-semibold text-neutral-500 uppercase tracking-wider border-b border-neutral-800"
                         style={{ gridTemplateColumns: rowGridTemplate }}
                       >
                         <div></div>
@@ -1954,12 +2122,13 @@ export default function Home() {
                         <div></div>
                       </div>
                     )}
-                    <div className="divide-y divide-slate-800/50">
+                    <div className="divide-y divide-neutral-800/50">
                       <AnimatePresence mode="popLayout" initial={false}>
                         {currentSubtasks.map((sub) => (
                           <TaskRow
                             key={sub._localId || sub.id}
                             task={sub as Task}
+                            navScope={`subtasks-${activeModalTask.id}`}
                             onOpen={() => setModalTaskStack([...modalTaskStack, sub.id])}
                             columns={activeColumns}
                             gridTemplate={rowGridTemplate}
@@ -1973,14 +2142,14 @@ export default function Home() {
                       </AnimatePresence>
                     </div>
                     </div>
-                    <div className="p-2 flex gap-2 items-center bg-slate-950/60">
+                    <div className="p-2 flex gap-2 items-center bg-neutral-950/60">
                       <input
                         type="text"
                         placeholder="+ Add new subtask..."
                         value={newSubtaskTitle}
                         onChange={(e) => setNewSubtaskTitle(e.target.value)}
                         onKeyDown={(e) => e.key === 'Enter' && handleAddSubtask(activeModalTask)}
-                        className="flex-1 bg-slate-900 border border-slate-800 rounded px-3 py-1.5 text-xs text-white focus:outline-none focus:border-blue-500"
+                        className="flex-1 bg-neutral-900 border border-neutral-800 rounded px-3 py-1.5 text-xs text-white focus:outline-none focus:border-blue-500"
                       />
                       <button
                         onClick={() => handleAddSubtask(activeModalTask)}
@@ -1993,11 +2162,11 @@ export default function Home() {
                 </div>
 
                 <div className="grid grid-cols-2 gap-4">
-                  <div className="bg-slate-950/40 p-4 rounded border border-slate-800">
-                    <h4 className="text-[11px] font-bold text-slate-400 uppercase tracking-wider mb-2">Timeframe</h4>
+                  <div className="bg-neutral-950/40 p-4 rounded border border-neutral-800">
+                    <h4 className="text-[11px] font-bold text-neutral-400 uppercase tracking-wider mb-2">Timeframe</h4>
                     <div className="space-y-1.5 text-xs font-mono">
                       <div className="flex items-center justify-between gap-2">
-                        <span className="text-slate-400 shrink-0">Start:</span>
+                        <span className="text-neutral-400 shrink-0">Start:</span>
                         <DatePickerPopover
                           value={activeModalTask.startDate}
                           onChange={(iso) =>
@@ -2010,7 +2179,7 @@ export default function Home() {
                         />
                       </div>
                       <div className="flex items-center justify-between gap-2">
-                        <span className="text-slate-400 shrink-0">Due:</span>
+                        <span className="text-neutral-400 shrink-0">Due:</span>
                         <DatePickerPopover
                           value={activeModalTask.dueDate}
                           onChange={(iso) =>
@@ -2025,8 +2194,8 @@ export default function Home() {
                     </div>
                   </div>
 
-                  <div className="bg-slate-950/40 p-4 rounded border border-slate-800">
-                    <h4 className="text-[11px] font-bold text-slate-400 uppercase tracking-wider mb-2">Assignees</h4>
+                  <div className="bg-neutral-950/40 p-4 rounded border border-neutral-800">
+                    <h4 className="text-[11px] font-bold text-neutral-400 uppercase tracking-wider mb-2">Assignees</h4>
                     <div className="flex flex-wrap items-center gap-1.5">
                       {activeModalTask.assignees?.map((a: any) => (
                         <span key={a.id} className="text-[10px] px-2 py-1 rounded text-white font-semibold" style={{ backgroundColor: a.color }}>
@@ -2036,7 +2205,7 @@ export default function Home() {
                       <FloatingPopover
                         open={modalAssigneeOpen}
                         onClose={() => setModalAssigneeOpen(false)}
-                        panelClassName="w-44 bg-slate-900 border border-slate-800 rounded shadow-xl p-1.5"
+                        panelClassName="w-44 bg-neutral-900 border border-neutral-800 rounded shadow-xl p-1.5"
                         anchor={
                           <button
                             onClick={(e) => {
@@ -2044,7 +2213,7 @@ export default function Home() {
                               setModalAssigneeOpen((o) => !o);
                             }}
                             title="Add assignee"
-                            className="w-6 h-6 rounded-full border border-dashed border-slate-600 text-slate-500 hover:border-blue-400 hover:text-blue-400 text-xs flex items-center justify-center cursor-pointer"
+                            className="w-6 h-6 rounded-full border border-dashed border-neutral-600 text-neutral-500 hover:border-blue-400 hover:text-blue-400 text-xs flex items-center justify-center cursor-pointer"
                           >
                             +
                           </button>
@@ -2056,11 +2225,11 @@ export default function Home() {
                             <button
                               key={u.id}
                               onClick={() => toggleAssignee(activeModalTask, u.id)}
-                              className="w-full flex items-center gap-2 text-[11px] text-slate-300 px-2 py-1 rounded hover:bg-slate-800/60 cursor-pointer"
+                              className="w-full flex items-center gap-2 text-[11px] text-neutral-300 px-2 py-1 rounded hover:bg-neutral-800/60 cursor-pointer"
                             >
                               <span
                                 className={`w-3.5 h-3.5 rounded border flex items-center justify-center shrink-0 transition ${
-                                  checked ? 'bg-blue-500 border-blue-500 text-white' : 'border-slate-600'
+                                  checked ? 'bg-blue-500 border-blue-500 text-white' : 'border-neutral-600'
                                 }`}
                               >
                                 {checked && <Check className="w-2.5 h-2.5" />}
@@ -2072,7 +2241,7 @@ export default function Home() {
                             </button>
                           );
                         })}
-                        {users.length === 0 && <p className="text-[10px] text-slate-500 px-2 py-1">No users yet.</p>}
+                        {users.length === 0 && <p className="text-[10px] text-neutral-500 px-2 py-1">No users yet.</p>}
                       </FloatingPopover>
                     </div>
                   </div>
@@ -2090,21 +2259,21 @@ export default function Home() {
                 className="shrink-0 overflow-hidden"
               >
               <div className="w-[420px] h-full flex flex-col overflow-hidden">
-                <div className="px-5 py-3 border-b border-slate-800 shrink-0">
-                  <h4 className="text-xs font-bold text-slate-300 flex items-center gap-1.5"><MessageSquare className="w-3.5 h-3.5" /> Activity & Comments</h4>
+                <div className="px-5 py-3 border-b border-neutral-800 shrink-0">
+                  <h4 className="text-xs font-bold text-neutral-300 flex items-center gap-1.5"><MessageSquare className="w-3.5 h-3.5" /> Activity & Comments</h4>
                 </div>
 
                 <div className="flex-1 overflow-y-auto px-5 py-4 space-y-3">
-                  {activeComments.length === 0 && <p className="text-[11px] text-slate-500">No activity yet.</p>}
+                  {activeComments.length === 0 && <p className="text-[11px] text-neutral-500">No activity yet.</p>}
                   {activeComments.map((c) =>
                     c.type === 'activity' ? (
-                      <div key={c.id} className="flex items-center gap-2 text-[11px] text-slate-500 italic">
-                        <span className="w-1 h-1 rounded-full bg-slate-600 shrink-0"></span>
+                      <div key={c.id} className="flex items-center gap-2 text-[11px] text-neutral-500 italic">
+                        <span className="w-1 h-1 rounded-full bg-neutral-600 shrink-0"></span>
                         <span>{c.body}</span>
-                        <span className="text-slate-600 ml-auto shrink-0">{timeAgo(c.createdAt)}</span>
+                        <span className="text-neutral-600 ml-auto shrink-0">{timeAgo(c.createdAt)}</span>
                       </div>
                     ) : (
-                      <div key={c.id} className="bg-slate-950/60 border border-slate-800 rounded p-3">
+                      <div key={c.id} className="bg-neutral-950/60 border border-neutral-800 rounded p-3">
                         <div className="flex items-center gap-2 mb-1.5">
                           {c.author ? (
                             <span
@@ -2114,22 +2283,22 @@ export default function Home() {
                               {c.author.initials}
                             </span>
                           ) : (
-                            <span className="w-5 h-5 rounded-full bg-slate-700 text-[8px] font-bold flex items-center justify-center text-slate-300">?</span>
+                            <span className="w-5 h-5 rounded-full bg-neutral-700 text-[8px] font-bold flex items-center justify-center text-neutral-300">?</span>
                           )}
-                          <span className="text-[11px] font-semibold text-slate-200">{c.author?.name || 'Anonymous'}</span>
-                          <span className="text-[10px] text-slate-500 ml-auto">{timeAgo(c.createdAt)}</span>
+                          <span className="text-[11px] font-semibold text-neutral-200">{c.author?.name || 'Anonymous'}</span>
+                          <span className="text-[10px] text-neutral-500 ml-auto">{timeAgo(c.createdAt)}</span>
                         </div>
-                        <p className="text-xs text-slate-300 whitespace-pre-wrap">{c.body}</p>
+                        <p className="text-xs text-neutral-300 whitespace-pre-wrap">{c.body}</p>
                       </div>
                     )
                   )}
                 </div>
 
-                <div className="p-4 border-t border-slate-800 space-y-2 shrink-0">
+                <div className="p-4 border-t border-neutral-800 space-y-2 shrink-0">
                   <select
                     value={commentAsUserId}
                     onChange={(e) => setCommentAsUserId(e.target.value)}
-                    className="w-full bg-slate-950 border border-slate-800 rounded px-2 py-1 text-[11px] text-slate-300 focus:outline-none"
+                    className="w-full bg-neutral-950 border border-neutral-800 rounded px-2 py-1 text-[11px] text-neutral-300 focus:outline-none"
                   >
                     <option value="">Comment as...</option>
                     {users.map((u) => (
@@ -2152,7 +2321,7 @@ export default function Home() {
                     }}
                     placeholder="Write a comment... (Enter to send, Shift+Enter for new line)"
                     rows={2}
-                    className="w-full bg-slate-950 border border-slate-800 rounded px-3 py-2 text-xs text-white focus:outline-none focus:border-blue-500 resize-none"
+                    className="w-full bg-neutral-950 border border-neutral-800 rounded px-3 py-2 text-xs text-white focus:outline-none focus:border-blue-500 resize-none"
                   />
                   <button
                     onClick={() => {
@@ -2189,39 +2358,39 @@ export default function Home() {
 
       {/* ================= TEAM / USER ADMIN MODAL ================= */}
       {teamOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/70 backdrop-blur-xs" onClick={() => setTeamOpen(false)}>
-          <div onClick={(e) => e.stopPropagation()} className="w-[420px] bg-slate-900 border border-slate-800 rounded shadow-2xl overflow-hidden">
-            <div className="px-5 py-4 border-b border-slate-800 flex items-center justify-between">
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-neutral-950/70 backdrop-blur-xs" onClick={() => setTeamOpen(false)}>
+          <div onClick={(e) => e.stopPropagation()} className="w-[420px] bg-neutral-900 border border-neutral-800 rounded shadow-2xl overflow-hidden">
+            <div className="px-5 py-4 border-b border-neutral-800 flex items-center justify-between">
               <h3 className="font-bold text-sm text-white flex items-center gap-1.5"><Users className="w-4 h-4" /> Team</h3>
-              <button onClick={() => setTeamOpen(false)} className="text-slate-400 hover:text-white cursor-pointer">
+              <button onClick={() => setTeamOpen(false)} className="text-neutral-400 hover:text-white cursor-pointer">
                 <X className="w-3.5 h-3.5" />
               </button>
             </div>
 
             <div className="p-5 space-y-3 max-h-72 overflow-y-auto">
-              {users.length === 0 && <p className="text-xs text-slate-500">No users yet — add the first one below.</p>}
+              {users.length === 0 && <p className="text-xs text-neutral-500">No users yet — add the first one below.</p>}
               {users.map((u) => (
-                <div key={u.id} className="flex items-center justify-between bg-slate-950/60 border border-slate-800 rounded px-3 py-2">
+                <div key={u.id} className="flex items-center justify-between bg-neutral-950/60 border border-neutral-800 rounded px-3 py-2">
                   <div className="flex items-center gap-2.5">
                     <span className="w-7 h-7 rounded-full text-[10px] font-bold flex items-center justify-center text-white" style={{ backgroundColor: u.color }}>
                       {u.initials}
                     </span>
-                    <span className="text-xs text-slate-200 font-medium">{u.name}</span>
+                    <span className="text-xs text-neutral-200 font-medium">{u.name}</span>
                   </div>
-                  <button onClick={() => deleteUser(u.id)} className="text-slate-500 hover:text-red-400 text-xs cursor-pointer">
+                  <button onClick={() => deleteUser(u.id)} className="text-neutral-500 hover:text-red-400 text-xs cursor-pointer">
                     <Trash2 className="w-3.5 h-3.5" />
                   </button>
                 </div>
               ))}
             </div>
 
-            <div className="p-5 border-t border-slate-800 space-y-2.5">
+            <div className="p-5 border-t border-neutral-800 space-y-2.5">
               <input
                 value={newUserName}
                 onChange={(e) => setNewUserName(e.target.value)}
                 onKeyDown={(e) => e.key === 'Enter' && handleAddUser()}
                 placeholder="Full name (e.g. Robin Hansen)"
-                className="w-full bg-slate-950 border border-slate-700 rounded px-3 py-2 text-xs text-white focus:outline-none focus:border-blue-500"
+                className="w-full bg-neutral-950 border border-neutral-700 rounded px-3 py-2 text-xs text-white focus:outline-none focus:border-blue-500"
               />
               <div className="flex items-center justify-between">
                 <div className="flex gap-1.5">
@@ -2305,9 +2474,22 @@ export default function Home() {
 
       <DragOverlay dropAnimation={null}>
         {activeDragTask && (
-          <div className="flex items-center gap-2 px-3 py-2 rounded bg-slate-900 border border-blue-500 shadow-2xl text-xs text-slate-200 max-w-xs">
+          <div className="flex items-center gap-2 px-3 py-2 rounded bg-neutral-900 border border-blue-500 shadow-2xl text-xs text-neutral-200 max-w-xs">
             <span className="w-2.5 h-2.5 rounded-full shrink-0" style={{ backgroundColor: statusColor(activeDragTask.status) }}></span>
             <span className="truncate font-medium">{activeDragTask.title}</span>
+          </div>
+        )}
+        {activeDragEntity && (
+          <div
+            className="flex items-center gap-2 px-3 py-2 rounded bg-neutral-900 border shadow-2xl text-xs text-neutral-200 max-w-xs"
+            style={{ borderColor: activeDragEntity.color || '#3b82f6' }}
+          >
+            {activeDragEntity.kind === 'folder' ? (
+              <FolderIconLucide className="w-3.5 h-3.5 shrink-0" style={{ color: activeDragEntity.color || undefined }} />
+            ) : (
+              <ListIcon className="w-3.5 h-3.5 shrink-0" />
+            )}
+            <span className="truncate font-medium">{activeDragEntity.name}</span>
           </div>
         )}
       </DragOverlay>

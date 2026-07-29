@@ -6,8 +6,8 @@ import { getISOWeek, isSameDay } from '../../lib/calendarDates';
 import type { ClippedSegment, DragMode, DragState } from '../../lib/ganttLayout';
 import type { Task } from '../../store/useTaskStore';
 
-export const BAR_H = 20;
-export const BAR_GAP = 6;
+export const BAR_H = 13;
+export const BAR_GAP = 3;
 export const DAY_NUM_H = 26;
 export const GUTTER_WIDTH = 34;
 const CLICK_DRAG_THRESHOLD = 4;
@@ -88,7 +88,7 @@ export default function WeekRow({
 
   return (
     <div className="relative flex" style={{ height }}>
-      <div className="shrink-0 flex items-start justify-center pt-1 text-[9px] text-slate-600 font-mono border-r border-b border-slate-800/60" style={{ width: GUTTER_WIDTH }}>
+      <div className="shrink-0 flex items-start justify-center pt-1 text-[9px] text-neutral-600 font-mono border-r border-b border-neutral-800/60" style={{ width: GUTTER_WIDTH }}>
         {getISOWeek(weekDays[0])}
       </div>
       <div className="relative flex-1">
@@ -100,19 +100,19 @@ export default function WeekRow({
               <div key={i} className="relative group/day">
                 <button
                   onClick={() => onDrillDay(day)}
-                  className={`w-full h-full flex flex-col items-start text-left border-r border-b border-slate-800/60 last:border-r-0 px-1.5 pt-1 cursor-pointer hover:bg-slate-800/30 transition ${
-                    outOfMonth ? 'bg-slate-950/40' : ''
+                  className={`w-full h-full flex flex-col items-start text-left border-r border-b border-neutral-800/60 last:border-r-0 px-1.5 pt-1 cursor-pointer hover:bg-neutral-800/30 transition ${
+                    outOfMonth ? 'bg-neutral-950/40' : ''
                   }`}
                 >
                   <span
                     className={`text-[10px] font-mono inline-flex items-center justify-center w-5 h-5 rounded-full ${
-                      isToday ? 'bg-blue-600 text-white font-semibold' : outOfMonth ? 'text-slate-600' : 'text-slate-400'
+                      isToday ? 'bg-blue-600 text-white font-semibold' : outOfMonth ? 'text-neutral-600' : 'text-neutral-400'
                     }`}
                   >
                     {day.getDate()}
                   </span>
                   {overflowByDay[i] > 0 && (
-                    <span className="block text-[9px] text-slate-500 mt-0.5">+{overflowByDay[i]} more</span>
+                    <span className="block text-[9px] text-neutral-500 mt-0.5">+{overflowByDay[i]} more</span>
                   )}
                 </button>
                 <button
@@ -121,7 +121,7 @@ export default function WeekRow({
                     onQuickAddDay(day);
                   }}
                   title="New task"
-                  className="absolute top-1 right-1 w-4 h-4 rounded bg-slate-800 text-slate-400 hover:bg-blue-600 hover:text-white flex items-center justify-center opacity-0 group-hover/day:opacity-100 transition cursor-pointer"
+                  className="absolute top-1 right-1 w-4 h-4 rounded bg-neutral-800 text-neutral-400 hover:bg-blue-600 hover:text-white flex items-center justify-center opacity-0 group-hover/day:opacity-100 transition cursor-pointer"
                 >
                   <Plus className="w-2.5 h-2.5" />
                 </button>
@@ -156,9 +156,9 @@ export default function WeekRow({
                   onPointerMove={(e) => moveInteraction(e, task)}
                   onPointerUp={(e) => endInteraction(e, task, 'move')}
                   title={task.title}
-                  className={`relative h-full flex items-center text-[10px] text-white font-medium truncate cursor-grab active:cursor-grabbing select-none ${
-                    seg.isStartEdge ? 'rounded-l pl-2' : 'pl-1'
-                  } ${seg.isEndEdge ? 'rounded-r pr-2' : 'pr-1'}`}
+                  className={`relative h-full flex items-center text-[9px] leading-none text-white font-medium truncate cursor-grab active:cursor-grabbing select-none ${
+                    seg.isStartEdge ? 'rounded-l pl-1.5' : 'pl-1'
+                  } ${seg.isEndEdge ? 'rounded-r pr-1.5' : 'pr-1'}`}
                   style={{ backgroundColor: color }}
                 >
                   <span className="truncate">{task.title}</span>

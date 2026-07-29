@@ -87,20 +87,20 @@ export default function DatePickerPopover({ value, onChange, placeholder = 'Not 
       open={open}
       onClose={() => setOpen(false)}
       align={align}
-      panelClassName="w-64 bg-slate-900 border border-slate-800 rounded shadow-2xl overflow-hidden text-xs"
+      panelClassName="w-64 bg-neutral-900 border border-neutral-800 rounded shadow-2xl overflow-hidden text-xs"
       anchor={
         <button
           type="button"
           onClick={() => setOpen((o) => !o)}
           className={`px-2 py-1 rounded cursor-pointer text-xs font-sans transition ${
-            selected ? 'text-slate-300 hover:bg-slate-800/70 hover:text-white' : 'text-slate-500 hover:bg-slate-800/70 hover:text-slate-300'
+            selected ? 'text-neutral-300 hover:bg-neutral-800/70 hover:text-white' : 'text-neutral-500 hover:bg-neutral-800/70 hover:text-neutral-300'
           }`}
         >
           {selected ? (
             <span className="inline-flex items-baseline gap-1.5 tabular-nums">
               <span>{formatShort(selected)}</span>
               {hasTime && (
-                <span className="text-[9px] text-slate-500">
+                <span className="text-[9px] text-neutral-500">
                   {pad(selected.getHours())}:{pad(selected.getMinutes())}
                 </span>
               )}
@@ -113,7 +113,7 @@ export default function DatePickerPopover({ value, onChange, placeholder = 'Not 
     >
       <div className="p-3">
         <div className="flex items-center justify-between mb-2">
-          <span className="font-semibold text-slate-200">
+          <span className="font-semibold text-neutral-200">
             {MONTH_LABELS[viewMonth.getMonth()]} {viewMonth.getFullYear()}
           </span>
           <div className="flex items-center gap-1">
@@ -127,20 +127,20 @@ export default function DatePickerPopover({ value, onChange, placeholder = 'Not 
             <button
               type="button"
               onClick={() => setViewMonth((m) => new Date(m.getFullYear(), m.getMonth() - 1, 1))}
-              className="text-slate-400 hover:text-white px-1 cursor-pointer"
+              className="text-neutral-400 hover:text-white px-1 cursor-pointer"
             >
               <ChevronLeft className="w-3.5 h-3.5" />
             </button>
             <button
               type="button"
               onClick={() => setViewMonth((m) => new Date(m.getFullYear(), m.getMonth() + 1, 1))}
-              className="text-slate-400 hover:text-white px-1 cursor-pointer"
+              className="text-neutral-400 hover:text-white px-1 cursor-pointer"
             >
               <ChevronRight className="w-3.5 h-3.5" />
             </button>
           </div>
         </div>
-        <div className="grid grid-cols-7 gap-y-1 text-center text-[10px] text-slate-500 mb-1">
+        <div className="grid grid-cols-7 gap-y-1 text-center text-[10px] text-neutral-500 mb-1">
           {WEEKDAY_LABELS.map((w) => (
             <div key={w}>{w}</div>
           ))}
@@ -159,10 +159,10 @@ export default function DatePickerPopover({ value, onChange, placeholder = 'Not 
                   isSelected
                     ? 'bg-blue-600 text-white font-semibold'
                     : isToday
-                    ? 'text-blue-400 font-semibold hover:bg-slate-800'
+                    ? 'text-blue-400 font-semibold hover:bg-neutral-800'
                     : inMonth
-                    ? 'text-slate-300 hover:bg-slate-800'
-                    : 'text-slate-600 hover:bg-slate-800/50'
+                    ? 'text-neutral-300 hover:bg-neutral-800'
+                    : 'text-neutral-600 hover:bg-neutral-800/50'
                 }`}
               >
                 {day.getDate()}
@@ -173,10 +173,10 @@ export default function DatePickerPopover({ value, onChange, placeholder = 'Not 
       </div>
 
       {selected && (
-        <div className="px-3 py-2.5 border-t border-slate-800 bg-slate-950/40 space-y-2">
+        <div className="px-3 py-2.5 border-t border-neutral-800 bg-neutral-950/40 space-y-2">
           <div className="flex items-center gap-2">
-            <span className="text-[9px] uppercase tracking-wide text-slate-500 w-9 shrink-0">Date</span>
-            <span className="flex items-center gap-1.5 text-[11px] bg-slate-800 text-slate-200 rounded px-2.5 py-1">
+            <span className="text-[9px] uppercase tracking-wide text-neutral-500 w-9 shrink-0">Date</span>
+            <span className="flex items-center gap-1.5 text-[11px] bg-neutral-800 text-neutral-200 rounded px-2.5 py-1">
               {formatShort(selected)}
               <button
                 type="button"
@@ -184,14 +184,14 @@ export default function DatePickerPopover({ value, onChange, placeholder = 'Not 
                   onChange(null);
                   setShowTimeInput(false);
                 }}
-                className="text-slate-400 hover:text-white cursor-pointer"
+                className="text-neutral-400 hover:text-white cursor-pointer"
               >
                 <X className="w-3 h-3" />
               </button>
             </span>
           </div>
           <div className="flex items-center gap-2">
-            <span className="text-[9px] uppercase tracking-wide text-slate-500 w-9 shrink-0">Time</span>
+            <span className="text-[9px] uppercase tracking-wide text-neutral-500 w-9 shrink-0">Time</span>
             {showTimeInput ? (
               <input
                 type="time"
@@ -201,7 +201,7 @@ export default function DatePickerPopover({ value, onChange, placeholder = 'Not 
                   const [h, m] = e.target.value.split(':').map(Number);
                   if (!isNaN(h) && !isNaN(m)) commitTime(h, m);
                 }}
-                className="bg-slate-900 border border-slate-700 rounded px-2 py-1 text-[11px] text-slate-200 focus:outline-none focus:border-blue-500"
+                className="bg-neutral-900 border border-neutral-700 rounded px-2 py-1 text-[11px] text-neutral-200 focus:outline-none focus:border-blue-500"
               />
             ) : (
               <button

@@ -88,8 +88,8 @@ export default function DayTimeline({ day, tasks, statusColorOf, onOpenTask, onC
   return (
     <div className="flex flex-col h-full overflow-y-auto">
       {allDayTasks.length > 0 && (
-        <div className="shrink-0 border-b border-slate-800 px-3 py-2 space-y-1">
-          <div className="text-[9px] uppercase tracking-wider text-slate-500 mb-1">All day</div>
+        <div className="shrink-0 border-b border-neutral-800 px-3 py-2 space-y-1">
+          <div className="text-[9px] uppercase tracking-wider text-neutral-500 mb-1">All day</div>
           {allDayTasks.map((task) => (
             <button
               key={task.id}
@@ -107,8 +107,8 @@ export default function DayTimeline({ day, tasks, statusColorOf, onOpenTask, onC
       <div className="relative flex-1" style={{ minHeight: 24 * HOUR_H }}>
         <div className="absolute inset-0">
           {Array.from({ length: 24 }, (_, h) => (
-            <div key={h} className="relative border-b border-slate-800/50" style={{ height: HOUR_H }}>
-              <span className="absolute -top-2 left-1 text-[9px] text-slate-600 font-mono">
+            <div key={h} className="relative border-b border-neutral-800/50" style={{ height: HOUR_H }}>
+              <span className="absolute -top-2 left-1 text-[9px] text-neutral-600 font-mono">
                 {String(h).padStart(2, '0')}:00
               </span>
             </div>

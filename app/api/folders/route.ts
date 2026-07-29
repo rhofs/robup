@@ -9,7 +9,7 @@ export async function POST(req: Request) {
       name: body.name,
       parentId: body.parentId ?? null,
     },
-    select: { id: true, name: true, spaceId: true, parentId: true, order: true },
+    select: { id: true, name: true, color: true, icon: true, spaceId: true, parentId: true, order: true },
   });
   return NextResponse.json(folder);
 }

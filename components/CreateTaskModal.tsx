@@ -43,38 +43,38 @@ export default function CreateTaskModal({ open, workspaces, defaultStartDate, on
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/70 backdrop-blur-xs" onClick={onClose}>
-      <div onClick={(e) => e.stopPropagation()} className="w-[420px] bg-slate-900 border border-slate-800 rounded shadow-2xl overflow-hidden">
-        <div className="px-5 py-4 border-b border-slate-800 flex items-center justify-between">
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-neutral-950/70 backdrop-blur-xs" onClick={onClose}>
+      <div onClick={(e) => e.stopPropagation()} className="w-[420px] bg-neutral-900 border border-neutral-800 rounded shadow-2xl overflow-hidden">
+        <div className="px-5 py-4 border-b border-neutral-800 flex items-center justify-between">
           <h3 className="font-bold text-sm text-white">New task</h3>
-          <button onClick={onClose} className="text-slate-400 hover:text-white cursor-pointer">
+          <button onClick={onClose} className="text-neutral-400 hover:text-white cursor-pointer">
             <X className="w-3.5 h-3.5" />
           </button>
         </div>
 
         <div className="p-5 space-y-3">
           <div className="space-y-1.5">
-            <label className="text-[10px] uppercase tracking-wide text-slate-500 font-semibold">Title</label>
+            <label className="text-[10px] uppercase tracking-wide text-neutral-500 font-semibold">Title</label>
             <input
               autoFocus
               value={title}
               onChange={(e) => setTitle(e.target.value)}
               onKeyDown={(e) => e.key === 'Enter' && canCreate && handleCreate()}
               placeholder="Task title..."
-              className="w-full bg-slate-950 border border-slate-700 rounded px-3 py-2 text-xs text-white focus:outline-none focus:border-blue-500"
+              className="w-full bg-neutral-950 border border-neutral-700 rounded px-3 py-2 text-xs text-white focus:outline-none focus:border-blue-500"
             />
           </div>
 
           <div className="grid grid-cols-2 gap-3">
             <div className="space-y-1.5">
-              <label className="text-[10px] uppercase tracking-wide text-slate-500 font-semibold">Space *</label>
+              <label className="text-[10px] uppercase tracking-wide text-neutral-500 font-semibold">Space *</label>
               <select
                 value={spaceId}
                 onChange={(e) => {
                   setSpaceId(e.target.value);
                   setListId('');
                 }}
-                className="w-full bg-slate-950 border border-slate-700 rounded px-2 py-2 text-xs text-white focus:outline-none focus:border-blue-500"
+                className="w-full bg-neutral-950 border border-neutral-700 rounded px-2 py-2 text-xs text-white focus:outline-none focus:border-blue-500"
               >
                 <option value="">Select a space...</option>
                 {spaces.map((s) => (
@@ -86,12 +86,12 @@ export default function CreateTaskModal({ open, workspaces, defaultStartDate, on
             </div>
 
             <div className="space-y-1.5">
-              <label className="text-[10px] uppercase tracking-wide text-slate-500 font-semibold">List *</label>
+              <label className="text-[10px] uppercase tracking-wide text-neutral-500 font-semibold">List *</label>
               <select
                 value={listId}
                 onChange={(e) => setListId(e.target.value)}
                 disabled={!selectedSpace}
-                className="w-full bg-slate-950 border border-slate-700 rounded px-2 py-2 text-xs text-white focus:outline-none focus:border-blue-500 disabled:opacity-40 disabled:cursor-not-allowed"
+                className="w-full bg-neutral-950 border border-neutral-700 rounded px-2 py-2 text-xs text-white focus:outline-none focus:border-blue-500 disabled:opacity-40 disabled:cursor-not-allowed"
               >
                 <option value="">{selectedSpace ? 'Select a list...' : 'Pick a space first'}</option>
                 {selectedSpace?.lists.map((l) => (
@@ -105,14 +105,14 @@ export default function CreateTaskModal({ open, workspaces, defaultStartDate, on
 
           <div className="grid grid-cols-2 gap-3">
             <div className="space-y-1.5">
-              <label className="text-[10px] uppercase tracking-wide text-slate-500 font-semibold">Start date</label>
-              <div className="bg-slate-950 border border-slate-700 rounded px-1 py-0.5 inline-block">
+              <label className="text-[10px] uppercase tracking-wide text-neutral-500 font-semibold">Start date</label>
+              <div className="bg-neutral-950 border border-neutral-700 rounded px-1 py-0.5 inline-block">
                 <DatePickerPopover value={startDate} onChange={setStartDate} placeholder="Not set" />
               </div>
             </div>
             <div className="space-y-1.5">
-              <label className="text-[10px] uppercase tracking-wide text-slate-500 font-semibold">Due date</label>
-              <div className="bg-slate-950 border border-slate-700 rounded px-1 py-0.5 inline-block">
+              <label className="text-[10px] uppercase tracking-wide text-neutral-500 font-semibold">Due date</label>
+              <div className="bg-neutral-950 border border-neutral-700 rounded px-1 py-0.5 inline-block">
                 <DatePickerPopover value={dueDate} onChange={setDueDate} placeholder="Not set" />
               </div>
             </div>
@@ -124,7 +124,7 @@ export default function CreateTaskModal({ open, workspaces, defaultStartDate, on
             onClick={handleCreate}
             disabled={!canCreate}
             title={!canCreate ? 'Title, Space, and List are all required' : ''}
-            className="w-full bg-blue-600 hover:bg-blue-500 disabled:bg-slate-800 disabled:text-slate-500 disabled:cursor-not-allowed text-white text-xs py-2.5 rounded font-medium cursor-pointer transition"
+            className="w-full bg-blue-600 hover:bg-blue-500 disabled:bg-neutral-800 disabled:text-neutral-500 disabled:cursor-not-allowed text-white text-xs py-2.5 rounded font-medium cursor-pointer transition"
           >
             Create task
           </button>

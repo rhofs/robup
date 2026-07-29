@@ -2,10 +2,10 @@ import { PrismaClient } from '@prisma/client'
 const prisma = new PrismaClient()
 
 const STATUS_DEFS = [
-  { name: 'To Do', color: '#f59e0b' },
-  { name: 'In Progress', color: '#3b82f6' },
-  { name: 'Review', color: '#a855f7' },
-  { name: 'Done', color: '#10b981' },
+  { name: 'To Do', color: '#c89642' },
+  { name: 'In Progress', color: '#618cd1' },
+  { name: 'Review', color: '#9a61d1' },
+  { name: 'Done', color: '#349f7c' },
 ]
 
 async function main() {
@@ -28,7 +28,7 @@ async function main() {
   const productDev = await prisma.space.create({
     data: {
       name: '🚀 Product Dev',
-      color: '#3B82F6',
+      color: '#618cd1',
       workspaceId: workspace.id,
       statuses: {
         create: STATUS_DEFS.map((s, idx) => ({ ...s, order: idx })),
@@ -40,7 +40,7 @@ async function main() {
   const marketing = await prisma.space.create({
     data: {
       name: '🔥 Marketing',
-      color: '#EF4444',
+      color: '#cd6565',
       workspaceId: workspace.id,
       statuses: {
         create: STATUS_DEFS.map((s, idx) => ({ ...s, order: idx })),
@@ -65,8 +65,8 @@ async function main() {
   // Team — noen ekte User-rader så assignee-velgeren har innhold med en gang
   console.log('👥 Oppretter testbrukere...')
   const rh = await prisma.user.create({ data: { name: 'Robin H.', initials: 'RH', color: '#6366F1' } })
-  const co = await prisma.user.create({ data: { name: 'Casper O.', initials: 'CO', color: '#10B981' } })
-  const vs = await prisma.user.create({ data: { name: 'Vetle S.', initials: 'VS', color: '#F59E0B' } })
+  const co = await prisma.user.create({ data: { name: 'Casper O.', initials: 'CO', color: '#349f7c' } })
+  const vs = await prisma.user.create({ data: { name: 'Vetle S.', initials: 'VS', color: '#c89642' } })
 
   const lister = [frontendList, backendList, q3Launch]
   const folk = [[rh], [co], [vs], [rh, co], []]

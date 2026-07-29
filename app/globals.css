@@ -27,7 +27,7 @@ body {
 
 * {
   scrollbar-width: thin;
-  scrollbar-color: #334155 transparent;
+  scrollbar-color: #525252 transparent;
 }
 
 *::-webkit-scrollbar {
@@ -40,14 +40,14 @@ body {
 }
 
 *::-webkit-scrollbar-thumb {
-  background-color: #334155;
+  background-color: #525252;
   border-radius: 8px;
   border: 2px solid transparent;
   background-clip: padding-box;
 }
 
 *::-webkit-scrollbar-thumb:hover {
-  background-color: #475569;
+  background-color: #737373;
 }
 
 @keyframes done-glow {
