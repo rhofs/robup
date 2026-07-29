@@ -6,11 +6,13 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
   const body = await req.json();
   const data: any = {};
   if (body.name !== undefined) data.name = body.name;
+  if (body.folderId !== undefined) data.folderId = body.folderId;
+  if (body.order !== undefined) data.order = body.order;
 
   const list = await prisma.list.update({
     where: { id },
     data,
-    select: { id: true, name: true, spaceId: true },
+    select: { id: true, name: true, spaceId: true, folderId: true, order: true },
   });
   return NextResponse.json(list);
 }

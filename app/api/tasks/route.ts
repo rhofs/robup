@@ -17,6 +17,8 @@ export async function POST(req: Request) {
       listId: body.listId,
       parentId: body.parentId ?? null,
       status: body.status ?? 'To Do',
+      startDate: body.startDate ? new Date(body.startDate) : null,
+      dueDate: body.dueDate ? new Date(body.dueDate) : null,
     },
     include: { assignees: true },
   });

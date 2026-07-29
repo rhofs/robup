@@ -87,12 +87,12 @@ export default function DatePickerPopover({ value, onChange, placeholder = 'Not 
       open={open}
       onClose={() => setOpen(false)}
       align={align}
-      panelClassName="w-64 bg-slate-900 border border-slate-800 rounded-xl shadow-2xl overflow-hidden text-xs"
+      panelClassName="w-64 bg-slate-900 border border-slate-800 rounded shadow-2xl overflow-hidden text-xs"
       anchor={
         <button
           type="button"
           onClick={() => setOpen((o) => !o)}
-          className={`px-2 py-1 rounded-md cursor-pointer text-xs font-sans transition ${
+          className={`px-2 py-1 rounded cursor-pointer text-xs font-sans transition ${
             selected ? 'text-slate-300 hover:bg-slate-800/70 hover:text-white' : 'text-slate-500 hover:bg-slate-800/70 hover:text-slate-300'
           }`}
         >
@@ -120,7 +120,7 @@ export default function DatePickerPopover({ value, onChange, placeholder = 'Not 
             <button
               type="button"
               onClick={() => setViewMonth(startOfDay(today))}
-              className="text-[10px] text-indigo-400 hover:text-indigo-300 px-1.5 cursor-pointer"
+              className="text-[10px] text-blue-400 hover:text-blue-300 px-1.5 cursor-pointer"
             >
               Today
             </button>
@@ -157,9 +157,9 @@ export default function DatePickerPopover({ value, onChange, placeholder = 'Not 
                 onClick={() => commitDate(day)}
                 className={`w-7 h-7 mx-auto rounded-full flex items-center justify-center cursor-pointer transition ${
                   isSelected
-                    ? 'bg-indigo-600 text-white font-semibold'
+                    ? 'bg-blue-600 text-white font-semibold'
                     : isToday
-                    ? 'text-indigo-400 font-semibold hover:bg-slate-800'
+                    ? 'text-blue-400 font-semibold hover:bg-slate-800'
                     : inMonth
                     ? 'text-slate-300 hover:bg-slate-800'
                     : 'text-slate-600 hover:bg-slate-800/50'
@@ -176,7 +176,7 @@ export default function DatePickerPopover({ value, onChange, placeholder = 'Not 
         <div className="px-3 py-2.5 border-t border-slate-800 bg-slate-950/40 space-y-2">
           <div className="flex items-center gap-2">
             <span className="text-[9px] uppercase tracking-wide text-slate-500 w-9 shrink-0">Date</span>
-            <span className="flex items-center gap-1.5 text-[11px] bg-slate-800 text-slate-200 rounded-full px-2.5 py-1">
+            <span className="flex items-center gap-1.5 text-[11px] bg-slate-800 text-slate-200 rounded px-2.5 py-1">
               {formatShort(selected)}
               <button
                 type="button"
@@ -201,13 +201,13 @@ export default function DatePickerPopover({ value, onChange, placeholder = 'Not 
                   const [h, m] = e.target.value.split(':').map(Number);
                   if (!isNaN(h) && !isNaN(m)) commitTime(h, m);
                 }}
-                className="bg-slate-900 border border-slate-700 rounded px-2 py-1 text-[11px] text-slate-200 focus:outline-none focus:border-indigo-500"
+                className="bg-slate-900 border border-slate-700 rounded px-2 py-1 text-[11px] text-slate-200 focus:outline-none focus:border-blue-500"
               />
             ) : (
               <button
                 type="button"
                 onClick={() => setShowTimeInput(true)}
-                className="text-[11px] text-indigo-400 hover:text-indigo-300 cursor-pointer"
+                className="text-[11px] text-blue-400 hover:text-blue-300 cursor-pointer"
               >
                 + Add time
               </button>

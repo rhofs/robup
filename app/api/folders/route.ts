@@ -3,13 +3,13 @@ import { prisma } from '@/lib/prisma';
 
 export async function POST(req: Request) {
   const body = await req.json();
-  const list = await prisma.list.create({
+  const folder = await prisma.folder.create({
     data: {
       spaceId: body.spaceId,
       name: body.name,
-      folderId: body.folderId ?? null,
+      parentId: body.parentId ?? null,
     },
-    select: { id: true, name: true, spaceId: true, folderId: true, order: true },
+    select: { id: true, name: true, spaceId: true, parentId: true, order: true },
   });
-  return NextResponse.json(list);
+  return NextResponse.json(folder);
 }

@@ -18,6 +18,7 @@ import { CSS } from '@dnd-kit/utilities';
 import {
   Globe,
   List as ListIcon,
+  Calendar as CalendarIcon,
   Users,
   Zap,
   Archive,
@@ -39,11 +40,15 @@ import {
   ChevronDown,
   GripVertical,
 } from 'lucide-react';
-import { useTaskStore, HierarchySpace, StatusDef, CustomFieldDef, Task, TaskDoc } from '../store/useTaskStore';
+import { useTaskStore, HierarchySpace, HierarchyFolder, StatusDef, CustomFieldDef, Task, TaskDoc } from '../store/useTaskStore';
+import { collectListIdsUnder, isDescendantOf } from '../lib/folderTree';
 import DatePickerPopover from '../components/DatePickerPopover';
 import ConfirmDialog from '../components/ConfirmDialog';
 import FloatingPopover from '../components/FloatingPopover';
 import TaskRow, { ColumnDef } from '../components/TaskRow';
+import FolderTree from '../components/FolderTree';
+import CalendarView from '../components/calendar/CalendarView';
+import CreateTaskModal from '../components/CreateTaskModal';
 
 function DocTab({
   doc,
@@ -67,8 +72,8 @@ function DocTab({
     <div ref={setNodeRef} style={style} {...attributes} {...listeners} className="relative group/doc shrink-0">
       <button
         onClick={onSelect}
-        className={`text-[11px] px-2.5 py-1 rounded-md cursor-pointer transition ${
-          isActive ? 'bg-indigo-600 text-white' : 'bg-slate-900 text-slate-400 hover:text-slate-200'
+        className={`text-[11px] px-2.5 py-1 rounded cursor-pointer transition ${
+          isActive ? 'bg-neutral-800 text-blue-400' : 'bg-slate-900 text-slate-400 hover:text-slate-200'
         }`}
       >
         {doc.title || 'Untitled'}
@@ -91,11 +96,15 @@ function SortableColumnHeader({
   onToggleSort,
   sortIcon,
   onContextMenuOpen,
+  onResize,
+  onResetWidth,
 }: {
   col: ColumnDef;
   onToggleSort: () => void;
   sortIcon: React.ReactNode;
   onContextMenuOpen?: (e: React.MouseEvent) => void;
+  onResize: (deltaPx: number) => void;
+  onResetWidth: () => void;
 }) {
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id: col.key });
   const style = {
@@ -114,13 +123,45 @@ function SortableColumnHeader({
         e.preventDefault();
         onContextMenuOpen?.(e);
       }}
-      className="text-center flex items-center justify-center gap-1 cursor-grab active:cursor-grabbing select-none"
+      className="relative text-center flex items-center justify-center gap-1 cursor-grab active:cursor-grabbing select-none"
       title="Drag to reorder, right-click for more options"
     >
       <button onClick={onToggleSort} className="hover:text-slate-300 cursor-pointer flex items-center gap-1">
         {col.label} {sortIcon}
       </button>
+      <ColumnResizeHandle onResize={onResize} onReset={onResetWidth} />
     </div>
+  );
+}
+
+function ColumnResizeHandle({ onResize, onReset }: { onResize: (deltaPx: number) => void; onReset: () => void }) {
+  const [resizing, setResizing] = useState(false);
+
+  return (
+    <div
+      onPointerDown={(e) => {
+        e.stopPropagation();
+        e.preventDefault();
+        setResizing(true);
+        (e.target as HTMLElement).setPointerCapture(e.pointerId);
+      }}
+      onPointerMove={(e) => {
+        if (!resizing) return;
+        e.stopPropagation();
+        onResize(e.movementX);
+      }}
+      onPointerUp={(e) => {
+        e.stopPropagation();
+        setResizing(false);
+      }}
+      onClick={(e) => e.stopPropagation()}
+      onDoubleClick={(e) => {
+        e.stopPropagation();
+        onReset();
+      }}
+      title="Drag to resize, double-click to reset"
+      className={`absolute top-0 right-0 h-full w-2 -mr-1 cursor-col-resize z-10 ${resizing ? 'bg-blue-500/60' : 'hover:bg-blue-500/40'}`}
+    />
   );
 }
 
@@ -163,7 +204,7 @@ function SortableStatusRow({
           onKeyDown={(e) => {
             if (e.key === 'Enter') (e.target as HTMLInputElement).blur();
           }}
-          className="flex-1 min-w-0 bg-slate-950 border border-slate-700 rounded px-2 py-1 text-[11px] text-white focus:outline-none focus:border-indigo-500"
+          className="flex-1 min-w-0 bg-slate-950 border border-slate-700 rounded px-2 py-1 text-[11px] text-white focus:outline-none focus:border-blue-500"
         />
         <button onClick={onDelete} className="text-slate-500 hover:text-red-400 text-xs cursor-pointer shrink-0">
           <Trash2 className="w-3.5 h-3.5" />
@@ -199,80 +240,6 @@ function DroppableSidebarItem({
   return <div ref={setNodeRef}>{children(isOver)}</div>;
 }
 
-function SidebarListItem({
-  list,
-  isActive,
-  count,
-  onNavigate,
-  onRename,
-}: {
-  list: { id: string; name: string };
-  isActive: boolean;
-  count: number;
-  onNavigate: () => void;
-  onRename: (name: string) => void;
-}) {
-  const [editing, setEditing] = useState(false);
-  const [draft, setDraft] = useState(list.name);
-  const { setNodeRef, isOver } = useDroppable({ id: `list:${list.id}` });
-
-  const commit = () => {
-    setEditing(false);
-    const trimmed = draft.trim();
-    if (trimmed && trimmed !== list.name) onRename(trimmed);
-    else setDraft(list.name);
-  };
-
-  if (editing) {
-    return (
-      <input
-        autoFocus
-        value={draft}
-        onChange={(e) => setDraft(e.target.value)}
-        onBlur={commit}
-        onKeyDown={(e) => {
-          if (e.key === 'Enter') commit();
-          if (e.key === 'Escape') {
-            setDraft(list.name);
-            setEditing(false);
-          }
-        }}
-        onClick={(e) => e.stopPropagation()}
-        className="w-full bg-slate-950 border border-indigo-500 rounded-md px-2 py-1 text-[11px] text-white focus:outline-none"
-      />
-    );
-  }
-
-  return (
-    <div
-      ref={setNodeRef}
-      onClick={onNavigate}
-      className={`group w-full text-left px-2 py-1 rounded-md text-[11px] transition flex items-center justify-between cursor-pointer ${
-        isActive ? 'bg-indigo-600/20 text-indigo-300 font-medium' : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/30'
-      } ${isOver ? 'ring-1 ring-inset ring-indigo-500 bg-indigo-600/10' : ''}`}
-    >
-      <span className="truncate flex items-center gap-1.5 min-w-0">
-        <ListIcon className="w-3 h-3 shrink-0" />
-        <span className="truncate">{list.name}</span>
-      </span>
-      <span className="flex items-center gap-1 shrink-0">
-        <span className="text-[9px] text-slate-500 font-mono">{count}</span>
-        <button
-          onClick={(e) => {
-            e.stopPropagation();
-            setDraft(list.name);
-            setEditing(true);
-          }}
-          title="Rename"
-          className="opacity-0 group-hover:opacity-100 text-slate-500 hover:text-slate-200 cursor-pointer"
-        >
-          <Pencil className="w-2.5 h-2.5" />
-        </button>
-      </span>
-    </div>
-  );
-}
-
 function SortableFieldOption({
   option,
   colorChoices,
@@ -304,7 +271,7 @@ function SortableFieldOption({
         <input
           value={option.label}
           onChange={(e) => onChangeLabel(e.target.value)}
-          className="flex-1 min-w-0 bg-slate-950 border border-slate-700 rounded px-2 py-1 text-xs text-white focus:outline-none focus:border-indigo-500"
+          className="flex-1 min-w-0 bg-slate-950 border border-slate-700 rounded px-2 py-1 text-xs text-white focus:outline-none focus:border-blue-500"
         />
         <button onClick={onDelete} className="text-slate-500 hover:text-red-400 text-xs cursor-pointer shrink-0">
           <Trash2 className="w-3.5 h-3.5" />
@@ -347,6 +314,12 @@ const initialsFromName = (name: string) =>
     .slice(0, 2)
     .toUpperCase();
 
+const DEFAULT_COLUMN_WIDTHS: Record<string, number> = { name: 280 };
+const NAME_WIDTH_RANGE = { min: 140, max: 640 };
+const COLUMN_WIDTH_RANGE = { min: 70, max: 300 };
+const COLUMN_WIDTHS_STORAGE_KEY = 'robup.columnWidths';
+const ACTIVITY_PANEL_STORAGE_KEY = 'robup.showActivityPanel';
+
 const timeAgo = (dateStr: string | Date) => {
   const diffMs = Date.now() - new Date(dateStr).getTime();
   const mins = Math.floor(diffMs / 60000);
@@ -369,6 +342,8 @@ export default function Home() {
     activeListId,
     isLoading,
     showArchived,
+    activeView,
+    setActiveView,
     fetchInitialData,
     setNavigation,
     setShowArchived,
@@ -390,8 +365,9 @@ export default function Home() {
     addUser,
     deleteUser,
     updateSpace,
-    createList,
-    renameList,
+    moveList,
+    moveFolder,
+    deleteFolder,
     fetchComments,
     addComment,
     fetchDocs,
@@ -411,6 +387,14 @@ export default function Home() {
   const [newSubtaskTitle, setNewSubtaskTitle] = useState('');
 
   const [visibleColumns, setVisibleColumns] = useState<string[]>(['status', 'assignee', 'startDate', 'dueDate']);
+  const [columnWidths, setColumnWidths] = useState<Record<string, number>>(DEFAULT_COLUMN_WIDTHS);
+  const [showActivityPanel, setShowActivityPanel] = useState(true);
+
+  const [createTaskOpen, setCreateTaskOpen] = useState(false);
+  const [createTaskDefaultDate, setCreateTaskDefaultDate] = useState<string | null>(null);
+
+  const [calendarVisibleListIds, setCalendarVisibleListIds] = useState<Set<string>>(new Set());
+  const calendarFilterInitRef = useRef(false);
   const [columnMenuOpen, setColumnMenuOpen] = useState(false);
   const [newFieldOpen, setNewFieldOpen] = useState(false);
   const [newFieldName, setNewFieldName] = useState('');
@@ -436,9 +420,6 @@ export default function Home() {
   const [spaceEditTarget, setSpaceEditTarget] = useState<HierarchySpace | null>(null);
   const [editSpaceName, setEditSpaceName] = useState('');
   const [editSpaceColor, setEditSpaceColor] = useState(FIELD_COLOR_CHOICES[0]);
-
-  const [newListSpaceId, setNewListSpaceId] = useState<string | null>(null);
-  const [newListName, setNewListName] = useState('');
 
   const [columnMenu, setColumnMenu] = useState<{ x: number; y: number; col: ColumnDef } | null>(null);
   const [fieldEditTarget, setFieldEditTarget] = useState<CustomFieldDef | null>(null);
@@ -517,6 +498,46 @@ export default function Home() {
     fetchInitialData();
   }, [fetchInitialData]);
 
+  // Restore persisted UI layout prefs once on mount (localStorage isn't available during SSR)
+  useEffect(() => {
+    try {
+      const storedWidths = localStorage.getItem(COLUMN_WIDTHS_STORAGE_KEY);
+      if (storedWidths) setColumnWidths({ ...DEFAULT_COLUMN_WIDTHS, ...JSON.parse(storedWidths) });
+      const storedPanel = localStorage.getItem(ACTIVITY_PANEL_STORAGE_KEY);
+      if (storedPanel !== null) setShowActivityPanel(storedPanel === 'true');
+    } catch {}
+  }, []);
+
+  useEffect(() => {
+    localStorage.setItem(COLUMN_WIDTHS_STORAGE_KEY, JSON.stringify(columnWidths));
+  }, [columnWidths]);
+
+  useEffect(() => {
+    localStorage.setItem(ACTIVITY_PANEL_STORAGE_KEY, String(showActivityPanel));
+  }, [showActivityPanel]);
+
+  // Calendar filter defaults to "everything visible"; newly created lists join the visible set too.
+  useEffect(() => {
+    const allListIds = workspaces.flatMap((w) => w.spaces.flatMap((s) => s.lists.map((l) => l.id)));
+    if (allListIds.length === 0) return;
+    if (!calendarFilterInitRef.current) {
+      setCalendarVisibleListIds(new Set(allListIds));
+      calendarFilterInitRef.current = true;
+      return;
+    }
+    setCalendarVisibleListIds((prev) => {
+      const next = new Set(prev);
+      let changed = false;
+      for (const id of allListIds) {
+        if (!next.has(id)) {
+          next.add(id);
+          changed = true;
+        }
+      }
+      return changed ? next : prev;
+    });
+  }, [workspaces]);
+
   const activeModalTaskId = modalTaskStack.length > 0 ? modalTaskStack[modalTaskStack.length - 1] : null;
   useEffect(() => {
     if (activeModalTaskId) {
@@ -527,6 +548,25 @@ export default function Home() {
       setEditingModalTitle(false);
     }
   }, [activeModalTaskId, fetchComments, fetchDocs]);
+
+  // Track subtasks added while a task is already open (vs. ones already there when it was opened),
+  // so only genuinely new rows play their entrance animation — opening a task shouldn't "pop in" its existing subtasks.
+  const [justAddedSubtaskIds, setJustAddedSubtaskIds] = useState<Set<string>>(new Set());
+  const prevSubtaskStateRef = useRef<{ parentId: string | null; ids: Set<string> }>({ parentId: null, ids: new Set() });
+  useEffect(() => {
+    const currentIds = new Set(tasks.filter((t) => t.parentId === activeModalTaskId).map((t) => t._localId || t.id));
+    const prev = prevSubtaskStateRef.current;
+    if (prev.parentId === activeModalTaskId) {
+      const added = [...currentIds].filter((id) => !prev.ids.has(id));
+      if (added.length > 0) {
+        setJustAddedSubtaskIds(new Set(added));
+        prevSubtaskStateRef.current = { parentId: activeModalTaskId, ids: currentIds };
+        const timer = setTimeout(() => setJustAddedSubtaskIds(new Set()), 500);
+        return () => clearTimeout(timer);
+      }
+    }
+    prevSubtaskStateRef.current = { parentId: activeModalTaskId, ids: currentIds };
+  }, [tasks, activeModalTaskId]);
 
   // When docs for the active task load, auto-select the first document
   const activeTaskDocs = activeModalTaskId ? docs[activeModalTaskId] || [] : [];
@@ -573,6 +613,37 @@ export default function Home() {
     .map((key) => availableColumns.find((c) => c.key === key))
     .filter((c): c is ColumnDef => !!c);
 
+  const resizeColumn = (key: string, deltaPx: number) => {
+    setColumnWidths((widths) => {
+      const isName = key === 'name';
+      const { min, max } = isName ? NAME_WIDTH_RANGE : COLUMN_WIDTH_RANGE;
+      const current = widths[key] ?? (isName ? DEFAULT_COLUMN_WIDTHS.name : 110);
+      const next = Math.min(max, Math.max(min, current + deltaPx));
+      if (next === current) return widths;
+      return { ...widths, [key]: next };
+    });
+  };
+
+  const resetColumnWidth = (key: string) => {
+    setColumnWidths((widths) => {
+      const next = { ...widths };
+      if (key === 'name') next.name = DEFAULT_COLUMN_WIDTHS.name;
+      else delete next[key];
+      return next;
+    });
+  };
+
+  const rowGridTemplate = `20px 28px ${columnWidths.name ?? DEFAULT_COLUMN_WIDTHS.name}px ${activeColumns
+    .map((c) => `${columnWidths[c.key] ?? 110}px`)
+    .join(' ')} 32px`;
+
+  const tableMinWidth =
+    20 +
+    28 +
+    (columnWidths.name ?? DEFAULT_COLUMN_WIDTHS.name) +
+    activeColumns.reduce((sum, c) => sum + (columnWidths[c.key] ?? 110), 0) +
+    32;
+
   const statusColor = (name: string) => statuses.find((s) => s.name === name)?.color || '#94a3b8';
 
   const filteredTasks = useMemo(() => {
@@ -606,6 +677,45 @@ export default function Home() {
     return result;
   }, [tasks, activeSpaceId, activeListId, currentSpace, modalTaskStack, sortBy, sortOrder, showArchived]);
 
+  // Calendar has its own independent multi-select filter (which Spaces/Lists are visible),
+  // separate from the Tasks tab's single-selection navigation.
+  const calendarFilteredTasks = useMemo(
+    () =>
+      tasks.filter(
+        (task) => task.parentId === null && !!task.archived === showArchived && calendarVisibleListIds.has(task.listId)
+      ),
+    [tasks, calendarVisibleListIds, showArchived]
+  );
+
+  const toggleCalendarList = (listId: string) => {
+    setCalendarVisibleListIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(listId)) next.delete(listId);
+      else next.add(listId);
+      return next;
+    });
+  };
+
+  const toggleCalendarSpace = (space: HierarchySpace) => {
+    const ids = collectListIdsUnder(space, null);
+    const allOn = ids.length > 0 && ids.every((id) => calendarVisibleListIds.has(id));
+    setCalendarVisibleListIds((prev) => {
+      const next = new Set(prev);
+      ids.forEach((id) => (allOn ? next.delete(id) : next.add(id)));
+      return next;
+    });
+  };
+
+  const toggleCalendarFolder = (space: HierarchySpace, folderId: string) => {
+    const ids = collectListIdsUnder(space, folderId);
+    const allOn = ids.length > 0 && ids.every((id) => calendarVisibleListIds.has(id));
+    setCalendarVisibleListIds((prev) => {
+      const next = new Set(prev);
+      ids.forEach((id) => (allOn ? next.delete(id) : next.add(id)));
+      return next;
+    });
+  };
+
   const toggleSort = (field: 'dueDate' | 'startDate' | 'name') => {
     if (sortBy === field) {
       setSortOrder(sortOrder === 'asc' ? 'desc' : 'asc');
@@ -617,7 +727,7 @@ export default function Home() {
 
   const SortIcon = ({ field }: { field: 'dueDate' | 'startDate' | 'name' }) =>
     sortBy === field ? (
-      <span className="text-indigo-400 inline-flex">{sortOrder === 'asc' ? <ChevronUp className="w-3 h-3" /> : <ChevronDown className="w-3 h-3" />}</span>
+      <span className="text-blue-400 inline-flex">{sortOrder === 'asc' ? <ChevronUp className="w-3 h-3" /> : <ChevronDown className="w-3 h-3" />}</span>
     ) : null;
 
   const toggleColumn = (key: string) => {
@@ -783,6 +893,36 @@ export default function Home() {
     const draggedId = active.id as string;
     const overId = over.id as string;
 
+    // Sidebar tree reparenting (List/Folder dragged onto a Folder or a Space header) is a
+    // completely different kind of drag from moving a task — dispatch on the id prefix.
+    // (Both share this one DndContext: dnd-kit resolves useDraggable/useDroppable by nearest
+    // ancestor DndContext, so a second nested context here would silently steal the existing
+    // `list:`/`space:` task-drop targets instead of coexisting with them.)
+    if (draggedId.startsWith('list-drag:') || draggedId.startsWith('folder-drag:')) {
+      const isFolder = draggedId.startsWith('folder-drag:');
+      const treeId = isFolder ? draggedId.slice('folder-drag:'.length) : draggedId.slice('list-drag:'.length);
+      const space = workspaces
+        .flatMap((w) => w.spaces)
+        .find((s) => (isFolder ? s.folders.some((f) => f.id === treeId) : s.lists.some((l) => l.id === treeId)));
+      if (!space) return;
+
+      if (overId.startsWith('folder-drop:')) {
+        const targetFolderId = overId.slice('folder-drop:'.length);
+        if (!space.folders.some((f) => f.id === targetFolderId)) return;
+        if (isFolder) {
+          if (targetFolderId === treeId || isDescendantOf(space, targetFolderId, treeId)) return;
+          moveFolder(space.id, treeId, targetFolderId);
+        } else {
+          moveList(space.id, treeId, targetFolderId);
+        }
+      } else if (overId.startsWith('space:')) {
+        if (overId.slice('space:'.length) !== space.id) return;
+        if (isFolder) moveFolder(space.id, treeId, null);
+        else moveList(space.id, treeId, null);
+      }
+      return;
+    }
+
     if (overId.startsWith('task:')) {
       const targetId = overId.slice('task:'.length);
       if (targetId !== draggedId) optimisticSetParent(draggedId, targetId);
@@ -794,6 +934,8 @@ export default function Home() {
       if (space?.lists[0]) optimisticSetList(draggedId, space.lists[0].id);
     }
   };
+
+  const [folderToDelete, setFolderToDelete] = useState<HierarchyFolder | null>(null);
 
   // ---- Docs (autosave) ----
   const handleDocDraftChange = (value: string) => {
@@ -830,9 +972,9 @@ export default function Home() {
 
   if (isLoading) {
     return (
-      <div className="flex h-screen w-screen items-center justify-center bg-slate-950 text-indigo-400 font-mono text-sm">
+      <div className="flex h-screen w-screen items-center justify-center bg-slate-950 text-blue-400 font-mono text-sm">
         <div className="flex items-center gap-3">
-          <div className="w-5 h-5 border-2 border-indigo-500 border-t-transparent rounded-full animate-spin"></div>
+          <div className="w-5 h-5 border-2 border-blue-500 border-t-transparent rounded-full animate-spin"></div>
           <span>Loading RobUp...</span>
         </div>
       </div>
@@ -852,32 +994,55 @@ export default function Home() {
   return (
     <DndContext sensors={taskSensors} collisionDetection={closestCenter} onDragStart={handleTaskDragStart} onDragEnd={handleTaskDragEnd}>
     <div className="flex h-screen bg-slate-950 text-slate-100 font-sans overflow-hidden select-none">
+      {/* ================= ICON RAIL ================= */}
+      <nav className="w-14 bg-slate-950 border-r border-slate-800/80 flex flex-col items-center py-4 gap-2 shrink-0 select-none">
+        <div className="w-8 h-8 rounded bg-gradient-to-br from-blue-500 to-blue-700 flex items-center justify-center font-black text-white shadow-lg shadow-blue-500/20 mb-3">
+          R
+        </div>
+        <button
+          onClick={() => setActiveView('board')}
+          title="Tasks"
+          className={`w-10 h-10 rounded flex flex-col items-center justify-center gap-0.5 transition cursor-pointer ${
+            activeView === 'board' ? 'bg-neutral-800 text-blue-400' : 'text-slate-500 hover:bg-slate-800/60 hover:text-slate-200'
+          }`}
+        >
+          <ListIcon className="w-4 h-4" />
+          <span className="text-[8px] font-medium leading-none">Tasks</span>
+        </button>
+        <button
+          onClick={() => setActiveView('calendar')}
+          title="Calendar"
+          className={`w-10 h-10 rounded flex flex-col items-center justify-center gap-0.5 transition cursor-pointer ${
+            activeView === 'calendar' ? 'bg-neutral-800 text-blue-400' : 'text-slate-500 hover:bg-slate-800/60 hover:text-slate-200'
+          }`}
+        >
+          <CalendarIcon className="w-4 h-4" />
+          <span className="text-[8px] font-medium leading-none">Cal.</span>
+        </button>
+      </nav>
+
       {/* ================= LEFT MENU (SIDEBAR) ================= */}
       <aside className="w-64 bg-slate-900/90 border-r border-slate-800/80 flex flex-col justify-between shrink-0 select-none">
         <div>
-          <div className="flex items-center gap-3 px-4 py-4 border-b border-slate-800/80">
-            <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-indigo-500 to-purple-600 flex items-center justify-center font-black text-white shadow-lg shadow-indigo-500/20">
-              R
-            </div>
-            <div>
-              <h1 className="font-bold tracking-tight text-white leading-tight text-sm">
-                {workspaces[0]?.name || 'RobUp Workspace'}
-              </h1>
-              <p className="text-[10px] text-emerald-400 font-mono flex items-center gap-1 mt-0.5">
-                <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse"></span> Zero-Cloud SQLite
-              </p>
-            </div>
+          <div className="px-4 py-4 border-b border-slate-800/80">
+            <h1 className="font-bold tracking-tight text-white leading-tight text-sm">
+              {workspaces[0]?.name || 'RobUp Workspace'}
+            </h1>
+            <p className="text-[10px] text-emerald-400 font-mono flex items-center gap-1 mt-0.5">
+              <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse"></span> Zero-Cloud SQLite
+            </p>
           </div>
 
           <div className="p-3 space-y-4 overflow-y-auto max-h-[calc(100vh-140px)]">
+            {activeView === 'board' && (
             <button
               onClick={() => {
                 setModalTaskStack([]);
                 setNavigation('everything', null);
               }}
-              className={`w-full text-left px-3 py-2 rounded-lg text-xs font-semibold transition flex items-center justify-between cursor-pointer ${
+              className={`w-full text-left px-3 py-2 rounded text-xs font-semibold transition flex items-center justify-between cursor-pointer ${
                 activeSpaceId === 'everything' && modalTaskStack.length === 0
-                  ? 'bg-indigo-600 text-white shadow-md shadow-indigo-600/20'
+                  ? 'bg-neutral-800 text-blue-400'
                   : 'text-slate-400 hover:bg-slate-800/60 hover:text-slate-200'
               }`}
             >
@@ -888,14 +1053,42 @@ export default function Home() {
                 {tasks.filter((t) => t.parentId === null && !t.archived).length}
               </span>
             </button>
+            )}
 
             <div className="space-y-3">
-              <p className="px-2 text-[10px] font-bold text-slate-500 uppercase tracking-wider">Spaces & Lists</p>
+              <div className="flex items-center justify-between px-2">
+                <p className="text-[10px] font-bold text-slate-500 uppercase tracking-wider">
+                  {activeView === 'calendar' ? 'Filter Spaces & Lists' : 'Spaces & Lists'}
+                </p>
+                {activeView === 'calendar' && (
+                  <div className="flex items-center gap-1.5">
+                    <button
+                      onClick={() =>
+                        setCalendarVisibleListIds(
+                          new Set(workspaces.flatMap((w) => w.spaces.flatMap((s) => s.lists.map((l) => l.id))))
+                        )
+                      }
+                      className="text-[9px] text-blue-400 hover:text-blue-300 cursor-pointer"
+                    >
+                      All
+                    </button>
+                    <button
+                      onClick={() => setCalendarVisibleListIds(new Set())}
+                      className="text-[9px] text-slate-500 hover:text-slate-300 cursor-pointer"
+                    >
+                      None
+                    </button>
+                  </div>
+                )}
+              </div>
               {workspaces[0]?.spaces.map((space: HierarchySpace) => {
-                const isSpaceActive = activeSpaceId === space.id && !activeListId && modalTaskStack.length === 0;
+                const isSpaceActive = activeView === 'board' && activeSpaceId === space.id && !activeListId && modalTaskStack.length === 0;
+                const spaceListIds = collectListIdsUnder(space, null);
                 const spaceTasksCount = tasks.filter(
-                  (t) => t.parentId === null && !t.archived && space.lists.some((l) => l.id === t.listId)
+                  (t) => t.parentId === null && !t.archived && spaceListIds.includes(t.listId)
                 ).length;
+                const spaceAllChecked = spaceListIds.length > 0 && spaceListIds.every((id) => calendarVisibleListIds.has(id));
+                const spaceSomeChecked = spaceListIds.some((id) => calendarVisibleListIds.has(id));
 
                 return (
                   <div key={space.id} className="space-y-1">
@@ -903,76 +1096,58 @@ export default function Home() {
                       {(isOver) => (
                         <button
                           onClick={() => {
-                            setModalTaskStack([]);
-                            setNavigation(space.id, null);
+                            if (activeView === 'calendar') {
+                              toggleCalendarSpace(space);
+                            } else {
+                              setModalTaskStack([]);
+                              setNavigation(space.id, null);
+                            }
                           }}
                           onContextMenu={(e) => openSpaceMenu(e, space)}
-                          className={`w-full text-left px-2.5 py-1.5 rounded-lg text-xs font-medium transition flex items-center justify-between cursor-pointer group ${
+                          className={`w-full text-left px-2.5 py-1.5 rounded text-xs font-medium transition flex items-center justify-between cursor-pointer group ${
                             isSpaceActive
-                              ? 'bg-slate-800 text-white font-semibold border-l-2 border-indigo-500'
+                              ? 'bg-slate-800 text-blue-400 font-semibold border-l-2 border-blue-500'
+                              : activeView === 'calendar' && spaceAllChecked
+                              ? 'text-blue-400'
                               : 'text-slate-300 hover:bg-slate-800/40'
-                          } ${isOver ? 'ring-1 ring-inset ring-indigo-500 bg-indigo-600/10' : ''}`}
+                          } ${isOver ? 'ring-1 ring-inset ring-neutral-500 bg-neutral-700/40' : ''}`}
                         >
                           <span className="flex items-center gap-2 truncate">
+                            {activeView === 'calendar' && (
+                              <span
+                                className={`w-3.5 h-3.5 rounded border flex items-center justify-center shrink-0 transition ${
+                                  spaceAllChecked
+                                    ? 'bg-blue-500 border-blue-500 text-white'
+                                    : spaceSomeChecked
+                                    ? 'bg-blue-500/30 border-blue-500'
+                                    : 'border-slate-600'
+                                }`}
+                              >
+                                {spaceAllChecked && <Check className="w-2.5 h-2.5" />}
+                              </span>
+                            )}
                             <span className="w-2.5 h-2.5 rounded-full shrink-0" style={{ backgroundColor: space.color || '#6366f1' }}></span>
                             <span className="truncate">{space.name}</span>
                           </span>
-                          <span className="text-[10px] text-slate-500 font-mono">{spaceTasksCount}</span>
+                          {activeView === 'board' && <span className="text-[10px] text-slate-500 font-mono">{spaceTasksCount}</span>}
                         </button>
                       )}
                     </DroppableSidebarItem>
 
-                    <div className="ml-4 pl-2 border-l border-slate-800 space-y-0.5">
-                      {space.lists.map((list) => {
-                        const isListActive = activeListId === list.id && modalTaskStack.length === 0;
-                        const listTasksCount = tasks.filter((t) => t.listId === list.id && t.parentId === null && !t.archived).length;
-                        return (
-                          <SidebarListItem
-                            key={list.id}
-                            list={list}
-                            isActive={isListActive}
-                            count={listTasksCount}
-                            onNavigate={() => {
-                              setModalTaskStack([]);
-                              setNavigation(space.id, list.id);
-                            }}
-                            onRename={(name) => renameList(space.id, list.id, name)}
-                          />
-                        );
-                      })}
-                      {newListSpaceId === space.id ? (
-                        <input
-                          autoFocus
-                          value={newListName}
-                          onChange={(e) => setNewListName(e.target.value)}
-                          onClick={(e) => e.stopPropagation()}
-                          onBlur={() => {
-                            if (newListName.trim()) createList(space.id, newListName.trim());
-                            setNewListName('');
-                            setNewListSpaceId(null);
-                          }}
-                          onKeyDown={(e) => {
-                            if (e.key === 'Enter') (e.target as HTMLInputElement).blur();
-                            if (e.key === 'Escape') {
-                              setNewListName('');
-                              setNewListSpaceId(null);
-                            }
-                          }}
-                          placeholder="List name..."
-                          className="w-full bg-slate-950 border border-indigo-500 rounded-md px-2 py-1 text-[11px] text-white focus:outline-none"
-                        />
-                      ) : (
-                        <button
-                          onClick={() => {
-                            setNewListSpaceId(space.id);
-                            setNewListName('');
-                          }}
-                          className="w-full text-left px-2 py-1 rounded-md text-[11px] text-slate-500 hover:text-indigo-400 hover:bg-slate-800/30 cursor-pointer flex items-center gap-1.5"
-                        >
-                          <Plus className="w-3 h-3" /> New list
-                        </button>
-                      )}
-                    </div>
+                    <FolderTree
+                      space={space}
+                      tasks={tasks}
+                      activeView={activeView}
+                      activeListId={activeListId}
+                      calendarVisibleListIds={calendarVisibleListIds}
+                      onNavigateList={(listId) => {
+                        setModalTaskStack([]);
+                        setNavigation(space.id, listId);
+                      }}
+                      toggleCalendarList={toggleCalendarList}
+                      toggleCalendarFolder={(folderId) => toggleCalendarFolder(space, folderId)}
+                      onDeleteFolderRequest={setFolderToDelete}
+                    />
                   </div>
                 );
               })}
@@ -983,12 +1158,12 @@ export default function Home() {
         <div className="p-3 m-3 space-y-2">
           <button
             onClick={() => setTeamOpen(true)}
-            className="w-full flex items-center justify-between bg-slate-950/60 rounded-xl border border-slate-800/80 px-3 py-2 text-[11px] text-slate-300 hover:border-slate-700 cursor-pointer"
+            className="w-full flex items-center justify-between bg-slate-950/60 rounded border border-slate-800/80 px-3 py-2 text-[11px] text-slate-300 hover:border-slate-700 cursor-pointer"
           >
             <span className="flex items-center gap-2"><Users className="w-3.5 h-3.5" /> Team</span>
             <span className="text-slate-500 font-mono">{users.length}</span>
           </button>
-          <div className="bg-slate-950/60 rounded-xl border border-slate-800/80 px-3 py-2 text-[11px] text-slate-400 flex items-center justify-between">
+          <div className="bg-slate-950/60 rounded border border-slate-800/80 px-3 py-2 text-[11px] text-slate-400 flex items-center justify-between">
             <span className="flex items-center gap-1.5"><Zap className="w-3.5 h-3.5" /> RobUp</span>
             <span className="text-emerald-400 font-mono">Flat List</span>
           </div>
@@ -1002,7 +1177,7 @@ export default function Home() {
             <div className="flex items-center gap-2 text-xs font-medium">
               <span className="text-slate-500">Workspace</span>
               <span className="text-slate-600">/</span>
-              <span className={`flex items-center gap-1.5 ${activeSpaceId === 'everything' ? 'text-indigo-400 font-semibold' : 'text-slate-300'}`}>
+              <span className={`flex items-center gap-1.5 ${activeSpaceId === 'everything' ? 'text-blue-400 font-semibold' : 'text-slate-300'}`}>
                 {activeSpaceId === 'everything' ? (
                   <>
                     <Globe className="w-3.5 h-3.5" /> Everything
@@ -1015,7 +1190,7 @@ export default function Home() {
                 <>
                   <span className="text-slate-600">/</span>
                   <span className="text-white font-semibold flex items-center gap-1.5">
-                    <span className="w-2 h-2 rounded-full bg-indigo-500"></span>
+                    <span className="w-2 h-2 rounded-full bg-slate-400"></span>
                     {currentSpace?.lists.find((l) => l.id === activeListId)?.name}
                   </span>
                 </>
@@ -1024,9 +1199,9 @@ export default function Home() {
 
             <button
               onClick={() => setShowArchived(!showArchived)}
-              className={`text-[11px] px-2.5 py-1 rounded-md border cursor-pointer transition flex items-center gap-1.5 ${
+              className={`text-[11px] px-2.5 py-1 rounded border cursor-pointer transition flex items-center gap-1.5 ${
                 showArchived
-                  ? 'bg-indigo-600/20 text-indigo-300 border-indigo-500/40'
+                  ? 'bg-neutral-800 text-blue-400 border-neutral-700'
                   : 'text-slate-400 border-slate-800 hover:bg-slate-800/60'
               }`}
             >
@@ -1040,6 +1215,7 @@ export default function Home() {
             <div className="flex items-center justify-between">
               <div className="text-slate-500 font-mono text-[10px]">{filteredTasks.length} tasks</div>
               <div className="flex items-center gap-1.5">
+                {activeView === 'board' && (
                 <div className="relative">
                   <button
                     onClick={(e) => {
@@ -1050,7 +1226,7 @@ export default function Home() {
                     }}
                     disabled={!currentSpace}
                     title={!currentSpace ? 'Select a specific Space to customize columns' : ''}
-                    className={`text-[11px] rounded-md px-2.5 py-1 flex items-center gap-1 border ${
+                    className={`text-[11px] rounded px-2.5 py-1 flex items-center gap-1 border ${
                       currentSpace
                         ? 'text-slate-300 bg-slate-900 border-slate-800 hover:border-slate-700 cursor-pointer'
                         : 'text-slate-600 bg-slate-900/50 border-slate-800/50 cursor-not-allowed'
@@ -1059,7 +1235,7 @@ export default function Home() {
                     <Plus className="w-3 h-3" /> Column
                   </button>
                   {columnMenuOpen && currentSpace && (
-                    <div onClick={(e) => e.stopPropagation()} className="absolute z-20 top-9 right-0 w-60 bg-slate-900 border border-slate-800 rounded-lg shadow-xl p-2 space-y-1">
+                    <div onClick={(e) => e.stopPropagation()} className="absolute z-20 top-9 right-0 w-60 bg-slate-900 border border-slate-800 rounded shadow-xl p-2 space-y-1">
                       <div className="flex items-center gap-2 text-[10px] text-slate-500 px-2 pb-1">Built-in (can be hidden, not deleted)</div>
                       {availableColumns.filter((c) => c.kind !== 'custom').map((col) => (
                         <label key={col.key} className="flex items-center gap-2 text-[11px] text-slate-300 px-2 py-1 rounded hover:bg-slate-800/60 cursor-pointer">
@@ -1076,7 +1252,7 @@ export default function Home() {
                             <input type="checkbox" checked={visibleColumns.includes(col.key)} onChange={() => toggleColumn(col.key)} />
                             {col.label}
                           </label>
-                          <button onClick={() => col.field && setFieldEditTarget(col.field)} className="text-slate-500 hover:text-indigo-400 text-[10px] cursor-pointer">
+                          <button onClick={() => col.field && setFieldEditTarget(col.field)} className="text-slate-500 hover:text-blue-400 text-[10px] cursor-pointer">
                             <Pencil className="w-3 h-3" />
                           </button>
                           <button onClick={() => handleDeleteField(col.key, col.label)} className="text-slate-500 hover:text-red-400 text-[10px] cursor-pointer">
@@ -1086,7 +1262,7 @@ export default function Home() {
                       ))}
                       <div className="border-t border-slate-800 pt-2 mt-1">
                         {!newFieldOpen ? (
-                          <button onClick={() => setNewFieldOpen(true)} className="w-full text-left text-[11px] text-indigo-400 px-2 py-1 rounded hover:bg-slate-800/60 cursor-pointer">
+                          <button onClick={() => setNewFieldOpen(true)} className="w-full text-left text-[11px] text-blue-400 px-2 py-1 rounded hover:bg-slate-800/60 cursor-pointer">
                             + New field
                           </button>
                         ) : (
@@ -1109,7 +1285,7 @@ export default function Home() {
                               <option value="dropdown">Dropdown</option>
                             </select>
                             <div className="flex gap-1.5">
-                              <button onClick={handleAddField} className="flex-1 bg-indigo-600 hover:bg-indigo-500 text-white text-[11px] py-1 rounded cursor-pointer">
+                              <button onClick={handleAddField} className="flex-1 bg-blue-600 hover:bg-blue-500 text-white text-[11px] py-1 rounded cursor-pointer">
                                 Create field
                               </button>
                               <button onClick={() => setNewFieldOpen(false)} className="text-[11px] text-slate-400 px-2 cursor-pointer">
@@ -1122,20 +1298,38 @@ export default function Home() {
                     </div>
                   )}
                 </div>
+                )}
 
               </div>
             </div>
 
-            <div className="bg-slate-900/60 border border-slate-800/80 rounded-xl overflow-hidden shadow-sm">
+            {activeView === 'calendar' ? (
+              <div className="h-[75vh]">
+                <CalendarView
+                  tasks={calendarFilteredTasks}
+                  statuses={statuses}
+                  onOpenTask={(id) => setModalTaskStack([id])}
+                  onRequestCreateTask={(date) => {
+                    setCreateTaskDefaultDate(date.toISOString());
+                    setCreateTaskOpen(true);
+                  }}
+                />
+              </div>
+            ) : (
+            <div className="bg-slate-900/60 border border-slate-800/80 rounded overflow-x-auto shadow-sm">
+              <div style={{ minWidth: tableMinWidth }}>
               <div
                 className="grid items-center px-4 py-2.5 text-[10px] font-semibold text-slate-500 uppercase tracking-wider border-b border-slate-800 bg-slate-950/40"
-                style={{ gridTemplateColumns: `20px 28px 2fr ${activeColumns.map(() => '110px').join(' ')} 32px` }}
+                style={{ gridTemplateColumns: rowGridTemplate }}
               >
                 <div></div>
                 <div></div>
-                <button onClick={() => toggleSort('name')} className="flex items-center gap-1 hover:text-slate-300 cursor-pointer text-left">
-                  Name <SortIcon field="name" />
-                </button>
+                <div className="relative flex items-center pr-2">
+                  <button onClick={() => toggleSort('name')} className="flex items-center gap-1 hover:text-slate-300 cursor-pointer text-left">
+                    Name <SortIcon field="name" />
+                  </button>
+                  <ColumnResizeHandle onResize={(d) => resizeColumn('name', d)} onReset={() => resetColumnWidth('name')} />
+                </div>
                 <DndContext sensors={columnSensors} collisionDetection={closestCenter} onDragEnd={handleColumnDragEnd}>
                   <SortableContext items={activeColumns.map((c) => c.key)} strategy={horizontalListSortingStrategy}>
                     {activeColumns.map((col) => (
@@ -1145,6 +1339,8 @@ export default function Home() {
                         onToggleSort={() => (col.kind === 'startDate' || col.kind === 'dueDate' ? toggleSort(col.kind) : undefined)}
                         sortIcon={col.kind === 'startDate' || col.kind === 'dueDate' ? <SortIcon field={col.kind} /> : null}
                         onContextMenuOpen={(e) => setColumnMenu({ x: e.clientX, y: e.clientY, col })}
+                        onResize={(d) => resizeColumn(col.key, d)}
+                        onResetWidth={() => resetColumnWidth(col.key)}
                       />
                     ))}
                   </SortableContext>
@@ -1160,6 +1356,7 @@ export default function Home() {
                       task={task}
                       onOpen={() => setModalTaskStack([task.id])}
                       columns={activeColumns}
+                      gridTemplate={rowGridTemplate}
                       statuses={statuses}
                       selectable
                       isSelected={selectedIds.has(task.id)}
@@ -1183,9 +1380,9 @@ export default function Home() {
                         if (e.key === 'Enter') handleQuickAdd();
                         if (e.key === 'Escape') setActiveAdd(false);
                       }}
-                      className="flex-1 bg-slate-900 border border-indigo-500/80 rounded px-3 py-1 text-xs text-white focus:outline-none"
+                      className="flex-1 bg-slate-900 border border-blue-500/80 rounded px-3 py-1 text-xs text-white focus:outline-none"
                     />
-                    <button onClick={handleQuickAdd} className="bg-indigo-600 text-white text-xs px-3 py-1 rounded font-medium cursor-pointer">
+                    <button onClick={handleQuickAdd} className="bg-blue-600 text-white text-xs px-3 py-1 rounded font-medium cursor-pointer">
                       Add
                     </button>
                     <button onClick={() => setActiveAdd(false)} className="text-slate-400 text-xs px-2 cursor-pointer">
@@ -1196,21 +1393,23 @@ export default function Home() {
                   !showArchived && (
                     <button
                       onClick={() => setActiveAdd(true)}
-                      className="w-full text-left px-4 py-2 text-xs font-medium text-slate-400 hover:bg-slate-800/40 hover:text-indigo-400 transition flex items-center gap-2 cursor-pointer"
+                      className="w-full text-left px-4 py-2 text-xs font-medium text-slate-400 hover:bg-slate-800/40 hover:text-blue-400 transition flex items-center gap-2 cursor-pointer"
                     >
-                      <span className="font-bold text-indigo-400">+</span> Add Task
+                      <span className="font-bold text-blue-400">+</span> Add Task
                     </button>
                   )
                 )}
               </div>
+              </div>
             </div>
+            )}
           </div>
         </div>
       </main>
 
       {/* ================= BULK ACTION BAR ================= */}
       {selectedIds.size > 0 && (
-        <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-40 bg-slate-900 border border-slate-700 rounded-xl shadow-2xl px-4 py-2.5 flex items-center gap-3">
+        <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-40 bg-slate-900 border border-slate-700 rounded shadow-2xl px-4 py-2.5 flex items-center gap-3">
           <span className="text-xs text-slate-300 font-medium">{selectedIds.size} selected</span>
           <div className="w-px h-5 bg-slate-700"></div>
           <button onClick={() => bulkArchive(true)} className="text-xs text-slate-300 hover:text-white px-2 py-1 rounded hover:bg-slate-800 cursor-pointer flex items-center gap-1.5">
@@ -1227,7 +1426,7 @@ export default function Home() {
               <FolderInput className="w-3.5 h-3.5" /> Move to...
             </button>
             {bulkMoveOpen && (
-              <div onClick={(e) => e.stopPropagation()} className="absolute z-20 bottom-9 left-1/2 -translate-x-1/2 w-56 bg-slate-900 border border-slate-800 rounded-lg shadow-xl p-1.5 max-h-56 overflow-y-auto">
+              <div onClick={(e) => e.stopPropagation()} className="absolute z-20 bottom-9 left-1/2 -translate-x-1/2 w-56 bg-slate-900 border border-slate-800 rounded shadow-xl p-1.5 max-h-56 overflow-y-auto">
                 {allListsFlat.map((l) => (
                   <button
                     key={l.id}
@@ -1254,7 +1453,7 @@ export default function Home() {
       {taskMenu && (
         <>
           <div className="fixed inset-0 z-[60]" onClick={() => setTaskMenu(null)} onContextMenu={(e) => { e.preventDefault(); setTaskMenu(null); }} />
-          <div className="fixed z-[61] w-48 bg-slate-900 border border-slate-800 rounded-lg shadow-2xl py-1" style={{ top: taskMenu.y, left: taskMenu.x }}>
+          <div className="fixed z-[61] w-48 bg-slate-900 border border-slate-800 rounded shadow-2xl py-1" style={{ top: taskMenu.y, left: taskMenu.x }}>
             <button
               onClick={() => {
                 setModalTaskStack([taskMenu.task.id]);
@@ -1302,7 +1501,7 @@ export default function Home() {
       {spaceMenu && (
         <>
           <div className="fixed inset-0 z-[60]" onClick={() => setSpaceMenu(null)} onContextMenu={(e) => { e.preventDefault(); setSpaceMenu(null); }} />
-          <div className="fixed z-[61] w-48 bg-slate-900 border border-slate-800 rounded-lg shadow-2xl py-1" style={{ top: spaceMenu.y, left: spaceMenu.x }}>
+          <div className="fixed z-[61] w-48 bg-slate-900 border border-slate-800 rounded shadow-2xl py-1" style={{ top: spaceMenu.y, left: spaceMenu.x }}>
             <button onClick={() => startEditSpace(spaceMenu.space)} className="w-full text-left px-3 py-1.5 text-xs text-slate-300 hover:bg-slate-800/60 cursor-pointer flex items-center gap-2">
               <Pencil className="w-3.5 h-3.5" /> Edit appearance
             </button>
@@ -1314,7 +1513,7 @@ export default function Home() {
       {columnMenu && (
         <>
           <div className="fixed inset-0 z-[60]" onClick={() => setColumnMenu(null)} onContextMenu={(e) => { e.preventDefault(); setColumnMenu(null); }} />
-          <div className="fixed z-[61] w-48 bg-slate-900 border border-slate-800 rounded-lg shadow-2xl py-1" style={{ top: columnMenu.y, left: columnMenu.x }}>
+          <div className="fixed z-[61] w-48 bg-slate-900 border border-slate-800 rounded shadow-2xl py-1" style={{ top: columnMenu.y, left: columnMenu.x }}>
             <button
               onClick={() => {
                 toggleColumn(columnMenu.col.key);
@@ -1365,7 +1564,7 @@ export default function Home() {
       {/* ================= EDIT SPACE MODAL ================= */}
       {spaceEditTarget && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/70 backdrop-blur-xs" onClick={() => setSpaceEditTarget(null)}>
-          <div onClick={(e) => e.stopPropagation()} className="w-[380px] bg-slate-900 border border-slate-800 rounded-2xl shadow-2xl overflow-hidden">
+          <div onClick={(e) => e.stopPropagation()} className="w-[380px] bg-slate-900 border border-slate-800 rounded shadow-2xl overflow-hidden">
             <div className="px-5 py-4 border-b border-slate-800 flex items-center justify-between">
               <h3 className="font-bold text-sm text-white">Edit Space</h3>
               <button onClick={() => setSpaceEditTarget(null)} className="text-slate-400 hover:text-white cursor-pointer">
@@ -1379,7 +1578,7 @@ export default function Home() {
                   value={editSpaceName}
                   onChange={(e) => setEditSpaceName(e.target.value)}
                   placeholder="🚀 Product Dev"
-                  className="w-full bg-slate-950 border border-slate-700 rounded-lg px-3 py-2 text-xs text-white focus:outline-none focus:border-indigo-500"
+                  className="w-full bg-slate-950 border border-slate-700 rounded px-3 py-2 text-xs text-white focus:outline-none focus:border-blue-500"
                 />
               </div>
               <div>
@@ -1395,11 +1594,11 @@ export default function Home() {
                   ))}
                 </div>
               </div>
-              <div className="flex items-center gap-2 bg-slate-950/60 border border-slate-800 rounded-lg px-3 py-2">
+              <div className="flex items-center gap-2 bg-slate-950/60 border border-slate-800 rounded px-3 py-2">
                 <span className="w-2.5 h-2.5 rounded-full" style={{ backgroundColor: editSpaceColor }}></span>
                 <span className="text-xs text-slate-300">{editSpaceName || 'Preview'}</span>
               </div>
-              <button onClick={saveSpaceEdit} className="w-full bg-indigo-600 hover:bg-indigo-500 text-white text-xs py-2 rounded-lg font-medium cursor-pointer">
+              <button onClick={saveSpaceEdit} className="w-full bg-blue-600 hover:bg-blue-500 text-white text-xs py-2 rounded font-medium cursor-pointer">
                 Save
               </button>
             </div>
@@ -1410,7 +1609,7 @@ export default function Home() {
       {/* ================= EDIT FIELD MODAL ================= */}
       {fieldEditTarget && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/70 backdrop-blur-xs" onClick={() => setFieldEditTarget(null)}>
-          <div onClick={(e) => e.stopPropagation()} className="w-[420px] bg-slate-900 border border-slate-800 rounded-2xl shadow-2xl overflow-hidden">
+          <div onClick={(e) => e.stopPropagation()} className="w-[420px] bg-slate-900 border border-slate-800 rounded shadow-2xl overflow-hidden">
             <div className="px-5 py-4 border-b border-slate-800 flex items-center justify-between">
               <h3 className="font-bold text-sm text-white">Edit field</h3>
               <button onClick={() => setFieldEditTarget(null)} className="text-slate-400 hover:text-white cursor-pointer">
@@ -1423,7 +1622,7 @@ export default function Home() {
                 <input
                   value={fieldNameDraft}
                   onChange={(e) => setFieldNameDraft(e.target.value)}
-                  className="w-full bg-slate-950 border border-slate-700 rounded-lg px-3 py-2 text-xs text-white focus:outline-none focus:border-indigo-500"
+                  className="w-full bg-slate-950 border border-slate-700 rounded px-3 py-2 text-xs text-white focus:outline-none focus:border-blue-500"
                 />
               </div>
 
@@ -1450,13 +1649,13 @@ export default function Home() {
                       </div>
                     </SortableContext>
                   </DndContext>
-                  <button onClick={addFieldOption} className="mt-2 text-[11px] text-indigo-400 hover:text-indigo-300 cursor-pointer">
+                  <button onClick={addFieldOption} className="mt-2 text-[11px] text-blue-400 hover:text-blue-300 cursor-pointer">
                     + New option
                   </button>
                 </div>
               )}
 
-              <button onClick={handleSaveField} className="w-full bg-indigo-600 hover:bg-indigo-500 text-white text-xs py-2 rounded-lg font-medium cursor-pointer">
+              <button onClick={handleSaveField} className="w-full bg-blue-600 hover:bg-blue-500 text-white text-xs py-2 rounded font-medium cursor-pointer">
                 Save
               </button>
             </div>
@@ -1467,7 +1666,7 @@ export default function Home() {
       {/* ================= MANAGE STATUSES MODAL (opens via right-click on the Status column) ================= */}
       {statusMenuOpen && currentSpace && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/70 backdrop-blur-xs" onClick={() => setStatusMenuOpen(false)}>
-          <div onClick={(e) => e.stopPropagation()} className="w-[380px] bg-slate-900 border border-slate-800 rounded-2xl shadow-2xl overflow-hidden">
+          <div onClick={(e) => e.stopPropagation()} className="w-[380px] bg-slate-900 border border-slate-800 rounded shadow-2xl overflow-hidden">
             <div className="px-5 py-4 border-b border-slate-800 flex items-center justify-between">
               <h3 className="font-bold text-sm text-white">Manage statuses</h3>
               <button onClick={() => setStatusMenuOpen(false)} className="text-slate-400 hover:text-white cursor-pointer">
@@ -1508,7 +1707,7 @@ export default function Home() {
                   value={newStatusName}
                   onChange={(e) => setNewStatusName(e.target.value)}
                   placeholder="New status (e.g. Blocked)"
-                  className="w-full bg-slate-950 border border-slate-700 rounded px-2 py-1.5 text-xs text-white focus:outline-none focus:border-indigo-500"
+                  className="w-full bg-slate-950 border border-slate-700 rounded px-2 py-1.5 text-xs text-white focus:outline-none focus:border-blue-500"
                 />
                 <div className="flex gap-1">
                   {FIELD_COLOR_CHOICES.map((c) => (
@@ -1520,7 +1719,7 @@ export default function Home() {
                     />
                   ))}
                 </div>
-                <button onClick={handleAddStatus} className="w-full bg-indigo-600 hover:bg-indigo-500 text-white text-xs py-1.5 rounded cursor-pointer">
+                <button onClick={handleAddStatus} className="w-full bg-blue-600 hover:bg-blue-500 text-white text-xs py-1.5 rounded cursor-pointer">
                   Create status
                 </button>
               </div>
@@ -1545,7 +1744,7 @@ export default function Home() {
             layoutId={`task-${activeModalTask.id}`}
             onClick={(e) => e.stopPropagation()}
             transition={{ duration: 0.32, ease: [0.32, 0.72, 0, 1] }}
-            className="w-full max-w-6xl h-[88vh] bg-slate-900 border border-slate-800 rounded-2xl shadow-2xl overflow-hidden"
+            className="w-full max-w-6xl h-[88vh] bg-slate-900 border border-slate-800 rounded shadow-2xl overflow-hidden"
           >
           <motion.div
             initial={{ opacity: 0 }}
@@ -1556,7 +1755,7 @@ export default function Home() {
           >
             <div className="px-6 py-4 border-b border-slate-800 flex items-center justify-between bg-slate-950/40 shrink-0">
               <div className="flex items-center gap-2 text-xs text-slate-400 font-mono overflow-x-auto">
-                <button onClick={() => setModalTaskStack([])} className="hover:text-indigo-400 cursor-pointer shrink-0 inline-flex items-center gap-1.5">
+                <button onClick={() => setModalTaskStack([])} className="hover:text-blue-400 cursor-pointer shrink-0 inline-flex items-center gap-1.5">
                   {activeSpaceId === 'everything' ? (
                     <>
                       <Globe className="w-3 h-3" /> Everything
@@ -1574,7 +1773,7 @@ export default function Home() {
                       <button
                         onClick={() => setModalTaskStack(modalTaskStack.slice(0, idx + 1))}
                         className={`cursor-pointer truncate max-w-[220px] ${
-                          idx === modalTaskStack.length - 1 ? 'text-indigo-400 font-bold' : 'hover:text-slate-200'
+                          idx === modalTaskStack.length - 1 ? 'text-blue-400 font-bold' : 'hover:text-slate-200'
                         }`}
                       >
                         {t.title}
@@ -1583,16 +1782,29 @@ export default function Home() {
                   );
                 })}
               </div>
-              <button
-                onClick={() => setModalTaskStack([])}
-                className="w-8 h-8 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 flex items-center justify-center font-bold text-sm cursor-pointer shrink-0"
-              >
-                <X className="w-3.5 h-3.5" />
-              </button>
+              <div className="flex items-center gap-2 shrink-0">
+                <button
+                  onClick={() => setShowActivityPanel((v) => !v)}
+                  title={showActivityPanel ? 'Hide Activity & Comments' : 'Show Activity & Comments'}
+                  className={`text-[11px] px-2.5 py-1 rounded border cursor-pointer transition flex items-center gap-1.5 ${
+                    showActivityPanel
+                      ? 'bg-neutral-800 text-blue-400 border-neutral-700'
+                      : 'text-slate-400 border-slate-800 hover:bg-slate-800/60'
+                  }`}
+                >
+                  <MessageSquare className="w-3.5 h-3.5" />
+                </button>
+                <button
+                  onClick={() => setModalTaskStack([])}
+                  className="w-8 h-8 rounded bg-slate-800 hover:bg-slate-700 text-slate-300 flex items-center justify-center font-bold text-sm cursor-pointer shrink-0"
+                >
+                  <X className="w-3.5 h-3.5" />
+                </button>
+              </div>
             </div>
 
-            <div className="flex-1 overflow-hidden grid grid-cols-12">
-              <div className="col-span-7 overflow-y-auto p-8 space-y-6 border-r border-slate-800">
+            <div className="flex-1 overflow-hidden flex">
+              <div className={`flex-1 min-w-0 overflow-y-auto p-8 space-y-6 ${showActivityPanel ? 'border-r border-slate-800' : ''}`}>
                 <div>
                   {editingModalTitle ? (
                     <input
@@ -1608,7 +1820,7 @@ export default function Home() {
                         if (e.key === 'Enter') (e.target as HTMLInputElement).blur();
                         if (e.key === 'Escape') setEditingModalTitle(false);
                       }}
-                      className="w-full text-2xl font-extrabold text-white tracking-tight bg-slate-950/60 border border-indigo-500 rounded-lg px-2 py-1 focus:outline-none"
+                      className="w-full text-2xl font-extrabold text-white tracking-tight bg-slate-950/60 border border-blue-500 rounded px-2 py-1 focus:outline-none"
                     />
                   ) : (
                     <h2
@@ -1625,16 +1837,16 @@ export default function Home() {
                   <p className="text-[11px] text-slate-500 font-mono mt-1">ID: {activeModalTask.id}</p>
                 </div>
 
-                <div className="flex items-center gap-3 bg-slate-950/40 p-3 rounded-xl border border-slate-800">
+                <div className="flex items-center gap-3 bg-slate-950/40 p-3 rounded border border-slate-800">
                   <span className="text-xs text-slate-400 font-medium">Status:</span>
                   <FloatingPopover
                     open={modalStatusOpen}
                     onClose={() => setModalStatusOpen(false)}
-                    panelClassName="w-40 bg-slate-900 border border-slate-800 rounded-lg shadow-xl p-1.5"
+                    panelClassName="w-40 bg-slate-900 border border-slate-800 rounded shadow-xl p-1.5"
                     anchor={
                       <button
                         onClick={() => setModalStatusOpen((o) => !o)}
-                        className="text-xs font-semibold px-3 py-1 rounded-full border cursor-pointer inline-flex items-center gap-1.5"
+                        className="text-xs font-semibold px-3 py-1 rounded border cursor-pointer inline-flex items-center gap-1.5"
                         style={{
                           color: statusColor(activeModalTask.status),
                           borderColor: statusColor(activeModalTask.status) + '55',
@@ -1669,7 +1881,7 @@ export default function Home() {
                       <span className="text-[10px] text-slate-500 flex items-center gap-1">{docSaveStatus === 'saving' ? 'Saving...' : (<><Check className="w-3 h-3" /> Saved</>)}</span>
                     )}
                   </div>
-                  <div className="bg-slate-950/40 border border-slate-800 rounded-xl overflow-hidden">
+                  <div className="bg-slate-950/40 border border-slate-800 rounded overflow-hidden">
                     <div className="flex items-center gap-1.5 px-3 py-2 border-b border-slate-800 overflow-x-auto">
                       <DndContext sensors={docSensors} collisionDetection={closestCenter} onDragEnd={handleDocDragEnd}>
                         <SortableContext items={activeTaskDocs.map((d) => d.id)} strategy={horizontalListSortingStrategy}>
@@ -1688,7 +1900,7 @@ export default function Home() {
                           ))}
                         </SortableContext>
                       </DndContext>
-                      <button onClick={handleNewDoc} className="text-[11px] text-indigo-400 px-2.5 py-1 rounded-md hover:bg-slate-800/60 cursor-pointer shrink-0">
+                      <button onClick={handleNewDoc} className="text-[11px] text-blue-400 px-2.5 py-1 rounded hover:bg-slate-800/60 cursor-pointer shrink-0">
                         + New
                       </button>
                     </div>
@@ -1720,36 +1932,46 @@ export default function Home() {
                     Subtasks ({currentSubtasks.length})
                   </h3>
 
-                  <div className="bg-slate-950/40 border border-slate-800 rounded-xl overflow-hidden">
+                  <div className="bg-slate-950/40 border border-slate-800 rounded overflow-x-auto">
+                    <div style={{ minWidth: currentSubtasks.length > 0 ? tableMinWidth : undefined }}>
                     {currentSubtasks.length > 0 && (
                       <div
                         className="grid items-center px-3 py-1.5 text-[9px] font-semibold text-slate-500 uppercase tracking-wider border-b border-slate-800"
-                        style={{ gridTemplateColumns: `20px 28px 2fr ${activeColumns.map(() => '110px').join(' ')} 32px` }}
+                        style={{ gridTemplateColumns: rowGridTemplate }}
                       >
                         <div></div>
                         <div></div>
-                        <div>Name</div>
+                        <div className="relative pr-2">
+                          Name
+                          <ColumnResizeHandle onResize={(d) => resizeColumn('name', d)} onReset={() => resetColumnWidth('name')} />
+                        </div>
                         {activeColumns.map((col) => (
-                          <div key={col.key} className="text-center">{col.label}</div>
+                          <div key={col.key} className="relative text-center">
+                            {col.label}
+                            <ColumnResizeHandle onResize={(d) => resizeColumn(col.key, d)} onReset={() => resetColumnWidth(col.key)} />
+                          </div>
                         ))}
                         <div></div>
                       </div>
                     )}
                     <div className="divide-y divide-slate-800/50">
-                      <AnimatePresence mode="popLayout" initial={false} key={activeModalTaskId || 'none'}>
+                      <AnimatePresence mode="popLayout" initial={false}>
                         {currentSubtasks.map((sub) => (
                           <TaskRow
                             key={sub._localId || sub.id}
                             task={sub as Task}
                             onOpen={() => setModalTaskStack([...modalTaskStack, sub.id])}
                             columns={activeColumns}
+                            gridTemplate={rowGridTemplate}
                             statuses={statuses}
                             onContextMenu={openTaskMenu}
                             autoFocusRename={renamingTaskId === sub.id}
                             onRenameHandled={() => setRenamingTaskId(null)}
+                            animateEntrance={justAddedSubtaskIds.has(sub._localId || sub.id)}
                           />
                         ))}
                       </AnimatePresence>
+                    </div>
                     </div>
                     <div className="p-2 flex gap-2 items-center bg-slate-950/60">
                       <input
@@ -1758,11 +1980,11 @@ export default function Home() {
                         value={newSubtaskTitle}
                         onChange={(e) => setNewSubtaskTitle(e.target.value)}
                         onKeyDown={(e) => e.key === 'Enter' && handleAddSubtask(activeModalTask)}
-                        className="flex-1 bg-slate-900 border border-slate-800 rounded-lg px-3 py-1.5 text-xs text-white focus:outline-none focus:border-indigo-500"
+                        className="flex-1 bg-slate-900 border border-slate-800 rounded px-3 py-1.5 text-xs text-white focus:outline-none focus:border-blue-500"
                       />
                       <button
                         onClick={() => handleAddSubtask(activeModalTask)}
-                        className="bg-indigo-600 hover:bg-indigo-500 text-white text-xs px-3 py-1.5 rounded-lg font-medium cursor-pointer"
+                        className="bg-blue-600 hover:bg-blue-500 text-white text-xs px-3 py-1.5 rounded font-medium cursor-pointer"
                       >
                         Add
                       </button>
@@ -1771,7 +1993,7 @@ export default function Home() {
                 </div>
 
                 <div className="grid grid-cols-2 gap-4">
-                  <div className="bg-slate-950/40 p-4 rounded-xl border border-slate-800">
+                  <div className="bg-slate-950/40 p-4 rounded border border-slate-800">
                     <h4 className="text-[11px] font-bold text-slate-400 uppercase tracking-wider mb-2">Timeframe</h4>
                     <div className="space-y-1.5 text-xs font-mono">
                       <div className="flex items-center justify-between gap-2">
@@ -1803,18 +2025,18 @@ export default function Home() {
                     </div>
                   </div>
 
-                  <div className="bg-slate-950/40 p-4 rounded-xl border border-slate-800">
+                  <div className="bg-slate-950/40 p-4 rounded border border-slate-800">
                     <h4 className="text-[11px] font-bold text-slate-400 uppercase tracking-wider mb-2">Assignees</h4>
                     <div className="flex flex-wrap items-center gap-1.5">
                       {activeModalTask.assignees?.map((a: any) => (
-                        <span key={a.id} className="text-[10px] px-2 py-1 rounded-full text-white font-semibold" style={{ backgroundColor: a.color }}>
+                        <span key={a.id} className="text-[10px] px-2 py-1 rounded text-white font-semibold" style={{ backgroundColor: a.color }}>
                           {a.name}
                         </span>
                       ))}
                       <FloatingPopover
                         open={modalAssigneeOpen}
                         onClose={() => setModalAssigneeOpen(false)}
-                        panelClassName="w-44 bg-slate-900 border border-slate-800 rounded-lg shadow-xl p-1.5"
+                        panelClassName="w-44 bg-slate-900 border border-slate-800 rounded shadow-xl p-1.5"
                         anchor={
                           <button
                             onClick={(e) => {
@@ -1822,7 +2044,7 @@ export default function Home() {
                               setModalAssigneeOpen((o) => !o);
                             }}
                             title="Add assignee"
-                            className="w-6 h-6 rounded-full border border-dashed border-slate-600 text-slate-500 hover:border-indigo-400 hover:text-indigo-400 text-xs flex items-center justify-center cursor-pointer"
+                            className="w-6 h-6 rounded-full border border-dashed border-slate-600 text-slate-500 hover:border-blue-400 hover:text-blue-400 text-xs flex items-center justify-center cursor-pointer"
                           >
                             +
                           </button>
@@ -1838,7 +2060,7 @@ export default function Home() {
                             >
                               <span
                                 className={`w-3.5 h-3.5 rounded border flex items-center justify-center shrink-0 transition ${
-                                  checked ? 'bg-indigo-500 border-indigo-500 text-white' : 'border-slate-600'
+                                  checked ? 'bg-blue-500 border-blue-500 text-white' : 'border-slate-600'
                                 }`}
                               >
                                 {checked && <Check className="w-2.5 h-2.5" />}
@@ -1857,7 +2079,17 @@ export default function Home() {
                 </div>
               </div>
 
-              <div className="col-span-5 flex flex-col overflow-hidden">
+              <AnimatePresence initial={false}>
+              {showActivityPanel && (
+              <motion.div
+                key="activity-panel"
+                initial={{ width: 0, opacity: 0 }}
+                animate={{ width: 420, opacity: 1 }}
+                exit={{ width: 0, opacity: 0 }}
+                transition={{ duration: 0.22, ease: 'easeInOut' }}
+                className="shrink-0 overflow-hidden"
+              >
+              <div className="w-[420px] h-full flex flex-col overflow-hidden">
                 <div className="px-5 py-3 border-b border-slate-800 shrink-0">
                   <h4 className="text-xs font-bold text-slate-300 flex items-center gap-1.5"><MessageSquare className="w-3.5 h-3.5" /> Activity & Comments</h4>
                 </div>
@@ -1872,7 +2104,7 @@ export default function Home() {
                         <span className="text-slate-600 ml-auto shrink-0">{timeAgo(c.createdAt)}</span>
                       </div>
                     ) : (
-                      <div key={c.id} className="bg-slate-950/60 border border-slate-800 rounded-xl p-3">
+                      <div key={c.id} className="bg-slate-950/60 border border-slate-800 rounded p-3">
                         <div className="flex items-center gap-2 mb-1.5">
                           {c.author ? (
                             <span
@@ -1897,7 +2129,7 @@ export default function Home() {
                   <select
                     value={commentAsUserId}
                     onChange={(e) => setCommentAsUserId(e.target.value)}
-                    className="w-full bg-slate-950 border border-slate-800 rounded-lg px-2 py-1 text-[11px] text-slate-300 focus:outline-none"
+                    className="w-full bg-slate-950 border border-slate-800 rounded px-2 py-1 text-[11px] text-slate-300 focus:outline-none"
                   >
                     <option value="">Comment as...</option>
                     {users.map((u) => (
@@ -1920,7 +2152,7 @@ export default function Home() {
                     }}
                     placeholder="Write a comment... (Enter to send, Shift+Enter for new line)"
                     rows={2}
-                    className="w-full bg-slate-950 border border-slate-800 rounded-lg px-3 py-2 text-xs text-white focus:outline-none focus:border-indigo-500 resize-none"
+                    className="w-full bg-slate-950 border border-slate-800 rounded px-3 py-2 text-xs text-white focus:outline-none focus:border-blue-500 resize-none"
                   />
                   <button
                     onClick={() => {
@@ -1928,12 +2160,15 @@ export default function Home() {
                       addComment(activeModalTask.id, newCommentBody.trim(), commentAsUserId || null);
                       setNewCommentBody('');
                     }}
-                    className="w-full bg-indigo-600 hover:bg-indigo-500 text-white text-xs py-2 rounded-lg font-medium cursor-pointer"
+                    className="w-full bg-blue-600 hover:bg-blue-500 text-white text-xs py-2 rounded font-medium cursor-pointer"
                   >
                     Send comment
                   </button>
                 </div>
               </div>
+              </motion.div>
+              )}
+              </AnimatePresence>
             </div>
           </motion.div>
           </motion.div>
@@ -1941,10 +2176,21 @@ export default function Home() {
       )}
       </AnimatePresence>
 
+      <CreateTaskModal
+        open={createTaskOpen}
+        workspaces={workspaces}
+        defaultStartDate={createTaskDefaultDate}
+        onClose={() => setCreateTaskOpen(false)}
+        onCreate={({ title, spaceId, listId, startDate, dueDate }) => {
+          optimisticCreateTask(title, listId, spaceId, null, startDate, dueDate);
+          setCreateTaskOpen(false);
+        }}
+      />
+
       {/* ================= TEAM / USER ADMIN MODAL ================= */}
       {teamOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/70 backdrop-blur-xs" onClick={() => setTeamOpen(false)}>
-          <div onClick={(e) => e.stopPropagation()} className="w-[420px] bg-slate-900 border border-slate-800 rounded-2xl shadow-2xl overflow-hidden">
+          <div onClick={(e) => e.stopPropagation()} className="w-[420px] bg-slate-900 border border-slate-800 rounded shadow-2xl overflow-hidden">
             <div className="px-5 py-4 border-b border-slate-800 flex items-center justify-between">
               <h3 className="font-bold text-sm text-white flex items-center gap-1.5"><Users className="w-4 h-4" /> Team</h3>
               <button onClick={() => setTeamOpen(false)} className="text-slate-400 hover:text-white cursor-pointer">
@@ -1955,7 +2201,7 @@ export default function Home() {
             <div className="p-5 space-y-3 max-h-72 overflow-y-auto">
               {users.length === 0 && <p className="text-xs text-slate-500">No users yet — add the first one below.</p>}
               {users.map((u) => (
-                <div key={u.id} className="flex items-center justify-between bg-slate-950/60 border border-slate-800 rounded-lg px-3 py-2">
+                <div key={u.id} className="flex items-center justify-between bg-slate-950/60 border border-slate-800 rounded px-3 py-2">
                   <div className="flex items-center gap-2.5">
                     <span className="w-7 h-7 rounded-full text-[10px] font-bold flex items-center justify-center text-white" style={{ backgroundColor: u.color }}>
                       {u.initials}
@@ -1975,7 +2221,7 @@ export default function Home() {
                 onChange={(e) => setNewUserName(e.target.value)}
                 onKeyDown={(e) => e.key === 'Enter' && handleAddUser()}
                 placeholder="Full name (e.g. Robin Hansen)"
-                className="w-full bg-slate-950 border border-slate-700 rounded-lg px-3 py-2 text-xs text-white focus:outline-none focus:border-indigo-500"
+                className="w-full bg-slate-950 border border-slate-700 rounded px-3 py-2 text-xs text-white focus:outline-none focus:border-blue-500"
               />
               <div className="flex items-center justify-between">
                 <div className="flex gap-1.5">
@@ -1994,7 +2240,7 @@ export default function Home() {
                   </span>
                 )}
               </div>
-              <button onClick={handleAddUser} className="w-full bg-indigo-600 hover:bg-indigo-500 text-white text-xs py-2 rounded-lg font-medium cursor-pointer">
+              <button onClick={handleAddUser} className="w-full bg-blue-600 hover:bg-blue-500 text-white text-xs py-2 rounded font-medium cursor-pointer">
                 + Add user
               </button>
             </div>
@@ -2046,9 +2292,20 @@ export default function Home() {
         }}
       />
 
+      <ConfirmDialog
+        open={!!folderToDelete}
+        title="Delete folder?"
+        message={folderToDelete ? `This permanently deletes "${folderToDelete.name}" and every sub-folder, list, and task inside it.` : ''}
+        onCancel={() => setFolderToDelete(null)}
+        onConfirm={() => {
+          if (folderToDelete) deleteFolder(folderToDelete.spaceId, folderToDelete.id);
+          setFolderToDelete(null);
+        }}
+      />
+
       <DragOverlay dropAnimation={null}>
         {activeDragTask && (
-          <div className="flex items-center gap-2 px-3 py-2 rounded-lg bg-slate-900 border border-indigo-500 shadow-2xl text-xs text-slate-200 max-w-xs">
+          <div className="flex items-center gap-2 px-3 py-2 rounded bg-slate-900 border border-blue-500 shadow-2xl text-xs text-slate-200 max-w-xs">
             <span className="w-2.5 h-2.5 rounded-full shrink-0" style={{ backgroundColor: statusColor(activeDragTask.status) }}></span>
             <span className="truncate font-medium">{activeDragTask.title}</span>
           </div>

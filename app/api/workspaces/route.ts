@@ -8,7 +8,8 @@ export async function GET() {
     include: {
       spaces: {
         include: {
-          lists: { select: { id: true, name: true } },
+          folders: { select: { id: true, name: true, spaceId: true, parentId: true, order: true } },
+          lists: { select: { id: true, name: true, folderId: true, order: true } },
           statuses: { orderBy: { order: 'asc' } },
           customFields: true,
         },

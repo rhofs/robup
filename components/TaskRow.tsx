@@ -19,6 +19,7 @@ type TaskRowProps = {
   task: Task;
   onOpen: () => void;
   columns: ColumnDef[];
+  gridTemplate: string;
   statuses: StatusDef[];
   selectable?: boolean;
   isSelected?: boolean;
@@ -26,12 +27,14 @@ type TaskRowProps = {
   onContextMenu?: (e: React.MouseEvent, task: Task) => void;
   autoFocusRename?: boolean;
   onRenameHandled?: () => void;
+  animateEntrance?: boolean;
 };
 
 function TaskRowImpl({
   task,
   onOpen,
   columns,
+  gridTemplate,
   statuses,
   selectable = false,
   isSelected = false,
@@ -39,6 +42,7 @@ function TaskRowImpl({
   onContextMenu,
   autoFocusRename = false,
   onRenameHandled,
+  animateEntrance = true,
 }: TaskRowProps) {
   const {
     users,
@@ -104,7 +108,7 @@ function TaskRowImpl({
           value={value}
           onClick={(e) => e.stopPropagation()}
           onChange={(e) => optimisticSetCustomFieldValue(task.id, field.id, e.target.value)}
-          className="text-[10px] font-semibold px-2 py-0.5 rounded-full border cursor-pointer bg-slate-900 text-slate-300 border-slate-700"
+          className="text-[10px] font-semibold px-2 py-0.5 rounded border cursor-pointer bg-slate-900 text-slate-300 border-slate-700"
           style={opt ? { color: opt.color, borderColor: opt.color + '55', backgroundColor: opt.color + '20' } : {}}
         >
           <option value="">—</option>
@@ -133,7 +137,7 @@ function TaskRowImpl({
     <motion.div
       layout
       layoutId={`task-${task.id}`}
-      initial={{ opacity: 0, y: 10 }}
+      initial={animateEntrance ? { opacity: 0, y: 10 } : false}
       animate={{ opacity: 1, y: 0 }}
       exit={{ opacity: 0, scale: 0.85, filter: 'blur(6px)', y: -6 }}
       transition={{ duration: 0.28, ease: 'easeOut' }}
@@ -145,9 +149,9 @@ function TaskRowImpl({
         onClick={onOpen}
         onContextMenu={(e) => onContextMenu?.(e, task)}
         className={`grid items-center px-4 py-2.5 text-xs hover:bg-slate-800/50 transition-colors duration-150 cursor-pointer group ${
-          isOver ? 'bg-indigo-600/20 ring-1 ring-inset ring-indigo-500' : ''
-        } ${isDragging ? 'opacity-40' : ''} ${isSelected ? 'bg-indigo-600/10' : ''}`}
-        style={{ gridTemplateColumns: `20px 28px 2fr ${columns.map(() => '110px').join(' ')} 32px` }}
+          isOver ? 'bg-neutral-700/40 ring-1 ring-inset ring-neutral-500' : ''
+        } ${isDragging ? 'opacity-40' : ''} ${isSelected ? 'bg-neutral-700/30' : ''}`}
+        style={{ gridTemplateColumns: gridTemplate }}
       >
         {selectable ? (
           <button
@@ -157,7 +161,7 @@ function TaskRowImpl({
             }}
             className={`w-3.5 h-3.5 rounded border flex items-center justify-center cursor-pointer transition ${
               isSelected
-                ? 'bg-indigo-500 border-indigo-500 text-white opacity-100'
+                ? 'bg-blue-500 border-blue-500 text-white opacity-100'
                 : 'border-slate-600 opacity-0 group-hover:opacity-100'
             }`}
           >
@@ -184,7 +188,7 @@ function TaskRowImpl({
           {showAsDone && <Check className="w-2.5 h-2.5" />}
         </button>
 
-        <div className="font-medium text-slate-200 flex items-center gap-2 truncate pr-4">
+        <div className={`font-medium flex items-center gap-2 truncate pr-4 ${isSelected ? 'text-blue-400' : 'text-slate-200'}`}>
           {editingTitle ? (
             <input
               autoFocus
@@ -199,7 +203,7 @@ function TaskRowImpl({
                   setEditingTitle(false);
                 }
               }}
-              className="w-full bg-slate-900 border border-indigo-500 rounded px-1.5 py-0.5 text-slate-100 focus:outline-none"
+              className="w-full bg-slate-900 border border-blue-500 rounded px-1.5 py-0.5 text-slate-100 focus:outline-none"
             />
           ) : (
             <>
@@ -233,14 +237,14 @@ function TaskRowImpl({
               <FloatingPopover
                 open={statusOpen}
                 onClose={() => setStatusOpen(false)}
-                panelClassName="w-40 bg-slate-900 border border-slate-800 rounded-lg shadow-xl p-1.5"
+                panelClassName="w-40 bg-slate-900 border border-slate-800 rounded shadow-xl p-1.5"
                 anchor={
                   <button
                     onClick={(e) => {
                       e.stopPropagation();
                       setStatusOpen((o) => !o);
                     }}
-                    className="text-[10px] font-semibold px-2 py-0.5 rounded-full border cursor-pointer transition inline-flex items-center gap-1"
+                    className="text-[10px] font-semibold px-2 py-0.5 rounded border cursor-pointer transition inline-flex items-center gap-1"
                     style={{ color: statusColorOf(task.status), borderColor: statusColorOf(task.status) + '55', backgroundColor: statusColorOf(task.status) + '20' }}
                   >
                     {task.status} <RefreshCw className="w-2.5 h-2.5" />
@@ -266,7 +270,7 @@ function TaskRowImpl({
               <FloatingPopover
                 open={assigneeOpen}
                 onClose={() => setAssigneeOpen(false)}
-                panelClassName="w-44 bg-slate-900 border border-slate-800 rounded-lg shadow-xl p-1.5"
+                panelClassName="w-44 bg-slate-900 border border-slate-800 rounded shadow-xl p-1.5"
                 anchor={
                   <button
                     onClick={(e) => {
@@ -301,7 +305,7 @@ function TaskRowImpl({
                     >
                       <span
                         className={`w-3.5 h-3.5 rounded border flex items-center justify-center shrink-0 transition ${
-                          checked ? 'bg-indigo-500 border-indigo-500 text-white' : 'border-slate-600'
+                          checked ? 'bg-blue-500 border-blue-500 text-white' : 'border-slate-600'
                         }`}
                       >
                         {checked && <Check className="w-2.5 h-2.5" />}

@@ -1,5 +1,6 @@
 import { create } from 'zustand';
 import { Task as PrismaTask } from '@prisma/client';
+import { collectFolderIdsUnder } from '../lib/folderTree';
 
 export type StatusDef = {
   id: string;
@@ -46,13 +47,29 @@ export type TaskDoc = {
   updatedAt: string;
 };
 
+export type HierarchyFolder = {
+  id: string;
+  name: string;
+  spaceId: string;
+  parentId: string | null;
+  order: number;
+};
+
+export type HierarchyList = {
+  id: string;
+  name: string;
+  folderId: string | null;
+  order: number;
+};
+
 export type HierarchySpace = {
   id: string;
   name: string;
   color: string;
   statuses: StatusDef[];
   customFields: CustomFieldDef[];
-  lists: { id: string; name: string }[];
+  folders: HierarchyFolder[];
+  lists: HierarchyList[];
 };
 
 export type HierarchyWorkspace = {
@@ -79,7 +96,14 @@ interface TaskStore {
   setShowArchived: (v: boolean) => void;
 
   optimisticMoveTask: (taskId: string, newStatus: string) => void;
-  optimisticCreateTask: (title: string, listId: string, spaceId: string, parentId?: string | null) => Promise<void>;
+  optimisticCreateTask: (
+    title: string,
+    listId: string,
+    spaceId: string,
+    parentId?: string | null,
+    startDate?: string | null,
+    dueDate?: string | null
+  ) => Promise<void>;
   optimisticDeleteTask: (taskId: string) => void;
   optimisticArchiveTask: (taskId: string, archived: boolean) => void;
   optimisticSetAssignees: (taskId: string, userIds: string[]) => void;
@@ -110,8 +134,14 @@ interface TaskStore {
 
   updateSpace: (spaceId: string, patch: { name?: string; color?: string }) => Promise<void>;
 
-  createList: (spaceId: string, name: string) => Promise<void>;
+  createList: (spaceId: string, name: string, folderId?: string | null) => Promise<void>;
   renameList: (spaceId: string, listId: string, name: string) => Promise<void>;
+  moveList: (spaceId: string, listId: string, folderId: string | null) => Promise<void>;
+
+  createFolder: (spaceId: string, name: string, parentId?: string | null) => Promise<void>;
+  renameFolder: (spaceId: string, folderId: string, name: string) => Promise<void>;
+  moveFolder: (spaceId: string, folderId: string, parentId: string | null) => Promise<void>;
+  deleteFolder: (spaceId: string, folderId: string) => Promise<void>;
 
   fetchComments: (taskId: string) => Promise<void>;
   addComment: (taskId: string, body: string, authorId?: string | null) => Promise<void>;
@@ -185,7 +215,7 @@ export const useTaskStore = create<TaskStore>((set, get) => ({
     });
   },
 
-  optimisticCreateTask: async (title, listId, spaceId, parentId = null) => {
+  optimisticCreateTask: async (title, listId, spaceId, parentId = null, startDate = null, dueDate = null) => {
     const tempId = `temp-${Date.now()}`;
     const space = get()
       .workspaces.flatMap((w) => w.spaces)
@@ -204,8 +234,8 @@ export const useTaskStore = create<TaskStore>((set, get) => ({
       customFieldValues: '{}',
       archived: false,
       archivedAt: null,
-      startDate: null,
-      dueDate: null,
+      startDate: startDate ? new Date(startDate) : null,
+      dueDate: dueDate ? new Date(dueDate) : null,
       createdAt: new Date(),
       updatedAt: new Date(),
     };
@@ -216,7 +246,7 @@ export const useTaskStore = create<TaskStore>((set, get) => ({
       const res = await fetch('/api/tasks', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ title, listId, parentId, status: defaultStatus }),
+        body: JSON.stringify({ title, listId, parentId, status: defaultStatus, startDate, dueDate }),
       });
       const savedTask = await res.json();
 
@@ -490,11 +520,11 @@ export const useTaskStore = create<TaskStore>((set, get) => ({
     });
   },
 
-  createList: async (spaceId, name) => {
+  createList: async (spaceId, name, folderId = null) => {
     const res = await fetch('/api/lists', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ spaceId, name }),
+      body: JSON.stringify({ spaceId, name, folderId }),
     });
     const newList = await res.json();
     set((state) => ({
@@ -519,6 +549,87 @@ export const useTaskStore = create<TaskStore>((set, get) => ({
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ name }),
     });
+  },
+
+  moveList: async (spaceId, listId, folderId) => {
+    set((state) => ({
+      workspaces: state.workspaces.map((ws) => ({
+        ...ws,
+        spaces: ws.spaces.map((s) =>
+          s.id === spaceId ? { ...s, lists: s.lists.map((l) => (l.id === listId ? { ...l, folderId } : l)) } : s
+        ),
+      })),
+    }));
+    await fetch(`/api/lists/${listId}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ folderId }),
+    });
+  },
+
+  createFolder: async (spaceId, name, parentId = null) => {
+    const res = await fetch('/api/folders', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ spaceId, name, parentId }),
+    });
+    const newFolder = await res.json();
+    set((state) => ({
+      workspaces: state.workspaces.map((ws) => ({
+        ...ws,
+        spaces: ws.spaces.map((s) => (s.id === spaceId ? { ...s, folders: [...s.folders, newFolder] } : s)),
+      })),
+    }));
+  },
+
+  renameFolder: async (spaceId, folderId, name) => {
+    set((state) => ({
+      workspaces: state.workspaces.map((ws) => ({
+        ...ws,
+        spaces: ws.spaces.map((s) =>
+          s.id === spaceId ? { ...s, folders: s.folders.map((f) => (f.id === folderId ? { ...f, name } : f)) } : s
+        ),
+      })),
+    }));
+    await fetch(`/api/folders/${folderId}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ name }),
+    });
+  },
+
+  moveFolder: async (spaceId, folderId, parentId) => {
+    set((state) => ({
+      workspaces: state.workspaces.map((ws) => ({
+        ...ws,
+        spaces: ws.spaces.map((s) =>
+          s.id === spaceId ? { ...s, folders: s.folders.map((f) => (f.id === folderId ? { ...f, parentId } : f)) } : s
+        ),
+      })),
+    }));
+    await fetch(`/api/folders/${folderId}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ parentId }),
+    });
+  },
+
+  deleteFolder: async (spaceId, folderId) => {
+    set((state) => ({
+      workspaces: state.workspaces.map((ws) => ({
+        ...ws,
+        spaces: ws.spaces.map((s) => {
+          if (s.id !== spaceId) return s;
+          const removedFolderIds = new Set([folderId, ...collectFolderIdsUnder(s, folderId)]);
+          return {
+            ...s,
+            folders: s.folders.filter((f) => !removedFolderIds.has(f.id)),
+            lists: s.lists.filter((l) => !l.folderId || !removedFolderIds.has(l.folderId)),
+          };
+        }),
+      })),
+    }));
+    await fetch(`/api/folders/${folderId}`, { method: 'DELETE' });
   },
 
   fetchComments: async (taskId) => {
