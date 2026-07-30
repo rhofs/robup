@@ -1,6 +1,22 @@
 import { NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 
+// Folder/List rows each carry their own `spaceId` directly (not derived from ancestry), so
+// moving a folder into a different Space only updates its own row unless we walk its subtree
+// too — otherwise every list and sub-folder nested inside would silently keep pointing at the
+// old Space, orphaned from the piece of the tree that moved.
+async function collectDescendantFolderIds(rootId: string): Promise<string[]> {
+  const ids: string[] = [];
+  let frontier = [rootId];
+  while (frontier.length > 0) {
+    const children = await prisma.folder.findMany({ where: { parentId: { in: frontier } }, select: { id: true } });
+    const childIds = children.map((c) => c.id);
+    ids.push(...childIds);
+    frontier = childIds;
+  }
+  return ids;
+}
+
 export async function PATCH(req: Request, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
   const body = await req.json();
@@ -10,10 +26,24 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
   if (body.icon !== undefined) data.icon = body.icon;
   if (body.parentId !== undefined) data.parentId = body.parentId;
   if (body.order !== undefined) data.order = body.order;
+  if (body.spaceId !== undefined) data.spaceId = body.spaceId;
 
-  const folder = await prisma.folder.update({
+  if (body.spaceId !== undefined) {
+    const descendantFolderIds = await collectDescendantFolderIds(id);
+    const allFolderIds = [id, ...descendantFolderIds];
+    await prisma.$transaction([
+      prisma.folder.update({ where: { id }, data }),
+      ...(descendantFolderIds.length > 0
+        ? [prisma.folder.updateMany({ where: { id: { in: descendantFolderIds } }, data: { spaceId: body.spaceId } })]
+        : []),
+      prisma.list.updateMany({ where: { folderId: { in: allFolderIds } }, data: { spaceId: body.spaceId } }),
+    ]);
+  } else {
+    await prisma.folder.update({ where: { id }, data });
+  }
+
+  const folder = await prisma.folder.findUniqueOrThrow({
     where: { id },
-    data,
     select: { id: true, name: true, color: true, icon: true, spaceId: true, parentId: true, order: true },
   });
   return NextResponse.json(folder);

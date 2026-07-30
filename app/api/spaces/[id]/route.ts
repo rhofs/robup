@@ -7,6 +7,7 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
   const data: any = {};
   if (body.name !== undefined) data.name = body.name;
   if (body.color !== undefined) data.color = body.color;
+  if (body.order !== undefined) data.order = body.order;
 
   const space = await prisma.space.update({
     where: { id },

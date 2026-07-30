@@ -7,9 +7,10 @@ export async function GET() {
   const workspaces = await prisma.workspace.findMany({
     include: {
       spaces: {
+        orderBy: { order: 'asc' },
         include: {
           folders: { select: { id: true, name: true, color: true, icon: true, spaceId: true, parentId: true, order: true } },
-          lists: { select: { id: true, name: true, folderId: true, order: true } },
+          lists: { select: { id: true, name: true, color: true, icon: true, folderId: true, order: true } },
           statuses: { orderBy: { order: 'asc' } },
           customFields: true,
         },

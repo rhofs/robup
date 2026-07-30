@@ -60,6 +60,8 @@ export type HierarchyFolder = {
 export type HierarchyList = {
   id: string;
   name: string;
+  color: string | null;
+  icon: string | null;
   folderId: string | null;
   order: number;
 };
@@ -68,6 +70,7 @@ export type HierarchySpace = {
   id: string;
   name: string;
   color: string;
+  order: number;
   statuses: StatusDef[];
   customFields: CustomFieldDef[];
   folders: HierarchyFolder[];
@@ -93,6 +96,7 @@ interface TaskStore {
   showArchived: boolean;
 
   fetchInitialData: () => Promise<void>;
+  refetchWorkspaces: () => Promise<void>;
   setActiveView: (view: 'board' | 'calendar') => void;
   setNavigation: (spaceId: string, listId?: string | null) => void;
   setShowArchived: (v: boolean) => void;
@@ -135,19 +139,25 @@ interface TaskStore {
   deleteUser: (userId: string) => Promise<void>;
 
   updateSpace: (spaceId: string, patch: { name?: string; color?: string }) => Promise<void>;
+  reorderSpace: (spaceId: string, order: number) => Promise<void>;
 
   createList: (spaceId: string, name: string, folderId?: string | null) => Promise<void>;
   renameList: (spaceId: string, listId: string, name: string) => Promise<void>;
-  moveList: (spaceId: string, listId: string, folderId: string | null) => Promise<void>;
+  updateList: (spaceId: string, listId: string, patch: { name?: string; color?: string | null; icon?: string | null }) => Promise<void>;
+  // `targetSpaceId`, when given and different from `spaceId`, moves the list to a different
+  // Space entirely (not just a different folder within the same one) — see the comment above
+  // the implementation for why that needs a slower refetch-based path instead of a local patch.
+  moveList: (spaceId: string, listId: string, folderId: string | null, targetSpaceId?: string) => Promise<void>;
+  reorderList: (spaceId: string, listId: string, order: number) => Promise<void>;
 
   createFolder: (spaceId: string, name: string, parentId?: string | null) => Promise<void>;
   renameFolder: (spaceId: string, folderId: string, name: string) => Promise<void>;
   updateFolder: (
     spaceId: string,
     folderId: string,
-    patch: { name?: string; color?: string | null; icon?: string | null }
+    patch: { name?: string; color?: string | null; icon?: string | null; order?: number }
   ) => Promise<void>;
-  moveFolder: (spaceId: string, folderId: string, parentId: string | null) => Promise<void>;
+  moveFolder: (spaceId: string, folderId: string, parentId: string | null, targetSpaceId?: string) => Promise<void>;
   deleteFolder: (spaceId: string, folderId: string) => Promise<void>;
 
   fetchComments: (taskId: string) => Promise<void>;
@@ -196,6 +206,21 @@ export const useTaskStore = create<TaskStore>((set, get) => ({
     } catch (error) {
       console.error('Error fetching data:', error);
       set({ isLoading: false });
+    }
+  },
+
+  // Lighter than fetchInitialData: re-syncs just the Space/Folder/List tree, without touching
+  // tasks, users, or navigation state. Used after a cross-Space folder/list move, where the
+  // moved subtree's spaceId changes for a potentially-nested set of rows server-side — patching
+  // that shape correctly across two different Space objects in local state isn't worth the
+  // complexity next to a plain refetch.
+  refetchWorkspaces: async () => {
+    try {
+      const res = await fetch('/api/workspaces');
+      const workspaces = await res.json();
+      set({ workspaces });
+    } catch (error) {
+      console.error('Error refetching workspaces:', error);
     }
   },
 
@@ -527,6 +552,20 @@ export const useTaskStore = create<TaskStore>((set, get) => ({
     });
   },
 
+  reorderSpace: async (spaceId, order) => {
+    set((state) => ({
+      workspaces: state.workspaces.map((ws) => ({
+        ...ws,
+        spaces: ws.spaces.map((s) => (s.id === spaceId ? { ...s, order } : s)),
+      })),
+    }));
+    await fetch(`/api/spaces/${spaceId}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ order }),
+    });
+  },
+
   createList: async (spaceId, name, folderId = null) => {
     const res = await fetch('/api/lists', {
       method: 'POST',
@@ -558,7 +597,32 @@ export const useTaskStore = create<TaskStore>((set, get) => ({
     });
   },
 
-  moveList: async (spaceId, listId, folderId) => {
+  updateList: async (spaceId, listId, patch) => {
+    set((state) => ({
+      workspaces: state.workspaces.map((ws) => ({
+        ...ws,
+        spaces: ws.spaces.map((s) =>
+          s.id === spaceId ? { ...s, lists: s.lists.map((l) => (l.id === listId ? { ...l, ...patch } : l)) } : s
+        ),
+      })),
+    }));
+    await fetch(`/api/lists/${listId}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(patch),
+    });
+  },
+
+  moveList: async (spaceId, listId, folderId, targetSpaceId) => {
+    if (targetSpaceId && targetSpaceId !== spaceId) {
+      await fetch(`/api/lists/${listId}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ folderId, spaceId: targetSpaceId }),
+      });
+      await get().refetchWorkspaces();
+      return;
+    }
     set((state) => ({
       workspaces: state.workspaces.map((ws) => ({
         ...ws,
@@ -571,6 +635,22 @@ export const useTaskStore = create<TaskStore>((set, get) => ({
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ folderId }),
+    });
+  },
+
+  reorderList: async (spaceId, listId, order) => {
+    set((state) => ({
+      workspaces: state.workspaces.map((ws) => ({
+        ...ws,
+        spaces: ws.spaces.map((s) =>
+          s.id === spaceId ? { ...s, lists: s.lists.map((l) => (l.id === listId ? { ...l, order } : l)) } : s
+        ),
+      })),
+    }));
+    await fetch(`/api/lists/${listId}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ order }),
     });
   },
 
@@ -621,7 +701,16 @@ export const useTaskStore = create<TaskStore>((set, get) => ({
     });
   },
 
-  moveFolder: async (spaceId, folderId, parentId) => {
+  moveFolder: async (spaceId, folderId, parentId, targetSpaceId) => {
+    if (targetSpaceId && targetSpaceId !== spaceId) {
+      await fetch(`/api/folders/${folderId}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ parentId, spaceId: targetSpaceId }),
+      });
+      await get().refetchWorkspaces();
+      return;
+    }
     set((state) => ({
       workspaces: state.workspaces.map((ws) => ({
         ...ws,

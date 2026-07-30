@@ -20,6 +20,7 @@ model Space {
   id           String        @id @default(uuid())
   name         String
   color        String        @default("#3B82F6")
+  order        Int           @default(0)
   workspaceId  String        @map("workspace_id")
   workspace    Workspace     @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
   folders      Folder[]
@@ -49,6 +50,8 @@ model Folder {
 model List {
   id        String   @id @default(uuid())
   name      String
+  color     String?
+  icon      String?
   spaceId   String   @map("space_id")
   space     Space    @relation(fields: [spaceId], references: [id], onDelete: Cascade)
   folderId  String?  @map("folder_id")

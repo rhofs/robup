@@ -9,6 +9,7 @@ import {
   useSensor,
   useSensors,
   useDroppable,
+  useDraggable,
   DragOverlay,
   type DragEndEvent,
   type DragStartEvent,
@@ -41,7 +42,7 @@ import {
   ChevronDown,
   GripVertical,
 } from 'lucide-react';
-import { useTaskStore, HierarchySpace, HierarchyFolder, StatusDef, CustomFieldDef, Task, TaskDoc } from '../store/useTaskStore';
+import { useTaskStore, HierarchySpace, HierarchyFolder, HierarchyList, StatusDef, CustomFieldDef, Task, TaskDoc } from '../store/useTaskStore';
 import { collectListIdsUnder, isDescendantOf } from '../lib/folderTree';
 import DatePickerPopover from '../components/DatePickerPopover';
 import ConfirmDialog from '../components/ConfirmDialog';
@@ -232,13 +233,24 @@ function SortableStatusRow({
 
 function DroppableSidebarItem({
   id,
+  dragId,
   children,
 }: {
   id: string;
-  children: (isOver: boolean) => React.ReactNode;
+  dragId: string;
+  children: (isOver: boolean, dragHandleProps: { attributes: any; listeners: any; isDragging: boolean }) => React.ReactNode;
 }) {
-  const { setNodeRef, isOver } = useDroppable({ id });
-  return <div ref={setNodeRef}>{children(isOver)}</div>;
+  const { setNodeRef: setDropRef, isOver } = useDroppable({ id });
+  const { setNodeRef: setDragRef, attributes, listeners, isDragging } = useDraggable({ id: dragId });
+  const setNodeRef = (node: HTMLElement | null) => {
+    setDropRef(node);
+    setDragRef(node);
+  };
+  return (
+    <div ref={setNodeRef} style={isDragging ? { opacity: 0.4 } : undefined}>
+      {children(isOver, { attributes, listeners, isDragging })}
+    </div>
+  );
 }
 
 function SortableFieldOption({
@@ -369,7 +381,10 @@ export default function Home() {
     addUser,
     deleteUser,
     updateSpace,
+    reorderSpace,
     moveList,
+    reorderList,
+    updateList,
     moveFolder,
     updateFolder,
     deleteFolder,
@@ -431,6 +446,14 @@ export default function Home() {
   const [editFolderName, setEditFolderName] = useState('');
   const [editFolderColor, setEditFolderColor] = useState<string | null>(null);
   const [editFolderIcon, setEditFolderIcon] = useState<string | null>(null);
+  const [renameFolderId, setRenameFolderId] = useState<string | null>(null);
+
+  const [listMenu, setListMenu] = useState<{ x: number; y: number; list: HierarchyList; spaceId: string } | null>(null);
+  const [listEditTarget, setListEditTarget] = useState<{ list: HierarchyList; spaceId: string } | null>(null);
+  const [editListName, setEditListName] = useState('');
+  const [editListColor, setEditListColor] = useState<string | null>(null);
+  const [editListIcon, setEditListIcon] = useState<string | null>(null);
+  const [renameListId, setRenameListId] = useState<string | null>(null);
 
   const [columnMenu, setColumnMenu] = useState<{ x: number; y: number; col: ColumnDef } | null>(null);
   const [fieldEditTarget, setFieldEditTarget] = useState<CustomFieldDef | null>(null);
@@ -867,6 +890,10 @@ export default function Home() {
     setFolderMenu({ x: e.clientX, y: e.clientY, folder });
   };
 
+  const openListMenu = (e: React.MouseEvent, list: HierarchyList, spaceId: string) => {
+    setListMenu({ x: e.clientX, y: e.clientY, list, spaceId });
+  };
+
   const startEditFolder = (folder: HierarchyFolder) => {
     setFolderEditTarget(folder);
     setEditFolderName(folder.name);
@@ -883,6 +910,24 @@ export default function Home() {
       icon: editFolderIcon,
     });
     setFolderEditTarget(null);
+  };
+
+  const startEditList = (list: HierarchyList, spaceId: string) => {
+    setListEditTarget({ list, spaceId });
+    setEditListName(list.name);
+    setEditListColor(list.color);
+    setEditListIcon(list.icon);
+    setListMenu(null);
+  };
+
+  const saveListEdit = () => {
+    if (!listEditTarget) return;
+    updateList(listEditTarget.spaceId, listEditTarget.list.id, {
+      name: editListName.trim() || listEditTarget.list.name,
+      color: editListColor,
+      icon: editListIcon,
+    });
+    setListEditTarget(null);
   };
 
   // ---- Bulk-valg ----
@@ -914,12 +959,66 @@ export default function Home() {
   // ---- Drag & drop for tasks (row → another row / list / space) ----
   const taskSensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 5 } }));
   const [activeDragTask, setActiveDragTask] = useState<Task | null>(null);
-  const [activeDragEntity, setActiveDragEntity] = useState<{ kind: 'folder' | 'list'; name: string; color?: string | null } | null>(
+  const [activeDragEntity, setActiveDragEntity] = useState<{ kind: 'folder' | 'list' | 'space'; name: string; color?: string | null } | null>(
     null
   );
 
+  const [toast, setToast] = useState<string | null>(null);
+  const toastTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const showToast = (message: string) => {
+    if (toastTimeoutRef.current) clearTimeout(toastTimeoutRef.current);
+    setToast(message);
+    toastTimeoutRef.current = setTimeout(() => setToast(null), 3000);
+  };
+
+  // Re-numbers one sibling group's `order` field after a drag-to-reorder, same pattern as
+  // `handleStatusDragEnd` below: move the dragged item to the target's index via `arrayMove`,
+  // then persist any index that actually changed.
+  const reorderFolderSiblings = (space: HierarchySpace, draggedId: string, targetId: string) => {
+    const dragged = space.folders.find((f) => f.id === draggedId);
+    if (!dragged) return;
+    const siblings = space.folders.filter((f) => f.parentId === dragged.parentId).sort((a, b) => a.order - b.order);
+    const oldIndex = siblings.findIndex((f) => f.id === draggedId);
+    const newIndex = siblings.findIndex((f) => f.id === targetId);
+    if (oldIndex === -1 || newIndex === -1) return;
+    arrayMove(siblings, oldIndex, newIndex).forEach((f, index) => {
+      if (f.order !== index) updateFolder(space.id, f.id, { order: index });
+    });
+  };
+
+  const reorderListSiblings = (space: HierarchySpace, draggedId: string, targetId: string) => {
+    const dragged = space.lists.find((l) => l.id === draggedId);
+    if (!dragged) return;
+    const siblings = space.lists.filter((l) => l.folderId === dragged.folderId).sort((a, b) => a.order - b.order);
+    const oldIndex = siblings.findIndex((l) => l.id === draggedId);
+    const newIndex = siblings.findIndex((l) => l.id === targetId);
+    if (oldIndex === -1 || newIndex === -1) return;
+    arrayMove(siblings, oldIndex, newIndex).forEach((l, index) => {
+      if (l.order !== index) reorderList(space.id, l.id, index);
+    });
+  };
+
+  // Spaces are always top-level (no nesting, no cross-Space case) — plain flat reorder among
+  // every Space in the workspace, same shape as handleStatusDragEnd below.
+  const reorderSpaceSiblings = (draggedId: string, targetId: string) => {
+    const allSpaces = workspaces.flatMap((w) => w.spaces).sort((a, b) => a.order - b.order);
+    const oldIndex = allSpaces.findIndex((s) => s.id === draggedId);
+    const newIndex = allSpaces.findIndex((s) => s.id === targetId);
+    if (oldIndex === -1 || newIndex === -1) return;
+    arrayMove(allSpaces, oldIndex, newIndex).forEach((s, index) => {
+      if (s.order !== index) reorderSpace(s.id, index);
+    });
+  };
+
   const handleTaskDragStart = (event: DragStartEvent) => {
     const draggedId = event.active.id as string;
+
+    if (draggedId.startsWith('space-drag:')) {
+      const spaceId = draggedId.slice('space-drag:'.length);
+      const space = workspaces.flatMap((w) => w.spaces).find((s) => s.id === spaceId);
+      if (space) setActiveDragEntity({ kind: 'space', name: space.name, color: space.color });
+      return;
+    }
 
     if (draggedId.startsWith('folder-drag:') || draggedId.startsWith('list-drag:')) {
       const isFolder = draggedId.startsWith('folder-drag:');
@@ -947,6 +1046,18 @@ export default function Home() {
     const draggedId = active.id as string;
     const overId = over.id as string;
 
+    if (draggedId.startsWith('space-drag:')) {
+      const spaceId = draggedId.slice('space-drag:'.length);
+      // Reuses the existing `space:${id}` droppable (already registered on every Space header
+      // for task-drops and cross-Space folder/list moves) — same technique as List-onto-List
+      // reordering above: the dragged id's own prefix already disambiguates the meaning.
+      if (overId.startsWith('space:')) {
+        const targetSpaceId = overId.slice('space:'.length);
+        if (targetSpaceId !== spaceId) reorderSpaceSiblings(spaceId, targetSpaceId);
+      }
+      return;
+    }
+
     // Sidebar tree reparenting (List/Folder dragged onto a Folder or a Space header) is a
     // completely different kind of drag from moving a task — dispatch on the id prefix.
     // (Both share this one DndContext: dnd-kit resolves useDraggable/useDroppable by nearest
@@ -955,24 +1066,50 @@ export default function Home() {
     if (draggedId.startsWith('list-drag:') || draggedId.startsWith('folder-drag:')) {
       const isFolder = draggedId.startsWith('folder-drag:');
       const treeId = isFolder ? draggedId.slice('folder-drag:'.length) : draggedId.slice('list-drag:'.length);
-      const space = workspaces
-        .flatMap((w) => w.spaces)
-        .find((s) => (isFolder ? s.folders.some((f) => f.id === treeId) : s.lists.some((l) => l.id === treeId)));
+      const allSpaces = workspaces.flatMap((w) => w.spaces);
+      const space = allSpaces.find((s) => (isFolder ? s.folders.some((f) => f.id === treeId) : s.lists.some((l) => l.id === treeId)));
       if (!space) return;
 
       if (overId.startsWith('folder-drop:')) {
         const targetFolderId = overId.slice('folder-drop:'.length);
-        if (!space.folders.some((f) => f.id === targetFolderId)) return;
+        // The target folder can live in a *different* Space than the one being dragged from —
+        // search all Spaces, not just the source one, otherwise cross-Space moves silently do
+        // nothing (this used to only ever look inside `space`, the source).
+        const targetSpace = allSpaces.find((s) => s.folders.some((f) => f.id === targetFolderId));
+        if (!targetSpace) return;
         if (isFolder) {
-          if (targetFolderId === treeId || isDescendantOf(space, targetFolderId, treeId)) return;
-          moveFolder(space.id, treeId, targetFolderId);
+          if (targetSpace.id === space.id && (targetFolderId === treeId || isDescendantOf(space, targetFolderId, treeId))) return;
+          const dragged = space.folders.find((f) => f.id === treeId);
+          const target = targetSpace.folders.find((f) => f.id === targetFolderId);
+          // Dropping a folder onto one that's ALREADY its sibling (same Space, same parent)
+          // reorders it to that position instead of nesting it — nesting only kicks in when
+          // dropped onto a folder somewhere else in the tree, which is the far more common
+          // gesture there. A different Space can never be "already a sibling".
+          if (dragged && target && targetSpace.id === space.id && dragged.parentId === target.parentId) {
+            reorderFolderSiblings(space, treeId, targetFolderId);
+          } else {
+            moveFolder(space.id, treeId, targetFolderId, targetSpace.id);
+          }
         } else {
-          moveList(space.id, treeId, targetFolderId);
+          moveList(space.id, treeId, targetFolderId, targetSpace.id);
+        }
+      } else if (overId.startsWith('list:') && !isFolder) {
+        // Lists can't "contain" anything, so a List dragged onto another List's `list:` target
+        // (already registered for task-drops) has no competing meaning the way folder-onto-
+        // folder does — for a list-drag specifically, it always means reorder. Scoped to same-
+        // Space siblings only; moving a list to sit at a precise position in a *different*
+        // Space's list is a rarer case left to the Space-header drop below (append, not exact
+        // position) rather than adding cross-Space position math here.
+        const targetListId = overId.slice('list:'.length);
+        if (targetListId !== treeId && space.lists.some((l) => l.id === targetListId)) {
+          reorderListSiblings(space, treeId, targetListId);
         }
       } else if (overId.startsWith('space:')) {
-        if (overId.slice('space:'.length) !== space.id) return;
-        if (isFolder) moveFolder(space.id, treeId, null);
-        else moveList(space.id, treeId, null);
+        const targetSpaceId = overId.slice('space:'.length);
+        const targetSpace = allSpaces.find((s) => s.id === targetSpaceId);
+        if (!targetSpace) return;
+        if (isFolder) moveFolder(space.id, treeId, null, targetSpace.id);
+        else moveList(space.id, treeId, null, targetSpace.id);
       }
       return;
     }
@@ -982,10 +1119,25 @@ export default function Home() {
       if (targetId !== draggedId) optimisticSetParent(draggedId, targetId);
     } else if (overId.startsWith('list:')) {
       optimisticSetList(draggedId, overId.slice('list:'.length));
+    } else if (overId.startsWith('folder-drop:')) {
+      // Dropping a task onto a Folder row (rather than a specific List within it) has no
+      // single obvious destination list, so — same fallback as dropping onto a Space header
+      // below — land it in the first list found anywhere under that folder, recursively.
+      const folderId = overId.slice('folder-drop:'.length);
+      const folder = workspaces.flatMap((w) => w.spaces).flatMap((s) => s.folders).find((f) => f.id === folderId);
+      const space = workspaces.flatMap((w) => w.spaces).find((s) => s.folders.some((f) => f.id === folderId));
+      const firstListId = space ? collectListIdsUnder(space, folderId)[0] : undefined;
+      if (firstListId) optimisticSetList(draggedId, firstListId);
+      else showToast(`"${folder?.name ?? 'This folder'}" has no list yet — add one before moving tasks in here.`);
     } else if (overId.startsWith('space:')) {
       const spaceId = overId.slice('space:'.length);
       const space = workspaces.flatMap((w) => w.spaces).find((s) => s.id === spaceId);
-      if (space?.lists[0]) optimisticSetList(draggedId, space.lists[0].id);
+      // Recurse through nested folders too, not just this Space's top-level lists — a Space
+      // with every list tucked inside a folder shouldn't look "empty" just because none of
+      // them live at the root.
+      const firstListId = space ? collectListIdsUnder(space, null)[0] : undefined;
+      if (firstListId) optimisticSetList(draggedId, firstListId);
+      else showToast(`"${space?.name ?? 'This space'}" has no list yet — add one before moving tasks in here.`);
     }
   };
 
@@ -1150,7 +1302,7 @@ export default function Home() {
                   </div>
                 )}
               </div>
-              {workspaces[0]?.spaces.map((space: HierarchySpace) => {
+              {[...(workspaces[0]?.spaces ?? [])].sort((a, b) => a.order - b.order).map((space: HierarchySpace) => {
                 const isSpaceActive = activeView === 'board' && activeSpaceId === space.id && !activeListId && modalTaskStack.length === 0;
                 const spaceListIds = collectListIdsUnder(space, null);
                 const spaceTasksCount = tasks.filter(
@@ -1161,9 +1313,11 @@ export default function Home() {
 
                 return (
                   <div key={space.id} className="space-y-1">
-                    <DroppableSidebarItem id={`space:${space.id}`}>
-                      {(isOver) => (
+                    <DroppableSidebarItem id={`space:${space.id}`} dragId={`space-drag:${space.id}`}>
+                      {(isOver, drag) => (
                         <button
+                          {...drag.attributes}
+                          {...drag.listeners}
                           onClick={() => {
                             if (activeView === 'calendar') {
                               toggleCalendarSpace(space);
@@ -1217,6 +1371,11 @@ export default function Home() {
                       toggleCalendarFolder={(folderId) => toggleCalendarFolder(space, folderId)}
                       onDeleteFolderRequest={setFolderToDelete}
                       onFolderContextMenu={openFolderMenu}
+                      renameFolderId={renameFolderId}
+                      onRenameFolderHandled={() => setRenameFolderId(null)}
+                      onListContextMenu={(e, list) => openListMenu(e, list, space.id)}
+                      renameListId={renameListId}
+                      onRenameListHandled={() => setRenameListId(null)}
                     />
                   </div>
                 );
@@ -1588,6 +1747,48 @@ export default function Home() {
             <button onClick={() => startEditFolder(folderMenu.folder)} className="w-full text-left px-3 py-1.5 text-xs text-neutral-300 hover:bg-neutral-800/60 cursor-pointer flex items-center gap-2">
               <Pencil className="w-3.5 h-3.5" /> Edit appearance
             </button>
+            <button
+              onClick={() => {
+                setRenameFolderId(folderMenu.folder.id);
+                setFolderMenu(null);
+              }}
+              className="w-full text-left px-3 py-1.5 text-xs text-neutral-300 hover:bg-neutral-800/60 cursor-pointer flex items-center gap-2"
+            >
+              <Pencil className="w-3.5 h-3.5" /> Rename
+            </button>
+            <button
+              onClick={() => {
+                setFolderToDelete(folderMenu.folder);
+                setFolderMenu(null);
+              }}
+              className="w-full text-left px-3 py-1.5 text-xs text-red-400 hover:bg-neutral-800/60 cursor-pointer flex items-center gap-2"
+            >
+              <Trash2 className="w-3.5 h-3.5" /> Delete
+            </button>
+          </div>
+        </>
+      )}
+
+      {/* ================= CONTEXT MENU: LIST ================= */}
+      {listMenu && (
+        <>
+          <div className="fixed inset-0 z-[60]" onClick={() => setListMenu(null)} onContextMenu={(e) => { e.preventDefault(); setListMenu(null); }} />
+          <div className="fixed z-[61] w-48 bg-neutral-900 border border-neutral-800 rounded shadow-2xl py-1" style={{ top: listMenu.y, left: listMenu.x }}>
+            <button
+              onClick={() => startEditList(listMenu.list, listMenu.spaceId)}
+              className="w-full text-left px-3 py-1.5 text-xs text-neutral-300 hover:bg-neutral-800/60 cursor-pointer flex items-center gap-2"
+            >
+              <Pencil className="w-3.5 h-3.5" /> Edit appearance
+            </button>
+            <button
+              onClick={() => {
+                setRenameListId(listMenu.list.id);
+                setListMenu(null);
+              }}
+              className="w-full text-left px-3 py-1.5 text-xs text-neutral-300 hover:bg-neutral-800/60 cursor-pointer flex items-center gap-2"
+            >
+              <Pencil className="w-3.5 h-3.5" /> Rename
+            </button>
           </div>
         </>
       )}
@@ -1767,6 +1968,91 @@ export default function Home() {
                 <span className="text-xs text-neutral-300">{editFolderName || 'Preview'}</span>
               </div>
               <button onClick={saveFolderEdit} className="w-full bg-blue-600 hover:bg-blue-500 text-white text-xs py-2 rounded font-medium cursor-pointer">
+                Save
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ================= EDIT LIST MODAL ================= */}
+      {listEditTarget && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-neutral-950/70 backdrop-blur-xs" onClick={() => setListEditTarget(null)}>
+          <div onClick={(e) => e.stopPropagation()} className="w-[380px] bg-neutral-900 border border-neutral-800 rounded shadow-2xl overflow-hidden">
+            <div className="px-5 py-4 border-b border-neutral-800 flex items-center justify-between">
+              <h3 className="font-bold text-sm text-white">Edit List</h3>
+              <button onClick={() => setListEditTarget(null)} className="text-neutral-400 hover:text-white cursor-pointer">
+                <X className="w-3.5 h-3.5" />
+              </button>
+            </div>
+            <div className="p-5 space-y-3">
+              <div>
+                <label className="text-[11px] text-neutral-400 mb-1 block">Name</label>
+                <input
+                  value={editListName}
+                  onChange={(e) => setEditListName(e.target.value)}
+                  placeholder="List name"
+                  className="w-full bg-neutral-950 border border-neutral-700 rounded px-3 py-2 text-xs text-white focus:outline-none focus:border-blue-500"
+                />
+              </div>
+              <div>
+                <label className="text-[11px] text-neutral-400 mb-1 block">Color</label>
+                <div className="flex flex-wrap gap-1.5">
+                  <button
+                    onClick={() => setEditListColor(null)}
+                    title="Default"
+                    className={`w-6 h-6 rounded-full cursor-pointer bg-neutral-700 flex items-center justify-center ${
+                      editListColor === null ? 'ring-2 ring-white' : ''
+                    }`}
+                  >
+                    {editListColor === null && <Check className="w-3 h-3 text-white" />}
+                  </button>
+                  {FIELD_COLOR_CHOICES.map((c) => (
+                    <button
+                      key={c}
+                      onClick={() => setEditListColor(c)}
+                      className={`w-6 h-6 rounded-full cursor-pointer ${editListColor === c ? 'ring-2 ring-white' : ''}`}
+                      style={{ backgroundColor: c }}
+                    />
+                  ))}
+                </div>
+              </div>
+              <div>
+                <label className="text-[11px] text-neutral-400 mb-1 block">Icon</label>
+                <div className="flex flex-wrap gap-1.5">
+                  <button
+                    onClick={() => setEditListIcon(null)}
+                    title="Default"
+                    className={`w-7 h-7 rounded bg-neutral-950 border border-neutral-700 flex items-center justify-center cursor-pointer text-neutral-300 ${
+                      editListIcon === null ? 'border-blue-500 text-blue-400' : ''
+                    }`}
+                  >
+                    <ListIcon className="w-3.5 h-3.5" />
+                  </button>
+                  {FOLDER_ICON_CHOICES.map((iconKey) => {
+                    const Icon = FOLDER_ICON_MAP[iconKey];
+                    return (
+                      <button
+                        key={iconKey}
+                        onClick={() => setEditListIcon(iconKey)}
+                        className={`w-7 h-7 rounded bg-neutral-950 border border-neutral-700 flex items-center justify-center cursor-pointer text-neutral-300 ${
+                          editListIcon === iconKey ? 'border-blue-500 text-blue-400' : ''
+                        }`}
+                      >
+                        <Icon className="w-3.5 h-3.5" />
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+              <div className="flex items-center gap-2 bg-neutral-950/60 border border-neutral-800 rounded px-3 py-2">
+                {(() => {
+                  const PreviewIcon = editListIcon ? FOLDER_ICON_MAP[editListIcon] : ListIcon;
+                  return <PreviewIcon className="w-3.5 h-3.5" style={{ color: editListColor || undefined }} />;
+                })()}
+                <span className="text-xs text-neutral-300">{editListName || 'Preview'}</span>
+              </div>
+              <button onClick={saveListEdit} className="w-full bg-blue-600 hover:bg-blue-500 text-white text-xs py-2 rounded font-medium cursor-pointer">
                 Save
               </button>
             </div>
@@ -2486,6 +2772,8 @@ export default function Home() {
           >
             {activeDragEntity.kind === 'folder' ? (
               <FolderIconLucide className="w-3.5 h-3.5 shrink-0" style={{ color: activeDragEntity.color || undefined }} />
+            ) : activeDragEntity.kind === 'space' ? (
+              <span className="w-2.5 h-2.5 rounded-full shrink-0" style={{ backgroundColor: activeDragEntity.color || '#6366f1' }} />
             ) : (
               <ListIcon className="w-3.5 h-3.5 shrink-0" />
             )}
@@ -2493,6 +2781,19 @@ export default function Home() {
           </div>
         )}
       </DragOverlay>
+
+      <AnimatePresence>
+        {toast && (
+          <motion.div
+            initial={{ opacity: 0, y: 10 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: 10 }}
+            className="fixed bottom-6 left-1/2 -translate-x-1/2 z-[70] bg-neutral-900 border border-neutral-700 rounded shadow-2xl px-4 py-2.5 text-xs text-neutral-200 max-w-sm text-center"
+          >
+            {toast}
+          </motion.div>
+        )}
+      </AnimatePresence>
     </div>
     </DndContext>
   );

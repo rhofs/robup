@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useDraggable, useDroppable } from '@dnd-kit/core';
 import {
   ChevronRight,
@@ -25,6 +25,30 @@ import {
 } from 'lucide-react';
 import { useTaskStore, HierarchySpace, HierarchyFolder, HierarchyList, Task } from '../store/useTaskStore';
 import { getChildFolders, getListsIn, collectListIdsUnder } from '../lib/folderTree';
+
+const COLLAPSED_FOLDERS_STORAGE_KEY = 'robup.collapsedFolders';
+
+// Folders default to expanded, so we only need to persist the collapsed ones (usually the
+// minority). Read/write the whole set on each toggle — toggles are one-at-a-time user clicks,
+// never concurrent, so a read-modify-write round trip per click is safe.
+function readCollapsedFolders(): Set<string> {
+  if (typeof window === 'undefined') return new Set();
+  try {
+    const raw = localStorage.getItem(COLLAPSED_FOLDERS_STORAGE_KEY);
+    return raw ? new Set(JSON.parse(raw)) : new Set();
+  } catch {
+    return new Set();
+  }
+}
+
+function setFolderCollapsed(folderId: string, collapsed: boolean) {
+  try {
+    const next = readCollapsedFolders();
+    if (collapsed) next.add(folderId);
+    else next.delete(folderId);
+    localStorage.setItem(COLLAPSED_FOLDERS_STORAGE_KEY, JSON.stringify([...next]));
+  } catch {}
+}
 
 export const FOLDER_ICON_CHOICES = ['star', 'rocket', 'briefcase', 'bookmark', 'flag', 'layers', 'target', 'heart', 'trophy'];
 
@@ -51,6 +75,11 @@ type FolderTreeProps = {
   toggleCalendarFolder: (folderId: string) => void;
   onDeleteFolderRequest: (folder: HierarchyFolder) => void;
   onFolderContextMenu: (e: React.MouseEvent, folder: HierarchyFolder) => void;
+  renameFolderId: string | null;
+  onRenameFolderHandled: () => void;
+  onListContextMenu: (e: React.MouseEvent, list: HierarchyList) => void;
+  renameListId: string | null;
+  onRenameListHandled: () => void;
 };
 
 export default function FolderTree(props: FolderTreeProps) {
@@ -96,6 +125,9 @@ function FolderLevel(props: FolderTreeProps & { parentId: string | null; depth: 
             onNavigate={() => onNavigateList(list.id)}
             onToggle={() => toggleCalendarList(list.id)}
             onRename={(name) => renameList(space.id, list.id, name)}
+            onContextMenu={(e) => props.onListContextMenu(e, list)}
+            renameListId={props.renameListId}
+            onRenameListHandled={props.onRenameListHandled}
           />
         );
       })}
@@ -145,11 +177,39 @@ function FolderLevel(props: FolderTreeProps & { parentId: string | null; depth: 
 }
 
 function FolderRow(props: FolderTreeProps & { folder: HierarchyFolder; parentId: string | null; depth: number }) {
-  const { space, tasks, activeView, calendarVisibleListIds, toggleCalendarFolder, onDeleteFolderRequest, onFolderContextMenu, folder } = props;
+  const {
+    space,
+    tasks,
+    activeView,
+    calendarVisibleListIds,
+    toggleCalendarFolder,
+    onDeleteFolderRequest,
+    onFolderContextMenu,
+    renameFolderId,
+    onRenameFolderHandled,
+    folder,
+  } = props;
   const { renameFolder } = useTaskStore();
-  const [expanded, setExpanded] = useState(true);
+  const [expanded, setExpandedState] = useState(() => !readCollapsedFolders().has(folder.id));
+  const setExpanded = (next: boolean | ((v: boolean) => boolean)) => {
+    setExpandedState((prev) => {
+      const value = typeof next === 'function' ? next(prev) : next;
+      setFolderCollapsed(folder.id, !value);
+      return value;
+    });
+  };
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState(folder.name);
+
+  // Triggered by the "Rename" item in the folder's right-click context menu (page.tsx),
+  // which lives outside this row and has no direct handle on its local `editing` state.
+  useEffect(() => {
+    if (renameFolderId === folder.id) {
+      setDraft(folder.name);
+      setEditing(true);
+      onRenameFolderHandled();
+    }
+  }, [renameFolderId, folder.id, folder.name, onRenameFolderHandled]);
 
   const { attributes, listeners, setNodeRef: setDragRef, isDragging } = useDraggable({ id: `folder-drag:${folder.id}` });
   const { setNodeRef: setDropRef, isOver } = useDroppable({ id: `folder-drop:${folder.id}` });
@@ -278,6 +338,9 @@ function ListRow({
   filterMode = false,
   checked = false,
   onToggle,
+  onContextMenu,
+  renameListId,
+  onRenameListHandled,
 }: {
   list: HierarchyList;
   isActive: boolean;
@@ -287,10 +350,28 @@ function ListRow({
   filterMode?: boolean;
   checked?: boolean;
   onToggle?: () => void;
+  onContextMenu: (e: React.MouseEvent) => void;
+  renameListId: string | null;
+  onRenameListHandled: () => void;
 }) {
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState(list.name);
 
+  // Triggered by the "Rename" item in the list's right-click context menu (page.tsx), same
+  // pattern as FolderRow's equivalent effect below.
+  useEffect(() => {
+    if (renameListId === list.id) {
+      setDraft(list.name);
+      setEditing(true);
+      onRenameListHandled();
+    }
+  }, [renameListId, list.id, list.name, onRenameListHandled]);
+
+  // The `list:${id}` droppable below is reused for two different purposes depending on what's
+  // being dragged (task vs. a sibling List/Folder) — page.tsx's onDragEnd already branches on
+  // the dragged id's prefix first, so it can tell them apart without a second droppable here.
+  // A second `useDroppable` on this exact same rect would tie with this one in collision
+  // detection (identical center point), making the winner effectively random.
   const { attributes, listeners, setNodeRef: setDragRef, isDragging } = useDraggable({ id: `list-drag:${list.id}` });
   const { setNodeRef: setTaskDropRef, isOver } = useDroppable({ id: `list:${list.id}` });
   const setNodeRef = (node: HTMLElement | null) => {
@@ -331,6 +412,11 @@ function ListRow({
       {...attributes}
       {...listeners}
       onClick={filterMode ? onToggle : onNavigate}
+      onContextMenu={(e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        onContextMenu(e);
+      }}
       className={`group w-full text-left px-2 py-1 rounded text-[11px] transition flex items-center justify-between cursor-pointer ${
         isActive
           ? 'bg-neutral-800 text-blue-400 font-medium'
@@ -349,7 +435,11 @@ function ListRow({
             {checked && <Check className="w-2.5 h-2.5" />}
           </span>
         )}
-        <ListIcon className="w-3 h-3 shrink-0" />
+        {(() => {
+          const CustomIcon = list.icon ? FOLDER_ICON_MAP[list.icon] : null;
+          const Icon = CustomIcon || ListIcon;
+          return <Icon className="w-3 h-3 shrink-0" style={{ color: list.color || undefined }} />;
+        })()}
         <span className="truncate">{list.name}</span>
       </span>
       <span className="flex items-center gap-1 shrink-0">

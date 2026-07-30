@@ -19,8 +19,11 @@ import DayTimeline from './DayTimeline';
 
 type Granularity = 'month' | 'week' | 'day';
 
-const MONTH_MAX_LANES = 4;
-const WEEK_MAX_LANES = 8;
+// Bars are 13px/16px per lane now (was 20px/26px) — these caps were never re-tuned after
+// that slimming pass, so raise them to use the same visual row budget as before instead of
+// wasting the extra headroom on an early "+N more".
+const MONTH_MAX_LANES = 6;
+const WEEK_MAX_LANES = 12;
 const OVERFLOW_H = 14;
 
 type CalendarViewProps = {
