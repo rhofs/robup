@@ -100,12 +100,18 @@ export default function CalendarView({ tasks, statuses, onOpenTask, onRequestCre
     maxVisibleLanes = granularity === 'month' ? MONTH_MAX_LANES : WEEK_MAX_LANES;
   }
 
-  const rowHeight = useMemo(() => {
-    if (granularity === 'day') return 0;
+  // `overflowTop` is where the "+N more" strip for a row starts — right below the last
+  // visible lane. It must be a real reserved strip, not drawn inside the day-number area,
+  // or it silently sits underneath the bars of whichever day is already fully crowded —
+  // which is exactly the day that needs it most, so tasks past the cap looked like they'd
+  // vanished with no indication at all.
+  const { rowHeight, overflowTop } = useMemo(() => {
+    if (granularity === 'day') return { rowHeight: 0, overflowTop: 0 };
     const used = Math.max(0, ...segmentsByWeek.flat().map((s) => s.lane + 1));
     const laneCount = Math.max(1, Math.min(maxVisibleLanes, used));
     const hasOverflow = segmentsByWeek.flat().some((s) => s.lane >= maxVisibleLanes);
-    return DAY_NUM_H + laneCount * (BAR_H + BAR_GAP) + (hasOverflow ? OVERFLOW_H : 0);
+    const top = DAY_NUM_H + laneCount * (BAR_H + BAR_GAP);
+    return { rowHeight: top + (hasOverflow ? OVERFLOW_H : 0), overflowTop: top };
   }, [granularity, segmentsByWeek, maxVisibleLanes]);
 
   const gridStartDate = weeks.length > 0 ? weeks[0][0] : today;
@@ -283,6 +289,7 @@ export default function CalendarView({ tasks, statuses, onOpenTask, onRequestCre
                 monthAnchor={granularity === 'month' ? focusDate : undefined}
                 maxVisibleLanes={maxVisibleLanes}
                 height={rowHeight}
+                overflowTop={overflowTop}
                 activeDrag={weekDrag}
                 onOpenTask={onOpenTask}
                 onDrillDay={drillToDay}

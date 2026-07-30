@@ -21,6 +21,7 @@ type WeekRowProps = {
   monthAnchor?: Date;
   maxVisibleLanes: number;
   height: number;
+  overflowTop: number;
   activeDrag: DragState | null;
   onOpenTask: (id: string) => void;
   onDrillDay: (day: Date) => void;
@@ -39,6 +40,7 @@ export default function WeekRow({
   monthAnchor,
   maxVisibleLanes,
   height,
+  overflowTop,
   activeDrag,
   onOpenTask,
   onDrillDay,
@@ -111,9 +113,6 @@ export default function WeekRow({
                   >
                     {day.getDate()}
                   </span>
-                  {overflowByDay[i] > 0 && (
-                    <span className="block text-[9px] text-neutral-500 mt-0.5">+{overflowByDay[i]} more</span>
-                  )}
                 </button>
                 <button
                   onClick={(e) => {
@@ -183,6 +182,20 @@ export default function WeekRow({
               </div>
             );
           })}
+        </div>
+
+        {/* Own reserved strip below the visible lanes — never drawn where a bar could sit on
+            top of it and hide it, which is what happened when this lived in the day-number area. */}
+        <div className="absolute inset-x-0 grid grid-cols-7 z-10" style={{ top: overflowTop, bottom: 0 }}>
+          {overflowByDay.map((count, i) => (
+            <button
+              key={i}
+              onClick={() => onDrillDay(weekDays[i])}
+              className="text-left px-1.5 cursor-pointer"
+            >
+              {count > 0 && <span className="text-[9px] text-neutral-400 hover:text-neutral-200">+{count} more</span>}
+            </button>
+          ))}
         </div>
       </div>
     </div>

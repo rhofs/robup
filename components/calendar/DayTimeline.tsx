@@ -2,6 +2,7 @@
 
 import { useRef, useState } from 'react';
 import { isSameDay } from '../../lib/calendarDates';
+import { layoutDayColumns } from '../../lib/ganttLayout';
 import type { Task } from '../../store/useTaskStore';
 
 const HOUR_H = 48;
@@ -125,7 +126,14 @@ export default function DayTimeline({ day, tasks, statusColorOf, onOpenTask, onC
         )}
 
         <div className="absolute left-12 right-2 top-0 bottom-0">
-          {timedTasks.map(({ task, start, end }) => {
+          {(() => {
+            const columns = layoutDayColumns(
+              timedTasks.map(({ task, start, end }) => {
+                const startMin = minutesOfDay(start);
+                return { id: task.id, startMin, endMin: Math.max(minutesOfDay(end), startMin + 30) };
+              })
+            );
+            return timedTasks.map(({ task, start, end }) => {
             const isDraggingThis = drag?.taskId === task.id;
             let startMin = minutesOfDay(start);
             let endMin = Math.max(minutesOfDay(end), startMin + 30);
@@ -142,12 +150,19 @@ export default function DayTimeline({ day, tasks, statusColorOf, onOpenTask, onC
             const top = (startMin / 60) * HOUR_H;
             const height = Math.max(20, ((endMin - startMin) / 60) * HOUR_H);
             const color = statusColorOf(task.status);
+            const { col, cols } = columns.get(task.id) ?? { col: 0, cols: 1 };
 
             return (
               <div
                 key={task.id}
-                className="absolute left-0 right-0 group/block"
-                style={{ top, height }}
+                className="absolute group/block"
+                style={{
+                  top,
+                  height,
+                  left: `${(col / cols) * 100}%`,
+                  width: `${(1 / cols) * 100}%`,
+                  paddingRight: cols > 1 ? 2 : 0,
+                }}
               >
                 <div
                   onPointerDown={(e) => startInteraction(e, task, 'move')}
@@ -175,7 +190,8 @@ export default function DayTimeline({ day, tasks, statusColorOf, onOpenTask, onC
                 </div>
               </div>
             );
-          })}
+            });
+          })()}
         </div>
       </div>
     </div>
