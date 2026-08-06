@@ -126,45 +126,6 @@ export type HierarchyWorkspace = {
 // Captured from live state right before a delete, walked bottom-up to build the JSON, then
 // walked top-down (parent before child) to restore — see the `snapshot*`/`restore*` helpers
 // inside the store body.
-type TaskSnapshot = {
-  id: string;
-  title: string;
-  status: string;
-  startDate: string | null;
-  dueDate: string | null;
-  archived: boolean;
-  listId: string;
-  parentId: string | null;
-  assigneeIds: string[];
-  customFieldValues: string;
-  comments: { id: string; body: string; type: 'comment' | 'activity'; activityKind: string | null; authorId: string | null }[];
-  docs: { id: string; title: string; content: string; order: number }[];
-  subtasks: TaskSnapshot[];
-};
-
-type ListSnapshot = HierarchyList & { tasks: TaskSnapshot[] };
-
-type FolderSnapshot = HierarchyFolder & { children: FolderSnapshot[]; lists: ListSnapshot[] };
-
-type SpaceDocSnapshot = { id: string; title: string; content: string; order: number };
-
-type DocFolderSnapshot = HierarchyDocFolder & { children: DocFolderSnapshot[]; docs: SpaceDocSnapshot[] };
-
-type SpaceSnapshot = {
-  id: string;
-  name: string;
-  color: string;
-  order: number;
-  description: string | null;
-  coverImageUrl: string | null;
-  statuses: StatusDef[];
-  customFields: CustomFieldDef[];
-  rootFolders: FolderSnapshot[];
-  rootLists: ListSnapshot[];
-  rootDocFolders: DocFolderSnapshot[];
-  rootSpaceDocs: SpaceDocSnapshot[];
-};
-
 interface TaskStore {
   tasks: Task[];
   users: AppUser[];
@@ -307,182 +268,27 @@ interface TaskStore {
   updateDoc: (docId: string, taskId: string, patch: { title?: string; content?: string }) => void;
   deleteDoc: (docId: string, taskId: string) => Promise<void>;
   reorderDocs: (taskId: string, orderedIds: string[]) => void;
+
+  // Trash panel: restore or permanently purge a soft-deleted item of any kind by its API path
+  // segment (mirrors the route names, not the display label — 'doc-folders', not 'docFolder').
+  restoreFromTrash: (kind: 'spaces' | 'folders' | 'lists' | 'tasks' | 'doc-folders' | 'docs', id: string) => Promise<void>;
+  permanentlyDeleteFromTrash: (kind: 'spaces' | 'folders' | 'lists' | 'tasks' | 'doc-folders' | 'docs', id: string) => Promise<void>;
 }
 
 export const useTaskStore = create<TaskStore>((set, get) => {
-  // ---------------------------------------------------------------------------------------
-  // Snapshot & restore helpers for cascading-delete undo (Task-with-subtasks, List, Folder,
-  // Space). Snapshot walks bottom-up from live state (recursing into children); restore walks
-  // the snapshot top-down, recreating every row via the SAME store actions used everywhere else
-  // (each now accepting an optional explicit `id` so identity survives the round trip), so local
-  // state stays correctly in sync without needing a full refetch for the common case — Folder/
-  // Space restores still do one at the end as a safety net given how many chained async calls
-  // are involved. Comments/Docs are restored via direct fetches (not through the store's
-  // interactive `addComment`/`createDoc` optimistic-UI paths) since they aren't held in local
-  // state until a task modal lazily fetches them — writing the server rows is all that's needed.
-  const snapshotTask = async (task: Task): Promise<TaskSnapshot> => {
-    const state = get();
-    const comments =
-      state.comments[task.id] ??
-      (await fetch(`/api/tasks/${task.id}/comments`)
-        .then((r) => (r.ok ? r.json() : []))
-        .catch(() => []));
-    const docs =
-      state.docs[task.id] ??
-      (await fetch(`/api/tasks/${task.id}/docs`)
-        .then((r) => (r.ok ? r.json() : []))
-        .catch(() => []));
-    const subtasks = state.tasks.filter((t) => t.parentId === task.id);
-    return {
-      id: task.id,
-      title: task.title,
-      status: task.status,
-      startDate: task.startDate ? new Date(task.startDate).toISOString() : null,
-      dueDate: task.dueDate ? new Date(task.dueDate).toISOString() : null,
-      archived: task.archived,
-      listId: task.listId,
-      parentId: task.parentId,
-      assigneeIds: task.assignees.map((a) => a.id),
-      customFieldValues: task.customFieldValues,
-      comments: (comments as TaskComment[]).map((c) => ({ id: c.id, body: c.body, type: c.type, activityKind: c.activityKind, authorId: c.authorId })),
-      docs: (docs as TaskDoc[]).map((d) => ({ id: d.id, title: d.title, content: d.content, order: d.order })),
-      subtasks: await Promise.all(subtasks.map(snapshotTask)),
-    };
-  };
-
-  // Set for the duration of any restoreTask/restoreList/restoreFolderTree/restoreSpace call —
-  // these reconstruct prior state by calling the same primitive actions (optimisticArchiveTask,
-  // optimisticSetAssignees, ...) used for genuine interactive edits, but a restore already
-  // replays the ORIGINAL activity comments verbatim from the snapshot, so those primitives must
-  // skip generating a fresh (duplicate) activity-log entry while this is true. Undo/redo of a
-  // plain field edit (not a snapshot restore) is NOT covered by this — those intentionally keep
-  // logging symmetrically, since documenting "X was undone" is useful history, not noise.
-  let isRestoringSnapshot = false;
-  const runRestoring = async <T,>(fn: () => Promise<T>): Promise<T> => {
-    const prev = isRestoringSnapshot;
-    isRestoringSnapshot = true;
-    try {
-      return await fn();
-    } finally {
-      isRestoringSnapshot = prev;
-    }
-  };
-
-  const restoreTask = async (snap: TaskSnapshot) => {
-    await get().optimisticCreateTask(snap.title, snap.listId, '', snap.parentId, snap.startDate, snap.dueDate, snap.id, snap.status);
-    if (snap.archived) get().optimisticArchiveTask(snap.id, true);
-    if (snap.assigneeIds.length > 0) get().optimisticSetAssignees(snap.id, snap.assigneeIds);
-    const cfValues = JSON.parse(snap.customFieldValues || '{}');
-    for (const [fieldId, value] of Object.entries(cfValues)) {
-      get().optimisticSetCustomFieldValue(snap.id, fieldId, value as string);
-    }
-    for (const c of snap.comments) {
-      await fetch(`/api/tasks/${snap.id}/comments`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ id: c.id, body: c.body, type: c.type, activityKind: c.activityKind, authorId: c.authorId }),
-      });
-    }
-    for (const d of snap.docs) {
-      await fetch(`/api/tasks/${snap.id}/docs`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ id: d.id, title: d.title, content: d.content, order: d.order }),
-      });
-    }
-    for (const sub of snap.subtasks) await restoreTask(sub);
-  };
-
-  const snapshotList = async (list: HierarchyList): Promise<ListSnapshot> => {
-    const tasks = get().tasks.filter((t) => t.listId === list.id && t.parentId === null);
-    return { ...list, tasks: await Promise.all(tasks.map(snapshotTask)) };
-  };
-
-  const restoreList = async (spaceId: string, snap: ListSnapshot) => {
-    await get().createList(spaceId, snap.name, snap.folderId, snap.id);
-    await get().updateList(spaceId, snap.id, { color: snap.color, icon: snap.icon });
-    if (snap.order !== 0) await get().reorderList(spaceId, snap.id, snap.order);
-    for (const t of snap.tasks) await restoreTask(t);
-  };
-
-  const snapshotFolderTree = async (space: HierarchySpace, folderId: string): Promise<FolderSnapshot> => {
-    const folder = space.folders.find((f) => f.id === folderId)!;
-    const childFolders = space.folders.filter((f) => f.parentId === folderId);
-    const lists = space.lists.filter((l) => l.folderId === folderId);
-    return {
-      ...folder,
-      children: await Promise.all(childFolders.map((f) => snapshotFolderTree(space, f.id))),
-      lists: await Promise.all(lists.map(snapshotList)),
-    };
-  };
-
-  const restoreFolderTree = async (spaceId: string, snap: FolderSnapshot) => {
-    await get().createFolder(spaceId, snap.name, snap.parentId, snap.id);
-    await get().updateFolder(spaceId, snap.id, { color: snap.color, icon: snap.icon, order: snap.order });
-    for (const l of snap.lists) await restoreList(spaceId, l);
-    for (const c of snap.children) await restoreFolderTree(spaceId, c);
-  };
-
-  const snapshotSpaceDoc = (doc: TaskDoc): SpaceDocSnapshot => ({ id: doc.id, title: doc.title, content: doc.content, order: doc.order });
-
-  const restoreSpaceDoc = async (spaceId: string, folderId: string | null, snap: SpaceDocSnapshot) => {
-    await get().createSpaceDoc(spaceId, folderId, { id: snap.id, title: snap.title, content: snap.content, order: snap.order });
-  };
-
-  const snapshotDocFolderTree = async (space: HierarchySpace, folderId: string): Promise<DocFolderSnapshot> => {
-    const folder = space.docFolders.find((f) => f.id === folderId)!;
-    const childFolders = space.docFolders.filter((f) => f.parentId === folderId);
-    const docs = space.spaceDocs.filter((d) => d.folderId === folderId);
-    return {
-      ...folder,
-      children: await Promise.all(childFolders.map((f) => snapshotDocFolderTree(space, f.id))),
-      docs: docs.map(snapshotSpaceDoc),
-    };
-  };
-
-  const restoreDocFolderTree = async (spaceId: string, snap: DocFolderSnapshot) => {
-    await get().createDocFolder(spaceId, snap.name, snap.parentId, snap.id);
-    await get().updateDocFolder(spaceId, snap.id, { color: snap.color, icon: snap.icon });
-    for (const d of snap.docs) await restoreSpaceDoc(spaceId, snap.id, d);
-    for (const c of snap.children) await restoreDocFolderTree(spaceId, c);
-  };
-
-  const snapshotSpace = async (space: HierarchySpace): Promise<SpaceSnapshot> => {
-    const rootFolders = space.folders.filter((f) => f.parentId === null);
-    const rootLists = space.lists.filter((l) => l.folderId === null);
-    const rootDocFolders = space.docFolders.filter((f) => f.parentId === null);
-    const rootSpaceDocs = space.spaceDocs.filter((d) => d.folderId === null);
-    return {
-      id: space.id,
-      name: space.name,
-      color: space.color,
-      order: space.order,
-      description: space.description,
-      coverImageUrl: space.coverImageUrl,
-      statuses: space.statuses,
-      customFields: space.customFields,
-      rootFolders: await Promise.all(rootFolders.map((f) => snapshotFolderTree(space, f.id))),
-      rootLists: await Promise.all(rootLists.map(snapshotList)),
-      rootDocFolders: await Promise.all(rootDocFolders.map((f) => snapshotDocFolderTree(space, f.id))),
-      rootSpaceDocs: rootSpaceDocs.map(snapshotSpaceDoc),
-    };
-  };
-
-  const restoreSpace = async (workspaceId: string, snap: SpaceSnapshot) => {
-    await get().createSpace(workspaceId, snap.name, snap.id);
-    await get().updateSpace(snap.id, { color: snap.color, description: snap.description, coverImageUrl: snap.coverImageUrl });
-    if (snap.order !== 0) await get().reorderSpace(snap.id, snap.order);
-    for (const st of snap.statuses) {
-      await get().createStatus(snap.id, st.name, st.color, st.id);
-      await get().updateStatus(snap.id, st.id, { order: st.order });
-    }
-    for (const cf of snap.customFields) await get().createCustomField(snap.id, cf.name, cf.type, cf.options, cf.id);
-    for (const l of snap.rootLists) await restoreList(snap.id, l);
-    for (const f of snap.rootFolders) await restoreFolderTree(snap.id, f);
-    for (const d of snap.rootSpaceDocs) await restoreSpaceDoc(snap.id, null, d);
-    for (const f of snap.rootDocFolders) await restoreDocFolderTree(snap.id, f);
-    await get().refetchWorkspaces();
-    await get().refetchTasks();
+  // Delete/restore for Space, Folder, List, Task, DocFolder, and Doc all go through the
+  // server's soft-delete (`deletedAt`) + cascade instead of a real destructive delete — see
+  // lib/trashCascade.ts. That means undo for any of them is just "PATCH { restore: true }"
+  // (clearing deletedAt back down the same subtree it was stamped on), not a client-side
+  // snapshot-and-recreate: the row never actually left the database, so recreating it with the
+  // same id would hit a unique-constraint conflict instead of bringing it back.
+  const restoreEntity = async (kind: 'spaces' | 'folders' | 'lists' | 'tasks' | 'doc-folders' | 'docs', id: string) => {
+    await fetch(`/api/${kind}/${id}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ restore: true }),
+    });
+    await Promise.all([get().refetchWorkspaces(), get().refetchTasks()]);
   };
 
   return {
@@ -663,18 +469,23 @@ export const useTaskStore = create<TaskStore>((set, get) => {
 
     optimisticDeleteTask: async (taskId) => {
       const task = get().tasks.find((t) => t.id === taskId);
-      const snap = task ? await snapshotTask(task) : null;
       set((state) => ({
         tasks: state.tasks.filter((t) => t.id !== taskId),
       }));
-      // Awaited (and the history push deferred until after) so undo can't fire before the row is
-      // actually gone server-side — pushing first race against the DELETE and a fast Ctrl+Z could
-      // try to recreate a row with an id that (from the server's perspective) still exists.
-      await fetch(`/api/tasks/${taskId}`, { method: 'DELETE' });
-      if (task && snap) {
+      const res = await fetch(`/api/tasks/${taskId}`, { method: 'DELETE' }).catch(() => null);
+      if (!res || !res.ok) {
+        // The optimistic removal above already hid it from the UI — if the request never actually
+        // landed (dropped connection, server restart mid-request, etc.) it would otherwise look
+        // deleted forever without ever reaching the trash. Resync from the server to undo the
+        // illusion rather than leaving a phantom gap.
+        await get().refetchTasks();
+        alert('Kunne ikke slette oppgaven — prøv igjen.');
+        return;
+      }
+      if (task) {
         useHistoryStore.getState().push({
           label: `Delete task "${task.title}"`,
-          undo: () => runRestoring(() => restoreTask(snap)),
+          undo: () => restoreEntity('tasks', taskId),
           redo: () => get().optimisticDeleteTask(taskId),
         });
       }
@@ -693,7 +504,6 @@ export const useTaskStore = create<TaskStore>((set, get) => {
         body: JSON.stringify({
           archived,
           authorId: useSessionStore.getState().currentUserId,
-          ...(isRestoringSnapshot ? { skipActivityLog: true } : {}),
         }),
       }).then(() => {
         if (get().comments[taskId]) get().fetchComments(taskId);
@@ -720,7 +530,6 @@ export const useTaskStore = create<TaskStore>((set, get) => {
         body: JSON.stringify({
           assigneeIds: userIds,
           authorId: useSessionStore.getState().currentUserId,
-          ...(isRestoringSnapshot ? { skipActivityLog: true } : {}),
         }),
       }).then(() => {
         if (get().comments[taskId]) get().fetchComments(taskId);
@@ -1278,21 +1087,22 @@ export const useTaskStore = create<TaskStore>((set, get) => {
     deleteSpace: async (spaceId) => {
       const workspace = get().workspaces.find((w) => w.spaces.some((s) => s.id === spaceId));
       const space = workspace?.spaces.find((s) => s.id === spaceId);
-      const snap = workspace && space ? await snapshotSpace(space) : null;
       set((state) => ({
         workspaces: state.workspaces.map((ws) => ({
           ...ws,
           spaces: ws.spaces.filter((s) => s.id !== spaceId),
         })),
       }));
-      // See optimisticDeleteTask's comment: push only after the delete has actually committed
-      // server-side, so undo can't race a not-yet-completed delete into a unique-constraint error
-      // when it tries to recreate a row with the same id.
-      await fetch(`/api/spaces/${spaceId}`, { method: 'DELETE' });
-      if (workspace && space && snap) {
+      const res = await fetch(`/api/spaces/${spaceId}`, { method: 'DELETE' }).catch(() => null);
+      if (!res || !res.ok) {
+        await get().refetchWorkspaces();
+        alert('Kunne ikke slette space — prøv igjen.');
+        return;
+      }
+      if (space) {
         useHistoryStore.getState().push({
           label: `Delete space "${space.name}"`,
-          undo: () => runRestoring(() => restoreSpace(workspace.id, snap)),
+          undo: () => restoreEntity('spaces', spaceId),
           redo: () => get().deleteSpace(spaceId),
         });
       }
@@ -1445,23 +1255,22 @@ export const useTaskStore = create<TaskStore>((set, get) => {
         .workspaces.flatMap((w) => w.spaces)
         .find((s) => s.id === spaceId)
         ?.lists.find((l) => l.id === listId);
-      const snap = list ? await snapshotList(list) : null;
       set((state) => ({
         workspaces: state.workspaces.map((ws) => ({
           ...ws,
           spaces: ws.spaces.map((s) => (s.id === spaceId ? { ...s, lists: s.lists.filter((l) => l.id !== listId) } : s)),
         })),
       }));
-      // See optimisticDeleteTask's comment: push only after the delete has actually committed.
-      await fetch(`/api/lists/${listId}`, { method: 'DELETE' });
-      if (list && snap) {
+      const res = await fetch(`/api/lists/${listId}`, { method: 'DELETE' }).catch(() => null);
+      if (!res || !res.ok) {
+        await get().refetchWorkspaces();
+        alert('Kunne ikke slette listen — prøv igjen.');
+        return;
+      }
+      if (list) {
         useHistoryStore.getState().push({
           label: `Delete list "${list.name}"`,
-          undo: () =>
-            runRestoring(async () => {
-              await restoreList(spaceId, snap);
-              await get().refetchTasks();
-            }),
+          undo: () => restoreEntity('lists', listId),
           redo: () => get().deleteList(spaceId, listId),
         });
       }
@@ -1585,7 +1394,7 @@ export const useTaskStore = create<TaskStore>((set, get) => {
 
     deleteFolder: async (spaceId, folderId) => {
       const space = get().workspaces.flatMap((w) => w.spaces).find((s) => s.id === spaceId);
-      const snap = space && space.folders.some((f) => f.id === folderId) ? await snapshotFolderTree(space, folderId) : null;
+      const folder = space?.folders.find((f) => f.id === folderId);
       set((state) => ({
         workspaces: state.workspaces.map((ws) => ({
           ...ws,
@@ -1600,16 +1409,16 @@ export const useTaskStore = create<TaskStore>((set, get) => {
           }),
         })),
       }));
-      // See optimisticDeleteTask's comment: push only after the delete has actually committed.
-      await fetch(`/api/folders/${folderId}`, { method: 'DELETE' });
-      if (snap) {
+      const res = await fetch(`/api/folders/${folderId}`, { method: 'DELETE' }).catch(() => null);
+      if (!res || !res.ok) {
+        await get().refetchWorkspaces();
+        alert('Kunne ikke slette mappen — prøv igjen.');
+        return;
+      }
+      if (folder) {
         useHistoryStore.getState().push({
-          label: `Delete folder "${snap.name}"`,
-          undo: () =>
-            runRestoring(async () => {
-              await restoreFolderTree(spaceId, snap);
-              await get().refetchTasks();
-            }),
+          label: `Delete folder "${folder.name}"`,
+          undo: () => restoreEntity('folders', folderId),
           redo: () => get().deleteFolder(spaceId, folderId),
         });
       }
@@ -1706,7 +1515,7 @@ export const useTaskStore = create<TaskStore>((set, get) => {
 
     deleteDocFolder: async (spaceId, folderId) => {
       const space = get().workspaces.flatMap((w) => w.spaces).find((s) => s.id === spaceId);
-      const snap = space && space.docFolders.some((f) => f.id === folderId) ? await snapshotDocFolderTree(space, folderId) : null;
+      const folder = space?.docFolders.find((f) => f.id === folderId);
       set((state) => ({
         workspaces: state.workspaces.map((ws) => ({
           ...ws,
@@ -1721,11 +1530,16 @@ export const useTaskStore = create<TaskStore>((set, get) => {
           }),
         })),
       }));
-      await fetch(`/api/doc-folders/${folderId}`, { method: 'DELETE' });
-      if (snap) {
+      const res = await fetch(`/api/doc-folders/${folderId}`, { method: 'DELETE' }).catch(() => null);
+      if (!res || !res.ok) {
+        await get().refetchWorkspaces();
+        alert('Kunne ikke slette dokumentmappen — prøv igjen.');
+        return;
+      }
+      if (folder) {
         useHistoryStore.getState().push({
-          label: `Delete doc folder "${snap.name}"`,
-          undo: () => runRestoring(() => restoreDocFolderTree(spaceId, snap)),
+          label: `Delete doc folder "${folder.name}"`,
+          undo: () => restoreEntity('doc-folders', folderId),
           redo: () => get().deleteDocFolder(spaceId, folderId),
         });
       }
@@ -1872,13 +1686,16 @@ export const useTaskStore = create<TaskStore>((set, get) => {
           spaces: ws.spaces.map((s) => (s.id === spaceId ? { ...s, spaceDocs: s.spaceDocs.filter((d) => d.id !== docId) } : s)),
         })),
       }));
-      await fetch(`/api/docs/${docId}`, { method: 'DELETE' });
+      const res = await fetch(`/api/docs/${docId}`, { method: 'DELETE' }).catch(() => null);
+      if (!res || !res.ok) {
+        await get().refetchWorkspaces();
+        alert('Kunne ikke slette dokumentet — prøv igjen.');
+        return;
+      }
       if (doc) {
         useHistoryStore.getState().push({
           label: `Delete document "${doc.title}"`,
-          undo: async () => {
-            await get().createSpaceDoc(spaceId, doc.folderId, { id: doc.id, title: doc.title, content: doc.content, order: doc.order });
-          },
+          undo: () => restoreEntity('docs', docId),
           redo: () => get().deleteSpaceDoc(docId, spaceId),
         });
       }
@@ -2066,13 +1883,26 @@ export const useTaskStore = create<TaskStore>((set, get) => {
         docs: { ...state.docs, [taskId]: (state.docs[taskId] || []).filter((d) => d.id !== docId) },
       }));
       const authorId = useSessionStore.getState().currentUserId;
-      await fetch(`/api/docs/${docId}${authorId ? `?authorId=${authorId}` : ''}`, { method: 'DELETE' });
+      const res = await fetch(`/api/docs/${docId}${authorId ? `?authorId=${authorId}` : ''}`, { method: 'DELETE' }).catch(() => null);
+      if (!res || !res.ok) {
+        await get().fetchDocs(taskId);
+        alert('Kunne ikke slette dokumentet — prøv igjen.');
+        return;
+      }
       if (get().comments[taskId]) get().fetchComments(taskId);
       if (doc) {
         useHistoryStore.getState().push({
           label: `Delete document "${doc.title}"`,
+          // Task-scoped docs live in the store's lazily-loaded `docs[taskId]` cache, not in
+          // `workspaces`/`tasks` — restoreEntity's blanket refetch wouldn't touch it, so refresh
+          // that cache directly instead.
           undo: async () => {
-            await get().createDoc(taskId, { id: doc.id, title: doc.title, content: doc.content, order: doc.order });
+            await fetch(`/api/docs/${docId}`, {
+              method: 'PATCH',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ restore: true }),
+            });
+            await get().fetchDocs(taskId);
           },
           redo: () => get().deleteDoc(docId, taskId),
         });
@@ -2103,6 +1933,17 @@ export const useTaskStore = create<TaskStore>((set, get) => {
         undo: () => get().reorderDocs(taskId, oldOrderedIds),
         redo: () => get().reorderDocs(taskId, orderedIds),
       });
+    },
+
+    restoreFromTrash: async (kind, id) => {
+      await restoreEntity(kind, id);
+    },
+
+    // Not undoable — this is the one truly destructive action in the app (real cascade delete
+    // via Prisma's onDelete: Cascade FKs), reachable only from inside the Trash panel on an
+    // already soft-deleted item.
+    permanentlyDeleteFromTrash: async (kind, id) => {
+      await fetch(`/api/${kind}/${id}?permanent=true`, { method: 'DELETE' });
     },
   };
 });

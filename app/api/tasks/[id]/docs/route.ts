@@ -4,7 +4,7 @@ import { prisma } from '@/lib/prisma';
 export async function GET(_req: Request, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
   const docs = await prisma.doc.findMany({
-    where: { taskId: id },
+    where: { taskId: id, deletedAt: null },
     orderBy: { order: 'asc' },
   });
   return NextResponse.json(docs);

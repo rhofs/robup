@@ -8,16 +8,17 @@ export async function GET() {
     include: {
       rooms: { orderBy: { order: 'asc' } },
       spaces: {
+        where: { deletedAt: null },
         orderBy: { order: 'asc' },
         include: {
-          folders: { select: { id: true, name: true, color: true, icon: true, spaceId: true, parentId: true, order: true } },
-          lists: { select: { id: true, name: true, color: true, icon: true, folderId: true, order: true } },
+          folders: { where: { deletedAt: null }, select: { id: true, name: true, color: true, icon: true, spaceId: true, parentId: true, order: true } },
+          lists: { where: { deletedAt: null }, select: { id: true, name: true, color: true, icon: true, folderId: true, order: true } },
           statuses: { orderBy: { order: 'asc' } },
           customFields: true,
           // Space.docs is already scoped by the spaceId foreign key — task-scoped docs (spaceId
           // null) never come back here, they stay reachable only via /api/tasks/[id]/docs.
-          docFolders: { select: { id: true, name: true, color: true, icon: true, spaceId: true, parentId: true, order: true } },
-          docs: { select: { id: true, title: true, content: true, order: true, taskId: true, spaceId: true, folderId: true, createdAt: true, updatedAt: true } },
+          docFolders: { where: { deletedAt: null }, select: { id: true, name: true, color: true, icon: true, spaceId: true, parentId: true, order: true } },
+          docs: { where: { deletedAt: null }, select: { id: true, title: true, content: true, order: true, taskId: true, spaceId: true, folderId: true, createdAt: true, updatedAt: true } },
         },
       },
     },

@@ -28,9 +28,14 @@ let coalesceEntry: HistoryEntry | null = null;
 let isReplaying = false;
 
 const commitCoalesced = (target: (entry: HistoryEntry) => void) => {
-  if (coalesceEntry) target(coalesceEntry);
+  // Clear the pending entry BEFORE calling target, not after: `push` calls this with a target
+  // of `push` itself (to flush a pending coalesce before a fresh push), so if `coalesceEntry`
+  // were still set when that reentrant `push` call ran, it would see the same non-null entry,
+  // try to commit it again, and recurse without bound — a real infinite loop, not hypothetical.
+  const entry = coalesceEntry;
   coalesceKey = null;
   coalesceEntry = null;
+  if (entry) target(entry);
 };
 
 export const useHistoryStore = create<HistoryStore>((set, get) => ({

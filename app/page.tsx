@@ -43,6 +43,7 @@ import {
   MessageSquare,
   ChevronUp,
   ChevronDown,
+  ChevronRight,
   GripVertical,
   CornerDownRight,
   CornerUpLeft,
@@ -72,6 +73,7 @@ import DocFolderTree from '../components/DocFolderTree';
 import DocsBrowser from '../components/DocsBrowser';
 import OfficePage from '../components/OfficePage';
 import CommandPalette from '../components/CommandPalette';
+import TrashPanel from '../components/TrashPanel';
 import MentionText from '../components/MentionText';
 import MentionTextarea from '../components/MentionTextarea';
 import type { MentionKind } from '../lib/mentions';
@@ -412,6 +414,28 @@ const NAME_WIDTH_RANGE = { min: 140, max: 640 };
 const COLUMN_WIDTH_RANGE = { min: 70, max: 300 };
 const COLUMN_WIDTHS_STORAGE_KEY = 'robup.columnWidths';
 const ACTIVITY_PANEL_STORAGE_KEY = 'robup.showActivityPanel';
+const COLLAPSED_SPACES_STORAGE_KEY = 'robup.collapsedSpaces';
+
+// Same "only persist the collapsed ones" shape as FolderTree.tsx's readCollapsedFolders —
+// Spaces default to expanded, so the minority (collapsed) is what's worth remembering.
+function readCollapsedSpaces(): Set<string> {
+  if (typeof window === 'undefined') return new Set();
+  try {
+    const raw = localStorage.getItem(COLLAPSED_SPACES_STORAGE_KEY);
+    return raw ? new Set(JSON.parse(raw)) : new Set();
+  } catch {
+    return new Set();
+  }
+}
+
+function setSpaceCollapsed(spaceId: string, collapsed: boolean) {
+  try {
+    const next = readCollapsedSpaces();
+    if (collapsed) next.add(spaceId);
+    else next.delete(spaceId);
+    localStorage.setItem(COLLAPSED_SPACES_STORAGE_KEY, JSON.stringify([...next]));
+  } catch {}
+}
 
 const timeAgo = (dateStr: string | Date) => {
   const diffMs = Date.now() - new Date(dateStr).getTime();
@@ -557,7 +581,19 @@ function PageContent() {
   const [editSpaceColor, setEditSpaceColor] = useState(FIELD_COLOR_CHOICES[0]);
   const [spaceToDelete, setSpaceToDelete] = useState<HierarchySpace | null>(null);
   const [creatingSpace, setCreatingSpace] = useState(false);
+  const [trashOpen, setTrashOpen] = useState(false);
   const [newSpaceDraft, setNewSpaceDraft] = useState('');
+  const [collapsedSpaceIds, setCollapsedSpaceIds] = useState<Set<string>>(() => readCollapsedSpaces());
+  const toggleSpaceCollapsed = (spaceId: string) => {
+    setCollapsedSpaceIds((prev) => {
+      const next = new Set(prev);
+      const collapsed = !next.has(spaceId);
+      if (collapsed) next.add(spaceId);
+      else next.delete(spaceId);
+      setSpaceCollapsed(spaceId, collapsed);
+      return next;
+    });
+  };
 
   const [folderMenu, setFolderMenu] = useState<{ x: number; y: number; folder: HierarchyFolder } | null>(null);
   const [folderEditTarget, setFolderEditTarget] = useState<HierarchyFolder | null>(null);
@@ -872,7 +908,10 @@ function PageContent() {
     return null;
   }, [workspaces, activeSpaceId]);
 
-  const showingSpaceHome = activeView === 'board' && !!currentSpace && activeListIds.size === 0;
+  // Archive mode always wants the flat task table (to browse every archived task in the Space),
+  // even with no List selected — SpaceHome has no concept of "archived", so it must yield to the
+  // table here or the Archive toggle silently does nothing while on a Space's home page.
+  const showingSpaceHome = activeView === 'board' && !!currentSpace && activeListIds.size === 0 && !showArchived;
 
   const statuses: StatusDef[] = currentSpace?.statuses?.length ? currentSpace.statuses : DEFAULT_STATUSES;
   const customFields: CustomFieldDef[] = currentSpace?.customFields || [];
@@ -933,7 +972,11 @@ function PageContent() {
 
       if (activeSpaceId === 'everything') return true;
       if (activeListIds.size > 0) return activeListIds.has(task.listId);
-      return false; // Space selected but no List active → SpaceHome renders instead, no flat table
+      // Space selected but no List active: normally SpaceHome renders instead of a flat table,
+      // so this table is never seen — except in Archive mode, which has no SpaceHome equivalent
+      // and needs to show every archived task across the whole Space, not just one List's worth.
+      if (showArchived && currentSpace) return collectListIdsUnder(currentSpace, null).includes(task.listId);
+      return false;
     });
 
     if (sortBy !== 'none') {
@@ -1920,6 +1963,14 @@ function PageContent() {
           <Building2 className="w-4 h-4" />
           <span className="text-[8px] font-medium leading-none">Office</span>
         </button>
+        <button
+          onClick={() => setTrashOpen(true)}
+          title="Trash"
+          className="w-10 h-10 rounded flex flex-col items-center justify-center gap-0.5 transition cursor-pointer text-neutral-500 hover:bg-neutral-800/60 hover:text-neutral-200"
+        >
+          <Trash2 className="w-4 h-4" />
+          <span className="text-[8px] font-medium leading-none">Trash</span>
+        </button>
       </nav>
 
       {/* ================= LEFT MENU (SIDEBAR) ================= */}
@@ -2088,6 +2139,28 @@ function PageContent() {
                           } ${isOver ? 'ring-1 ring-inset ring-neutral-500 bg-neutral-700/40' : ''}`}
                         >
                           <span className="flex items-center gap-2 truncate">
+                            <span
+                              role="button"
+                              tabIndex={0}
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                toggleSpaceCollapsed(space.id);
+                              }}
+                              onKeyDown={(e) => {
+                                if (e.key === 'Enter' || e.key === ' ') {
+                                  e.preventDefault();
+                                  e.stopPropagation();
+                                  toggleSpaceCollapsed(space.id);
+                                }
+                              }}
+                              className="shrink-0 text-neutral-500 hover:text-neutral-300 cursor-pointer"
+                            >
+                              {collapsedSpaceIds.has(space.id) ? (
+                                <ChevronRight className="w-3 h-3" />
+                              ) : (
+                                <ChevronDown className="w-3 h-3" />
+                              )}
+                            </span>
                             {activeView === 'calendar' && (
                               <span
                                 className={`w-3.5 h-3.5 rounded border flex items-center justify-center shrink-0 transition ${
@@ -2109,45 +2182,46 @@ function PageContent() {
                       )}
                     </DroppableSidebarItem>
 
-                    {activeView === 'docs' ? (
-                      <DocFolderTree
-                        space={space}
-                        activeDocFolderId={activeSpaceId === space.id ? activeDocFolderId : null}
-                        activeStandaloneDocId={activeSpaceId === space.id ? activeStandaloneDocId : null}
-                        onNavigateFolder={(folderId) => {
-                          setNavigation(space.id, []);
-                          setDocsNavigation(folderId, null);
-                        }}
-                        onOpenDoc={(docId) => {
-                          setNavigation(space.id, []);
-                          setDocsNavigation(activeDocFolderId, docId);
-                        }}
-                        onDeleteFolderRequest={setDocFolderToDelete}
-                        onDeleteDocRequest={setSpaceDocToDelete}
-                      />
-                    ) : (
-                      <FolderTree
-                        space={space}
-                        tasks={tasks}
-                        activeView={activeView}
-                        activeListIds={activeListIds}
-                        calendarVisibleListIds={calendarVisibleListIds}
-                        onNavigateList={(e, listId) => {
-                          setModalTaskStack([]);
-                          handleListClick(e, space, listId);
-                        }}
-                        toggleCalendarList={toggleCalendarList}
-                        toggleCalendarFolder={(folderId) => toggleCalendarFolder(space, folderId)}
-                        onDeleteFolderRequest={setFolderToDelete}
-                        onFolderContextMenu={openFolderMenu}
-                        renameFolderId={renameFolderId}
-                        onRenameFolderHandled={() => setRenameFolderId(null)}
-                        onListContextMenu={(e, list) => openListMenu(e, list, space.id)}
-                        onDeleteListRequest={(list) => setListToDelete({ list, spaceId: space.id })}
-                        renameListId={renameListId}
-                        onRenameListHandled={() => setRenameListId(null)}
-                      />
-                    )}
+                    {!collapsedSpaceIds.has(space.id) &&
+                      (activeView === 'docs' ? (
+                        <DocFolderTree
+                          space={space}
+                          activeDocFolderId={activeSpaceId === space.id ? activeDocFolderId : null}
+                          activeStandaloneDocId={activeSpaceId === space.id ? activeStandaloneDocId : null}
+                          onNavigateFolder={(folderId) => {
+                            setNavigation(space.id, []);
+                            setDocsNavigation(folderId, null);
+                          }}
+                          onOpenDoc={(docId) => {
+                            setNavigation(space.id, []);
+                            setDocsNavigation(activeDocFolderId, docId);
+                          }}
+                          onDeleteFolderRequest={setDocFolderToDelete}
+                          onDeleteDocRequest={setSpaceDocToDelete}
+                        />
+                      ) : (
+                        <FolderTree
+                          space={space}
+                          tasks={tasks}
+                          activeView={activeView}
+                          activeListIds={activeListIds}
+                          calendarVisibleListIds={calendarVisibleListIds}
+                          onNavigateList={(e, listId) => {
+                            setModalTaskStack([]);
+                            handleListClick(e, space, listId);
+                          }}
+                          toggleCalendarList={toggleCalendarList}
+                          toggleCalendarFolder={(folderId) => toggleCalendarFolder(space, folderId)}
+                          onDeleteFolderRequest={setFolderToDelete}
+                          onFolderContextMenu={openFolderMenu}
+                          renameFolderId={renameFolderId}
+                          onRenameFolderHandled={() => setRenameFolderId(null)}
+                          onListContextMenu={(e, list) => openListMenu(e, list, space.id)}
+                          onDeleteListRequest={(list) => setListToDelete({ list, spaceId: space.id })}
+                          renameListId={renameListId}
+                          onRenameListHandled={() => setRenameListId(null)}
+                        />
+                      ))}
                     {spaceDropIndicator?.targetId === space.id && spaceDropIndicator.position === 'below' && (
                       <div className="h-0.5 bg-blue-500 rounded-full mx-2" />
                     )}
@@ -3930,6 +4004,8 @@ function PageContent() {
         onClose={() => setCommandPaletteOpen(false)}
         onOpenTask={(id) => setModalTaskStack([id])}
       />
+
+      {trashOpen && <TrashPanel onClose={() => setTrashOpen(false)} />}
     </div>
     </DndContext>
   );

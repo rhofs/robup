@@ -1,9 +1,17 @@
 import { NextResponse } from 'next/server';
 import { prisma, publicUserSelect } from '@/lib/prisma';
+import { cascadeTask } from '@/lib/trashCascade';
 
 export async function PATCH(req: Request, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
   const body = await req.json();
+
+  if (body.restore === true) {
+    await cascadeTask(id, null);
+    const task = await prisma.task.findUniqueOrThrow({ where: { id }, include: { assignees: { select: publicUserSelect } } });
+    return NextResponse.json(task);
+  }
+
   const existing = await prisma.task.findUnique({ where: { id }, include: { assignees: { select: publicUserSelect } } });
 
   const data: any = {};
@@ -118,8 +126,13 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
   return NextResponse.json(task);
 }
 
-export async function DELETE(_req: Request, { params }: { params: Promise<{ id: string }> }) {
+export async function DELETE(req: Request, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
-  await prisma.task.delete({ where: { id } });
+  const permanent = new URL(req.url).searchParams.get('permanent') === 'true';
+  if (permanent) {
+    await prisma.task.delete({ where: { id } });
+  } else {
+    await cascadeTask(id, new Date());
+  }
   return NextResponse.json({ ok: true });
 }

@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
+import { cascadeDocFolder } from '@/lib/trashCascade';
 
 // DocFolder/Doc rows each carry their own `spaceId` directly (not derived from ancestry), so
 // moving a DocFolder into a different Space only updates its own row unless we walk its subtree
@@ -19,6 +20,16 @@ async function collectDescendantDocFolderIds(rootId: string): Promise<string[]> 
 export async function PATCH(req: Request, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
   const body = await req.json();
+
+  if (body.restore === true) {
+    await cascadeDocFolder(id, null);
+    const folder = await prisma.docFolder.findUniqueOrThrow({
+      where: { id },
+      select: { id: true, name: true, color: true, icon: true, spaceId: true, parentId: true, order: true },
+    });
+    return NextResponse.json(folder);
+  }
+
   const data: any = {};
   if (body.name !== undefined) data.name = body.name;
   if (body.color !== undefined) data.color = body.color;
@@ -48,8 +59,13 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
   return NextResponse.json(folder);
 }
 
-export async function DELETE(_req: Request, { params }: { params: Promise<{ id: string }> }) {
+export async function DELETE(req: Request, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
-  await prisma.docFolder.delete({ where: { id } });
+  const permanent = new URL(req.url).searchParams.get('permanent') === 'true';
+  if (permanent) {
+    await prisma.docFolder.delete({ where: { id } });
+  } else {
+    await cascadeDocFolder(id, new Date());
+  }
   return NextResponse.json({ ok: true });
 }

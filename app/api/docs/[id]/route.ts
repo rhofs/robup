@@ -4,6 +4,12 @@ import { prisma } from '@/lib/prisma';
 export async function PATCH(req: Request, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
   const body = await req.json();
+
+  if (body.restore === true) {
+    const doc = await prisma.doc.update({ where: { id }, data: { deletedAt: null } });
+    return NextResponse.json(doc);
+  }
+
   const data: any = {};
   if (body.title !== undefined) data.title = body.title;
   if (body.content !== undefined) data.content = body.content;
@@ -21,8 +27,12 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
 
 export async function DELETE(req: Request, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
-  const authorId = new URL(req.url).searchParams.get('authorId');
-  const doc = await prisma.doc.delete({ where: { id } });
+  const url = new URL(req.url);
+  const authorId = url.searchParams.get('authorId');
+  const permanent = url.searchParams.get('permanent') === 'true';
+  const doc = permanent
+    ? await prisma.doc.delete({ where: { id } })
+    : await prisma.doc.update({ where: { id }, data: { deletedAt: new Date() } });
   // Activity & Comments is a task-scoped concept — a standalone (Space/DocFolder) doc has no
   // task to log against, so only write the activity entry when this doc actually belonged to one.
   if (doc.taskId) {

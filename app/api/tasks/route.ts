@@ -3,6 +3,7 @@ import { prisma, publicUserSelect } from '@/lib/prisma';
 
 export async function GET() {
   const tasks = await prisma.task.findMany({
+    where: { deletedAt: null },
     include: { assignees: { select: publicUserSelect } },
     orderBy: { createdAt: 'desc' },
   });

@@ -39,6 +39,7 @@ model Space {
   order         Int           @default(0)
   description   String?
   coverImageUrl String?       @map("cover_image_url")
+  deletedAt     DateTime?     @map("deleted_at")
   workspaceId   String        @map("workspace_id")
   workspace     Workspace     @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
   folders       Folder[]
@@ -52,33 +53,35 @@ model Space {
 
 // 3. Valgfritt mellomnivå (Mappe) — kan nøstes vilkårlig dypt i seg selv
 model Folder {
-  id        String   @id @default(uuid())
+  id        String    @id @default(uuid())
   name      String
   color     String?
   icon      String?
-  spaceId   String   @map("space_id")
-  space     Space    @relation(fields: [spaceId], references: [id], onDelete: Cascade)
-  parentId  String?  @map("parent_id")
-  parent    Folder?  @relation("FolderChildren", fields: [parentId], references: [id], onDelete: Cascade)
-  children  Folder[] @relation("FolderChildren")
+  deletedAt DateTime? @map("deleted_at")
+  spaceId   String    @map("space_id")
+  space     Space     @relation(fields: [spaceId], references: [id], onDelete: Cascade)
+  parentId  String?   @map("parent_id")
+  parent    Folder?   @relation("FolderChildren", fields: [parentId], references: [id], onDelete: Cascade)
+  children  Folder[]  @relation("FolderChildren")
   lists     List[]
-  order     Int      @default(0)
-  createdAt DateTime @default(now()) @map("created_at")
+  order     Int       @default(0)
+  createdAt DateTime  @default(now()) @map("created_at")
 }
 
 // 4. Endestasjon for oppgaver (Lister)
 model List {
-  id        String   @id @default(uuid())
+  id        String    @id @default(uuid())
   name      String
   color     String?
   icon      String?
-  spaceId   String   @map("space_id")
-  space     Space    @relation(fields: [spaceId], references: [id], onDelete: Cascade)
-  folderId  String?  @map("folder_id")
-  folder    Folder?  @relation(fields: [folderId], references: [id], onDelete: Cascade)
-  order     Int      @default(0)
+  deletedAt DateTime? @map("deleted_at")
+  spaceId   String    @map("space_id")
+  space     Space     @relation(fields: [spaceId], references: [id], onDelete: Cascade)
+  folderId  String?   @map("folder_id")
+  folder    Folder?   @relation(fields: [folderId], references: [id], onDelete: Cascade)
+  order     Int       @default(0)
   tasks     Task[]
-  createdAt DateTime @default(now()) @map("created_at")
+  createdAt DateTime  @default(now()) @map("created_at")
 }
 
 // 5. Egendefinerte statuser per Space
@@ -122,47 +125,48 @@ model User {
 
 // 8. Selve oppgaven & Subtasks
 model Task {
-  id          String    @id @default(uuid())
+  id          String  @id @default(uuid())
   title       String
   description String?
   status      String
   priority    Int?
 
-  startDate   DateTime? @map("start_date")
-  dueDate     DateTime? @map("due_date")
+  startDate DateTime? @map("start_date")
+  dueDate   DateTime? @map("due_date")
 
-  archived    Boolean   @default(false)
-  archivedAt  DateTime? @map("archived_at")
+  archived   Boolean   @default(false)
+  archivedAt DateTime? @map("archived_at")
+  deletedAt  DateTime? @map("deleted_at")
 
-  listId      String    @map("list_id")
-  list        List      @relation(fields: [listId], references: [id], onDelete: Cascade)
+  listId String @map("list_id")
+  list   List   @relation(fields: [listId], references: [id], onDelete: Cascade)
 
-  parentId    String?   @map("parent_id")
-  parent      Task?     @relation("Subtasks", fields: [parentId], references: [id], onDelete: Cascade)
-  subtasks    Task[]    @relation("Subtasks")
+  parentId String? @map("parent_id")
+  parent   Task?   @relation("Subtasks", fields: [parentId], references: [id], onDelete: Cascade)
+  subtasks Task[]  @relation("Subtasks")
 
-  assignees   User[]    @relation("TaskAssignees")
-  comments    Comment[]
-  docs        Doc[]
+  assignees User[]    @relation("TaskAssignees")
+  comments  Comment[]
+  docs      Doc[]
 
   customFieldValues String @default("{}") @map("custom_field_values")
 
-  createdAt   DateTime  @default(now()) @map("created_at")
-  updatedAt   DateTime  @updatedAt @map("updated_at")
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
 }
 
 // 9. Kommentarer OG aktivitetslogg på en task (skilt med "type")
 model Comment {
-  id           String   @id @default(uuid())
+  id           String  @id @default(uuid())
   body         String
-  type         String   @default("comment") // 'comment' | 'activity'
-  activityKind String?  @map("activity_kind") // icon selector for type='activity' rows — see ACTIVITY_ICONS in app/page.tsx
+  type         String  @default("comment") // 'comment' | 'activity'
+  activityKind String? @map("activity_kind") // icon selector for type='activity' rows — see ACTIVITY_ICONS in app/page.tsx
 
-  taskId    String   @map("task_id")
-  task      Task     @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  taskId String @map("task_id")
+  task   Task   @relation(fields: [taskId], references: [id], onDelete: Cascade)
 
-  authorId  String?  @map("author_id")
-  author    User?    @relation(fields: [authorId], references: [id], onDelete: SetNull)
+  authorId String? @map("author_id")
+  author   User?   @relation(fields: [authorId], references: [id], onDelete: SetNull)
 
   createdAt DateTime @default(now()) @map("created_at")
 }
@@ -171,22 +175,23 @@ model Comment {
 // Space/DocFolder-struktur (den nye "Docs"-fanen). taskId/spaceId+folderId er uavhengige av
 // hverandre — et dokument kan i prinsippet være begge deler, selv om ingen UI setter det opp ennå.
 model Doc {
-  id        String     @id @default(uuid())
-  title     String     @default("Untitled")
-  content   String     @default("")
-  order     Int        @default(0)
+  id        String    @id @default(uuid())
+  title     String    @default("Untitled")
+  content   String    @default("")
+  order     Int       @default(0)
+  deletedAt DateTime? @map("deleted_at")
 
-  taskId    String?    @map("task_id")
-  task      Task?      @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  taskId String? @map("task_id")
+  task   Task?   @relation(fields: [taskId], references: [id], onDelete: Cascade)
 
-  spaceId   String?    @map("space_id")
-  space     Space?     @relation(fields: [spaceId], references: [id], onDelete: Cascade)
+  spaceId String? @map("space_id")
+  space   Space?  @relation(fields: [spaceId], references: [id], onDelete: Cascade)
 
-  folderId  String?    @map("doc_folder_id")
-  folder    DocFolder? @relation(fields: [folderId], references: [id], onDelete: Cascade)
+  folderId String?    @map("doc_folder_id")
+  folder   DocFolder? @relation(fields: [folderId], references: [id], onDelete: Cascade)
 
-  createdAt DateTime   @default(now()) @map("created_at")
-  updatedAt DateTime   @updatedAt @map("updated_at")
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
 }
 
 // 11. Mappe-struktur for løsrevne (ikke task-bundne) Docs — speiler Folder (Space > Folder > List)
@@ -195,6 +200,7 @@ model DocFolder {
   name      String
   color     String?
   icon      String?
+  deletedAt DateTime?   @map("deleted_at")
   spaceId   String      @map("space_id")
   space     Space       @relation(fields: [spaceId], references: [id], onDelete: Cascade)
   parentId  String?     @map("parent_id")
