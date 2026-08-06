@@ -93,7 +93,10 @@ Schema changes today: `Comment.activityKind` (all via `prisma db push`, no migra
 
 ## Next steps / not built yet
 
-Nothing queued up right now — the user's Docs drag-and-drop and @-mention requests are both done. For the record, since it's come up again: the Office tab, Docs nesting, and the `.ics` feed are **already built** (see "What's built" above, and the 2026-08-01 session notes) — the only item from that family of asks still genuinely outstanding is real-time collaborative editing, explicitly deferred (below). See "Known v1 scope cuts" below for smaller loose ends.
+**Queued for a future session:**
+
+- **Planner calendar bar colors should follow the Space > Folder/List > Task cascade, not just Status.** Today `CalendarView.tsx`/`WeekRow.tsx`/`DayTimeline.tsx` color every bar purely by `statusColorOf(task.status)` (the Space's custom status palette) — Space/Folder/List's own `color` field (already on the schema, used in the sidebar) isn't consulted at all. Wanted behavior: default to the task's Space color, but let a more specific ancestor's or the task's own color override it if one is set — i.e. resolve color as Task's own color (if it ever gets one — doesn't exist on the schema yet) → List's color → Folder's color → Space's color, most specific wins, falling back up the chain when something in between has no color set.
+- **Real-time collaborative Doc editing ("like Google Docs")** — re-requested by the user (2026-08-06), previously scoped out (see below) but now something to actually plan for. Needs Yjs + Tiptap (replacing the current plain autosave `<textarea>` in the Doc editor) + a Hocuspocus (or similar) always-on WebSocket sync server — a real architectural departure from this app's current deliberately-local "Zero-Cloud SQLite, one process" design, so this needs its own plan-mode pass before starting (at minimum: how the sync server runs alongside `next dev`/production, and what happens to the existing plain-text `Doc.content` + @-mention-token convention under a CRDT-backed rich-text doc).
 
 **Known v1 scope cuts, worth a follow-up:**
 
@@ -101,10 +104,6 @@ Nothing queued up right now — the user's Docs drag-and-drop and @-mention requ
 - **Doc-to-Task attach is one-directional** — a task can link an existing standalone doc, but there's no "link to task" affordance from the Docs tab side. Reachable by opening the task first.
 - **Office Rooms aren't drag-reorderable among themselves** — the `order` field exists (defaults to creation order) but nothing lets you reorder Room cards; only people can be dragged, between Rooms/Unassigned.
 - **No real presence/"who's here today"** on the Office rooms view — would need actual session tracking, which doesn't exist (no real login system yet, discussed and left alone this session). `status` is self-authored free text, not live presence.
-
-**Explicitly deferred:**
-
-- **Real-time collaborative editing** (Yjs + Tiptap + Hocuspocus) — needs an always-on WebSocket sync-server process, a real architectural departure from this app's current deliberately-local "Zero-Cloud SQLite, one process" design. Decided to hold off until the app is actually leaving that local-only phase, rather than bolt on that operational complexity now.
 
 ## Today's session (2026-08-01)
 
