@@ -55,7 +55,7 @@ import {
   Unlink,
   type LucideIcon,
 } from 'lucide-react';
-import { useTaskStore, HierarchySpace, HierarchyFolder, HierarchyList, HierarchyDocFolder, HierarchyRoom, StatusDef, CustomFieldDef, Task, TaskDoc } from '../store/useTaskStore';
+import { useTaskStore, HierarchySpace, HierarchyFolder, HierarchyList, HierarchyDocFolder, HierarchyRoom, HierarchyWorkspace, StatusDef, CustomFieldDef, Task, TaskDoc } from '../store/useTaskStore';
 import { useHistoryStore } from '../store/useHistoryStore';
 import { useSessionStore } from '../store/useSessionStore';
 import { collectListIdsUnder, isDescendantOf, getOrderedListIds } from '../lib/folderTree';
@@ -664,10 +664,10 @@ function PageContent() {
     const oldIndex = ids.indexOf(active.id as string);
     const newIndex = ids.indexOf(over.id as string);
     if (oldIndex === -1 || newIndex === -1) return;
-    useHistoryStore.getState().transaction('Reorder statuses', () => {
-      arrayMove(statuses, oldIndex, newIndex).forEach((s, index) => {
-        if (s.order !== index) updateStatus(currentSpace.id, s.id, { order: index });
-      });
+    useHistoryStore.getState().transaction('Reorder statuses', async () => {
+      await Promise.all(
+        arrayMove(statuses, oldIndex, newIndex).map((s, index) => (s.order !== index ? updateStatus(currentSpace.id, s.id, { order: index }) : null))
+      );
     });
   };
 
@@ -686,6 +686,9 @@ function PageContent() {
   const docSaveTimer = useRef<any>(null);
   const [docToDelete, setDocToDelete] = useState<{ id: string; title: string } | null>(null);
   const [linkDocOpen, setLinkDocOpen] = useState(false);
+  // Reverse direction of "Link existing" above — links an existing Task onto a standalone
+  // (Docs-tab) doc, from the Docs tab side. Same setDocTaskLink action, just initiated from here.
+  const [linkTaskOpen, setLinkTaskOpen] = useState(false);
   // Captured on focus, compared on blur — logs one "document edited" activity entry per edit
   // session (not per autosave tick) for whichever field(s) actually changed during that session.
   const docEditBaselineRef = useRef<{ docId: string; title: string; content: string } | null>(null);
@@ -1286,7 +1289,13 @@ function PageContent() {
   // ---- Drag & drop for tasks (row → another row / list / space) ----
   const taskSensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 5 } }));
   const [activeDragTask, setActiveDragTask] = useState<Task | null>(null);
-  const [activeDragEntity, setActiveDragEntity] = useState<{ kind: 'folder' | 'list' | 'space' | 'person' | 'docfolder' | 'spacedoc'; name: string; color?: string | null; initials?: string } | null>(
+  const [activeDragEntity, setActiveDragEntity] = useState<{
+    kind: 'folder' | 'list' | 'space' | 'person' | 'room' | 'docfolder' | 'spacedoc';
+    name: string;
+    color?: string | null;
+    initials?: string;
+    icon?: string | null;
+  } | null>(
     null
   );
   const [spaceDropIndicator, setSpaceDropIndicator] = useState<{ targetId: string; position: 'above' | 'below' } | null>(null);
@@ -1363,10 +1372,20 @@ function PageContent() {
     const oldIndex = siblings.findIndex((f) => f.id === draggedId);
     const newIndex = siblings.findIndex((f) => f.id === targetId);
     if (oldIndex === -1 || newIndex === -1) return;
-    useHistoryStore.getState().transaction('Reorder folders', () => {
-      arrayMove(siblings, oldIndex, newIndex).forEach((f, index) => {
-        if (f.order !== index) updateFolder(space.id, f.id, { order: index });
-      });
+    // transaction()'s group only closes once its callback's returned Promise resolves — an async
+    // callback awaiting every update (Promise.all, same shape as bulkDelete below) is required for
+    // that, not a sync forEach firing fetches it doesn't wait for. A sync forEach here would close
+    // (and push) an EMPTY group immediately, since none of the individual updateFolder calls'
+    // own history pushes (which happen after their own await fetch) have landed yet — so each
+    // change would end up as its own separate top-level undo entry instead of one combined step,
+    // and Ctrl+Z would only revert the last of them, leaving the rest applied. Only visible when a
+    // reorder actually changes 2+ siblings at once (a 2-item swap where one side's old order
+    // already happens to equal its new index dodges it by luck) — found via the Office Rooms
+    // reorder fix, where a 3-way tie made a simultaneous 2-item change unavoidable.
+    useHistoryStore.getState().transaction('Reorder folders', async () => {
+      await Promise.all(
+        arrayMove(siblings, oldIndex, newIndex).map((f, index) => (f.order !== index ? updateFolder(space.id, f.id, { order: index }) : null))
+      );
     });
   };
 
@@ -1377,10 +1396,10 @@ function PageContent() {
     const oldIndex = siblings.findIndex((l) => l.id === draggedId);
     const newIndex = siblings.findIndex((l) => l.id === targetId);
     if (oldIndex === -1 || newIndex === -1) return;
-    useHistoryStore.getState().transaction('Reorder lists', () => {
-      arrayMove(siblings, oldIndex, newIndex).forEach((l, index) => {
-        if (l.order !== index) reorderList(space.id, l.id, index);
-      });
+    useHistoryStore.getState().transaction('Reorder lists', async () => {
+      await Promise.all(
+        arrayMove(siblings, oldIndex, newIndex).map((l, index) => (l.order !== index ? reorderList(space.id, l.id, index) : null))
+      );
     });
   };
 
@@ -1392,10 +1411,22 @@ function PageContent() {
     const oldIndex = siblings.findIndex((f) => f.id === draggedId);
     const newIndex = siblings.findIndex((f) => f.id === targetId);
     if (oldIndex === -1 || newIndex === -1) return;
-    useHistoryStore.getState().transaction('Reorder doc folders', () => {
-      arrayMove(siblings, oldIndex, newIndex).forEach((f, index) => {
-        if (f.order !== index) updateDocFolder(space.id, f.id, { order: index });
-      });
+    useHistoryStore.getState().transaction('Reorder doc folders', async () => {
+      await Promise.all(
+        arrayMove(siblings, oldIndex, newIndex).map((f, index) => (f.order !== index ? updateDocFolder(space.id, f.id, { order: index }) : null))
+      );
+    });
+  };
+
+  // Rooms are workspace-scoped, not nested under a Space, so this is flat siblings-among-all-
+  // rooms — same arrayMove + transaction shape as every other reorder helper regardless.
+  const reorderRoomSiblings = (workspace: HierarchyWorkspace, draggedId: string, targetId: string) => {
+    const siblings = [...workspace.rooms].sort((a, b) => a.order - b.order);
+    const oldIndex = siblings.findIndex((r) => r.id === draggedId);
+    const newIndex = siblings.findIndex((r) => r.id === targetId);
+    if (oldIndex === -1 || newIndex === -1) return;
+    useHistoryStore.getState().transaction('Reorder rooms', async () => {
+      await Promise.all(arrayMove(siblings, oldIndex, newIndex).map((r, index) => (r.order !== index ? updateRoom(r.id, { order: index }) : null)));
     });
   };
 
@@ -1406,10 +1437,10 @@ function PageContent() {
     const oldIndex = siblings.findIndex((d) => d.id === draggedId);
     const newIndex = siblings.findIndex((d) => d.id === targetId);
     if (oldIndex === -1 || newIndex === -1) return;
-    useHistoryStore.getState().transaction('Reorder documents', () => {
-      arrayMove(siblings, oldIndex, newIndex).forEach((d, index) => {
-        if (d.order !== index) reorderSpaceDoc(space.id, d.id, index);
-      });
+    useHistoryStore.getState().transaction('Reorder documents', async () => {
+      await Promise.all(
+        arrayMove(siblings, oldIndex, newIndex).map((d, index) => (d.order !== index ? reorderSpaceDoc(space.id, d.id, index) : null))
+      );
     });
   };
 
@@ -1427,10 +1458,8 @@ function PageContent() {
     if (!dragged || targetIndex === -1) return;
     const insertAt = position === 'below' ? targetIndex + 1 : targetIndex;
     const next = [...withoutDragged.slice(0, insertAt), dragged, ...withoutDragged.slice(insertAt)];
-    useHistoryStore.getState().transaction('Reorder spaces', () => {
-      next.forEach((s, index) => {
-        if (s.order !== index) reorderSpace(s.id, index);
-      });
+    useHistoryStore.getState().transaction('Reorder spaces', async () => {
+      await Promise.all(next.map((s, index) => (s.order !== index ? reorderSpace(s.id, index) : null)));
     });
   };
 
@@ -1462,6 +1491,13 @@ function PageContent() {
       const userId = draggedId.slice('person-drag:'.length);
       const person = users.find((u) => u.id === userId);
       if (person) setActiveDragEntity({ kind: 'person', name: person.name, color: person.color, initials: person.initials });
+      return;
+    }
+
+    if (draggedId.startsWith('room-drag:')) {
+      const roomId = draggedId.slice('room-drag:'.length);
+      const room = workspaces.flatMap((w) => w.rooms).find((r) => r.id === roomId);
+      if (room) setActiveDragEntity({ kind: 'room', name: room.name, color: room.color, icon: room.icon });
       return;
     }
 
@@ -1592,6 +1628,21 @@ function PageContent() {
       if (overId.startsWith('room-drop:')) {
         const target = overId.slice('room-drop:'.length);
         assignUserToRoom(userId, target === 'unassigned' ? null : target);
+      }
+      return;
+    }
+
+    // Reuses the same `room-drop:` droppable people drag onto (disambiguated by the dragged id's
+    // prefix, same trick as every other reorder-vs-drop-target reuse in this app) — dropping a
+    // Room onto another Room reorders them; the Unassigned tray isn't a valid reorder target.
+    if (draggedId.startsWith('room-drag:')) {
+      const roomId = draggedId.slice('room-drag:'.length);
+      if (overId.startsWith('room-drop:')) {
+        const targetId = overId.slice('room-drop:'.length);
+        if (targetId !== 'unassigned' && targetId !== roomId) {
+          const workspace = workspaces.find((w) => w.rooms.some((r) => r.id === roomId));
+          if (workspace) reorderRoomSiblings(workspace, roomId, targetId);
+        }
       }
       return;
     }
@@ -1883,6 +1934,12 @@ function PageContent() {
     ? workspaces.flatMap((w) => w.spaces).find((s) => s.lists.some((l) => l.id === activeModalTask.listId))
     : null;
   const linkableSpaceDocs = activeModalTaskSpace ? activeModalTaskSpace.spaceDocs.filter((d) => d.taskId === null) : [];
+
+  // Reverse picker: Tasks in the current Space, for linking an existing Task onto a standalone
+  // doc from the Docs tab side. Same Space-scoping rationale as linkableSpaceDocs above.
+  const linkableTasks = currentSpace
+    ? tasks.filter((t) => !t.archived && collectListIdsUnder(currentSpace, null).includes(t.listId))
+    : [];
 
   // Stable serialization of the selected List set — order-independent so toggling the same
   // Lists in a different click order doesn't spuriously read as "different navigation."
@@ -2472,11 +2529,67 @@ function PageContent() {
                     >
                       &larr; Back to {currentSpace.name}
                     </button>
-                    {spaceDocSaveStatus !== 'idle' && (
-                      <span className="text-[10px] text-neutral-500 flex items-center gap-1">
-                        {spaceDocSaveStatus === 'saving' ? 'Saving...' : (<><Check className="w-3 h-3" /> Saved</>)}
-                      </span>
-                    )}
+                    <div className="flex items-center gap-2">
+                      {activeStandaloneDoc.taskId ? (
+                        (() => {
+                          const linkedTask = tasks.find((t) => t.id === activeStandaloneDoc.taskId);
+                          return (
+                            <span className="flex items-center gap-1 text-[10px] text-neutral-500">
+                              <Link2 className="w-3 h-3 shrink-0" />
+                              Linked to{' '}
+                              <button
+                                onClick={() => linkedTask && setModalTaskStack([linkedTask.id])}
+                                className="text-blue-400 hover:underline cursor-pointer"
+                              >
+                                {linkedTask?.title ?? 'task'}
+                              </button>
+                              <button
+                                onClick={() => setDocTaskLink(activeStandaloneDoc.id, null)}
+                                title="Unlink"
+                                className="text-neutral-500 hover:text-red-400 cursor-pointer"
+                              >
+                                <Unlink className="w-3 h-3" />
+                              </button>
+                            </span>
+                          );
+                        })()
+                      ) : (
+                        linkableTasks.length > 0 && (
+                          <FloatingPopover
+                            open={linkTaskOpen}
+                            onClose={() => setLinkTaskOpen(false)}
+                            panelClassName="w-56 max-h-64 overflow-y-auto bg-neutral-900 border border-neutral-800 rounded shadow-xl py-1"
+                            anchor={
+                              <button
+                                onClick={() => setLinkTaskOpen((o) => !o)}
+                                className="text-[11px] text-neutral-400 hover:text-blue-400 px-2 py-1 rounded hover:bg-neutral-800/60 cursor-pointer flex items-center gap-1"
+                              >
+                                <Link2 className="w-3 h-3" /> Link to task
+                              </button>
+                            }
+                          >
+                            <div className="text-[10px] uppercase tracking-wide text-neutral-500 px-3 py-1">From this Space</div>
+                            {linkableTasks.map((t) => (
+                              <button
+                                key={t.id}
+                                onClick={() => {
+                                  setDocTaskLink(activeStandaloneDoc.id, t.id);
+                                  setLinkTaskOpen(false);
+                                }}
+                                className="w-full text-left px-3 py-1.5 text-xs text-neutral-300 hover:bg-neutral-800/60 cursor-pointer truncate"
+                              >
+                                {t.title}
+                              </button>
+                            ))}
+                          </FloatingPopover>
+                        )
+                      )}
+                      {spaceDocSaveStatus !== 'idle' && (
+                        <span className="text-[10px] text-neutral-500 flex items-center gap-1">
+                          {spaceDocSaveStatus === 'saving' ? 'Saving...' : (<><Check className="w-3 h-3" /> Saved</>)}
+                        </span>
+                      )}
+                    </div>
                   </div>
                   <div className="bg-neutral-900/60 border border-neutral-800/80 rounded p-6 space-y-3">
                     <input
@@ -2537,6 +2650,7 @@ function PageContent() {
                 <CalendarView
                   tasks={calendarFilteredTasks}
                   statuses={statuses}
+                  workspaces={workspaces}
                   onOpenTask={(id) => setModalTaskStack([id])}
                   onRequestCreateTask={(date) => {
                     setCreateTaskDefaultDate(date.toISOString());
@@ -3974,6 +4088,8 @@ function PageContent() {
               >
                 {activeDragEntity.initials}
               </span>
+            ) : activeDragEntity.kind === 'room' ? (
+              <span className="text-sm shrink-0">{activeDragEntity.icon || '🏠'}</span>
             ) : activeDragEntity.kind === 'docfolder' ? (
               <FolderIconLucide className="w-3.5 h-3.5 shrink-0" style={{ color: activeDragEntity.color || undefined }} />
             ) : activeDragEntity.kind === 'spacedoc' ? (

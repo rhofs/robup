@@ -16,7 +16,7 @@ type WeekRowProps = {
   weekDays: Date[];
   segments: ClippedSegment[];
   tasksById: Map<string, Task>;
-  statusColorOf: (name: string) => string;
+  taskColorOf: (task: Task) => string;
   today: Date;
   monthAnchor?: Date;
   maxVisibleLanes: number;
@@ -35,7 +35,7 @@ export default function WeekRow({
   weekDays,
   segments,
   tasksById,
-  statusColorOf,
+  taskColorOf,
   today,
   monthAnchor,
   maxVisibleLanes,
@@ -134,7 +134,7 @@ export default function WeekRow({
             const task = tasksById.get(seg.taskId);
             if (!task) return null;
             const isDraggingThis = activeDrag?.taskId === seg.taskId;
-            const color = statusColorOf(task.status);
+            const color = taskColorOf(task);
 
             return (
               <div

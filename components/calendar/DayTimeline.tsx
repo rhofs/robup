@@ -18,12 +18,12 @@ const minutesOfDay = (d: Date) => d.getHours() * 60 + d.getMinutes();
 type DayTimelineProps = {
   day: Date;
   tasks: Task[];
-  statusColorOf: (name: string) => string;
+  taskColorOf: (task: Task) => string;
   onOpenTask: (id: string) => void;
   onCommitDates: (taskId: string, startISO: string | null, dueISO: string | null) => void;
 };
 
-export default function DayTimeline({ day, tasks, statusColorOf, onOpenTask, onCommitDates }: DayTimelineProps) {
+export default function DayTimeline({ day, tasks, taskColorOf, onOpenTask, onCommitDates }: DayTimelineProps) {
   const [drag, setDrag] = useState<DayDragState | null>(null);
   const draggedRef = useRef(false);
   const today = new Date();
@@ -97,7 +97,7 @@ export default function DayTimeline({ day, tasks, statusColorOf, onOpenTask, onC
               onClick={() => onOpenTask(task.id)}
               title={task.title}
               className="w-full text-left truncate text-[11px] text-white font-medium px-2 py-1 rounded cursor-pointer"
-              style={{ backgroundColor: statusColorOf(task.status) }}
+              style={{ backgroundColor: taskColorOf(task) }}
             >
               {task.title}
             </button>
@@ -149,7 +149,7 @@ export default function DayTimeline({ day, tasks, statusColorOf, onOpenTask, onC
             }
             const top = (startMin / 60) * HOUR_H;
             const height = Math.max(20, ((endMin - startMin) / 60) * HOUR_H);
-            const color = statusColorOf(task.status);
+            const color = taskColorOf(task);
             const { col, cols } = columns.get(task.id) ?? { col: 0, cols: 1 };
 
             return (

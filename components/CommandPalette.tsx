@@ -6,13 +6,24 @@ import { Search, ListChecks, FileText, UserCircle, List as ListIcon, Layers } fr
 import { useTaskStore } from '../store/useTaskStore';
 import { scoreMatch } from '../lib/search';
 
-// Searches only what's already loaded eagerly client-side: Task titles, standalone (Docs-tab)
-// Doc titles, People names, and Space/List names. Task-scoped Docs are deliberately excluded —
-// those only load per-task when that task's modal opens (fetchDocs), so their titles aren't
-// available app-wide without a new bulk-fetch; reachable by opening the task first, same as today.
+// Searches everything already loaded eagerly client-side: Task titles, both standalone (Docs-tab)
+// AND task-scoped Doc titles (the latter bulk-loaded into `docs` via GET /api/task-docs at
+// startup, same field the task modal's Documents tab lazily refreshes per-task), People names,
+// and Space/List names.
 type PaletteResult =
   | { kind: 'task'; id: string; label: string; sub?: string; score: number }
-  | { kind: 'doc'; id: string; label: string; spaceId: string; folderId: string | null; sub?: string; score: number }
+  | {
+      kind: 'doc';
+      id: string;
+      label: string;
+      sub?: string;
+      score: number;
+      // Standalone (Docs-tab) docs carry spaceId/folderId; task-scoped docs carry taskId instead —
+      // exactly one of the two is ever set, dispatched on in `activate()`.
+      spaceId?: string;
+      folderId?: string | null;
+      taskId?: string;
+    }
   | { kind: 'person'; id: string; label: string; sub?: string; score: number }
   | { kind: 'space'; id: string; label: string; sub?: string; score: number }
   | { kind: 'list'; id: string; label: string; spaceId: string; sub?: string; score: number };
@@ -42,7 +53,7 @@ type CommandPaletteProps = {
 };
 
 export default function CommandPalette({ open, onClose, onOpenTask }: CommandPaletteProps) {
-  const { tasks, users, workspaces, setActiveView, setNavigation, setDocsNavigation, setActiveOfficeUserId } = useTaskStore();
+  const { tasks, users, workspaces, docs, setActiveView, setNavigation, setDocsNavigation, setActiveOfficeUserId } = useTaskStore();
   const [query, setQuery] = useState('');
   const [selectedIndex, setSelectedIndex] = useState(0);
   const inputRef = useRef<HTMLInputElement>(null);
@@ -69,6 +80,22 @@ export default function CommandPalette({ open, onClose, onOpenTask }: CommandPal
     for (const u of users) {
       const score = scoreMatch(u.name, q);
       if (score !== null) byCategory.person.push({ kind: 'person', id: u.id, label: u.name, score });
+    }
+    for (const taskId in docs) {
+      const owningTask = tasks.find((t) => t.id === taskId);
+      for (const doc of docs[taskId]) {
+        const docScore = scoreMatch(doc.title, q);
+        if (docScore !== null) {
+          byCategory.doc.push({
+            kind: 'doc',
+            id: doc.id,
+            label: doc.title || 'Untitled',
+            taskId,
+            sub: owningTask?.title,
+            score: docScore,
+          });
+        }
+      }
     }
     for (const ws of workspaces) {
       for (const space of ws.spaces) {
@@ -105,15 +132,23 @@ export default function CommandPalette({ open, onClose, onOpenTask }: CommandPal
         .forEach((r) => flat.push(r));
     }
     return flat;
-  }, [query, tasks, users, workspaces]);
+  }, [query, tasks, users, workspaces, docs]);
 
   const activate = (r: PaletteResult) => {
     if (r.kind === 'task') {
       onOpenTask(r.id);
     } else if (r.kind === 'doc') {
-      setActiveView('docs');
-      setNavigation(r.spaceId, []);
-      setDocsNavigation(r.folderId, r.id);
+      if (r.taskId) {
+        // No deep-link straight to this specific doc tab within the modal (the task-modal's
+        // auto-select-first-doc effect would need a "pending doc" hook to not stomp on it) —
+        // landing on the task itself, doc tab visible right there, is enough to fix "I couldn't
+        // find this doc via search at all."
+        onOpenTask(r.taskId);
+      } else if (r.spaceId !== undefined) {
+        setActiveView('docs');
+        setNavigation(r.spaceId, []);
+        setDocsNavigation(r.folderId ?? null, r.id);
+      }
     } else if (r.kind === 'person') {
       setActiveView('office');
       setActiveOfficeUserId(r.id);

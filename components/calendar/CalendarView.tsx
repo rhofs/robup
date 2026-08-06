@@ -13,7 +13,7 @@ import {
   startOfWeek,
 } from '../../lib/calendarDates';
 import { assignLanes, clipRangeToWeek, type ClippedSegment, type DragMode, type DragState, type TaskRange } from '../../lib/ganttLayout';
-import { useTaskStore, StatusDef, Task } from '../../store/useTaskStore';
+import { useTaskStore, StatusDef, Task, HierarchyWorkspace } from '../../store/useTaskStore';
 import WeekRow, { BAR_GAP, BAR_H, DAY_NUM_H, GUTTER_WIDTH } from './WeekRow';
 import DayTimeline from './DayTimeline';
 
@@ -29,11 +29,12 @@ const OVERFLOW_H = 14;
 type CalendarViewProps = {
   tasks: Task[];
   statuses: StatusDef[];
+  workspaces: HierarchyWorkspace[];
   onOpenTask: (id: string) => void;
   onRequestCreateTask: (date: Date) => void;
 };
 
-export default function CalendarView({ tasks, statuses, onOpenTask, onRequestCreateTask }: CalendarViewProps) {
+export default function CalendarView({ tasks, statuses, workspaces, onOpenTask, onRequestCreateTask }: CalendarViewProps) {
   const {
     optimisticSetDates,
     calendarGranularity: granularity,
@@ -48,6 +49,28 @@ export default function CalendarView({ tasks, statuses, onOpenTask, onRequestCre
 
   const today = useMemo(() => startOfDay(new Date()), []);
   const statusColorOf = (name: string) => statuses.find((s) => s.name === name)?.color || '#94a3b8';
+
+  // Space > Folder (nested, most-specific-set wins) > List > Task color cascade — Task has no
+  // color field of its own yet, so the chain bottoms out at List. Falls back to statusColorOf
+  // only when the task's List can't be found at all (e.g. an orphaned/stale reference).
+  const taskColorOf = (task: Task): string => {
+    for (const ws of workspaces) {
+      for (const space of ws.spaces) {
+        const list = space.lists.find((l) => l.id === task.listId);
+        if (!list) continue;
+        if (list.color) return list.color;
+        let folderId = list.folderId;
+        while (folderId) {
+          const folder = space.folders.find((f) => f.id === folderId);
+          if (!folder) break;
+          if (folder.color) return folder.color;
+          folderId = folder.parentId;
+        }
+        return space.color;
+      }
+    }
+    return statusColorOf(task.status);
+  };
 
   const ranges = useMemo(() => {
     const out: TaskRange[] = [];
@@ -279,7 +302,7 @@ export default function CalendarView({ tasks, statuses, onOpenTask, onRequestCre
           <DayTimeline
             day={focusDate}
             tasks={dayTasks}
-            statusColorOf={statusColorOf}
+            taskColorOf={taskColorOf}
             onOpenTask={onOpenTask}
             onCommitDates={(taskId, startISO, dueISO) => optimisticSetDates(taskId, startISO, dueISO)}
           />
@@ -291,7 +314,7 @@ export default function CalendarView({ tasks, statuses, onOpenTask, onRequestCre
                 weekDays={weekDays}
                 segments={segmentsByWeek[i]}
                 tasksById={tasksById}
-                statusColorOf={statusColorOf}
+                taskColorOf={taskColorOf}
                 today={today}
                 monthAnchor={granularity === 'month' ? focusDate : undefined}
                 maxVisibleLanes={maxVisibleLanes}
@@ -326,7 +349,7 @@ export default function CalendarView({ tasks, statuses, onOpenTask, onRequestCre
                       className={`h-full flex items-center text-[9px] leading-none text-white font-medium truncate px-1.5 border border-dashed border-white/80 ${
                         seg.isStartEdge ? 'rounded-l' : ''
                       } ${seg.isEndEdge ? 'rounded-r' : ''}`}
-                      style={{ backgroundColor: statusColorOf(draggedTask.status), opacity: 0.85 }}
+                      style={{ backgroundColor: taskColorOf(draggedTask), opacity: 0.85 }}
                     >
                       <span className="truncate">{draggedTask.title}</span>
                     </div>

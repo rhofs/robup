@@ -151,7 +151,18 @@ function RoomCard({
   onDeleteRequest: () => void;
 }) {
   const { updateRoom } = useTaskStore();
-  const { setNodeRef, isOver } = useDroppable({ id: `room-drop:${room.id}` });
+  // Combined drag+drop like every other reorderable-and-a-drop-target row in this app: setNodeRef
+  // covers the whole card (both for drag-rect measurement and as the drop target people are
+  // dragged onto), but {...attributes}/{...listeners} — the actual pointer handlers — go on just
+  // the header row below, not the card root, so they don't shadow each PersonChip's own
+  // useDraggable in the members list underneath (a draggable nested inside another draggable's
+  // listener region is a real dnd-kit footgun; scoping the handle to a sibling of that region avoids it).
+  const { attributes, listeners, setNodeRef: setDragRef, isDragging } = useDraggable({ id: `room-drag:${room.id}` });
+  const { setNodeRef: setDropRef, isOver } = useDroppable({ id: `room-drop:${room.id}` });
+  const setNodeRef = (node: HTMLDivElement | null) => {
+    setDragRef(node);
+    setDropRef(node);
+  };
   const [editingName, setEditingName] = useState(false);
   const [nameDraft, setNameDraft] = useState(room.name);
   const [customizeOpen, setCustomizeOpen] = useState(false);
@@ -168,10 +179,10 @@ function RoomCard({
       ref={setNodeRef}
       className={`rounded border p-3 space-y-2.5 transition ${
         isOver ? 'border-blue-500/60 bg-blue-500/5' : 'border-neutral-800/80 bg-neutral-900/60'
-      }`}
+      } ${isDragging ? 'opacity-40' : ''}`}
       style={room.color ? { borderTopColor: room.color, borderTopWidth: 2 } : undefined}
     >
-      <div className="flex items-center justify-between gap-2">
+      <div {...attributes} {...listeners} className="flex items-center justify-between gap-2 cursor-grab active:cursor-grabbing">
         <div className="flex items-center gap-1.5 min-w-0">
           <FloatingPopover
             open={customizeOpen}

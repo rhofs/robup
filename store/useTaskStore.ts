@@ -207,7 +207,7 @@ interface TaskStore {
   // Office "rooms" — purely organizational/visual grouping of team members, unrelated to the
   // Space/Folder/List tree.
   createRoom: (workspaceId: string, name: string, id?: string) => Promise<void>;
-  updateRoom: (roomId: string, patch: { name?: string; icon?: string | null; color?: string | null }) => Promise<void>;
+  updateRoom: (roomId: string, patch: { name?: string; icon?: string | null; color?: string | null; order?: number }) => Promise<void>;
   deleteRoom: (roomId: string) => Promise<void>;
   assignUserToRoom: (userId: string, roomId: string | null) => Promise<void>;
   updateWorkspaceMessage: (workspaceId: string, message: string | null) => Promise<void>;
@@ -311,21 +311,33 @@ export const useTaskStore = create<TaskStore>((set, get) => {
     fetchInitialData: async () => {
       set({ isLoading: true });
       try {
-        const [workspacesRes, tasksRes, usersRes] = await Promise.all([
+        const [workspacesRes, tasksRes, usersRes, taskDocsRes] = await Promise.all([
           fetch('/api/workspaces'),
           fetch('/api/tasks'),
           fetch('/api/users'),
+          fetch('/api/task-docs'),
         ]);
         const workspaces = await workspacesRes.json();
         const tasks = await tasksRes.json();
         const users = await usersRes.json();
+        const taskDocs = await taskDocsRes.json();
 
         const firstSpaceId = workspaces[0]?.spaces[0]?.id || 'everything';
+
+        // Seeds `docs` (normally populated lazily per-task via fetchDocs on modal-open) with
+        // every task-scoped doc up front, purely so it's searchable app-wide — fetchDocs still
+        // re-fetches its own task's slice on modal-open as the freshness safety net it always was.
+        const docsByTask: Record<string, TaskDoc[]> = {};
+        for (const doc of taskDocs as TaskDoc[]) {
+          if (!doc.taskId) continue;
+          (docsByTask[doc.taskId] ??= []).push(doc);
+        }
 
         set({
           workspaces,
           tasks,
           users,
+          docs: docsByTask,
           activeSpaceId: firstSpaceId,
           isLoading: false,
         });
@@ -941,6 +953,7 @@ export const useTaskStore = create<TaskStore>((set, get) => {
         if (patch.name !== undefined) oldPatch.name = oldRoom.name;
         if (patch.icon !== undefined) oldPatch.icon = oldRoom.icon;
         if (patch.color !== undefined) oldPatch.color = oldRoom.color;
+        if (patch.order !== undefined) oldPatch.order = oldRoom.order;
         useHistoryStore.getState().push({
           label: 'Update room',
           undo: () => get().updateRoom(roomId, oldPatch),
