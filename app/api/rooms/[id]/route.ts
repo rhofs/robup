@@ -6,20 +6,21 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
   const body = await req.json();
   const data: any = {};
   if (body.name !== undefined) data.name = body.name;
+  if (body.icon !== undefined) data.icon = body.icon;
   if (body.color !== undefined) data.color = body.color;
-  if (body.order !== undefined) data.order = body.order;
-  if (body.description !== undefined) data.description = body.description;
-  if (body.coverImageUrl !== undefined) data.coverImageUrl = body.coverImageUrl;
 
-  const space = await prisma.space.update({
+  const room = await prisma.room.update({
     where: { id },
     data,
+    select: { id: true, name: true, icon: true, color: true, order: true, workspaceId: true },
   });
-  return NextResponse.json(space);
+  return NextResponse.json(room);
 }
 
 export async function DELETE(_req: Request, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
-  await prisma.space.delete({ where: { id } });
+  // Room.members has onDelete: SetNull on User.roomId — deleting a room un-assigns its members
+  // rather than deleting them.
+  await prisma.room.delete({ where: { id } });
   return NextResponse.json({ ok: true });
 }

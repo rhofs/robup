@@ -67,10 +67,10 @@ export const FOLDER_ICON_MAP: Record<string, LucideIcon> = {
 type FolderTreeProps = {
   space: HierarchySpace;
   tasks: Task[];
-  activeView: 'board' | 'calendar';
-  activeListId: string | null;
+  activeView: 'board' | 'calendar' | 'docs' | 'office';
+  activeListIds: Set<string>;
   calendarVisibleListIds: Set<string>;
-  onNavigateList: (listId: string) => void;
+  onNavigateList: (e: React.MouseEvent, listId: string) => void;
   toggleCalendarList: (listId: string) => void;
   toggleCalendarFolder: (folderId: string) => void;
   onDeleteFolderRequest: (folder: HierarchyFolder) => void;
@@ -78,6 +78,7 @@ type FolderTreeProps = {
   renameFolderId: string | null;
   onRenameFolderHandled: () => void;
   onListContextMenu: (e: React.MouseEvent, list: HierarchyList) => void;
+  onDeleteListRequest: (list: HierarchyList) => void;
   renameListId: string | null;
   onRenameListHandled: () => void;
 };
@@ -87,7 +88,7 @@ export default function FolderTree(props: FolderTreeProps) {
 }
 
 function FolderLevel(props: FolderTreeProps & { parentId: string | null; depth: number }) {
-  const { space, tasks, activeView, activeListId, calendarVisibleListIds, onNavigateList, toggleCalendarList, parentId, depth } = props;
+  const { space, tasks, activeView, activeListIds, calendarVisibleListIds, onNavigateList, toggleCalendarList, parentId, depth } = props;
   const { createList, createFolder, renameList } = useTaskStore();
   const [addMode, setAddMode] = useState<'list' | 'folder' | null>(null);
   const [draft, setDraft] = useState('');
@@ -112,7 +113,7 @@ function FolderLevel(props: FolderTreeProps & { parentId: string | null; depth: 
       ))}
 
       {lists.map((list) => {
-        const isActive = activeView === 'board' && activeListId === list.id;
+        const isActive = activeView === 'board' && activeListIds.has(list.id);
         const count = tasks.filter((t) => t.listId === list.id && t.parentId === null && !t.archived).length;
         return (
           <ListRow
@@ -122,10 +123,11 @@ function FolderLevel(props: FolderTreeProps & { parentId: string | null; depth: 
             count={count}
             filterMode={activeView === 'calendar'}
             checked={calendarVisibleListIds.has(list.id)}
-            onNavigate={() => onNavigateList(list.id)}
+            onNavigate={(e) => onNavigateList(e, list.id)}
             onToggle={() => toggleCalendarList(list.id)}
             onRename={(name) => renameList(space.id, list.id, name)}
             onContextMenu={(e) => props.onListContextMenu(e, list)}
+            onDeleteRequest={() => props.onDeleteListRequest(list)}
             renameListId={props.renameListId}
             onRenameListHandled={props.onRenameListHandled}
           />
@@ -339,18 +341,20 @@ function ListRow({
   checked = false,
   onToggle,
   onContextMenu,
+  onDeleteRequest,
   renameListId,
   onRenameListHandled,
 }: {
   list: HierarchyList;
   isActive: boolean;
   count: number;
-  onNavigate: () => void;
+  onNavigate: (e: React.MouseEvent) => void;
   onRename: (name: string) => void;
   filterMode?: boolean;
   checked?: boolean;
   onToggle?: () => void;
   onContextMenu: (e: React.MouseEvent) => void;
+  onDeleteRequest: () => void;
   renameListId: string | null;
   onRenameListHandled: () => void;
 }) {
@@ -455,6 +459,18 @@ function ListRow({
         >
           <Pencil className="w-2.5 h-2.5" />
         </button>
+        {!filterMode && (
+          <button
+            onClick={(e) => {
+              e.stopPropagation();
+              onDeleteRequest();
+            }}
+            title="Delete"
+            className="opacity-0 group-hover:opacity-100 text-neutral-500 hover:text-red-400 cursor-pointer"
+          >
+            <Trash2 className="w-2.5 h-2.5" />
+          </button>
+        )}
       </span>
     </div>
   );

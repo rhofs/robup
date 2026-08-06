@@ -28,6 +28,19 @@ export const collectListIdsUnder = (space: HierarchySpace, folderId: string | nu
   return space.lists.filter((l) => idSet.has(l.folderId)).map((l) => l.id);
 };
 
+// Every List id in the space, in the same depth-first order FolderTree.tsx actually renders them
+// (folders before lists at each level, each folder's own children walked before moving to the
+// next sibling) — used to resolve a Shift-click range selection into "everything visually
+// between the anchor and the click," even across a currently-collapsed folder.
+export const getOrderedListIds = (space: HierarchySpace, parentId: string | null = null): string[] => {
+  const result: string[] = [];
+  for (const folder of getChildFolders(space, parentId)) {
+    result.push(...getOrderedListIds(space, folder.id));
+  }
+  result.push(...getListsIn(space, parentId).map((l) => l.id));
+  return result;
+};
+
 // Would moving `folderId` under `candidateParentId` create a cycle (dropping a folder onto its own descendant)?
 export const isDescendantOf = (space: HierarchySpace, candidateParentId: string, folderId: string): boolean => {
   if (candidateParentId === folderId) return true;

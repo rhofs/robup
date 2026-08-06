@@ -3,14 +3,13 @@ import { prisma } from '@/lib/prisma';
 
 export async function POST(req: Request) {
   const body = await req.json();
-  const field = await prisma.customField.create({
+  const room = await prisma.room.create({
     data: {
       ...(body.id ? { id: body.id } : {}),
-      spaceId: body.spaceId,
+      workspaceId: body.workspaceId,
       name: body.name,
-      type: body.type,
-      options: JSON.stringify(body.options ?? []),
     },
+    select: { id: true, name: true, icon: true, color: true, order: true, workspaceId: true },
   });
-  return NextResponse.json({ ...field, options: JSON.parse(field.options) });
+  return NextResponse.json(room);
 }

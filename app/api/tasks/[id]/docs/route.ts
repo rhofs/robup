@@ -16,11 +16,27 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
   const order = await prisma.doc.count({ where: { taskId: id } });
   const doc = await prisma.doc.create({
     data: {
+      ...(body.id ? { id: body.id } : {}),
       taskId: id,
       title: body.title || 'Untitled',
-      content: '',
-      order,
+      content: body.content || '',
+      order: body.order ?? order,
     },
   });
+
+  // Same rule as task creation: only a fresh interactive create logs — an id-based create is a
+  // snapshot restore (which replays the original activity comments verbatim) or a redo.
+  if (!body.id) {
+    await prisma.comment.create({
+      data: {
+        taskId: id,
+        body: `Dokument opprettet: «${doc.title}»`,
+        type: 'activity',
+        activityKind: 'docCreated',
+        authorId: body.authorId ?? null,
+      },
+    });
+  }
+
   return NextResponse.json(doc);
 }

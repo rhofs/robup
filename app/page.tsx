@@ -1,6 +1,7 @@
 'use client';
 
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { Suspense, useEffect, useMemo, useRef, useState } from 'react';
+import { useRouter, usePathname, useSearchParams } from 'next/navigation';
 import { AnimatePresence, motion } from 'framer-motion';
 import {
   DndContext,
@@ -13,6 +14,7 @@ import {
   DragOverlay,
   type DragEndEvent,
   type DragStartEvent,
+  type DragOverEvent,
 } from '@dnd-kit/core';
 import { SortableContext, horizontalListSortingStrategy, verticalListSortingStrategy, arrayMove, useSortable } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
@@ -22,6 +24,7 @@ import {
   Folder as FolderIconLucide,
   Calendar as CalendarIcon,
   Users,
+  UserCircle,
   Zap,
   Archive,
   Plus,
@@ -41,9 +44,22 @@ import {
   ChevronUp,
   ChevronDown,
   GripVertical,
+  CornerDownRight,
+  CornerUpLeft,
+  ListPlus,
+  ListMinus,
+  Link2,
+  Building2,
+  Search,
+  Unlink,
+  type LucideIcon,
 } from 'lucide-react';
-import { useTaskStore, HierarchySpace, HierarchyFolder, HierarchyList, StatusDef, CustomFieldDef, Task, TaskDoc } from '../store/useTaskStore';
-import { collectListIdsUnder, isDescendantOf } from '../lib/folderTree';
+import { useTaskStore, HierarchySpace, HierarchyFolder, HierarchyList, HierarchyDocFolder, HierarchyRoom, StatusDef, CustomFieldDef, Task, TaskDoc } from '../store/useTaskStore';
+import { useHistoryStore } from '../store/useHistoryStore';
+import { useSessionStore } from '../store/useSessionStore';
+import { collectListIdsUnder, isDescendantOf, getOrderedListIds } from '../lib/folderTree';
+import { isDescendantOfDocFolder } from '../lib/docFolderTree';
+import { buildNavQueryString, dateKey, parseNavUrl } from '../lib/navUrl';
 import DatePickerPopover from '../components/DatePickerPopover';
 import ConfirmDialog from '../components/ConfirmDialog';
 import FloatingPopover from '../components/FloatingPopover';
@@ -51,17 +67,27 @@ import TaskRow, { ColumnDef } from '../components/TaskRow';
 import FolderTree, { FOLDER_ICON_CHOICES, FOLDER_ICON_MAP } from '../components/FolderTree';
 import CalendarView from '../components/calendar/CalendarView';
 import CreateTaskModal from '../components/CreateTaskModal';
+import SpaceHome from '../components/SpaceHome';
+import DocFolderTree from '../components/DocFolderTree';
+import DocsBrowser from '../components/DocsBrowser';
+import OfficePage from '../components/OfficePage';
+import CommandPalette from '../components/CommandPalette';
+import MentionText from '../components/MentionText';
+import MentionTextarea from '../components/MentionTextarea';
+import type { MentionKind } from '../lib/mentions';
 
 function DocTab({
   doc,
   isActive,
   onSelect,
   onDelete,
+  onUnlink,
 }: {
   doc: TaskDoc;
   isActive: boolean;
   onSelect: () => void;
   onDelete: () => void;
+  onUnlink?: () => void;
 }) {
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id: doc.id });
   const style = {
@@ -69,6 +95,9 @@ function DocTab({
     transition,
     opacity: isDragging ? 0.5 : 1,
   };
+  // A doc with a spaceId is also a standalone Docs-tab doc — it has somewhere else to keep
+  // living, so it gets a separate "detach without destroying" affordance next to Delete.
+  const canUnlink = doc.spaceId !== null && onUnlink;
 
   return (
     <div ref={setNodeRef} style={style} {...attributes} {...listeners} className="relative group/doc shrink-0">
@@ -80,11 +109,24 @@ function DocTab({
       >
         {doc.title || 'Untitled'}
       </button>
+      {canUnlink && (
+        <button
+          onClick={(e) => {
+            e.stopPropagation();
+            onUnlink();
+          }}
+          title="Unlink from this task (keeps the doc in the Docs tab)"
+          className="absolute -top-1.5 -left-1.5 w-3.5 h-3.5 rounded-full bg-neutral-800 text-neutral-400 hover:text-blue-400 flex items-center justify-center opacity-0 group-hover/doc:opacity-100 cursor-pointer"
+        >
+          <Unlink className="w-2 h-2" />
+        </button>
+      )}
       <button
         onClick={(e) => {
           e.stopPropagation();
           onDelete();
         }}
+        title="Delete"
         className="absolute -top-1.5 -right-1.5 w-3.5 h-3.5 rounded-full bg-neutral-800 text-neutral-400 hover:text-red-400 text-[8px] flex items-center justify-center opacity-0 group-hover/doc:opacity-100 cursor-pointer"
       >
         <X className="w-2.5 h-2.5" />
@@ -312,7 +354,7 @@ function SortableFieldOption({
 // Muted/pastel variants of the base Tailwind accent hues — same hues, lower saturation
 // and slightly lifted lightness so status pills, calendar bars, and sidebar color dots
 // read as soft accents instead of solid neon fills.
-const DEFAULT_STATUSES: StatusDef[] = [
+export const DEFAULT_STATUSES: StatusDef[] = [
   { id: 'default-todo', name: 'To Do', color: '#c89642', order: 0 },
   { id: 'default-progress', name: 'In Progress', color: '#618cd1', order: 1 },
   { id: 'default-review', name: 'Review', color: '#9a61d1', order: 2 },
@@ -320,6 +362,41 @@ const DEFAULT_STATUSES: StatusDef[] = [
 ];
 
 const FIELD_COLOR_CHOICES = ['#c89642', '#618cd1', '#9a61d1', '#349f7c', '#cd6565', '#31a0b3', '#cb6798', '#8d97a5'];
+
+// Icon per activity-log kind (Comment.activityKind) — same neutral Lucide icon language as the
+// rest of the app instead of emoji. Entries logged before this existed have `activityKind: null`
+// and fall back to the plain dot marker in the render below.
+const ACTIVITY_ICONS: Record<string, LucideIcon> = {
+  created: Plus,
+  title: Pencil,
+  status: RefreshCw,
+  archived: CheckCircle2,
+  unarchived: Undo2,
+  becameSubtask: CornerDownRight,
+  leftSubtask: CornerUpLeft,
+  movedList: FolderInput,
+  assigned: UserCircle,
+  unassigned: UserCircle,
+  subtaskAdded: ListPlus,
+  subtaskRemoved: ListMinus,
+  docCreated: FileText,
+  docDeleted: Trash2,
+  docEdited: Pencil,
+};
+
+const listPathLabel = (space: HierarchySpace, listId: string): string => {
+  const list = space.lists.find((l) => l.id === listId);
+  if (!list) return '';
+  const parts: string[] = [list.name];
+  let folderId = list.folderId;
+  while (folderId) {
+    const folder = space.folders.find((f) => f.id === folderId);
+    if (!folder) break;
+    parts.unshift(folder.name);
+    folderId = folder.parentId;
+  }
+  return parts.join(' / ');
+};
 
 const initialsFromName = (name: string) =>
   name
@@ -348,6 +425,14 @@ const timeAgo = (dateStr: string | Date) => {
 };
 
 export default function Home() {
+  return (
+    <Suspense fallback={null}>
+      <PageContent />
+    </Suspense>
+  );
+}
+
+function PageContent() {
   const {
     tasks,
     workspaces,
@@ -355,11 +440,20 @@ export default function Home() {
     comments,
     docs,
     activeSpaceId,
-    activeListId,
+    activeListIds,
     isLoading,
     showArchived,
     activeView,
     setActiveView,
+    calendarGranularity,
+    calendarFocusDate,
+    setCalendarGranularity,
+    setCalendarFocusDate,
+    activeDocFolderId,
+    activeStandaloneDocId,
+    setDocsNavigation,
+    activeOfficeUserId,
+    setActiveOfficeUserId,
     fetchInitialData,
     setNavigation,
     setShowArchived,
@@ -379,23 +473,44 @@ export default function Home() {
     updateCustomField,
     deleteCustomField,
     addUser,
+    updateUser,
     deleteUser,
+    createRoom,
+    updateRoom,
+    deleteRoom,
+    assignUserToRoom,
+    updateWorkspaceMessage,
     updateSpace,
     reorderSpace,
+    createSpace,
+    deleteSpace,
     moveList,
     reorderList,
     updateList,
+    deleteList,
     moveFolder,
     updateFolder,
     deleteFolder,
+    updateDocFolder,
+    moveDocFolder,
+    deleteDocFolder,
+    createSpaceDoc,
+    updateSpaceDoc,
+    moveSpaceDoc,
+    reorderSpaceDoc,
+    deleteSpaceDoc,
+    setDocTaskLink,
     fetchComments,
     addComment,
+    logActivity,
     fetchDocs,
     createDoc,
     updateDoc,
     deleteDoc,
     reorderDocs,
   } = useTaskStore();
+
+  const { currentUserId, setCurrentUserId } = useSessionStore();
 
   const [sortBy, setSortBy] = useState<'dueDate' | 'startDate' | 'name' | 'none'>('none');
   const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('asc');
@@ -433,13 +548,16 @@ export default function Home() {
   const [newUserColor, setNewUserColor] = useState(FIELD_COLOR_CHOICES[1]);
 
   const [newCommentBody, setNewCommentBody] = useState('');
-  const [commentAsUserId, setCommentAsUserId] = useState('');
+  const [commentAsUserId, setCommentAsUserId] = useState(currentUserId ?? '');
 
   const [taskMenu, setTaskMenu] = useState<{ x: number; y: number; task: Task } | null>(null);
   const [spaceMenu, setSpaceMenu] = useState<{ x: number; y: number; space: HierarchySpace } | null>(null);
   const [spaceEditTarget, setSpaceEditTarget] = useState<HierarchySpace | null>(null);
   const [editSpaceName, setEditSpaceName] = useState('');
   const [editSpaceColor, setEditSpaceColor] = useState(FIELD_COLOR_CHOICES[0]);
+  const [spaceToDelete, setSpaceToDelete] = useState<HierarchySpace | null>(null);
+  const [creatingSpace, setCreatingSpace] = useState(false);
+  const [newSpaceDraft, setNewSpaceDraft] = useState('');
 
   const [folderMenu, setFolderMenu] = useState<{ x: number; y: number; folder: HierarchyFolder } | null>(null);
   const [folderEditTarget, setFolderEditTarget] = useState<HierarchyFolder | null>(null);
@@ -454,8 +572,10 @@ export default function Home() {
   const [editListColor, setEditListColor] = useState<string | null>(null);
   const [editListIcon, setEditListIcon] = useState<string | null>(null);
   const [renameListId, setRenameListId] = useState<string | null>(null);
+  const [listToDelete, setListToDelete] = useState<{ list: HierarchyList; spaceId: string } | null>(null);
 
   const [columnMenu, setColumnMenu] = useState<{ x: number; y: number; col: ColumnDef } | null>(null);
+  const [taskListPicker, setTaskListPicker] = useState<{ x: number; y: number; taskId: string; options: { id: string; label: string }[] } | null>(null);
   const [fieldEditTarget, setFieldEditTarget] = useState<CustomFieldDef | null>(null);
   const [fieldToDelete, setFieldToDelete] = useState<{ id: string; name: string } | null>(null);
   const [statusToDelete, setStatusToDelete] = useState<{ id: string; name: string } | null>(null);
@@ -508,8 +628,10 @@ export default function Home() {
     const oldIndex = ids.indexOf(active.id as string);
     const newIndex = ids.indexOf(over.id as string);
     if (oldIndex === -1 || newIndex === -1) return;
-    arrayMove(statuses, oldIndex, newIndex).forEach((s, index) => {
-      if (s.order !== index) updateStatus(currentSpace.id, s.id, { order: index });
+    useHistoryStore.getState().transaction('Reorder statuses', () => {
+      arrayMove(statuses, oldIndex, newIndex).forEach((s, index) => {
+        if (s.order !== index) updateStatus(currentSpace.id, s.id, { order: index });
+      });
     });
   };
 
@@ -521,8 +643,27 @@ export default function Home() {
   const [activeDocId, setActiveDocId] = useState<string | null>(null);
   const [docDraft, setDocDraft] = useState('');
   const [docSaveStatus, setDocSaveStatus] = useState<'idle' | 'saving' | 'saved'>('idle');
+  // Notion-style view/edit toggle — mentions render as clickable chips in view mode, raw
+  // @[Label](kind:id) text while actually editing (a <textarea> can't show inline chips).
+  const [docEditorEditing, setDocEditorEditing] = useState(false);
+  const docTextareaRef = useRef<HTMLTextAreaElement>(null);
   const docSaveTimer = useRef<any>(null);
   const [docToDelete, setDocToDelete] = useState<{ id: string; title: string } | null>(null);
+  const [linkDocOpen, setLinkDocOpen] = useState(false);
+  // Captured on focus, compared on blur — logs one "document edited" activity entry per edit
+  // session (not per autosave tick) for whichever field(s) actually changed during that session.
+  const docEditBaselineRef = useRef<{ docId: string; title: string; content: string } | null>(null);
+
+  // Docs tab's full-page editor — same autosave shape as the task-modal one above, minus the
+  // activity-baseline tracking (standalone docs have no task Activity & Comments feed to log into).
+  const [spaceDocDraft, setSpaceDocDraft] = useState('');
+  const [spaceDocSaveStatus, setSpaceDocSaveStatus] = useState<'idle' | 'saving' | 'saved'>('idle');
+  const [spaceDocEditorEditing, setSpaceDocEditorEditing] = useState(false);
+  const spaceDocTextareaRef = useRef<HTMLTextAreaElement>(null);
+  const spaceDocSaveTimer = useRef<any>(null);
+  const [docFolderToDelete, setDocFolderToDelete] = useState<HierarchyDocFolder | null>(null);
+  const [spaceDocToDelete, setSpaceDocToDelete] = useState<TaskDoc | null>(null);
+  const [roomToDelete, setRoomToDelete] = useState<HierarchyRoom | null>(null);
 
   const [editingModalTitle, setEditingModalTitle] = useState(false);
   const [modalTitleDraft, setModalTitleDraft] = useState('');
@@ -531,6 +672,107 @@ export default function Home() {
   useEffect(() => {
     fetchInitialData();
   }, [fetchInitialData]);
+
+  // ---- Browser back/forward: nav state <-> URL query string ----
+  // Two effects, each a no-op when the URL and the app's nav state already agree — that mutual
+  // "already equal" check (rather than a manual reentrancy flag like isRestoringSnapshot) is what
+  // stops these two effects from fighting each other over a URL the other one just set.
+  const router = useRouter();
+  const pathname = usePathname();
+  const searchParams = useSearchParams();
+  // Guards effect 1 from pushing any URL before effect 2 has had a chance to read a possibly
+  // deep-linked one — otherwise the app's own default state would stomp it before it's ever seen.
+  const hasHydratedFromUrlRef = useRef(false);
+  const urlModalStackKey = modalTaskStack.join(',');
+  const urlListIdsKey = [...activeListIds].sort().join(',');
+  const urlFocusDateKey = dateKey(calendarFocusDate);
+  const urlDocFolderIdKey = activeDocFolderId ?? '';
+  const urlDocIdKey = activeStandaloneDocId ?? '';
+  const urlOfficeUserIdKey = activeOfficeUserId ?? '';
+
+  // Effect 1: nav state -> URL. Always pushes (never replaces) once hydrated — every one of these
+  // changes is a real, distinct navigation the user just made (click a Space, open a task, drill a
+  // day), so it deserves its own back-button step. (An earlier version special-cased the very
+  // first push after hydration as a `replace`, meant only to silently normalize a stale/partial
+  // incoming URL — but since this effect only runs when something actually changes, that "first
+  // push" was, in practice, almost always the user's first real click, which then silently
+  // replaced the page's own history entry instead of adding a new one. Removed.)
+  useEffect(() => {
+    if (!hasHydratedFromUrlRef.current) return;
+    const qs = buildNavQueryString({
+      view: activeView,
+      spaceId: activeSpaceId,
+      listIds: [...activeListIds],
+      modalStack: modalTaskStack,
+      granularity: calendarGranularity,
+      focusDate: calendarFocusDate,
+      docFolderId: activeDocFolderId,
+      docId: activeStandaloneDocId,
+      officeUserId: activeOfficeUserId,
+    });
+    if (qs === searchParams.toString()) return;
+    router.push(qs ? `${pathname}?${qs}` : pathname, { scroll: false });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [
+    activeView,
+    activeSpaceId,
+    urlListIdsKey,
+    urlModalStackKey,
+    calendarGranularity,
+    urlFocusDateKey,
+    urlDocFolderIdKey,
+    urlDocIdKey,
+    urlOfficeUserIdKey,
+  ]);
+
+  // Effect 2: URL -> nav state. Runs once real data has loaded (so a deep-linked Space/List/task
+  // can be validated) and again on every back/forward navigation. Content-compares before calling
+  // any setter so it never fights effect 1 above.
+  useEffect(() => {
+    if (workspaces.length === 0) return;
+    const parsed = parseNavUrl(searchParams);
+
+    if (parsed.view !== activeView) setActiveView(parsed.view);
+
+    // A bare URL (no `space=`) means two different things depending on when we see it: on the very
+    // first hydration pass it means "no opinion" and leaves whatever fetchInitialData's own
+    // auto-select-first-space default already put in place. On every later pass — a real
+    // back/forward navigation landing on a URL from before the user ever picked a Space — it must
+    // actually resolve to 'everything', or backing past that first click would silently do nothing
+    // (the "no opinion" reading would just leave the current Space selected).
+    const explicitSpaceId = parsed.spaceId ?? (hasHydratedFromUrlRef.current ? 'everything' : null);
+    let docsSpace: HierarchySpace | undefined;
+    if (explicitSpaceId !== null) {
+      const allSpaces = workspaces.flatMap((w) => w.spaces);
+      const spaceExists = explicitSpaceId === 'everything' || allSpaces.some((s) => s.id === explicitSpaceId);
+      const resolvedSpaceId = spaceExists ? explicitSpaceId : 'everything';
+      const space = allSpaces.find((s) => s.id === resolvedSpaceId);
+      docsSpace = space;
+      const validListIds = (parsed.listIds ?? []).filter((id) => space?.lists.some((l) => l.id === id));
+      if (resolvedSpaceId !== activeSpaceId || validListIds.sort().join(',') !== urlListIdsKey) {
+        setNavigation(resolvedSpaceId, validListIds);
+      }
+    }
+
+    const validDocFolderId =
+      parsed.docFolderId && docsSpace?.docFolders.some((f) => f.id === parsed.docFolderId) ? parsed.docFolderId : null;
+    const validDocId = parsed.docId && docsSpace?.spaceDocs.some((d) => d.id === parsed.docId) ? parsed.docId : null;
+    if (validDocFolderId !== activeDocFolderId || validDocId !== activeStandaloneDocId) {
+      setDocsNavigation(validDocFolderId, validDocId);
+    }
+
+    const validModalStack = parsed.modalStack.filter((id) => tasks.some((t) => t.id === id));
+    if (validModalStack.join(',') !== urlModalStackKey) setModalTaskStack(validModalStack);
+
+    if (parsed.granularity !== calendarGranularity) setCalendarGranularity(parsed.granularity);
+    if (dateKey(parsed.focusDate) !== urlFocusDateKey) setCalendarFocusDate(parsed.focusDate);
+
+    const validOfficeUserId = parsed.officeUserId && users.some((u) => u.id === parsed.officeUserId) ? parsed.officeUserId : null;
+    if (validOfficeUserId !== activeOfficeUserId) setActiveOfficeUserId(validOfficeUserId);
+
+    hasHydratedFromUrlRef.current = true;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [searchParams, workspaces.length]);
 
   // Restore persisted UI layout prefs once on mount (localStorage isn't available during SSR)
   useEffect(() => {
@@ -630,6 +872,8 @@ export default function Home() {
     return null;
   }, [workspaces, activeSpaceId]);
 
+  const showingSpaceHome = activeView === 'board' && !!currentSpace && activeListIds.size === 0;
+
   const statuses: StatusDef[] = currentSpace?.statuses?.length ? currentSpace.statuses : DEFAULT_STATUSES;
   const customFields: CustomFieldDef[] = currentSpace?.customFields || [];
 
@@ -688,12 +932,8 @@ export default function Home() {
       if (!!task.archived !== showArchived) return false;
 
       if (activeSpaceId === 'everything') return true;
-      if (activeListId) return task.listId === activeListId;
-      if (currentSpace) {
-        const listIdsInSpace = currentSpace.lists.map((l) => l.id);
-        return listIdsInSpace.includes(task.listId);
-      }
-      return true;
+      if (activeListIds.size > 0) return activeListIds.has(task.listId);
+      return false; // Space selected but no List active → SpaceHome renders instead, no flat table
     });
 
     if (sortBy !== 'none') {
@@ -710,7 +950,7 @@ export default function Home() {
     }
 
     return result;
-  }, [tasks, activeSpaceId, activeListId, currentSpace, modalTaskStack, sortBy, sortOrder, showArchived]);
+  }, [tasks, activeSpaceId, activeListIds, modalTaskStack, sortBy, sortOrder, showArchived]);
 
   // Calendar has its own independent multi-select filter (which Spaces/Lists are visible),
   // separate from the Tasks tab's single-selection navigation.
@@ -819,7 +1059,7 @@ export default function Home() {
 
   const handleQuickAdd = () => {
     if (!newTaskTitle.trim()) return;
-    let targetListId = activeListId;
+    let targetListId: string | null = [...activeListIds][0] ?? null;
     let targetSpaceId = activeSpaceId === 'everything' ? '' : activeSpaceId;
 
     if (!targetListId && currentSpace && currentSpace.lists.length > 0) {
@@ -836,6 +1076,37 @@ export default function Home() {
     } else {
       alert('Select a list in the sidebar first.');
     }
+  };
+
+  // Multi-select for Lists in the Tasks-tab sidebar — plain click selects just one; Ctrl/Cmd
+  // toggles a List in/out of the current selection; Shift selects the contiguous range between
+  // the last click ("anchor") and this one, in the same depth-first order the tree renders in
+  // (see getOrderedListIds). Scoped to one Space at a time — clicking into a different Space
+  // always starts a fresh single-selection there, since a merged view can only sensibly show one
+  // Space's Statuses/CustomFields/columns at once.
+  const multiSelectAnchorRef = useRef<{ spaceId: string; listId: string } | null>(null);
+  const handleListClick = (e: React.MouseEvent, space: HierarchySpace, listId: string) => {
+    const sameSpace = activeSpaceId === space.id;
+    if (e.shiftKey && sameSpace && multiSelectAnchorRef.current?.spaceId === space.id) {
+      const order = getOrderedListIds(space);
+      const anchorIdx = order.indexOf(multiSelectAnchorRef.current.listId);
+      const targetIdx = order.indexOf(listId);
+      if (anchorIdx !== -1 && targetIdx !== -1) {
+        const [start, end] = anchorIdx < targetIdx ? [anchorIdx, targetIdx] : [targetIdx, anchorIdx];
+        setNavigation(space.id, order.slice(start, end + 1));
+        return;
+      }
+    }
+    if ((e.ctrlKey || e.metaKey) && sameSpace) {
+      const next = new Set(activeListIds);
+      if (next.has(listId)) next.delete(listId);
+      else next.add(listId);
+      setNavigation(space.id, [...next]);
+      multiSelectAnchorRef.current = { spaceId: space.id, listId };
+      return;
+    }
+    setNavigation(space.id, [listId]);
+    multiSelectAnchorRef.current = { spaceId: space.id, listId };
   };
 
   const handleAddSubtask = (parent: any) => {
@@ -884,6 +1155,13 @@ export default function Home() {
     if (!spaceEditTarget) return;
     updateSpace(spaceEditTarget.id, { name: editSpaceName.trim() || spaceEditTarget.name, color: editSpaceColor });
     setSpaceEditTarget(null);
+  };
+
+  const commitNewSpace = () => {
+    const trimmed = newSpaceDraft.trim();
+    if (trimmed && workspaces[0]) createSpace(workspaces[0].id, trimmed);
+    setNewSpaceDraft('');
+    setCreatingSpace(false);
   };
 
   const openFolderMenu = (e: React.MouseEvent, folder: HierarchyFolder) => {
@@ -942,16 +1220,22 @@ export default function Home() {
   const clearSelection = () => setSelectedIds(new Set());
 
   const bulkArchive = (archived: boolean) => {
-    selectedIds.forEach((id) => optimisticArchiveTask(id, archived));
+    useHistoryStore.getState().transaction(archived ? 'Archive tasks' : 'Unarchive tasks', () => {
+      selectedIds.forEach((id) => optimisticArchiveTask(id, archived));
+    });
     clearSelection();
   };
   const bulkDelete = () => {
     if (!window.confirm(`Delete ${selectedIds.size} tasks? This cannot be undone.`)) return;
-    selectedIds.forEach((id) => optimisticDeleteTask(id));
+    useHistoryStore.getState().transaction('Delete tasks', async () => {
+      await Promise.all(Array.from(selectedIds).map((id) => optimisticDeleteTask(id)));
+    });
     clearSelection();
   };
   const bulkMoveToList = (listId: string) => {
-    selectedIds.forEach((id) => optimisticSetList(id, listId));
+    useHistoryStore.getState().transaction('Move tasks', () => {
+      selectedIds.forEach((id) => optimisticSetList(id, listId));
+    });
     clearSelection();
     setBulkMoveOpen(false);
   };
@@ -959,9 +1243,13 @@ export default function Home() {
   // ---- Drag & drop for tasks (row → another row / list / space) ----
   const taskSensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 5 } }));
   const [activeDragTask, setActiveDragTask] = useState<Task | null>(null);
-  const [activeDragEntity, setActiveDragEntity] = useState<{ kind: 'folder' | 'list' | 'space'; name: string; color?: string | null } | null>(
+  const [activeDragEntity, setActiveDragEntity] = useState<{ kind: 'folder' | 'list' | 'space' | 'person' | 'docfolder' | 'spacedoc'; name: string; color?: string | null; initials?: string } | null>(
     null
   );
+  const [spaceDropIndicator, setSpaceDropIndicator] = useState<{ targetId: string; position: 'above' | 'below' } | null>(null);
+  const spaceOverRef = useRef<
+    { mode: 'header'; targetId: string; top: number; height: number } | { mode: 'nested'; targetId: string } | null
+  >(null);
 
   const [toast, setToast] = useState<string | null>(null);
   const toastTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -970,6 +1258,57 @@ export default function Home() {
     setToast(message);
     toastTimeoutRef.current = setTimeout(() => setToast(null), 3000);
   };
+
+  // The token lives only on the /api/users/[id] response (never the team-wide GET /api/users
+  // list — it's a bearer secret for that person's .ics feed), so it's fetched fresh on click
+  // rather than cached in the `users` list.
+  const handleCopyCalendarLink = async () => {
+    if (!currentUserId) return;
+    const res = await fetch(`/api/users/${currentUserId}`);
+    if (!res.ok) {
+      showToast('Could not load your calendar link.');
+      return;
+    }
+    const me = await res.json();
+    const url = `${window.location.origin}/api/calendar/${me.calendarToken}`;
+    await navigator.clipboard.writeText(url);
+    showToast('Calendar feed link copied — paste it into Google/Apple/Outlook calendar as a subscription.');
+  };
+
+  // Global Ctrl+Z / Ctrl+Shift+Z undo/redo. Skipped while focus is inside an editable element so
+  // the browser's own native text-undo keeps working there instead of being hijacked — same
+  // `keydown` + cleanup shape as FloatingPopover.tsx's Escape handler, the only other global
+  // keyboard listener in this app.
+  useEffect(() => {
+    const handler = (e: KeyboardEvent) => {
+      if (!(e.ctrlKey || e.metaKey) || e.key.toLowerCase() !== 'z') return;
+      const el = document.activeElement;
+      const isEditable = el instanceof HTMLElement && (el.tagName === 'INPUT' || el.tagName === 'TEXTAREA' || el.isContentEditable);
+      if (isEditable) return;
+      e.preventDefault();
+      if (e.shiftKey) {
+        useHistoryStore.getState().redo().then((label) => label && showToast(`Redid: ${label}`));
+      } else {
+        useHistoryStore.getState().undo().then((label) => label && showToast(`Undid: ${label}`));
+      }
+    };
+    window.addEventListener('keydown', handler);
+    return () => window.removeEventListener('keydown', handler);
+  }, []);
+
+  // Global Ctrl+K / Cmd+K command palette. Deliberately no "skip while focus is editable" guard
+  // (unlike the undo/redo listener above) — a command palette needs to open from anywhere,
+  // including mid-typing in another field, same as Linear/Notion/Slack's Cmd+K.
+  const [commandPaletteOpen, setCommandPaletteOpen] = useState(false);
+  useEffect(() => {
+    const handler = (e: KeyboardEvent) => {
+      if (!(e.ctrlKey || e.metaKey) || e.key.toLowerCase() !== 'k') return;
+      e.preventDefault();
+      setCommandPaletteOpen((v) => !v);
+    };
+    window.addEventListener('keydown', handler);
+    return () => window.removeEventListener('keydown', handler);
+  }, []);
 
   // Re-numbers one sibling group's `order` field after a drag-to-reorder, same pattern as
   // `handleStatusDragEnd` below: move the dragged item to the target's index via `arrayMove`,
@@ -981,8 +1320,10 @@ export default function Home() {
     const oldIndex = siblings.findIndex((f) => f.id === draggedId);
     const newIndex = siblings.findIndex((f) => f.id === targetId);
     if (oldIndex === -1 || newIndex === -1) return;
-    arrayMove(siblings, oldIndex, newIndex).forEach((f, index) => {
-      if (f.order !== index) updateFolder(space.id, f.id, { order: index });
+    useHistoryStore.getState().transaction('Reorder folders', () => {
+      arrayMove(siblings, oldIndex, newIndex).forEach((f, index) => {
+        if (f.order !== index) updateFolder(space.id, f.id, { order: index });
+      });
     });
   };
 
@@ -993,20 +1334,60 @@ export default function Home() {
     const oldIndex = siblings.findIndex((l) => l.id === draggedId);
     const newIndex = siblings.findIndex((l) => l.id === targetId);
     if (oldIndex === -1 || newIndex === -1) return;
-    arrayMove(siblings, oldIndex, newIndex).forEach((l, index) => {
-      if (l.order !== index) reorderList(space.id, l.id, index);
+    useHistoryStore.getState().transaction('Reorder lists', () => {
+      arrayMove(siblings, oldIndex, newIndex).forEach((l, index) => {
+        if (l.order !== index) reorderList(space.id, l.id, index);
+      });
+    });
+  };
+
+  // Same shape as reorderFolderSiblings/reorderListSiblings, for the Docs tab's DocFolder/Doc tree.
+  const reorderDocFolderSiblings = (space: HierarchySpace, draggedId: string, targetId: string) => {
+    const dragged = space.docFolders.find((f) => f.id === draggedId);
+    if (!dragged) return;
+    const siblings = space.docFolders.filter((f) => f.parentId === dragged.parentId).sort((a, b) => a.order - b.order);
+    const oldIndex = siblings.findIndex((f) => f.id === draggedId);
+    const newIndex = siblings.findIndex((f) => f.id === targetId);
+    if (oldIndex === -1 || newIndex === -1) return;
+    useHistoryStore.getState().transaction('Reorder doc folders', () => {
+      arrayMove(siblings, oldIndex, newIndex).forEach((f, index) => {
+        if (f.order !== index) updateDocFolder(space.id, f.id, { order: index });
+      });
+    });
+  };
+
+  const reorderSpaceDocSiblings = (space: HierarchySpace, draggedId: string, targetId: string) => {
+    const dragged = space.spaceDocs.find((d) => d.id === draggedId);
+    if (!dragged) return;
+    const siblings = space.spaceDocs.filter((d) => d.folderId === dragged.folderId).sort((a, b) => a.order - b.order);
+    const oldIndex = siblings.findIndex((d) => d.id === draggedId);
+    const newIndex = siblings.findIndex((d) => d.id === targetId);
+    if (oldIndex === -1 || newIndex === -1) return;
+    useHistoryStore.getState().transaction('Reorder documents', () => {
+      arrayMove(siblings, oldIndex, newIndex).forEach((d, index) => {
+        if (d.order !== index) reorderSpaceDoc(space.id, d.id, index);
+      });
     });
   };
 
   // Spaces are always top-level (no nesting, no cross-Space case) — plain flat reorder among
-  // every Space in the workspace, same shape as handleStatusDragEnd below.
-  const reorderSpaceSiblings = (draggedId: string, targetId: string) => {
+  // every Space in the workspace. Takes an explicit above/below position (rather than relying on
+  // arrayMove's implicit "lands at the target's index" behavior) so it always matches whatever the
+  // drop indicator last showed, regardless of which direction the drag came from — see
+  // handleTaskDragOver's "nested" case, where hovering deep in a tall Space's own Folder/List tree
+  // always means "below this Space" even if the drag happened to approach from below it.
+  const reorderSpaceRelativeTo = (draggedId: string, targetId: string, position: 'above' | 'below') => {
     const allSpaces = workspaces.flatMap((w) => w.spaces).sort((a, b) => a.order - b.order);
-    const oldIndex = allSpaces.findIndex((s) => s.id === draggedId);
-    const newIndex = allSpaces.findIndex((s) => s.id === targetId);
-    if (oldIndex === -1 || newIndex === -1) return;
-    arrayMove(allSpaces, oldIndex, newIndex).forEach((s, index) => {
-      if (s.order !== index) reorderSpace(s.id, index);
+    const dragged = allSpaces.find((s) => s.id === draggedId);
+    const withoutDragged = allSpaces.filter((s) => s.id !== draggedId);
+    const targetIndex = withoutDragged.findIndex((s) => s.id === targetId);
+    if (!dragged || targetIndex === -1) return;
+    const insertAt = position === 'below' ? targetIndex + 1 : targetIndex;
+    const next = [...withoutDragged.slice(0, insertAt), dragged, ...withoutDragged.slice(insertAt)];
+    useHistoryStore.getState().transaction('Reorder spaces', () => {
+      next.forEach((s, index) => {
+        if (s.order !== index) reorderSpace(s.id, index);
+      });
     });
   };
 
@@ -1034,13 +1415,118 @@ export default function Home() {
       return;
     }
 
+    if (draggedId.startsWith('person-drag:')) {
+      const userId = draggedId.slice('person-drag:'.length);
+      const person = users.find((u) => u.id === userId);
+      if (person) setActiveDragEntity({ kind: 'person', name: person.name, color: person.color, initials: person.initials });
+      return;
+    }
+
+    if (draggedId.startsWith('docfolder-drag:') || draggedId.startsWith('spacedoc-drag:')) {
+      const isDocFolder = draggedId.startsWith('docfolder-drag:');
+      const treeId = isDocFolder ? draggedId.slice('docfolder-drag:'.length) : draggedId.slice('spacedoc-drag:'.length);
+      const allSpaces = workspaces.flatMap((w) => w.spaces);
+      if (isDocFolder) {
+        const folder = allSpaces.flatMap((s) => s.docFolders).find((f) => f.id === treeId);
+        if (folder) setActiveDragEntity({ kind: 'docfolder', name: folder.name, color: folder.color });
+      } else {
+        const doc = allSpaces.flatMap((s) => s.spaceDocs).find((d) => d.id === treeId);
+        if (doc) setActiveDragEntity({ kind: 'spacedoc', name: doc.title || 'Untitled' });
+      }
+      return;
+    }
+
     const task = tasks.find((t) => t.id === draggedId) || null;
     setActiveDragTask(task);
   };
 
+  // Live "where will this land" feedback for Space reordering — the actual reorder-on-drop
+  // (`reorderSpaceRelativeTo`) always matches whatever this last showed. Tracks WHICH row is
+  // currently the closest drop target (dnd-kit only re-fires `onDragOver` when that target
+  // changes, not on every pointer move, so the exact pointer position at that moment isn't
+  // reliable — see the `pointermove` listener below for the actual above/below computation).
+  //
+  // A Space's own droppable (`space:${id}`) only covers its header row — a Space with an
+  // expanded Folder/List tree underneath is visually "tall", but everywhere below the header is
+  // covered by ITS OWN folders'/lists' droppables instead. So dragging a Space down past a tall
+  // one spends most of the drag hovering `folder-drop:`/`list:` ids, not `space:` — treat any of
+  // those as "still hovering this Space's block" (look up which Space the folder/list belongs
+  // to), and since you only ever get there by dragging into/through the space's own content
+  // (never by hovering its header), always resolve that as "below" this Space, with the
+  // indicator landing after its last Folder/List — never "above", which would visually land
+  // in the middle of its own tree instead of between two Spaces.
+  const handleTaskDragOver = (event: DragOverEvent) => {
+    const { active, over } = event;
+    if (!active || !over) {
+      spaceOverRef.current = null;
+      setSpaceDropIndicator(null);
+      return;
+    }
+    const draggedId = active.id as string;
+    const overId = over.id as string;
+    if (!draggedId.startsWith('space-drag:')) {
+      spaceOverRef.current = null;
+      setSpaceDropIndicator(null);
+      return;
+    }
+    const spaceId = draggedId.slice('space-drag:'.length);
+
+    if (overId.startsWith('space:')) {
+      const targetId = overId.slice('space:'.length);
+      if (targetId === spaceId || !over.rect) {
+        spaceOverRef.current = null;
+        setSpaceDropIndicator(null);
+        return;
+      }
+      spaceOverRef.current = { mode: 'header', targetId, top: over.rect.top, height: over.rect.height };
+      return;
+    }
+
+    let nestedTargetId: string | null = null;
+    const allSpaces = workspaces.flatMap((w) => w.spaces);
+    if (overId.startsWith('folder-drop:')) {
+      const folderId = overId.slice('folder-drop:'.length);
+      nestedTargetId = allSpaces.find((s) => s.folders.some((f) => f.id === folderId))?.id ?? null;
+    } else if (overId.startsWith('list:')) {
+      const listId = overId.slice('list:'.length);
+      nestedTargetId = allSpaces.find((s) => s.lists.some((l) => l.id === listId))?.id ?? null;
+    }
+    if (!nestedTargetId || nestedTargetId === spaceId) {
+      spaceOverRef.current = null;
+      setSpaceDropIndicator(null);
+      return;
+    }
+    spaceOverRef.current = { mode: 'nested', targetId: nestedTargetId };
+  };
+
+  // Continuous pointer tracking while a Space is being dragged — `onDragOver` alone only tells us
+  // *which* row is closest, not where within it, so the above/below split is recomputed on every
+  // real pointermove against whatever `handleTaskDragOver` last recorded.
+  useEffect(() => {
+    if (activeDragEntity?.kind !== 'space') return;
+    const onPointerMove = (e: PointerEvent) => {
+      const over = spaceOverRef.current;
+      if (!over) {
+        setSpaceDropIndicator(null);
+        return;
+      }
+      if (over.mode === 'nested') {
+        setSpaceDropIndicator({ targetId: over.targetId, position: 'below' });
+        return;
+      }
+      const overCenterY = over.top + over.height / 2;
+      setSpaceDropIndicator({ targetId: over.targetId, position: e.clientY < overCenterY ? 'above' : 'below' });
+    };
+    window.addEventListener('pointermove', onPointerMove);
+    return () => window.removeEventListener('pointermove', onPointerMove);
+  }, [activeDragEntity?.kind]);
+
   const handleTaskDragEnd = (event: DragEndEvent) => {
+    const droppedSpaceIndicator = spaceDropIndicator;
     setActiveDragTask(null);
     setActiveDragEntity(null);
+    setSpaceDropIndicator(null);
+    spaceOverRef.current = null;
     const { active, over } = event;
     if (!over) return;
     const draggedId = active.id as string;
@@ -1048,12 +1534,21 @@ export default function Home() {
 
     if (draggedId.startsWith('space-drag:')) {
       const spaceId = draggedId.slice('space-drag:'.length);
-      // Reuses the existing `space:${id}` droppable (already registered on every Space header
-      // for task-drops and cross-Space folder/list moves) — same technique as List-onto-List
-      // reordering above: the dragged id's own prefix already disambiguates the meaning.
-      if (overId.startsWith('space:')) {
-        const targetSpaceId = overId.slice('space:'.length);
-        if (targetSpaceId !== spaceId) reorderSpaceSiblings(spaceId, targetSpaceId);
+      // Drop exactly where the indicator last showed (handleTaskDragOver), rather than
+      // re-deriving from `over` here — `over` alone can't tell "above" from "below", and for the
+      // nested case (dragged past a tall Space's own Folder/List tree) can't tell which Space's
+      // block it even belongs to without the same lookup handleTaskDragOver already did.
+      if (droppedSpaceIndicator && droppedSpaceIndicator.targetId !== spaceId) {
+        reorderSpaceRelativeTo(spaceId, droppedSpaceIndicator.targetId, droppedSpaceIndicator.position);
+      }
+      return;
+    }
+
+    if (draggedId.startsWith('person-drag:')) {
+      const userId = draggedId.slice('person-drag:'.length);
+      if (overId.startsWith('room-drop:')) {
+        const target = overId.slice('room-drop:'.length);
+        assignUserToRoom(userId, target === 'unassigned' ? null : target);
       }
       return;
     }
@@ -1114,36 +1609,124 @@ export default function Home() {
       return;
     }
 
+    // Docs tab's DocFolder/Doc tree reparenting — structurally identical to the List/Folder
+    // branch above, with its own distinct id prefixes (docfolder-drag:/docfolder-drop:/spacedoc:)
+    // so the two trees' ids never collide, even though they never render at the same time.
+    if (draggedId.startsWith('spacedoc-drag:') || draggedId.startsWith('docfolder-drag:')) {
+      const isDocFolder = draggedId.startsWith('docfolder-drag:');
+      const treeId = isDocFolder ? draggedId.slice('docfolder-drag:'.length) : draggedId.slice('spacedoc-drag:'.length);
+      const allSpaces = workspaces.flatMap((w) => w.spaces);
+      const space = allSpaces.find((s) => (isDocFolder ? s.docFolders.some((f) => f.id === treeId) : s.spaceDocs.some((d) => d.id === treeId)));
+      if (!space) return;
+
+      if (overId.startsWith('docfolder-drop:')) {
+        const targetFolderId = overId.slice('docfolder-drop:'.length);
+        const targetSpace = allSpaces.find((s) => s.docFolders.some((f) => f.id === targetFolderId));
+        if (!targetSpace) return;
+        if (isDocFolder) {
+          if (targetSpace.id === space.id && (targetFolderId === treeId || isDescendantOfDocFolder(space, targetFolderId, treeId))) return;
+          const dragged = space.docFolders.find((f) => f.id === treeId);
+          const target = targetSpace.docFolders.find((f) => f.id === targetFolderId);
+          if (dragged && target && targetSpace.id === space.id && dragged.parentId === target.parentId) {
+            reorderDocFolderSiblings(space, treeId, targetFolderId);
+          } else {
+            moveDocFolder(space.id, treeId, targetFolderId, targetSpace.id);
+          }
+        } else {
+          moveSpaceDoc(space.id, treeId, targetFolderId, targetSpace.id);
+        }
+      } else if (overId.startsWith('spacedoc:') && !isDocFolder) {
+        const targetDocId = overId.slice('spacedoc:'.length);
+        if (targetDocId !== treeId && space.spaceDocs.some((d) => d.id === targetDocId)) {
+          reorderSpaceDocSiblings(space, treeId, targetDocId);
+        }
+      } else if (overId.startsWith('space:')) {
+        const targetSpaceId = overId.slice('space:'.length);
+        const targetSpace = allSpaces.find((s) => s.id === targetSpaceId);
+        if (!targetSpace) return;
+        if (isDocFolder) moveDocFolder(space.id, treeId, null, targetSpace.id);
+        else moveSpaceDoc(space.id, treeId, null, targetSpace.id);
+      }
+      return;
+    }
+
     if (overId.startsWith('task:')) {
       const targetId = overId.slice('task:'.length);
       if (targetId !== draggedId) optimisticSetParent(draggedId, targetId);
     } else if (overId.startsWith('list:')) {
       optimisticSetList(draggedId, overId.slice('list:'.length));
-    } else if (overId.startsWith('folder-drop:')) {
-      // Dropping a task onto a Folder row (rather than a specific List within it) has no
-      // single obvious destination list, so — same fallback as dropping onto a Space header
-      // below — land it in the first list found anywhere under that folder, recursively.
-      const folderId = overId.slice('folder-drop:'.length);
-      const folder = workspaces.flatMap((w) => w.spaces).flatMap((s) => s.folders).find((f) => f.id === folderId);
-      const space = workspaces.flatMap((w) => w.spaces).find((s) => s.folders.some((f) => f.id === folderId));
-      const firstListId = space ? collectListIdsUnder(space, folderId)[0] : undefined;
-      if (firstListId) optimisticSetList(draggedId, firstListId);
-      else showToast(`"${folder?.name ?? 'This folder'}" has no list yet — add one before moving tasks in here.`);
-    } else if (overId.startsWith('space:')) {
-      const spaceId = overId.slice('space:'.length);
-      const space = workspaces.flatMap((w) => w.spaces).find((s) => s.id === spaceId);
-      // Recurse through nested folders too, not just this Space's top-level lists — a Space
-      // with every list tucked inside a folder shouldn't look "empty" just because none of
-      // them live at the root.
-      const firstListId = space ? collectListIdsUnder(space, null)[0] : undefined;
-      if (firstListId) optimisticSetList(draggedId, firstListId);
-      else showToast(`"${space?.name ?? 'This space'}" has no list yet — add one before moving tasks in here.`);
+    } else if (overId.startsWith('folder-drop:') || overId.startsWith('space:')) {
+      // Dropping a task onto a Folder/Space (rather than a specific List) has no single obvious
+      // destination when there's more than one List recursively inside — rather than silently
+      // guessing "whichever one happened to come first," offer a small picker (labeled with each
+      // List's folder path) so the drop actually lands where the user meant. If there's exactly
+      // one List, skip the picker and just use it — no need to ask when there's no real choice.
+      const isFolder = overId.startsWith('folder-drop:');
+      const targetId = isFolder ? overId.slice('folder-drop:'.length) : overId.slice('space:'.length);
+      const space = isFolder
+        ? workspaces.flatMap((w) => w.spaces).find((s) => s.folders.some((f) => f.id === targetId))
+        : workspaces.flatMap((w) => w.spaces).find((s) => s.id === targetId);
+      const targetName = isFolder
+        ? workspaces.flatMap((w) => w.spaces).flatMap((s) => s.folders).find((f) => f.id === targetId)?.name
+        : space?.name;
+      const listIds = space ? collectListIdsUnder(space, isFolder ? targetId : null) : [];
+      if (listIds.length === 0) {
+        showToast(`"${targetName ?? (isFolder ? 'This folder' : 'This space')}" has no list yet — add one before moving tasks in here.`);
+      } else if (listIds.length === 1) {
+        optimisticSetList(draggedId, listIds[0]);
+      } else if (space) {
+        const rect = active.rect.current.translated;
+        setTaskListPicker({
+          x: rect ? rect.left : 200,
+          y: rect ? rect.top : 200,
+          taskId: draggedId,
+          options: listIds.map((id) => ({ id, label: listPathLabel(space, id) })),
+        });
+      }
     }
   };
 
   const [folderToDelete, setFolderToDelete] = useState<HierarchyFolder | null>(null);
 
+  // Jumping from a clicked @-mention chip — mirrors CommandPalette's activate() exactly (same
+  // setter calls, same order for the 'doc' case) so a mention lands wherever the search palette
+  // would've taken you for the same entity.
+  const jumpToMention = (kind: MentionKind, id: string) => {
+    if (kind === 'task') {
+      setModalTaskStack([id]);
+    } else if (kind === 'doc') {
+      const doc = workspaces.flatMap((w) => w.spaces).flatMap((s) => s.spaceDocs).find((d) => d.id === id);
+      const space = workspaces.flatMap((w) => w.spaces).find((s) => s.spaceDocs.some((d) => d.id === id));
+      if (!doc || !space) return;
+      setActiveView('docs');
+      setNavigation(space.id, []);
+      setDocsNavigation(doc.folderId, id);
+    } else if (kind === 'user') {
+      setActiveView('office');
+      setActiveOfficeUserId(id);
+    }
+  };
+
   // ---- Docs (autosave) ----
+  // A freshly-opened existing doc defaults to view mode (chips render); a brand-new empty one
+  // opens straight into edit mode so there's no empty, unclickable box between creating it and
+  // actually typing into it.
+  useEffect(() => {
+    if (!activeDocId) return;
+    const doc = activeTaskDocs.find((d) => d.id === activeDocId);
+    setDocEditorEditing(!doc || doc.content === '');
+  }, [activeDocId]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Entering edit mode (click on the view-mode chips, or the effect above for a new doc) focuses
+  // the textarea with the cursor at the end — precise click-to-caret mapping isn't worth building.
+  useEffect(() => {
+    if (docEditorEditing && docTextareaRef.current) {
+      const el = docTextareaRef.current;
+      el.focus();
+      el.setSelectionRange(el.value.length, el.value.length);
+    }
+  }, [docEditorEditing]);
+
   const handleDocDraftChange = (value: string) => {
     setDocDraft(value);
     if (!activeDocId || !activeModalTaskId) return;
@@ -1153,6 +1736,27 @@ export default function Home() {
       updateDoc(activeDocId, activeModalTaskId, { content: value });
       setDocSaveStatus('saved');
     }, 600);
+  };
+
+  const captureDocEditBaseline = () => {
+    const doc = activeTaskDocs.find((d) => d.id === activeDocId);
+    if (doc) docEditBaselineRef.current = { docId: doc.id, title: doc.title, content: doc.content };
+  };
+
+  // Fires at most once per edit session (bounded by focus→blur), for whichever of title/content
+  // actually changed — not on every autosave tick, which would flood the activity feed with one
+  // entry per debounce firing during a single continuous edit.
+  const commitDocEditActivity = () => {
+    useHistoryStore.getState().endCoalesce();
+    const baseline = docEditBaselineRef.current;
+    const doc = activeTaskDocs.find((d) => d.id === activeDocId);
+    if (!baseline || !doc || baseline.docId !== doc.id || !activeModalTaskId) return;
+    if (doc.title !== baseline.title) {
+      logActivity(activeModalTaskId, `Dokument omdøpt til «${doc.title}»`, 'docEdited');
+    } else if (docDraft !== baseline.content) {
+      logActivity(activeModalTaskId, `Dokument redigert: «${doc.title}»`, 'docEdited');
+    }
+    docEditBaselineRef.current = { docId: doc.id, title: doc.title, content: docDraft };
   };
 
   const handleNewDoc = async () => {
@@ -1176,6 +1780,44 @@ export default function Home() {
     reorderDocs(activeModalTaskId, arrayMove(ids, oldIndex, newIndex));
   };
 
+  // ---- Docs tab: full-page editor (autosave), same debounce shape as the task-modal one above ----
+  const activeStandaloneDoc = currentSpace?.spaceDocs.find((d) => d.id === activeStandaloneDocId) ?? null;
+
+  useEffect(() => {
+    if (activeStandaloneDoc) {
+      setSpaceDocDraft(activeStandaloneDoc.content);
+      setSpaceDocEditorEditing(activeStandaloneDoc.content === '');
+    }
+  }, [activeStandaloneDocId]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  useEffect(() => {
+    if (spaceDocEditorEditing && spaceDocTextareaRef.current) {
+      const el = spaceDocTextareaRef.current;
+      el.focus();
+      el.setSelectionRange(el.value.length, el.value.length);
+    }
+  }, [spaceDocEditorEditing]);
+
+  const handleSpaceDocDraftChange = (value: string) => {
+    setSpaceDocDraft(value);
+    if (!activeStandaloneDocId || !currentSpace) return;
+    setSpaceDocSaveStatus('saving');
+    if (spaceDocSaveTimer.current) clearTimeout(spaceDocSaveTimer.current);
+    spaceDocSaveTimer.current = setTimeout(() => {
+      updateSpaceDoc(activeStandaloneDocId, currentSpace.id, { content: value });
+      setSpaceDocSaveStatus('saved');
+    }, 600);
+  };
+
+  const handleNewSpaceDoc = async () => {
+    if (!currentSpace) return;
+    const doc = await createSpaceDoc(currentSpace.id, activeDocFolderId, {});
+    if (doc) {
+      setDocsNavigation(activeDocFolderId, doc.id);
+      setSpaceDocDraft(doc.content);
+    }
+  };
+
   if (isLoading) {
     return (
       <div className="flex h-screen w-screen items-center justify-center bg-neutral-950 text-blue-400 font-mono text-sm">
@@ -1192,10 +1834,21 @@ export default function Home() {
   const activeComments = activeModalTask ? comments[activeModalTask.id] || [] : [];
   const allListsFlat = workspaces.flatMap((ws) => ws.spaces.flatMap((s) => s.lists.map((l) => ({ ...l, spaceName: s.name }))));
 
+  // The task's own Space (via its List) — scopes the "Link existing doc" picker to standalone
+  // docs from the same Space, rather than an overwhelming cross-Space list.
+  const activeModalTaskSpace = activeModalTask
+    ? workspaces.flatMap((w) => w.spaces).find((s) => s.lists.some((l) => l.id === activeModalTask.listId))
+    : null;
+  const linkableSpaceDocs = activeModalTaskSpace ? activeModalTaskSpace.spaceDocs.filter((d) => d.taskId === null) : [];
+
+  // Stable serialization of the selected List set — order-independent so toggling the same
+  // Lists in a different click order doesn't spuriously read as "different navigation."
+  const activeListIdsKey = [...activeListIds].sort().join(',');
+
   // Only changes on actual navigation (space/list/archive/modal open) — used as the
   // AnimatePresence key so rows don't play a false disintegrate/slide-in animation
   // when we're just switching which list of tasks is shown.
-  const taskListNavKey = `${activeSpaceId}|${activeListId}|${showArchived}|${modalTaskStack.length > 0}`;
+  const taskListNavKey = `${activeSpaceId}|${activeListIdsKey}|${showArchived}|${modalTaskStack.length > 0}`;
 
   // Scopes TaskRow's shared layoutId to the current Space/List — Framer Motion matches
   // layoutId globally, so without this a task visible in two different nav contexts
@@ -1203,7 +1856,7 @@ export default function Home() {
   // positions when switching views instead of just snapping. Same task id, same nav
   // context (e.g. clicking a row open) still shares an id, so the row-into-modal
   // expand animation is unaffected.
-  const navScope = `${activeSpaceId}|${activeListId}`;
+  const navScope = `${activeSpaceId}|${activeListIdsKey}`;
 
   // Which scope the currently-open task modal's layoutId should match: the main list's
   // navScope if opened from there, or the parent task's subtask-table scope if opened
@@ -1213,7 +1866,7 @@ export default function Home() {
     modalTaskStack.length > 1 ? `subtasks-${modalTaskStack[modalTaskStack.length - 2]}` : navScope;
 
   return (
-    <DndContext sensors={taskSensors} collisionDetection={closestCenter} onDragStart={handleTaskDragStart} onDragEnd={handleTaskDragEnd}>
+    <DndContext sensors={taskSensors} collisionDetection={closestCenter} onDragStart={handleTaskDragStart} onDragOver={handleTaskDragOver} onDragEnd={handleTaskDragEnd}>
     <div className="flex h-screen bg-neutral-950 text-neutral-100 font-sans overflow-hidden select-none">
       {/* ================= ICON RAIL ================= */}
       <nav className="w-14 bg-neutral-950 border-r border-neutral-800/80 flex flex-col items-center py-4 gap-2 shrink-0 select-none">
@@ -1240,6 +1893,33 @@ export default function Home() {
           <CalendarIcon className="w-4 h-4" />
           <span className="text-[8px] font-medium leading-none">Planner</span>
         </button>
+        <button
+          onClick={() => setActiveView('docs')}
+          title="Docs"
+          className={`w-10 h-10 rounded flex flex-col items-center justify-center gap-0.5 transition cursor-pointer ${
+            activeView === 'docs' ? 'bg-neutral-800 text-blue-400' : 'text-neutral-500 hover:bg-neutral-800/60 hover:text-neutral-200'
+          }`}
+        >
+          <FileText className="w-4 h-4" />
+          <span className="text-[8px] font-medium leading-none">Docs</span>
+        </button>
+        <button
+          onClick={() => {
+            // Always resets to the team grid, even if Office was already the active tab — same
+            // "click the rail icon to go home" expectation as clicking a nav icon in most apps,
+            // not just a tab switch. Without this, clicking Office while already viewing a
+            // person's page did nothing (setActiveView('office') is a no-op when already there).
+            setActiveView('office');
+            setActiveOfficeUserId(null);
+          }}
+          title="Office"
+          className={`w-10 h-10 rounded flex flex-col items-center justify-center gap-0.5 transition cursor-pointer ${
+            activeView === 'office' ? 'bg-neutral-800 text-blue-400' : 'text-neutral-500 hover:bg-neutral-800/60 hover:text-neutral-200'
+          }`}
+        >
+          <Building2 className="w-4 h-4" />
+          <span className="text-[8px] font-medium leading-none">Office</span>
+        </button>
       </nav>
 
       {/* ================= LEFT MENU (SIDEBAR) ================= */}
@@ -1254,12 +1934,23 @@ export default function Home() {
             </p>
           </div>
 
+          <div className="px-3 pt-3">
+            <button
+              onClick={() => setCommandPaletteOpen(true)}
+              className="w-full flex items-center gap-2 bg-neutral-950/60 rounded border border-neutral-800/80 px-3 py-1.5 text-[11px] text-neutral-500 hover:border-neutral-700 hover:text-neutral-300 cursor-pointer"
+            >
+              <Search className="w-3.5 h-3.5" />
+              <span className="flex-1 text-left">Search...</span>
+              <span className="text-[9px] font-mono text-neutral-600">Ctrl+K</span>
+            </button>
+          </div>
+
           <div className="p-3 space-y-4 overflow-y-auto max-h-[calc(100vh-140px)]">
             {activeView === 'board' && (
             <button
               onClick={() => {
                 setModalTaskStack([]);
-                setNavigation('everything', null);
+                setNavigation('everything', []);
               }}
               className={`w-full text-left px-3 py-2 rounded text-xs font-semibold transition flex items-center justify-between cursor-pointer ${
                 activeSpaceId === 'everything' && modalTaskStack.length === 0
@@ -1276,6 +1967,35 @@ export default function Home() {
             </button>
             )}
 
+            {activeView === 'office' ? (
+              <div className="space-y-2">
+                <p className="text-[10px] font-bold text-neutral-500 uppercase tracking-wider px-2">Team</p>
+                {users.map((u) => {
+                  const count = tasks.filter((t) => !t.archived && t.assignees.some((a) => a.id === u.id)).length;
+                  const isActive = activeOfficeUserId === u.id;
+                  return (
+                    <button
+                      key={u.id}
+                      onClick={() => setActiveOfficeUserId(u.id)}
+                      className={`w-full text-left px-2.5 py-1.5 rounded text-xs font-medium transition flex items-center justify-between cursor-pointer ${
+                        isActive ? 'bg-neutral-800 text-blue-400 font-semibold' : 'text-neutral-300 hover:bg-neutral-800/40'
+                      }`}
+                    >
+                      <span className="flex items-center gap-2 truncate">
+                        <span
+                          className="w-5 h-5 rounded-full text-[9px] font-bold flex items-center justify-center text-white shrink-0"
+                          style={{ backgroundColor: u.color }}
+                        >
+                          {u.initials}
+                        </span>
+                        <span className="truncate">{u.name}</span>
+                      </span>
+                      <span className="text-[10px] text-neutral-500 font-mono shrink-0">{count}</span>
+                    </button>
+                  );
+                })}
+              </div>
+            ) : (
             <div className="space-y-3">
               <div className="flex items-center justify-between px-2">
                 <p className="text-[10px] font-bold text-neutral-500 uppercase tracking-wider">
@@ -1301,9 +2021,35 @@ export default function Home() {
                     </button>
                   </div>
                 )}
+                {activeView === 'board' && !creatingSpace && (
+                  <button
+                    onClick={() => setCreatingSpace(true)}
+                    title="New space"
+                    className="text-neutral-500 hover:text-blue-400 cursor-pointer"
+                  >
+                    <Plus className="w-3.5 h-3.5" />
+                  </button>
+                )}
               </div>
+              {creatingSpace && (
+                <input
+                  autoFocus
+                  value={newSpaceDraft}
+                  onChange={(e) => setNewSpaceDraft(e.target.value)}
+                  onBlur={commitNewSpace}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter') (e.target as HTMLInputElement).blur();
+                    if (e.key === 'Escape') {
+                      setNewSpaceDraft('');
+                      setCreatingSpace(false);
+                    }
+                  }}
+                  placeholder="Space name..."
+                  className="w-full bg-neutral-950 border border-blue-500 rounded px-2 py-1 text-[11px] text-white focus:outline-none"
+                />
+              )}
               {[...(workspaces[0]?.spaces ?? [])].sort((a, b) => a.order - b.order).map((space: HierarchySpace) => {
-                const isSpaceActive = activeView === 'board' && activeSpaceId === space.id && !activeListId && modalTaskStack.length === 0;
+                const isSpaceActive = activeView === 'board' && activeSpaceId === space.id && activeListIds.size === 0 && modalTaskStack.length === 0;
                 const spaceListIds = collectListIdsUnder(space, null);
                 const spaceTasksCount = tasks.filter(
                   (t) => t.parentId === null && !t.archived && spaceListIds.includes(t.listId)
@@ -1313,6 +2059,9 @@ export default function Home() {
 
                 return (
                   <div key={space.id} className="space-y-1">
+                    {spaceDropIndicator?.targetId === space.id && spaceDropIndicator.position === 'above' && (
+                      <div className="h-0.5 bg-blue-500 rounded-full mx-2" />
+                    )}
                     <DroppableSidebarItem id={`space:${space.id}`} dragId={`space-drag:${space.id}`}>
                       {(isOver, drag) => (
                         <button
@@ -1321,9 +2070,12 @@ export default function Home() {
                           onClick={() => {
                             if (activeView === 'calendar') {
                               toggleCalendarSpace(space);
+                            } else if (activeView === 'docs') {
+                              setNavigation(space.id, []);
+                              setDocsNavigation(null, null);
                             } else {
                               setModalTaskStack([]);
-                              setNavigation(space.id, null);
+                              setNavigation(space.id, []);
                             }
                           }}
                           onContextMenu={(e) => openSpaceMenu(e, space)}
@@ -1357,34 +2109,96 @@ export default function Home() {
                       )}
                     </DroppableSidebarItem>
 
-                    <FolderTree
-                      space={space}
-                      tasks={tasks}
-                      activeView={activeView}
-                      activeListId={activeListId}
-                      calendarVisibleListIds={calendarVisibleListIds}
-                      onNavigateList={(listId) => {
-                        setModalTaskStack([]);
-                        setNavigation(space.id, listId);
-                      }}
-                      toggleCalendarList={toggleCalendarList}
-                      toggleCalendarFolder={(folderId) => toggleCalendarFolder(space, folderId)}
-                      onDeleteFolderRequest={setFolderToDelete}
-                      onFolderContextMenu={openFolderMenu}
-                      renameFolderId={renameFolderId}
-                      onRenameFolderHandled={() => setRenameFolderId(null)}
-                      onListContextMenu={(e, list) => openListMenu(e, list, space.id)}
-                      renameListId={renameListId}
-                      onRenameListHandled={() => setRenameListId(null)}
-                    />
+                    {activeView === 'docs' ? (
+                      <DocFolderTree
+                        space={space}
+                        activeDocFolderId={activeSpaceId === space.id ? activeDocFolderId : null}
+                        activeStandaloneDocId={activeSpaceId === space.id ? activeStandaloneDocId : null}
+                        onNavigateFolder={(folderId) => {
+                          setNavigation(space.id, []);
+                          setDocsNavigation(folderId, null);
+                        }}
+                        onOpenDoc={(docId) => {
+                          setNavigation(space.id, []);
+                          setDocsNavigation(activeDocFolderId, docId);
+                        }}
+                        onDeleteFolderRequest={setDocFolderToDelete}
+                        onDeleteDocRequest={setSpaceDocToDelete}
+                      />
+                    ) : (
+                      <FolderTree
+                        space={space}
+                        tasks={tasks}
+                        activeView={activeView}
+                        activeListIds={activeListIds}
+                        calendarVisibleListIds={calendarVisibleListIds}
+                        onNavigateList={(e, listId) => {
+                          setModalTaskStack([]);
+                          handleListClick(e, space, listId);
+                        }}
+                        toggleCalendarList={toggleCalendarList}
+                        toggleCalendarFolder={(folderId) => toggleCalendarFolder(space, folderId)}
+                        onDeleteFolderRequest={setFolderToDelete}
+                        onFolderContextMenu={openFolderMenu}
+                        renameFolderId={renameFolderId}
+                        onRenameFolderHandled={() => setRenameFolderId(null)}
+                        onListContextMenu={(e, list) => openListMenu(e, list, space.id)}
+                        onDeleteListRequest={(list) => setListToDelete({ list, spaceId: space.id })}
+                        renameListId={renameListId}
+                        onRenameListHandled={() => setRenameListId(null)}
+                      />
+                    )}
+                    {spaceDropIndicator?.targetId === space.id && spaceDropIndicator.position === 'below' && (
+                      <div className="h-0.5 bg-blue-500 rounded-full mx-2" />
+                    )}
                   </div>
                 );
               })}
             </div>
+            )}
           </div>
         </div>
 
         <div className="p-3 m-3 space-y-2">
+          <div
+            className="w-full flex items-center gap-2 bg-neutral-950/60 rounded border border-neutral-800/80 px-3 py-2 text-[11px] text-neutral-300"
+            title="Who you're acting as — attributed on activity you generate (task creation, edits, etc). Stand-in for real login/sessions, coming later."
+          >
+            {(() => {
+              const me = users.find((u) => u.id === currentUserId);
+              return me ? (
+                <span
+                  className="w-4 h-4 rounded-full text-[8px] font-bold flex items-center justify-center text-white shrink-0"
+                  style={{ backgroundColor: me.color }}
+                >
+                  {me.initials}
+                </span>
+              ) : (
+                <UserCircle className="w-3.5 h-3.5 text-neutral-500 shrink-0" />
+              );
+            })()}
+            <select
+              value={currentUserId ?? ''}
+              onChange={(e) => setCurrentUserId(e.target.value || null)}
+              className="flex-1 bg-transparent text-[11px] text-neutral-300 focus:outline-none cursor-pointer"
+            >
+              <option value="">You are: (none)</option>
+              {users.map((u) => (
+                <option key={u.id} value={u.id}>
+                  You are: {u.name}
+                </option>
+              ))}
+            </select>
+            {currentUserId && (
+              <button
+                onClick={handleCopyCalendarLink}
+                title="Copy your personal .ics calendar feed link"
+                className="shrink-0 p-1 rounded text-neutral-500 hover:text-neutral-300 hover:bg-neutral-800/60 cursor-pointer"
+              >
+                <Link2 className="w-3.5 h-3.5" />
+              </button>
+            )}
+          </div>
           <button
             onClick={() => setTeamOpen(true)}
             className="w-full flex items-center justify-between bg-neutral-950/60 rounded border border-neutral-800/80 px-3 py-2 text-[11px] text-neutral-300 hover:border-neutral-700 cursor-pointer"
@@ -1406,41 +2220,65 @@ export default function Home() {
             <div className="flex items-center gap-2 text-xs font-medium">
               <span className="text-neutral-500">Workspace</span>
               <span className="text-neutral-600">/</span>
-              <span className={`flex items-center gap-1.5 ${activeSpaceId === 'everything' ? 'text-blue-400 font-semibold' : 'text-neutral-300'}`}>
-                {activeSpaceId === 'everything' ? (
-                  <>
-                    <Globe className="w-3.5 h-3.5" /> Everything
-                  </>
-                ) : (
-                  currentSpace?.name
-                )}
-              </span>
-              {activeListId && (
+              {activeView === 'office' ? (
+                <>
+                  <button
+                    onClick={() => setActiveOfficeUserId(null)}
+                    className={`flex items-center gap-1.5 cursor-pointer ${
+                      activeOfficeUserId ? 'text-neutral-500 hover:text-neutral-300' : 'text-blue-400 font-semibold'
+                    }`}
+                  >
+                    <Building2 className="w-3.5 h-3.5" /> Office
+                  </button>
+                  {activeOfficeUserId && (
+                    <>
+                      <span className="text-neutral-600">/</span>
+                      <span className="text-neutral-300 font-semibold">{users.find((u) => u.id === activeOfficeUserId)?.name}</span>
+                    </>
+                  )}
+                </>
+              ) : (
+                <span className={`flex items-center gap-1.5 ${activeSpaceId === 'everything' ? 'text-blue-400 font-semibold' : 'text-neutral-300'}`}>
+                  {activeSpaceId === 'everything' ? (
+                    <>
+                      <Globe className="w-3.5 h-3.5" /> Everything
+                    </>
+                  ) : (
+                    currentSpace?.name
+                  )}
+                </span>
+              )}
+              {activeView === 'board' && activeListIds.size > 0 && (
                 <>
                   <span className="text-neutral-600">/</span>
                   <span className="text-white font-semibold flex items-center gap-1.5">
                     <span className="w-2 h-2 rounded-full bg-neutral-400"></span>
-                    {currentSpace?.lists.find((l) => l.id === activeListId)?.name}
+                    {activeListIds.size === 1
+                      ? currentSpace?.lists.find((l) => l.id === [...activeListIds][0])?.name
+                      : `${activeListIds.size} lists`}
                   </span>
                 </>
               )}
             </div>
 
-            <button
-              onClick={() => setShowArchived(!showArchived)}
-              className={`text-[11px] px-2.5 py-1 rounded border cursor-pointer transition flex items-center gap-1.5 ${
-                showArchived
-                  ? 'bg-neutral-800 text-blue-400 border-neutral-700'
-                  : 'text-neutral-400 border-neutral-800 hover:bg-neutral-800/60'
-              }`}
-            >
-              <Archive className="w-3.5 h-3.5" /> {showArchived ? 'Viewing archive' : 'Archive'}
-            </button>
+            {activeView === 'board' && (
+              <button
+                onClick={() => setShowArchived(!showArchived)}
+                className={`text-[11px] px-2.5 py-1 rounded border cursor-pointer transition flex items-center gap-1.5 ${
+                  showArchived
+                    ? 'bg-neutral-800 text-blue-400 border-neutral-700'
+                    : 'text-neutral-400 border-neutral-800 hover:bg-neutral-800/60'
+                }`}
+              >
+                <Archive className="w-3.5 h-3.5" /> {showArchived ? 'Viewing archive' : 'Archive'}
+              </button>
+            )}
           </div>
         </header>
 
         <div className="flex-1 overflow-auto p-6" onClick={closeAllMenus}>
           <div className="max-w-6xl mx-auto space-y-2">
+            {activeView === 'board' && !showingSpaceHome && (
             <div className="flex items-center justify-between">
               <div className="text-neutral-500 font-mono text-[10px]">{filteredTasks.length} tasks</div>
               <div className="flex items-center gap-1.5">
@@ -1531,8 +2369,96 @@ export default function Home() {
 
               </div>
             </div>
+            )}
 
-            {activeView === 'calendar' ? (
+            {activeView === 'office' ? (
+              <OfficePage
+                users={users}
+                activeUserId={activeOfficeUserId}
+                workspaces={workspaces}
+                tasks={tasks}
+                statuses={statuses}
+                onSelectUser={setActiveOfficeUserId}
+                onOpenTask={(id) => setModalTaskStack([id])}
+                onUpdatePhone={(userId, phone) => updateUser(userId, { phone })}
+                onUpdateUserField={(userId, field, value) => updateUser(userId, { [field]: value })}
+                onDeleteRoomRequest={setRoomToDelete}
+              />
+            ) : activeView === 'docs' ? (
+              !currentSpace ? (
+                <div className="text-[11px] text-neutral-500 px-1 py-8 text-center border border-dashed border-neutral-800 rounded">
+                  Pick a Space in the sidebar to browse its Docs.
+                </div>
+              ) : activeStandaloneDoc ? (
+                <div className="max-w-3xl mx-auto space-y-2">
+                  <div className="flex items-center justify-between">
+                    <button
+                      onClick={() => setDocsNavigation(activeDocFolderId, null)}
+                      className="text-[11px] text-neutral-500 hover:text-neutral-300 cursor-pointer"
+                    >
+                      &larr; Back to {currentSpace.name}
+                    </button>
+                    {spaceDocSaveStatus !== 'idle' && (
+                      <span className="text-[10px] text-neutral-500 flex items-center gap-1">
+                        {spaceDocSaveStatus === 'saving' ? 'Saving...' : (<><Check className="w-3 h-3" /> Saved</>)}
+                      </span>
+                    )}
+                  </div>
+                  <div className="bg-neutral-900/60 border border-neutral-800/80 rounded p-6 space-y-3">
+                    <input
+                      value={activeStandaloneDoc.title}
+                      onChange={(e) => updateSpaceDoc(activeStandaloneDoc.id, currentSpace.id, { title: e.target.value })}
+                      className="w-full bg-transparent text-lg font-semibold text-white focus:outline-none"
+                      placeholder="Document title"
+                    />
+                    {spaceDocEditorEditing ? (
+                      <MentionTextarea
+                        ref={spaceDocTextareaRef}
+                        value={spaceDocDraft}
+                        onChange={(e) => handleSpaceDocDraftChange(e.target.value)}
+                        onBlur={() => setSpaceDocEditorEditing(false)}
+                        rows={24}
+                        placeholder="Write anything — saved automatically as you type..."
+                        className="w-full bg-transparent text-sm text-neutral-300 focus:outline-none resize-y leading-relaxed"
+                      />
+                    ) : (
+                      <div onClick={() => setSpaceDocEditorEditing(true)} className="min-h-[24em] cursor-text">
+                        {spaceDocDraft ? (
+                          <MentionText
+                            text={spaceDocDraft}
+                            onJump={jumpToMention}
+                            className="text-sm text-neutral-300 whitespace-pre-wrap leading-relaxed"
+                          />
+                        ) : (
+                          <p className="text-sm text-neutral-600 italic leading-relaxed">
+                            Write anything — saved automatically as you type...
+                          </p>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                </div>
+              ) : (
+                <>
+                  <div className="flex items-center justify-end mb-2">
+                    <button
+                      onClick={handleNewSpaceDoc}
+                      className="text-[11px] bg-blue-600 hover:bg-blue-500 text-white px-2.5 py-1.5 rounded font-medium cursor-pointer flex items-center gap-1"
+                    >
+                      <Plus className="w-3.5 h-3.5" /> New doc
+                    </button>
+                  </div>
+                  <DocsBrowser
+                    space={currentSpace}
+                    folderId={activeDocFolderId}
+                    onNavigateFolder={(folderId) => setDocsNavigation(folderId, null)}
+                    onOpenDoc={(docId) => setDocsNavigation(activeDocFolderId, docId)}
+                    onDeleteFolderRequest={setDocFolderToDelete}
+                    onDeleteDocRequest={setSpaceDocToDelete}
+                  />
+                </>
+              )
+            ) : activeView === 'calendar' ? (
               <div className="h-[75vh]">
                 <CalendarView
                   tasks={calendarFilteredTasks}
@@ -1544,6 +2470,12 @@ export default function Home() {
                   }}
                 />
               </div>
+            ) : showingSpaceHome ? (
+              <SpaceHome
+                space={currentSpace!}
+                tasks={tasks}
+                onNavigateList={(listId) => setNavigation(currentSpace!.id, [listId])}
+              />
             ) : (
             <div className="bg-neutral-900/60 border border-neutral-800/80 rounded overflow-x-auto shadow-sm">
               <div style={{ minWidth: tableMinWidth }}>
@@ -1735,6 +2667,15 @@ export default function Home() {
             <button onClick={() => startEditSpace(spaceMenu.space)} className="w-full text-left px-3 py-1.5 text-xs text-neutral-300 hover:bg-neutral-800/60 cursor-pointer flex items-center gap-2">
               <Pencil className="w-3.5 h-3.5" /> Edit appearance
             </button>
+            <button
+              onClick={() => {
+                setSpaceToDelete(spaceMenu.space);
+                setSpaceMenu(null);
+              }}
+              className="w-full text-left px-3 py-1.5 text-xs text-red-400 hover:bg-neutral-800/60 cursor-pointer flex items-center gap-2"
+            >
+              <Trash2 className="w-3.5 h-3.5" /> Delete space
+            </button>
           </div>
         </>
       )}
@@ -1789,6 +2730,15 @@ export default function Home() {
             >
               <Pencil className="w-3.5 h-3.5" /> Rename
             </button>
+            <button
+              onClick={() => {
+                setListToDelete({ list: listMenu.list, spaceId: listMenu.spaceId });
+                setListMenu(null);
+              }}
+              className="w-full text-left px-3 py-1.5 text-xs text-red-400 hover:bg-neutral-800/60 cursor-pointer flex items-center gap-2"
+            >
+              <Trash2 className="w-3.5 h-3.5" /> Delete list
+            </button>
           </div>
         </>
       )}
@@ -1841,6 +2791,32 @@ export default function Home() {
                 </button>
               </>
             )}
+          </div>
+        </>
+      )}
+
+      {/* ================= PICKER: TASK DROPPED ONTO FOLDER/SPACE WITH MULTIPLE LISTS ================= */}
+      {taskListPicker && (
+        <>
+          <div className="fixed inset-0 z-[60]" onClick={() => setTaskListPicker(null)} onContextMenu={(e) => { e.preventDefault(); setTaskListPicker(null); }} />
+          <div
+            className="fixed z-[61] w-56 max-h-72 overflow-y-auto bg-neutral-900 border border-neutral-800 rounded shadow-2xl py-1"
+            style={{ top: taskListPicker.y, left: taskListPicker.x }}
+          >
+            <div className="px-3 py-1 text-[10px] uppercase tracking-wide text-neutral-500">Move to which list?</div>
+            {taskListPicker.options.map((opt) => (
+              <button
+                key={opt.id}
+                onClick={() => {
+                  optimisticSetList(taskListPicker.taskId, opt.id);
+                  setTaskListPicker(null);
+                }}
+                className="w-full text-left px-3 py-1.5 text-xs text-neutral-300 hover:bg-neutral-800/60 cursor-pointer truncate"
+                title={opt.label}
+              >
+                {opt.label}
+              </button>
+            ))}
           </div>
         </>
       )}
@@ -2350,6 +3326,17 @@ export default function Home() {
                                 setDocSaveStatus('idle');
                               }}
                               onDelete={() => setDocToDelete({ id: d.id, title: d.title || 'Untitled' })}
+                              onUnlink={
+                                activeModalTaskId
+                                  ? () => {
+                                      setDocTaskLink(d.id, null);
+                                      if (activeDocId === d.id) {
+                                        setActiveDocId(null);
+                                        setDocDraft('');
+                                      }
+                                    }
+                                  : undefined
+                              }
                             />
                           ))}
                         </SortableContext>
@@ -2357,6 +3344,35 @@ export default function Home() {
                       <button onClick={handleNewDoc} className="text-[11px] text-blue-400 px-2.5 py-1 rounded hover:bg-neutral-800/60 cursor-pointer shrink-0">
                         + New
                       </button>
+                      {linkableSpaceDocs.length > 0 && (
+                        <FloatingPopover
+                          open={linkDocOpen}
+                          onClose={() => setLinkDocOpen(false)}
+                          panelClassName="w-52 max-h-64 overflow-y-auto bg-neutral-900 border border-neutral-800 rounded shadow-xl py-1"
+                          anchor={
+                            <button
+                              onClick={() => setLinkDocOpen((o) => !o)}
+                              className="text-[11px] text-neutral-400 hover:text-blue-400 px-2.5 py-1 rounded hover:bg-neutral-800/60 cursor-pointer shrink-0 flex items-center gap-1"
+                            >
+                              <Link2 className="w-3 h-3" /> Link existing
+                            </button>
+                          }
+                        >
+                          <div className="text-[10px] uppercase tracking-wide text-neutral-500 px-3 py-1">From this Space's Docs</div>
+                          {linkableSpaceDocs.map((d) => (
+                            <button
+                              key={d.id}
+                              onClick={() => {
+                                if (activeModalTaskId) setDocTaskLink(d.id, activeModalTaskId);
+                                setLinkDocOpen(false);
+                              }}
+                              className="w-full text-left px-3 py-1.5 text-xs text-neutral-300 hover:bg-neutral-800/60 cursor-pointer truncate"
+                            >
+                              {d.title || 'Untitled'}
+                            </button>
+                          ))}
+                        </FloatingPopover>
+                      )}
                     </div>
 
                     {activeDocId ? (
@@ -2364,16 +3380,40 @@ export default function Home() {
                         <input
                           value={activeTaskDocs.find((d) => d.id === activeDocId)?.title || ''}
                           onChange={(e) => activeModalTaskId && updateDoc(activeDocId, activeModalTaskId, { title: e.target.value })}
+                          onFocus={captureDocEditBaseline}
+                          onBlur={commitDocEditActivity}
                           className="w-full bg-transparent text-sm font-semibold text-white focus:outline-none"
                           placeholder="Document title"
                         />
-                        <textarea
-                          value={docDraft}
-                          onChange={(e) => handleDocDraftChange(e.target.value)}
-                          rows={8}
-                          placeholder="Write notes, specs, anything — saved automatically as you type..."
-                          className="w-full bg-transparent text-xs text-neutral-300 focus:outline-none resize-y leading-relaxed"
-                        />
+                        {docEditorEditing ? (
+                          <MentionTextarea
+                            ref={docTextareaRef}
+                            value={docDraft}
+                            onChange={(e) => handleDocDraftChange(e.target.value)}
+                            onFocus={captureDocEditBaseline}
+                            onBlur={() => {
+                              commitDocEditActivity();
+                              setDocEditorEditing(false);
+                            }}
+                            rows={8}
+                            placeholder="Write notes, specs, anything — saved automatically as you type..."
+                            className="w-full bg-transparent text-xs text-neutral-300 focus:outline-none resize-y leading-relaxed"
+                          />
+                        ) : (
+                          <div onClick={() => setDocEditorEditing(true)} className="min-h-[8em] cursor-text">
+                            {docDraft ? (
+                              <MentionText
+                                text={docDraft}
+                                onJump={jumpToMention}
+                                className="text-xs text-neutral-300 whitespace-pre-wrap leading-relaxed"
+                              />
+                            ) : (
+                              <p className="text-xs text-neutral-600 italic leading-relaxed">
+                                Write notes, specs, anything — saved automatically as you type...
+                              </p>
+                            )}
+                          </div>
+                        )}
                       </div>
                     ) : (
                       <p className="text-[11px] text-neutral-500 p-4">No documents yet — press "+ New" to add one.</p>
@@ -2554,8 +3594,15 @@ export default function Home() {
                   {activeComments.map((c) =>
                     c.type === 'activity' ? (
                       <div key={c.id} className="flex items-center gap-2 text-[11px] text-neutral-500 italic">
-                        <span className="w-1 h-1 rounded-full bg-neutral-600 shrink-0"></span>
-                        <span>{c.body}</span>
+                        {(() => {
+                          const Icon = c.activityKind ? ACTIVITY_ICONS[c.activityKind] : null;
+                          return Icon ? (
+                            <Icon className="w-3 h-3 shrink-0 text-neutral-500" />
+                          ) : (
+                            <span className="w-1 h-1 rounded-full bg-neutral-600 shrink-0"></span>
+                          );
+                        })()}
+                        <span>{c.author ? <span className="font-semibold not-italic text-neutral-400">{c.author.name}: </span> : null}{c.body}</span>
                         <span className="text-neutral-600 ml-auto shrink-0">{timeAgo(c.createdAt)}</span>
                       </div>
                     ) : (
@@ -2574,7 +3621,7 @@ export default function Home() {
                           <span className="text-[11px] font-semibold text-neutral-200">{c.author?.name || 'Anonymous'}</span>
                           <span className="text-[10px] text-neutral-500 ml-auto">{timeAgo(c.createdAt)}</span>
                         </div>
-                        <p className="text-xs text-neutral-300 whitespace-pre-wrap">{c.body}</p>
+                        <MentionText text={c.body} onJump={jumpToMention} className="text-xs text-neutral-300 whitespace-pre-wrap" />
                       </div>
                     )
                   )}
@@ -2593,7 +3640,7 @@ export default function Home() {
                       </option>
                     ))}
                   </select>
-                  <textarea
+                  <MentionTextarea
                     value={newCommentBody}
                     onChange={(e) => setNewCommentBody(e.target.value)}
                     onKeyDown={(e) => {
@@ -2605,7 +3652,7 @@ export default function Home() {
                         }
                       }
                     }}
-                    placeholder="Write a comment... (Enter to send, Shift+Enter for new line)"
+                    placeholder="Write a comment... (Enter to send, Shift+Enter for new line, @ to mention)"
                     rows={2}
                     className="w-full bg-neutral-950 border border-neutral-800 rounded px-3 py-2 text-xs text-white focus:outline-none focus:border-blue-500 resize-none"
                   />
@@ -2758,6 +3805,78 @@ export default function Home() {
         }}
       />
 
+      <ConfirmDialog
+        open={!!spaceToDelete}
+        title="Delete space?"
+        message={spaceToDelete ? `This permanently deletes "${spaceToDelete.name}" and every folder, list, and task inside it.` : ''}
+        onCancel={() => setSpaceToDelete(null)}
+        onConfirm={() => {
+          if (spaceToDelete) {
+            deleteSpace(spaceToDelete.id);
+            if (activeSpaceId === spaceToDelete.id) setNavigation('everything', []);
+          }
+          setSpaceToDelete(null);
+        }}
+      />
+
+      <ConfirmDialog
+        open={!!listToDelete}
+        title="Delete list?"
+        message={listToDelete ? `This permanently deletes "${listToDelete.list.name}" and every task inside it.` : ''}
+        onCancel={() => setListToDelete(null)}
+        onConfirm={() => {
+          if (listToDelete) {
+            deleteList(listToDelete.spaceId, listToDelete.list.id);
+            if (activeListIds.has(listToDelete.list.id)) {
+              setNavigation(
+                listToDelete.spaceId,
+                [...activeListIds].filter((id) => id !== listToDelete.list.id)
+              );
+            }
+          }
+          setListToDelete(null);
+        }}
+      />
+
+      <ConfirmDialog
+        open={!!docFolderToDelete}
+        title="Delete doc folder?"
+        message={docFolderToDelete ? `This permanently deletes "${docFolderToDelete.name}" and every sub-folder and document inside it.` : ''}
+        onCancel={() => setDocFolderToDelete(null)}
+        onConfirm={() => {
+          if (docFolderToDelete) {
+            deleteDocFolder(docFolderToDelete.spaceId, docFolderToDelete.id);
+            if (activeDocFolderId === docFolderToDelete.id) setDocsNavigation(null, null);
+          }
+          setDocFolderToDelete(null);
+        }}
+      />
+
+      <ConfirmDialog
+        open={!!spaceDocToDelete}
+        title="Delete document?"
+        message={spaceDocToDelete ? `This permanently deletes "${spaceDocToDelete.title || 'Untitled'}".` : ''}
+        onCancel={() => setSpaceDocToDelete(null)}
+        onConfirm={() => {
+          if (spaceDocToDelete && currentSpace) {
+            deleteSpaceDoc(spaceDocToDelete.id, currentSpace.id);
+            if (activeStandaloneDocId === spaceDocToDelete.id) setDocsNavigation(activeDocFolderId, null);
+          }
+          setSpaceDocToDelete(null);
+        }}
+      />
+
+      <ConfirmDialog
+        open={!!roomToDelete}
+        title="Delete room?"
+        message={roomToDelete ? `This permanently deletes "${roomToDelete.name}". Members inside move back to Unassigned — they aren't deleted.` : ''}
+        onCancel={() => setRoomToDelete(null)}
+        onConfirm={() => {
+          if (roomToDelete) deleteRoom(roomToDelete.id);
+          setRoomToDelete(null);
+        }}
+      />
+
       <DragOverlay dropAnimation={null}>
         {activeDragTask && (
           <div className="flex items-center gap-2 px-3 py-2 rounded bg-neutral-900 border border-blue-500 shadow-2xl text-xs text-neutral-200 max-w-xs">
@@ -2774,6 +3893,17 @@ export default function Home() {
               <FolderIconLucide className="w-3.5 h-3.5 shrink-0" style={{ color: activeDragEntity.color || undefined }} />
             ) : activeDragEntity.kind === 'space' ? (
               <span className="w-2.5 h-2.5 rounded-full shrink-0" style={{ backgroundColor: activeDragEntity.color || '#6366f1' }} />
+            ) : activeDragEntity.kind === 'person' ? (
+              <span
+                className="w-4 h-4 rounded-full text-[8px] font-bold flex items-center justify-center text-white shrink-0"
+                style={{ backgroundColor: activeDragEntity.color || '#6366f1' }}
+              >
+                {activeDragEntity.initials}
+              </span>
+            ) : activeDragEntity.kind === 'docfolder' ? (
+              <FolderIconLucide className="w-3.5 h-3.5 shrink-0" style={{ color: activeDragEntity.color || undefined }} />
+            ) : activeDragEntity.kind === 'spacedoc' ? (
+              <FileText className="w-3.5 h-3.5 shrink-0" />
             ) : (
               <ListIcon className="w-3.5 h-3.5 shrink-0" />
             )}
@@ -2794,6 +3924,12 @@ export default function Home() {
           </motion.div>
         )}
       </AnimatePresence>
+
+      <CommandPalette
+        open={commandPaletteOpen}
+        onClose={() => setCommandPaletteOpen(false)}
+        onOpenTask={(id) => setModalTaskStack([id])}
+      />
     </div>
     </DndContext>
   );

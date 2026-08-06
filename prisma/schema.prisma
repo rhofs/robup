@@ -9,25 +9,45 @@ generator client {
 
 // 1. Øverste beholder
 model Workspace {
-  id        String   @id @default(uuid())
-  name      String
-  spaces    Space[]
-  createdAt DateTime @default(now()) @map("created_at")
+  id              String   @id @default(uuid())
+  name            String
+  messageOfTheDay String?  @map("message_of_the_day")
+  spaces          Space[]
+  rooms           Room[]
+  createdAt       DateTime @default(now()) @map("created_at")
+}
+
+// Kosé "kontorer" i Office-fanen — rent visuelt/organisatorisk, ingen kobling til Space-treet.
+// Sletting av et rom fjerner ikke medlemmene, de blir bare urepresenterte (SetNull).
+model Room {
+  id          String    @id @default(uuid())
+  name        String
+  icon        String?
+  color       String?
+  order       Int       @default(0)
+  workspaceId String    @map("workspace_id")
+  workspace   Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  members     User[]
+  createdAt   DateTime  @default(now()) @map("created_at")
 }
 
 // 2. Avdelinger
 model Space {
-  id           String        @id @default(uuid())
-  name         String
-  color        String        @default("#3B82F6")
-  order        Int           @default(0)
-  workspaceId  String        @map("workspace_id")
-  workspace    Workspace     @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
-  folders      Folder[]
-  lists        List[]
-  statuses     Status[]
-  customFields CustomField[]
-  createdAt    DateTime      @default(now()) @map("created_at")
+  id            String        @id @default(uuid())
+  name          String
+  color         String        @default("#3B82F6")
+  order         Int           @default(0)
+  description   String?
+  coverImageUrl String?       @map("cover_image_url")
+  workspaceId   String        @map("workspace_id")
+  workspace     Workspace     @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  folders       Folder[]
+  lists         List[]
+  statuses      Status[]
+  customFields  CustomField[]
+  docFolders    DocFolder[]
+  docs          Doc[]
+  createdAt     DateTime      @default(now()) @map("created_at")
 }
 
 // 3. Valgfritt mellomnivå (Mappe) — kan nøstes vilkårlig dypt i seg selv
@@ -85,13 +105,19 @@ model CustomField {
 
 // 7. Brukere som kan tildeles oppgaver / skrive kommentarer
 model User {
-  id        String    @id @default(uuid())
-  name      String
-  initials  String
-  color     String    @default("#6366F1")
-  tasks     Task[]    @relation("TaskAssignees")
-  comments  Comment[]
-  createdAt DateTime  @default(now()) @map("created_at")
+  id            String    @id @default(uuid())
+  name          String
+  initials      String
+  color         String    @default("#6366F1")
+  calendarToken String    @unique @default(uuid()) @map("calendar_token")
+  phone         String?
+  title         String?
+  status        String?
+  roomId        String?   @map("room_id")
+  room          Room?     @relation(fields: [roomId], references: [id], onDelete: SetNull)
+  tasks         Task[]    @relation("TaskAssignees")
+  comments      Comment[]
+  createdAt     DateTime  @default(now()) @map("created_at")
 }
 
 // 8. Selve oppgaven & Subtasks
@@ -127,9 +153,10 @@ model Task {
 
 // 9. Kommentarer OG aktivitetslogg på en task (skilt med "type")
 model Comment {
-  id        String   @id @default(uuid())
-  body      String
-  type      String   @default("comment") // 'comment' | 'activity'
+  id           String   @id @default(uuid())
+  body         String
+  type         String   @default("comment") // 'comment' | 'activity'
+  activityKind String?  @map("activity_kind") // icon selector for type='activity' rows — see ACTIVITY_ICONS in app/page.tsx
 
   taskId    String   @map("task_id")
   task      Task     @relation(fields: [taskId], references: [id], onDelete: Cascade)
@@ -140,16 +167,40 @@ model Comment {
   createdAt DateTime @default(now()) @map("created_at")
 }
 
-// 10. Navngitte dokumenter/beskrivelser per task, med autolagring
+// 10. Navngitte dokumenter — enten under en task (autolagring i task-modalen), eller løsrevet i en
+// Space/DocFolder-struktur (den nye "Docs"-fanen). taskId/spaceId+folderId er uavhengige av
+// hverandre — et dokument kan i prinsippet være begge deler, selv om ingen UI setter det opp ennå.
 model Doc {
-  id        String   @id @default(uuid())
-  title     String   @default("Untitled")
-  content   String   @default("")
-  order     Int      @default(0)
+  id        String     @id @default(uuid())
+  title     String     @default("Untitled")
+  content   String     @default("")
+  order     Int        @default(0)
 
-  taskId    String   @map("task_id")
-  task      Task     @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  taskId    String?    @map("task_id")
+  task      Task?      @relation(fields: [taskId], references: [id], onDelete: Cascade)
 
-  createdAt DateTime @default(now()) @map("created_at")
-  updatedAt DateTime @updatedAt @map("updated_at")
+  spaceId   String?    @map("space_id")
+  space     Space?     @relation(fields: [spaceId], references: [id], onDelete: Cascade)
+
+  folderId  String?    @map("doc_folder_id")
+  folder    DocFolder? @relation(fields: [folderId], references: [id], onDelete: Cascade)
+
+  createdAt DateTime   @default(now()) @map("created_at")
+  updatedAt DateTime   @updatedAt @map("updated_at")
+}
+
+// 11. Mappe-struktur for løsrevne (ikke task-bundne) Docs — speiler Folder (Space > Folder > List)
+model DocFolder {
+  id        String      @id @default(uuid())
+  name      String
+  color     String?
+  icon      String?
+  spaceId   String      @map("space_id")
+  space     Space       @relation(fields: [spaceId], references: [id], onDelete: Cascade)
+  parentId  String?     @map("parent_id")
+  parent    DocFolder?  @relation("DocFolderChildren", fields: [parentId], references: [id], onDelete: Cascade)
+  children  DocFolder[] @relation("DocFolderChildren")
+  docs      Doc[]
+  order     Int         @default(0)
+  createdAt DateTime    @default(now()) @map("created_at")
 }

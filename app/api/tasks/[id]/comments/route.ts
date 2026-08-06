@@ -1,11 +1,11 @@
 import { NextResponse } from 'next/server';
-import { prisma } from '@/lib/prisma';
+import { prisma, publicUserSelect } from '@/lib/prisma';
 
 export async function GET(_req: Request, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
   const comments = await prisma.comment.findMany({
     where: { taskId: id },
-    include: { author: true },
+    include: { author: { select: publicUserSelect } },
     orderBy: { createdAt: 'asc' },
   });
   return NextResponse.json(comments);
@@ -20,12 +20,14 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
     }
     const comment = await prisma.comment.create({
       data: {
+        ...(body.id ? { id: body.id } : {}),
         taskId: id,
         body: body.body,
-        type: 'comment',
+        type: body.type || 'comment',
+        activityKind: body.activityKind || null,
         authorId: body.authorId || null,
       },
-      include: { author: true },
+      include: { author: { select: publicUserSelect } },
     });
     return NextResponse.json(comment);
   } catch (error) {

@@ -34,9 +34,13 @@ type CalendarViewProps = {
 };
 
 export default function CalendarView({ tasks, statuses, onOpenTask, onRequestCreateTask }: CalendarViewProps) {
-  const { optimisticSetDates } = useTaskStore();
-  const [granularity, setGranularity] = useState<Granularity>('month');
-  const [focusDate, setFocusDate] = useState(() => startOfDay(new Date()));
+  const {
+    optimisticSetDates,
+    calendarGranularity: granularity,
+    calendarFocusDate: focusDate,
+    setCalendarGranularity: setGranularity,
+    setCalendarFocusDate: setFocusDate,
+  } = useTaskStore();
   const [weekDrag, setWeekDrag] = useState<DragState | null>(null);
   const gridContainerRef = useRef<HTMLDivElement>(null);
   // Sticky lane memory across renders — see assignLanes' doc comment for why this matters.
@@ -68,9 +72,9 @@ export default function CalendarView({ tasks, statuses, onOpenTask, onRequestCre
   };
 
   const step = (dir: 1 | -1) => {
-    if (granularity === 'month') setFocusDate((d) => new Date(d.getFullYear(), d.getMonth() + dir, 1));
-    else if (granularity === 'week') setFocusDate((d) => addDays(d, dir * 7));
-    else setFocusDate((d) => addDays(d, dir));
+    if (granularity === 'month') setFocusDate(new Date(focusDate.getFullYear(), focusDate.getMonth() + dir, 1));
+    else if (granularity === 'week') setFocusDate(addDays(focusDate, dir * 7));
+    else setFocusDate(addDays(focusDate, dir));
   };
 
   const headerLabel = useMemo(() => {
