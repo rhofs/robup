@@ -18,6 +18,7 @@ export type ParsedNavUrl = {
   docFolderId: string | null;
   docId: string | null;
   officeUserId: string | null;
+  officeRoomId: string | null;
 };
 
 export type NavState = {
@@ -30,6 +31,7 @@ export type NavState = {
   docFolderId: string | null;
   docId: string | null;
   officeUserId: string | null;
+  officeRoomId: string | null;
 };
 
 // Local-date YYYY-MM-DD — not `toISOString()`, which is UTC and shifts the date near midnight in
@@ -58,7 +60,8 @@ export function parseNavUrl(params: URLSearchParams): ParsedNavUrl {
   const docFolderId = params.get('docFolder');
   const docId = params.get('doc');
   const officeUserId = params.get('officeUser');
-  return { view, spaceId, listIds, modalStack, granularity, focusDate, docFolderId, docId, officeUserId };
+  const officeRoomId = params.get('officeRoom');
+  return { view, spaceId, listIds, modalStack, granularity, focusDate, docFolderId, docId, officeUserId, officeRoomId };
 }
 
 // Always-explicit canonical serialization of a fully-resolved nav state (as opposed to
@@ -74,5 +77,6 @@ export function buildNavQueryString(state: NavState): string {
   if (state.docFolderId) params.set('docFolder', state.docFolderId);
   if (state.docId) params.set('doc', state.docId);
   if (state.officeUserId) params.set('officeUser', state.officeUserId);
+  if (state.officeRoomId) params.set('officeRoom', state.officeRoomId);
   return params.toString();
 }

@@ -483,6 +483,8 @@ function PageContent() {
     setDocsNavigation,
     activeOfficeUserId,
     setActiveOfficeUserId,
+    activeOfficeRoomId,
+    setActiveOfficeRoomId,
     fetchInitialData,
     setNavigation,
     setShowArchived,
@@ -721,6 +723,7 @@ function PageContent() {
   const urlDocFolderIdKey = activeDocFolderId ?? '';
   const urlDocIdKey = activeStandaloneDocId ?? '';
   const urlOfficeUserIdKey = activeOfficeUserId ?? '';
+  const urlOfficeRoomIdKey = activeOfficeRoomId ?? '';
 
   // Effect 1: nav state -> URL. Always pushes (never replaces) once hydrated — every one of these
   // changes is a real, distinct navigation the user just made (click a Space, open a task, drill a
@@ -741,6 +744,7 @@ function PageContent() {
       docFolderId: activeDocFolderId,
       docId: activeStandaloneDocId,
       officeUserId: activeOfficeUserId,
+      officeRoomId: activeOfficeRoomId,
     });
     if (qs === searchParams.toString()) return;
     router.push(qs ? `${pathname}?${qs}` : pathname, { scroll: false });
@@ -755,6 +759,7 @@ function PageContent() {
     urlDocFolderIdKey,
     urlDocIdKey,
     urlOfficeUserIdKey,
+    urlOfficeRoomIdKey,
   ]);
 
   // Effect 2: URL -> nav state. Runs once real data has loaded (so a deep-linked Space/List/task
@@ -801,6 +806,10 @@ function PageContent() {
 
     const validOfficeUserId = parsed.officeUserId && users.some((u) => u.id === parsed.officeUserId) ? parsed.officeUserId : null;
     if (validOfficeUserId !== activeOfficeUserId) setActiveOfficeUserId(validOfficeUserId);
+
+    const validOfficeRoomId =
+      parsed.officeRoomId && workspaces.some((w) => w.rooms.some((r) => r.id === parsed.officeRoomId)) ? parsed.officeRoomId : null;
+    if (validOfficeRoomId !== activeOfficeRoomId) setActiveOfficeRoomId(validOfficeRoomId);
 
     hasHydratedFromUrlRef.current = true;
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -1789,6 +1798,7 @@ function PageContent() {
     } else if (kind === 'user') {
       setActiveView('office');
       setActiveOfficeUserId(id);
+      setActiveOfficeRoomId(null);
     }
   };
 
@@ -1942,6 +1952,7 @@ function PageContent() {
             // person's page did nothing (setActiveView('office') is a no-op when already there).
             setActiveView('office');
             setActiveOfficeUserId(null);
+            setActiveOfficeRoomId(null);
           }}
           title="Office"
           className={`w-10 h-10 rounded flex flex-col items-center justify-center gap-0.5 transition cursor-pointer ${
@@ -1951,6 +1962,11 @@ function PageContent() {
           <Building2 className="w-4 h-4" />
           <span className="text-[8px] font-medium leading-none">Office</span>
         </button>
+
+        {/* Pushes Trash down to the bottom, visually separated from the view-switching tabs above
+            it — it isn't a tab, so it shouldn't sit in the same run as Tasks/Planner/Docs/Office. */}
+        <div className="flex-1" />
+        <div className="w-8 border-t border-neutral-800/80 mb-2" />
         <button
           onClick={() => setTrashOpen(true)}
           title="Trash"
@@ -2015,7 +2031,10 @@ function PageContent() {
                   return (
                     <button
                       key={u.id}
-                      onClick={() => setActiveOfficeUserId(u.id)}
+                      onClick={() => {
+                        setActiveOfficeUserId(u.id);
+                        setActiveOfficeRoomId(null);
+                      }}
                       className={`w-full text-left px-2.5 py-1.5 rounded text-xs font-medium transition flex items-center justify-between cursor-pointer ${
                         isActive ? 'bg-neutral-800 text-blue-400 font-semibold' : 'text-neutral-300 hover:bg-neutral-800/40'
                       }`}
@@ -2285,9 +2304,12 @@ function PageContent() {
               {activeView === 'office' ? (
                 <>
                   <button
-                    onClick={() => setActiveOfficeUserId(null)}
+                    onClick={() => {
+                      setActiveOfficeUserId(null);
+                      setActiveOfficeRoomId(null);
+                    }}
                     className={`flex items-center gap-1.5 cursor-pointer ${
-                      activeOfficeUserId ? 'text-neutral-500 hover:text-neutral-300' : 'text-blue-400 font-semibold'
+                      activeOfficeUserId || activeOfficeRoomId ? 'text-neutral-500 hover:text-neutral-300' : 'text-blue-400 font-semibold'
                     }`}
                   >
                     <Building2 className="w-3.5 h-3.5" /> Office
@@ -2296,6 +2318,14 @@ function PageContent() {
                     <>
                       <span className="text-neutral-600">/</span>
                       <span className="text-neutral-300 font-semibold">{users.find((u) => u.id === activeOfficeUserId)?.name}</span>
+                    </>
+                  )}
+                  {!activeOfficeUserId && activeOfficeRoomId && (
+                    <>
+                      <span className="text-neutral-600">/</span>
+                      <span className="text-neutral-300 font-semibold">
+                        {workspaces.flatMap((w) => w.rooms).find((r) => r.id === activeOfficeRoomId)?.name}
+                      </span>
                     </>
                   )}
                 </>
@@ -2437,10 +2467,12 @@ function PageContent() {
               <OfficePage
                 users={users}
                 activeUserId={activeOfficeUserId}
+                activeRoomId={activeOfficeRoomId}
                 workspaces={workspaces}
                 tasks={tasks}
                 statuses={statuses}
                 onSelectUser={setActiveOfficeUserId}
+                onSelectRoom={setActiveOfficeRoomId}
                 onOpenTask={(id) => setModalTaskStack([id])}
                 onUpdatePhone={(userId, phone) => updateUser(userId, { phone })}
                 onUpdateUserField={(userId, field, value) => updateUser(userId, { [field]: value })}

@@ -18,6 +18,7 @@ export const publicUserSelect = {
   phone: true,
   title: true,
   status: true,
+  isDnd: true,
   roomId: true,
   createdAt: true,
 } as const;

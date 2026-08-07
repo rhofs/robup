@@ -4,17 +4,23 @@ import { useMemo, useState } from 'react';
 import { Phone, Pencil, ArrowLeft, Briefcase, Smile } from 'lucide-react';
 import { HierarchyWorkspace, HierarchyRoom, AppUser, Task, StatusDef } from '../store/useTaskStore';
 import OfficeRooms from './OfficeRooms';
+import RoomDetail from './RoomDetail';
 
-// Huly-style "office" — a room-based floor plan of the team (OfficeRooms.tsx), and (once a
-// person is picked) their own page: contact info + every task assigned to them across every
-// Space. No Space/Folder concept for people themselves, so this stays flatter than FolderTree.
+// Huly-style "office" — the HQ Building floor plan of the team (OfficeRooms.tsx), a room's own
+// detail view (RoomDetail.tsx) once one is stepped into, and (once a person is picked) their own
+// page: contact info + every task assigned to them across every Space. A person page takes
+// priority if somehow both a user and a room are selected — mirrors how every other "most
+// specific wins" nav field elsewhere in the app already resolves. No Space/Folder concept for
+// people themselves, so this stays flatter than FolderTree.
 type OfficePageProps = {
   users: AppUser[];
   activeUserId: string | null;
+  activeRoomId: string | null;
   workspaces: HierarchyWorkspace[];
   tasks: Task[];
   statuses: StatusDef[];
   onSelectUser: (userId: string | null) => void;
+  onSelectRoom: (roomId: string | null) => void;
   onOpenTask: (taskId: string) => void;
   onUpdatePhone: (userId: string, phone: string | null) => void;
   onUpdateUserField: (userId: string, field: 'title' | 'status', value: string | null) => void;
@@ -24,10 +30,12 @@ type OfficePageProps = {
 export default function OfficePage({
   users,
   activeUserId,
+  activeRoomId,
   workspaces,
   tasks,
   statuses,
   onSelectUser,
+  onSelectRoom,
   onOpenTask,
   onUpdatePhone,
   onUpdateUserField,
@@ -50,7 +58,19 @@ export default function OfficePage({
   const statusColorOf = (name: string) => statuses.find((s) => s.name === name)?.color || '#94a3b8';
 
   const activeUser = users.find((u) => u.id === activeUserId) ?? null;
+  const activeRoom = !activeUser ? (workspaces.flatMap((w) => w.rooms).find((r) => r.id === activeRoomId) ?? null) : null;
   const workspace = workspaces[0];
+
+  if (activeRoom) {
+    return (
+      <RoomDetail
+        room={activeRoom}
+        members={users.filter((u) => u.roomId === activeRoom.id)}
+        onBack={() => onSelectRoom(null)}
+        onSelectUser={onSelectUser}
+      />
+    );
+  }
 
   if (!activeUser) {
     if (!workspace) return null;
@@ -62,6 +82,7 @@ export default function OfficePage({
         users={users}
         tasks={tasks}
         onSelectUser={(id) => onSelectUser(id)}
+        onSelectRoom={(id) => onSelectRoom(id)}
         onDeleteRoomRequest={onDeleteRoomRequest}
       />
     );
@@ -73,7 +94,16 @@ export default function OfficePage({
 
   return (
     <div className="max-w-3xl mx-auto space-y-4">
-      <button onClick={() => onSelectUser(null)} className="text-[11px] text-neutral-500 hover:text-neutral-300 cursor-pointer flex items-center gap-1">
+      <button
+        onClick={() => {
+          // "Back to team" always means the top-level HQ Building, even if this person's page was
+          // reached from inside a room's own detail view (RoomDetail's member list) — clearing
+          // both keeps the button's label honest regardless of entry path.
+          onSelectUser(null);
+          onSelectRoom(null);
+        }}
+        className="text-[11px] text-neutral-500 hover:text-neutral-300 cursor-pointer flex items-center gap-1"
+      >
         <ArrowLeft className="w-3 h-3" /> Back to team
       </button>
 

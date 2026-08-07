@@ -28,6 +28,7 @@ export type AppUser = {
   phone: string | null;
   title: string | null;
   status: string | null;
+  isDnd: boolean;
   roomId: string | null;
 };
 
@@ -111,6 +112,7 @@ export type HierarchyRoom = {
   icon: string | null;
   color: string | null;
   order: number;
+  isDnd: boolean;
   workspaceId: string;
 };
 
@@ -144,8 +146,11 @@ interface TaskStore {
   // standalone Doc is open in the full-page editor (null = folder-browse grid).
   activeDocFolderId: string | null;
   activeStandaloneDocId: string | null;
-  // Office tab's own position — which team member's page is open (null = the team grid).
+  // Office tab's own position — which team member's page is open, or which room's detail view
+  // is open (null for both = the HQ Building overview). A person page takes priority if somehow
+  // both are set at once — mirrors how every other "most specific wins" nav field already resolves.
   activeOfficeUserId: string | null;
+  activeOfficeRoomId: string | null;
   isLoading: boolean;
   showArchived: boolean;
 
@@ -158,6 +163,7 @@ interface TaskStore {
   setCalendarFocusDate: (d: Date) => void;
   setDocsNavigation: (docFolderId: string | null, docId: string | null) => void;
   setActiveOfficeUserId: (userId: string | null) => void;
+  setActiveOfficeRoomId: (roomId: string | null) => void;
   setShowArchived: (v: boolean) => void;
 
   optimisticMoveTask: (taskId: string, newStatus: string) => void;
@@ -200,14 +206,26 @@ interface TaskStore {
   addUser: (name: string, initials: string, color: string, id?: string) => Promise<void>;
   updateUser: (
     userId: string,
-    patch: { name?: string; initials?: string; color?: string; phone?: string | null; title?: string | null; status?: string | null; roomId?: string | null }
+    patch: {
+      name?: string;
+      initials?: string;
+      color?: string;
+      phone?: string | null;
+      title?: string | null;
+      status?: string | null;
+      isDnd?: boolean;
+      roomId?: string | null;
+    }
   ) => Promise<void>;
   deleteUser: (userId: string) => Promise<void>;
 
   // Office "rooms" — purely organizational/visual grouping of team members, unrelated to the
   // Space/Folder/List tree.
   createRoom: (workspaceId: string, name: string, id?: string) => Promise<void>;
-  updateRoom: (roomId: string, patch: { name?: string; icon?: string | null; color?: string | null; order?: number }) => Promise<void>;
+  updateRoom: (
+    roomId: string,
+    patch: { name?: string; icon?: string | null; color?: string | null; order?: number; isDnd?: boolean }
+  ) => Promise<void>;
   deleteRoom: (roomId: string) => Promise<void>;
   assignUserToRoom: (userId: string, roomId: string | null) => Promise<void>;
   updateWorkspaceMessage: (workspaceId: string, message: string | null) => Promise<void>;
@@ -305,6 +323,7 @@ export const useTaskStore = create<TaskStore>((set, get) => {
     activeDocFolderId: null,
     activeStandaloneDocId: null,
     activeOfficeUserId: null,
+    activeOfficeRoomId: null,
     isLoading: true,
     showArchived: false,
 
@@ -390,6 +409,7 @@ export const useTaskStore = create<TaskStore>((set, get) => {
     setDocsNavigation: (activeDocFolderId, activeStandaloneDocId) => set({ activeDocFolderId, activeStandaloneDocId }),
 
     setActiveOfficeUserId: (activeOfficeUserId) => set({ activeOfficeUserId }),
+    setActiveOfficeRoomId: (activeOfficeRoomId) => set({ activeOfficeRoomId }),
 
     setShowArchived: (showArchived) => set({ showArchived }),
 
@@ -882,6 +902,7 @@ export const useTaskStore = create<TaskStore>((set, get) => {
         if (patch.phone !== undefined) oldPatch.phone = oldUser.phone;
         if (patch.title !== undefined) oldPatch.title = oldUser.title;
         if (patch.status !== undefined) oldPatch.status = oldUser.status;
+        if (patch.isDnd !== undefined) oldPatch.isDnd = oldUser.isDnd;
         if (patch.roomId !== undefined) oldPatch.roomId = oldUser.roomId;
         useHistoryStore.getState().push({
           label: 'Update team member',
@@ -954,6 +975,7 @@ export const useTaskStore = create<TaskStore>((set, get) => {
         if (patch.icon !== undefined) oldPatch.icon = oldRoom.icon;
         if (patch.color !== undefined) oldPatch.color = oldRoom.color;
         if (patch.order !== undefined) oldPatch.order = oldRoom.order;
+        if (patch.isDnd !== undefined) oldPatch.isDnd = oldRoom.isDnd;
         useHistoryStore.getState().push({
           label: 'Update room',
           undo: () => get().updateRoom(roomId, oldPatch),
@@ -981,7 +1003,7 @@ export const useTaskStore = create<TaskStore>((set, get) => {
           label: `Delete room "${room.name}"`,
           undo: async () => {
             await get().createRoom(workspace.id, room.name, room.id);
-            await get().updateRoom(room.id, { icon: room.icon, color: room.color });
+            await get().updateRoom(room.id, { icon: room.icon, color: room.color, isDnd: room.isDnd });
             for (const uid of memberIds) await get().assignUserToRoom(uid, room.id);
           },
           redo: () => get().deleteRoom(roomId),
