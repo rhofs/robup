@@ -10,9 +10,12 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
     return NextResponse.json(doc);
   }
 
+  // `content` is deliberately not accepted here — once a doc has ever been opened in the
+  // collaborative editor, its content is owned by server/collabServer.ts (the live Yjs doc plus
+  // the plain-text mirror it writes on every persist). A raw PATCH here would race the sidecar's
+  // own writes and could clobber live edits.
   const data: any = {};
   if (body.title !== undefined) data.title = body.title;
-  if (body.content !== undefined) data.content = body.content;
   if (body.order !== undefined) data.order = body.order;
   if (body.taskId !== undefined) data.taskId = body.taskId;
   if (body.folderId !== undefined) data.folderId = body.folderId;

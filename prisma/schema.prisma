@@ -178,6 +178,7 @@ model Doc {
   id        String    @id @default(uuid())
   title     String    @default("Untitled")
   content   String    @default("")
+  ydoc      Bytes?
   order     Int       @default(0)
   deletedAt DateTime? @map("deleted_at")
 

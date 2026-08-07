@@ -2,6 +2,7 @@
 
 import { Suspense, useEffect, useMemo, useRef, useState } from 'react';
 import { useRouter, usePathname, useSearchParams } from 'next/navigation';
+import dynamic from 'next/dynamic';
 import { AnimatePresence, motion } from 'framer-motion';
 import {
   DndContext,
@@ -76,6 +77,10 @@ import CommandPalette from '../components/CommandPalette';
 import TrashPanel from '../components/TrashPanel';
 import MentionText from '../components/MentionText';
 import MentionTextarea from '../components/MentionTextarea';
+
+// Client-only: HocuspocusProvider needs `window.location` and a real WebSocket, neither available
+// during SSR — a live collaborative editor has no reason to render server-side anyway.
+const CollabDocEditor = dynamic(() => import('../components/collab/CollabDocEditor'), { ssr: false });
 import type { MentionKind } from '../lib/mentions';
 
 function DocTab({
@@ -675,31 +680,19 @@ function PageContent() {
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [bulkMoveOpen, setBulkMoveOpen] = useState(false);
 
-  // Docs (sub-tab in the modal)
+  // Docs (sub-tab in the modal) — content itself now lives in each doc's own Yjs document,
+  // synced live via components/collab/CollabDocEditor.tsx; only which doc is selected is local state.
   const [activeDocId, setActiveDocId] = useState<string | null>(null);
-  const [docDraft, setDocDraft] = useState('');
-  const [docSaveStatus, setDocSaveStatus] = useState<'idle' | 'saving' | 'saved'>('idle');
-  // Notion-style view/edit toggle — mentions render as clickable chips in view mode, raw
-  // @[Label](kind:id) text while actually editing (a <textarea> can't show inline chips).
-  const [docEditorEditing, setDocEditorEditing] = useState(false);
-  const docTextareaRef = useRef<HTMLTextAreaElement>(null);
-  const docSaveTimer = useRef<any>(null);
   const [docToDelete, setDocToDelete] = useState<{ id: string; title: string } | null>(null);
   const [linkDocOpen, setLinkDocOpen] = useState(false);
   // Reverse direction of "Link existing" above — links an existing Task onto a standalone
   // (Docs-tab) doc, from the Docs tab side. Same setDocTaskLink action, just initiated from here.
   const [linkTaskOpen, setLinkTaskOpen] = useState(false);
-  // Captured on focus, compared on blur — logs one "document edited" activity entry per edit
-  // session (not per autosave tick) for whichever field(s) actually changed during that session.
+  // Captured on this editor instance's own focus, compared on its own blur — logs one "document
+  // edited" activity entry per edit session (not per keystroke) for whichever field(s) actually
+  // changed during that session. Scoped to this browser tab's own connection, not a shared field.
   const docEditBaselineRef = useRef<{ docId: string; title: string; content: string } | null>(null);
 
-  // Docs tab's full-page editor — same autosave shape as the task-modal one above, minus the
-  // activity-baseline tracking (standalone docs have no task Activity & Comments feed to log into).
-  const [spaceDocDraft, setSpaceDocDraft] = useState('');
-  const [spaceDocSaveStatus, setSpaceDocSaveStatus] = useState<'idle' | 'saving' | 'saved'>('idle');
-  const [spaceDocEditorEditing, setSpaceDocEditorEditing] = useState(false);
-  const spaceDocTextareaRef = useRef<HTMLTextAreaElement>(null);
-  const spaceDocSaveTimer = useRef<any>(null);
   const [docFolderToDelete, setDocFolderToDelete] = useState<HierarchyDocFolder | null>(null);
   const [spaceDocToDelete, setSpaceDocToDelete] = useState<TaskDoc | null>(null);
   const [roomToDelete, setRoomToDelete] = useState<HierarchyRoom | null>(null);
@@ -859,7 +852,6 @@ function PageContent() {
       fetchComments(activeModalTaskId);
       fetchDocs(activeModalTaskId);
       setActiveDocId(null);
-      setDocDraft('');
       setEditingModalTitle(false);
     }
   }, [activeModalTaskId, fetchComments, fetchDocs]);
@@ -888,7 +880,6 @@ function PageContent() {
   useEffect(() => {
     if (!activeDocId && activeTaskDocs.length > 0) {
       setActiveDocId(activeTaskDocs[0].id);
-      setDocDraft(activeTaskDocs[0].content);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeTaskDocs.length, activeModalTaskId]);
@@ -1801,65 +1792,34 @@ function PageContent() {
     }
   };
 
-  // ---- Docs (autosave) ----
-  // A freshly-opened existing doc defaults to view mode (chips render); a brand-new empty one
-  // opens straight into edit mode so there's no empty, unclickable box between creating it and
-  // actually typing into it.
-  useEffect(() => {
-    if (!activeDocId) return;
-    const doc = activeTaskDocs.find((d) => d.id === activeDocId);
-    setDocEditorEditing(!doc || doc.content === '');
-  }, [activeDocId]); // eslint-disable-line react-hooks/exhaustive-deps
-
-  // Entering edit mode (click on the view-mode chips, or the effect above for a new doc) focuses
-  // the textarea with the cursor at the end — precise click-to-caret mapping isn't worth building.
-  useEffect(() => {
-    if (docEditorEditing && docTextareaRef.current) {
-      const el = docTextareaRef.current;
-      el.focus();
-      el.setSelectionRange(el.value.length, el.value.length);
-    }
-  }, [docEditorEditing]);
-
-  const handleDocDraftChange = (value: string) => {
-    setDocDraft(value);
-    if (!activeDocId || !activeModalTaskId) return;
-    setDocSaveStatus('saving');
-    if (docSaveTimer.current) clearTimeout(docSaveTimer.current);
-    docSaveTimer.current = setTimeout(() => {
-      updateDoc(activeDocId, activeModalTaskId, { content: value });
-      setDocSaveStatus('saved');
-    }, 600);
-  };
-
+  // ---- Docs (live collaborative content via CollabDocEditor; title is still a plain field) ----
   const captureDocEditBaseline = () => {
     const doc = activeTaskDocs.find((d) => d.id === activeDocId);
     if (doc) docEditBaselineRef.current = { docId: doc.id, title: doc.title, content: doc.content };
   };
 
-  // Fires at most once per edit session (bounded by focus→blur), for whichever of title/content
-  // actually changed — not on every autosave tick, which would flood the activity feed with one
-  // entry per debounce firing during a single continuous edit.
-  const commitDocEditActivity = () => {
+  // Fires at most once per edit session (bounded by this editor instance's own focus→blur), for
+  // whichever of title/content actually changed. `liveText` is this browser tab's own current
+  // text, passed by CollabDocEditor's onEditorBlur — under real concurrent editing, two people
+  // blurring around the same moment can now log two sessions instead of one; inherent to moving
+  // from a single shared field to a multi-writer document, not a regression to fix.
+  const commitDocEditActivity = (liveText?: string) => {
     useHistoryStore.getState().endCoalesce();
     const baseline = docEditBaselineRef.current;
     const doc = activeTaskDocs.find((d) => d.id === activeDocId);
     if (!baseline || !doc || baseline.docId !== doc.id || !activeModalTaskId) return;
     if (doc.title !== baseline.title) {
       logActivity(activeModalTaskId, `Dokument omdøpt til «${doc.title}»`, 'docEdited');
-    } else if (docDraft !== baseline.content) {
+    } else if (liveText !== undefined && liveText !== baseline.content) {
       logActivity(activeModalTaskId, `Dokument redigert: «${doc.title}»`, 'docEdited');
     }
-    docEditBaselineRef.current = { docId: doc.id, title: doc.title, content: docDraft };
+    docEditBaselineRef.current = { docId: doc.id, title: doc.title, content: liveText ?? baseline.content };
   };
 
   const handleNewDoc = async () => {
     if (!activeModalTaskId) return;
     const doc = await createDoc(activeModalTaskId);
-    if (doc) {
-      setActiveDocId(doc.id);
-      setDocDraft(doc.content);
-    }
+    if (doc) setActiveDocId(doc.id);
   };
 
   const docSensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 5 } }));
@@ -1874,42 +1834,13 @@ function PageContent() {
     reorderDocs(activeModalTaskId, arrayMove(ids, oldIndex, newIndex));
   };
 
-  // ---- Docs tab: full-page editor (autosave), same debounce shape as the task-modal one above ----
+  // ---- Docs tab: full-page editor — live collaborative content via CollabDocEditor ----
   const activeStandaloneDoc = currentSpace?.spaceDocs.find((d) => d.id === activeStandaloneDocId) ?? null;
-
-  useEffect(() => {
-    if (activeStandaloneDoc) {
-      setSpaceDocDraft(activeStandaloneDoc.content);
-      setSpaceDocEditorEditing(activeStandaloneDoc.content === '');
-    }
-  }, [activeStandaloneDocId]); // eslint-disable-line react-hooks/exhaustive-deps
-
-  useEffect(() => {
-    if (spaceDocEditorEditing && spaceDocTextareaRef.current) {
-      const el = spaceDocTextareaRef.current;
-      el.focus();
-      el.setSelectionRange(el.value.length, el.value.length);
-    }
-  }, [spaceDocEditorEditing]);
-
-  const handleSpaceDocDraftChange = (value: string) => {
-    setSpaceDocDraft(value);
-    if (!activeStandaloneDocId || !currentSpace) return;
-    setSpaceDocSaveStatus('saving');
-    if (spaceDocSaveTimer.current) clearTimeout(spaceDocSaveTimer.current);
-    spaceDocSaveTimer.current = setTimeout(() => {
-      updateSpaceDoc(activeStandaloneDocId, currentSpace.id, { content: value });
-      setSpaceDocSaveStatus('saved');
-    }, 600);
-  };
 
   const handleNewSpaceDoc = async () => {
     if (!currentSpace) return;
     const doc = await createSpaceDoc(currentSpace.id, activeDocFolderId, {});
-    if (doc) {
-      setDocsNavigation(activeDocFolderId, doc.id);
-      setSpaceDocDraft(doc.content);
-    }
+    if (doc) setDocsNavigation(activeDocFolderId, doc.id);
   };
 
   if (isLoading) {
@@ -2584,11 +2515,6 @@ function PageContent() {
                           </FloatingPopover>
                         )
                       )}
-                      {spaceDocSaveStatus !== 'idle' && (
-                        <span className="text-[10px] text-neutral-500 flex items-center gap-1">
-                          {spaceDocSaveStatus === 'saving' ? 'Saving...' : (<><Check className="w-3 h-3" /> Saved</>)}
-                        </span>
-                      )}
                     </div>
                   </div>
                   <div className="bg-neutral-900/60 border border-neutral-800/80 rounded p-6 space-y-3">
@@ -2598,31 +2524,13 @@ function PageContent() {
                       className="w-full bg-transparent text-lg font-semibold text-white focus:outline-none"
                       placeholder="Document title"
                     />
-                    {spaceDocEditorEditing ? (
-                      <MentionTextarea
-                        ref={spaceDocTextareaRef}
-                        value={spaceDocDraft}
-                        onChange={(e) => handleSpaceDocDraftChange(e.target.value)}
-                        onBlur={() => setSpaceDocEditorEditing(false)}
-                        rows={24}
-                        placeholder="Write anything — saved automatically as you type..."
-                        className="w-full bg-transparent text-sm text-neutral-300 focus:outline-none resize-y leading-relaxed"
-                      />
-                    ) : (
-                      <div onClick={() => setSpaceDocEditorEditing(true)} className="min-h-[24em] cursor-text">
-                        {spaceDocDraft ? (
-                          <MentionText
-                            text={spaceDocDraft}
-                            onJump={jumpToMention}
-                            className="text-sm text-neutral-300 whitespace-pre-wrap leading-relaxed"
-                          />
-                        ) : (
-                          <p className="text-sm text-neutral-600 italic leading-relaxed">
-                            Write anything — saved automatically as you type...
-                          </p>
-                        )}
-                      </div>
-                    )}
+                    <CollabDocEditor
+                      key={activeStandaloneDoc.id}
+                      docId={activeStandaloneDoc.id}
+                      onJump={jumpToMention}
+                      placeholder="Write anything..."
+                      className="min-h-[24em] text-sm text-neutral-300"
+                    />
                   </div>
                 </div>
               ) : (
@@ -3491,13 +3399,10 @@ function PageContent() {
                   </FloatingPopover>
                 </div>
 
-                {/* Docs — multiple named documents with autosave */}
+                {/* Docs — multiple named documents, live collaborative editing */}
                 <div className="space-y-2 pt-4 border-t border-neutral-800">
                   <div className="flex items-center justify-between">
                     <h3 className="text-xs font-bold text-neutral-400 uppercase tracking-wider flex items-center gap-1.5"><FileText className="w-3.5 h-3.5" /> Documents</h3>
-                    {docSaveStatus !== 'idle' && activeDocId && (
-                      <span className="text-[10px] text-neutral-500 flex items-center gap-1">{docSaveStatus === 'saving' ? 'Saving...' : (<><Check className="w-3 h-3" /> Saved</>)}</span>
-                    )}
                   </div>
                   <div className="bg-neutral-950/40 border border-neutral-800 rounded overflow-hidden">
                     <div className="flex items-center gap-1.5 px-3 py-2 border-b border-neutral-800 overflow-x-auto">
@@ -3508,20 +3413,13 @@ function PageContent() {
                               key={d.id}
                               doc={d}
                               isActive={activeDocId === d.id}
-                              onSelect={() => {
-                                setActiveDocId(d.id);
-                                setDocDraft(d.content);
-                                setDocSaveStatus('idle');
-                              }}
+                              onSelect={() => setActiveDocId(d.id)}
                               onDelete={() => setDocToDelete({ id: d.id, title: d.title || 'Untitled' })}
                               onUnlink={
                                 activeModalTaskId
                                   ? () => {
                                       setDocTaskLink(d.id, null);
-                                      if (activeDocId === d.id) {
-                                        setActiveDocId(null);
-                                        setDocDraft('');
-                                      }
+                                      if (activeDocId === d.id) setActiveDocId(null);
                                     }
                                   : undefined
                               }
@@ -3569,39 +3467,19 @@ function PageContent() {
                           value={activeTaskDocs.find((d) => d.id === activeDocId)?.title || ''}
                           onChange={(e) => activeModalTaskId && updateDoc(activeDocId, activeModalTaskId, { title: e.target.value })}
                           onFocus={captureDocEditBaseline}
-                          onBlur={commitDocEditActivity}
+                          onBlur={() => commitDocEditActivity()}
                           className="w-full bg-transparent text-sm font-semibold text-white focus:outline-none"
                           placeholder="Document title"
                         />
-                        {docEditorEditing ? (
-                          <MentionTextarea
-                            ref={docTextareaRef}
-                            value={docDraft}
-                            onChange={(e) => handleDocDraftChange(e.target.value)}
-                            onFocus={captureDocEditBaseline}
-                            onBlur={() => {
-                              commitDocEditActivity();
-                              setDocEditorEditing(false);
-                            }}
-                            rows={8}
-                            placeholder="Write notes, specs, anything — saved automatically as you type..."
-                            className="w-full bg-transparent text-xs text-neutral-300 focus:outline-none resize-y leading-relaxed"
-                          />
-                        ) : (
-                          <div onClick={() => setDocEditorEditing(true)} className="min-h-[8em] cursor-text">
-                            {docDraft ? (
-                              <MentionText
-                                text={docDraft}
-                                onJump={jumpToMention}
-                                className="text-xs text-neutral-300 whitespace-pre-wrap leading-relaxed"
-                              />
-                            ) : (
-                              <p className="text-xs text-neutral-600 italic leading-relaxed">
-                                Write notes, specs, anything — saved automatically as you type...
-                              </p>
-                            )}
-                          </div>
-                        )}
+                        <CollabDocEditor
+                          key={activeDocId}
+                          docId={activeDocId}
+                          onJump={jumpToMention}
+                          placeholder="Write notes, specs, anything..."
+                          className="min-h-[8em] text-xs text-neutral-300"
+                          onEditorFocus={captureDocEditBaseline}
+                          onEditorBlur={commitDocEditActivity}
+                        />
                       </div>
                     ) : (
                       <p className="text-[11px] text-neutral-500 p-4">No documents yet — press "+ New" to add one.</p>
@@ -3946,10 +3824,7 @@ function PageContent() {
         onConfirm={() => {
           if (docToDelete && activeModalTaskId) {
             deleteDoc(docToDelete.id, activeModalTaskId);
-            if (activeDocId === docToDelete.id) {
-              setActiveDocId(null);
-              setDocDraft('');
-            }
+            if (activeDocId === docToDelete.id) setActiveDocId(null);
           }
           setDocToDelete(null);
         }}

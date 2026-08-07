@@ -250,7 +250,7 @@ interface TaskStore {
     folderId: string | null,
     opts?: { id?: string; title?: string; content?: string; order?: number }
   ) => Promise<TaskDoc | null>;
-  updateSpaceDoc: (docId: string, spaceId: string, patch: { title?: string; content?: string }) => void;
+  updateSpaceDoc: (docId: string, spaceId: string, patch: { title?: string }) => void;
   moveSpaceDoc: (spaceId: string, docId: string, folderId: string | null, targetSpaceId?: string) => Promise<void>;
   reorderSpaceDoc: (spaceId: string, docId: string, order: number) => Promise<void>;
   deleteSpaceDoc: (docId: string, spaceId: string) => Promise<void>;
@@ -265,7 +265,7 @@ interface TaskStore {
 
   fetchDocs: (taskId: string) => Promise<void>;
   createDoc: (taskId: string, opts?: { id?: string; title?: string; content?: string; order?: number }) => Promise<TaskDoc | null>;
-  updateDoc: (docId: string, taskId: string, patch: { title?: string; content?: string }) => void;
+  updateDoc: (docId: string, taskId: string, patch: { title?: string }) => void;
   deleteDoc: (docId: string, taskId: string) => Promise<void>;
   reorderDocs: (taskId: string, orderedIds: string[]) => void;
 
@@ -1617,7 +1617,6 @@ export const useTaskStore = create<TaskStore>((set, get) => {
       if (oldDoc) {
         const oldPatch: typeof patch = {};
         if (patch.title !== undefined) oldPatch.title = oldDoc.title;
-        if (patch.content !== undefined) oldPatch.content = oldDoc.content;
         useHistoryStore.getState().pushCoalesced(`doc-${docId}`, {
           label: 'Edit document',
           undo: () => get().updateSpaceDoc(docId, spaceId, oldPatch),
@@ -1881,7 +1880,6 @@ export const useTaskStore = create<TaskStore>((set, get) => {
       if (oldDoc) {
         const oldPatch: typeof patch = {};
         if (patch.title !== undefined) oldPatch.title = oldDoc.title;
-        if (patch.content !== undefined) oldPatch.content = oldDoc.content;
         useHistoryStore.getState().pushCoalesced(`doc-${docId}`, {
           label: 'Edit document',
           undo: () => get().updateDoc(docId, taskId, oldPatch),
