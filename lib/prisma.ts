@@ -8,8 +8,10 @@ export const prisma = globalForPrisma.prisma || new PrismaClient();
 
 if (process.env.NODE_ENV !== 'production') globalForPrisma.prisma = prisma;
 
-// calendarToken is a bearer secret for that user's .ics feed — never select it through a Task's
-// assignees or a Comment's author, only via GET /api/users/[id] for the user it belongs to.
+// calendarToken and googleRefreshToken are bearer secrets (the .ics feed / Google Docs export) —
+// never select them through a Task's assignees or a Comment's author, only via GET
+// /api/users/[id] for the user they belong to. googleEmail is display-only ("Connected as ..."),
+// not sensitive, so — unlike the two tokens above — it stays in this list, same as phone.
 export const publicUserSelect = {
   id: true,
   name: true,
@@ -20,5 +22,6 @@ export const publicUserSelect = {
   status: true,
   isDnd: true,
   roomId: true,
+  googleEmail: true,
   createdAt: true,
 } as const;

@@ -54,17 +54,20 @@ import {
   Building2,
   Search,
   Unlink,
+  Share2,
   type LucideIcon,
 } from 'lucide-react';
 import { useTaskStore, HierarchySpace, HierarchyFolder, HierarchyList, HierarchyDocFolder, HierarchyRoom, HierarchyWorkspace, StatusDef, CustomFieldDef, Task, TaskDoc } from '../store/useTaskStore';
 import { useHistoryStore } from '../store/useHistoryStore';
 import { useSessionStore } from '../store/useSessionStore';
+import { usePresenceConnection } from '../lib/collab/usePresenceConnection';
 import { collectListIdsUnder, isDescendantOf, getOrderedListIds } from '../lib/folderTree';
 import { isDescendantOfDocFolder } from '../lib/docFolderTree';
 import { buildNavQueryString, dateKey, parseNavUrl } from '../lib/navUrl';
 import DatePickerPopover from '../components/DatePickerPopover';
 import ConfirmDialog from '../components/ConfirmDialog';
 import FloatingPopover from '../components/FloatingPopover';
+import DocExportMenu from '../components/collab/DocExportMenu';
 import TaskRow, { ColumnDef } from '../components/TaskRow';
 import FolderTree, { FOLDER_ICON_CHOICES, FOLDER_ICON_MAP } from '../components/FolderTree';
 import CalendarView from '../components/calendar/CalendarView';
@@ -542,6 +545,7 @@ function PageContent() {
   } = useTaskStore();
 
   const { currentUserId, setCurrentUserId } = useSessionStore();
+  usePresenceConnection();
 
   const [sortBy, setSortBy] = useState<'dueDate' | 'startDate' | 'name' | 'none'>('none');
   const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('asc');
@@ -1326,6 +1330,22 @@ function PageContent() {
     await navigator.clipboard.writeText(url);
     showToast('Calendar feed link copied — paste it into Google/Apple/Outlook calendar as a subscription.');
   };
+
+  // One-shot signal from app/api/google/oauth/callback/route.ts's redirect — deliberately not
+  // part of lib/navUrl.ts's persistent nav-state<->URL sync (it's a single toast trigger, not
+  // app state), so it's handled here in its own effect and stripped from the URL immediately
+  // after, rather than folded into the existing nav-sync effects.
+  useEffect(() => {
+    const googleConnect = searchParams.get('googleConnect');
+    if (!googleConnect) return;
+    showToast(
+      googleConnect === 'success' ? 'Google account connected.' : 'Could not connect Google account — please try again.'
+    );
+    const next = new URLSearchParams(searchParams.toString());
+    next.delete('googleConnect');
+    router.replace(next.toString() ? `${pathname}?${next.toString()}` : pathname);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [searchParams]);
 
   // Global Ctrl+Z / Ctrl+Shift+Z undo/redo. Skipped while focus is inside an editable element so
   // the browser's own native text-undo keeps working there instead of being hijacked — same
@@ -2279,6 +2299,22 @@ function PageContent() {
                 <Link2 className="w-3.5 h-3.5" />
               </button>
             )}
+            {currentUserId &&
+              (() => {
+                const me = users.find((u) => u.id === currentUserId);
+                const connected = !!me?.googleEmail;
+                return (
+                  <a
+                    href={connected ? undefined : `/api/google/oauth/start?userId=${currentUserId}`}
+                    title={connected ? `Google Docs export connected as ${me!.googleEmail}` : 'Connect Google account for Doc export'}
+                    className={`shrink-0 p-1 rounded ${
+                      connected ? 'text-green-500' : 'text-neutral-500 hover:text-neutral-300 hover:bg-neutral-800/60 cursor-pointer'
+                    }`}
+                  >
+                    <Share2 className="w-3.5 h-3.5" />
+                  </a>
+                );
+              })()}
           </div>
           <button
             onClick={() => setTeamOpen(true)}
@@ -2493,6 +2529,7 @@ function PageContent() {
                       &larr; Back to {currentSpace.name}
                     </button>
                     <div className="flex items-center gap-2">
+                      <DocExportMenu docId={activeStandaloneDoc.id} onToast={showToast} />
                       {activeStandaloneDoc.taskId ? (
                         (() => {
                           const linkedTask = tasks.find((t) => t.id === activeStandaloneDoc.taskId);
@@ -3495,14 +3532,17 @@ function PageContent() {
 
                     {activeDocId ? (
                       <div className="p-3 space-y-2">
-                        <input
-                          value={activeTaskDocs.find((d) => d.id === activeDocId)?.title || ''}
-                          onChange={(e) => activeModalTaskId && updateDoc(activeDocId, activeModalTaskId, { title: e.target.value })}
-                          onFocus={captureDocEditBaseline}
-                          onBlur={() => commitDocEditActivity()}
-                          className="w-full bg-transparent text-sm font-semibold text-white focus:outline-none"
-                          placeholder="Document title"
-                        />
+                        <div className="flex items-center gap-2">
+                          <input
+                            value={activeTaskDocs.find((d) => d.id === activeDocId)?.title || ''}
+                            onChange={(e) => activeModalTaskId && updateDoc(activeDocId, activeModalTaskId, { title: e.target.value })}
+                            onFocus={captureDocEditBaseline}
+                            onBlur={() => commitDocEditActivity()}
+                            className="flex-1 min-w-0 bg-transparent text-sm font-semibold text-white focus:outline-none"
+                            placeholder="Document title"
+                          />
+                          <DocExportMenu docId={activeDocId} onToast={showToast} />
+                        </div>
                         <CollabDocEditor
                           key={activeDocId}
                           docId={activeDocId}

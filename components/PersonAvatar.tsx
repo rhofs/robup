@@ -2,6 +2,7 @@
 
 import type { useDraggable } from '@dnd-kit/core';
 import type { AppUser } from '../store/useTaskStore';
+import { usePresenceStore } from '../store/usePresenceStore';
 
 const SIZE_CLASSES = {
   sm: 'w-6 h-6 text-[9px]',
@@ -13,6 +14,13 @@ const DOT_SIZE_CLASSES = {
   sm: 'w-2 h-2 -bottom-0 -right-0',
   md: 'w-2.5 h-2.5 -bottom-0.5 -right-0.5',
   lg: 'w-4 h-4 -bottom-0.5 -right-0.5',
+} as const;
+
+// Opposite corner from the DND dot above, so the two independent signals never collide.
+const ONLINE_DOT_SIZE_CLASSES = {
+  sm: 'w-2 h-2 -bottom-0 -left-0',
+  md: 'w-2.5 h-2.5 -bottom-0.5 -left-0.5',
+  lg: 'w-4 h-4 -bottom-0.5 -left-0.5',
 } as const;
 
 type PersonAvatarProps = {
@@ -48,6 +56,7 @@ export default function PersonAvatar({
   dragListeners,
   style,
 }: PersonAvatarProps) {
+  const isOnline = usePresenceStore((s) => s.onlineUserIds.has(user.id));
   return (
     <button
       ref={dragRef as React.Ref<HTMLButtonElement>}
@@ -77,6 +86,12 @@ export default function PersonAvatar({
           className={`absolute ${DOT_SIZE_CLASSES[size]} rounded-full border-2 border-neutral-900 cursor-pointer transition ${
             user.isDnd ? 'bg-red-500' : 'bg-neutral-600 hover:bg-neutral-500'
           }`}
+        />
+      )}
+      {isOnline && (
+        <span
+          title="Online now"
+          className={`absolute ${ONLINE_DOT_SIZE_CLASSES[size]} rounded-full border-2 border-neutral-900 bg-green-500`}
         />
       )}
     </button>

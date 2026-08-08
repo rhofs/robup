@@ -30,6 +30,7 @@ export type AppUser = {
   status: string | null;
   isDnd: boolean;
   roomId: string | null;
+  googleEmail: string | null;
 };
 
 export type Task = PrismaTask & {
@@ -1003,7 +1004,7 @@ export const useTaskStore = create<TaskStore>((set, get) => {
           label: `Delete room "${room.name}"`,
           undo: async () => {
             await get().createRoom(workspace.id, room.name, room.id);
-            await get().updateRoom(room.id, { icon: room.icon, color: room.color, isDnd: room.isDnd });
+            await get().updateRoom(room.id, { order: room.order, icon: room.icon, color: room.color, isDnd: room.isDnd });
             for (const uid of memberIds) await get().assignUserToRoom(uid, room.id);
           },
           redo: () => get().deleteRoom(roomId),

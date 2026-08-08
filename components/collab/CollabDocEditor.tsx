@@ -6,11 +6,19 @@ import { HocuspocusProvider } from '@hocuspocus/provider';
 import Document from '@tiptap/extension-document';
 import Paragraph from '@tiptap/extension-paragraph';
 import Text from '@tiptap/extension-text';
+import Bold from '@tiptap/extension-bold';
+import Italic from '@tiptap/extension-italic';
+import Heading from '@tiptap/extension-heading';
+import BulletList from '@tiptap/extension-bullet-list';
+import OrderedList from '@tiptap/extension-ordered-list';
+import ListItem from '@tiptap/extension-list-item';
+import HardBreak from '@tiptap/extension-hard-break';
 import Collaboration from '@tiptap/extension-collaboration';
 import CollaborationCaret from '@tiptap/extension-collaboration-caret';
 import Placeholder from '@tiptap/extension-placeholder';
 import { ClientMentionNode } from './mentionNodeView';
 import PresenceBar from './PresenceBar';
+import DocToolbar from './DocToolbar';
 import { useTaskStore } from '../../store/useTaskStore';
 import { useSessionStore } from '../../store/useSessionStore';
 import type { MentionKind } from '../../lib/mentions';
@@ -69,6 +77,13 @@ export default function CollabDocEditor({
             Document,
             Paragraph,
             Text,
+            Bold,
+            Italic,
+            Heading.configure({ levels: [1, 2] }),
+            BulletList,
+            OrderedList,
+            ListItem,
+            HardBreak,
             ClientMentionNode.configure({ onJump }),
             Placeholder.configure({ placeholder: placeholder ?? 'Write notes, specs, anything...' }),
             Collaboration.configure({ document: provider.document }),
@@ -89,6 +104,7 @@ export default function CollabDocEditor({
   return (
     <div className={className}>
       {provider && <PresenceBar provider={provider} />}
+      {editor && <DocToolbar editor={editor} />}
       <div className="collab-doc-editor mt-1.5">
         <EditorContent editor={editor} />
       </div>

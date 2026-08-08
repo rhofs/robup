@@ -5,6 +5,7 @@ import { yXmlFragmentToProsemirrorJSON, prosemirrorJSONToYXmlFragment } from '@t
 import { collabSchema } from '../lib/collab/schema';
 import { legacyContentToDocJSON } from '../lib/collab/legacyContentToDocJSON';
 import { docJSONToPlainText } from '../lib/collab/docJSONToPlainText';
+import { PRESENCE_DOCUMENT_NAME } from '../lib/collab/presenceRoom';
 
 // Standalone sidecar process (run via `npm run dev:collab` / bundled into `npm run dev` via
 // concurrently — see package.json) — deliberately NOT embedded into the Next server, so `next
@@ -26,6 +27,10 @@ const server = new Server({
   unloadImmediately: false,
 
   async onLoadDocument({ document, documentName }) {
+    // The workspace-presence room carries no persisted content, only ephemeral awareness state
+    // (who's connected) — it isn't a real Doc row, so skip the DB lookup entirely.
+    if (documentName === PRESENCE_DOCUMENT_NAME) return;
+
     const doc = await prisma.doc.findUnique({ where: { id: documentName } });
     if (!doc) throw new Error(`Doc ${documentName} not found`);
 
@@ -50,6 +55,8 @@ const server = new Server({
   },
 
   async onStoreDocument({ document, documentName }) {
+    if (documentName === PRESENCE_DOCUMENT_NAME) return;
+
     const json = yXmlFragmentToProsemirrorJSON(document.getXmlFragment(XML_FRAGMENT_FIELD));
     await prisma.doc.update({
       where: { id: documentName },

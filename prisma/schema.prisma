@@ -118,6 +118,11 @@ model User {
   title         String?
   status        String?
   isDnd         Boolean   @default(false) @map("is_dnd")
+  // Google Docs export (Doc export feature): googleRefreshToken is a bearer credential — same
+  // leak-prevention rule as calendarToken, kept out of publicUserSelect. googleEmail is
+  // display-only ("Connected as ..."), not sensitive, so it stays IN publicUserSelect like phone.
+  googleRefreshToken String? @map("google_refresh_token")
+  googleEmail        String? @map("google_email")
   roomId        String?   @map("room_id")
   room          Room?     @relation(fields: [roomId], references: [id], onDelete: SetNull)
   tasks         Task[]    @relation("TaskAssignees")
