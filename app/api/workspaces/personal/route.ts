@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
+import { getCurrentUserId } from '@/lib/auth/session';
 
 // Find-or-create the user's single-member "personal" workspace behind the sidebar's private "My
 // tasks" list. A single atomic `upsert` keyed on the unique `personalOwnerId` column — not a
@@ -7,10 +8,9 @@ import { prisma } from '@/lib/prisma';
 // effect double-invocation (two near-simultaneous requests both saw "nothing exists yet" and both
 // created a workspace). The unique constraint plus upsert make a duplicate impossible at the DB
 // level regardless of how many concurrent requests land.
-export async function POST(req: Request) {
-  const body = await req.json();
-  const userId = body.userId as string | undefined;
-  if (!userId) return NextResponse.json({ error: 'Missing userId' }, { status: 400 });
+export async function POST() {
+  const userId = await getCurrentUserId();
+  if (!userId) return NextResponse.json({ error: 'Not authenticated' }, { status: 401 });
 
   const workspace = await prisma.workspace.upsert({
     where: { personalOwnerId: userId },

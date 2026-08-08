@@ -1,9 +1,15 @@
 import { NextResponse } from 'next/server';
 import { createGoogleOAuthClient, GOOGLE_EXPORT_SCOPES } from '@/lib/google/oauthClient';
+import { getCurrentUserId } from '@/lib/auth/session';
 
-export async function GET(req: Request) {
-  const userId = new URL(req.url).searchParams.get('userId');
-  if (!userId) return new Response('Missing userId', { status: 400 });
+export async function GET() {
+  // Previously read ?userId= straight off the query string with zero verification — anyone could
+  // trigger this flow with a victim's id, then complete Google's consent with their own Google
+  // account, attaching their own refresh token to the victim's User row. Now derived from the
+  // caller's own session; the callback (see .../callback/route.ts) independently re-derives it
+  // too and requires the two to match before writing anything.
+  const userId = await getCurrentUserId();
+  if (!userId) return new Response('Not authenticated', { status: 401 });
 
   let oauth2Client;
   try {

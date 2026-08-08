@@ -124,16 +124,43 @@ model CustomField {
 model User {
   id            String    @id @default(uuid())
   name          String
-  initials      String
+  // Defaulted (was bare-required) — @auth/prisma-adapter's createUser() only ever supplies
+  // id/name/email/emailVerified/image, so a brand-new Google sign-in's very first insert would
+  // otherwise violate NOT NULL before anything else runs. Backfilled to a real value right after,
+  // in auth.ts's events.createUser hook.
+  initials      String    @default("")
   color         String    @default("#6366F1")
   calendarToken String    @unique @default(uuid()) @map("calendar_token")
   phone         String?
   title         String?
   status        String?
   isDnd         Boolean   @default(false) @map("is_dnd")
+
+  // Real accounts (Google OAuth + email/password login). Nullable+unique mirrors the existing
+  // Workspace.personalOwnerId precedent — SQLite treats NULL as distinct under a unique index, so
+  // every seeded/demo User keeps email: null with zero collisions, while every real signup gets a
+  // genuinely unique one. Seed users are permanently unreachable via real login (no email, no
+  // password, no linked Account) — real accounts start completely fresh, seed data stays only as
+  // local dev/demo fixture data.
+  email         String?   @unique
+  // Required by @auth/prisma-adapter's AdapterUser contract (written on OAuth sign-in). No
+  // magic-link/verification-email flow exists — Google's asserted email is trusted at sign-in
+  // time instead.
+  emailVerified DateTime? @map("email_verified")
+  // bcrypt hash, for the Credentials (email/password) provider. Null for Google-only accounts —
+  // rejected explicitly in auth.ts's authorize(), not treated as "no password required."
+  password      String?
+  // Required literal field name for @auth/prisma-adapter's internal OAuth-account bookkeeping —
+  // deliberately NOT the same field as avatarUrl below (the app's own display avatar) to avoid
+  // conflating "OAuth plumbing" with "what the UI shows."
+  image         String?   @map("oauth_image")
+  accounts      Account[]
+
   // Google Docs export (Doc export feature): googleRefreshToken is a bearer credential — same
   // leak-prevention rule as calendarToken, kept out of publicUserSelect. googleEmail is
   // display-only ("Connected as ..."), not sensitive, so it stays IN publicUserSelect like phone.
+  // Unrelated to the Account model above — that's login-with-Google; this is the separate
+  // "connect your Google account to export Docs" flow. Two independent Google integrations.
   googleRefreshToken String? @map("google_refresh_token")
   googleEmail        String? @map("google_email")
   // Personal profile ("Me" zone) — avatarUrl is a plain URL string, same "no upload, just a
@@ -148,6 +175,28 @@ model User {
   workspaces    Workspace[] @relation("WorkspaceMembers")
   comments      Comment[]
   createdAt     DateTime  @default(now()) @map("created_at")
+}
+
+// Standard @auth/prisma-adapter model, needed only for Google OAuth account linking — sessions
+// are JWT-only (Credentials + Auth.js can't use database sessions), so no Session model exists
+// here, and no Email/magic-link provider exists, so no VerificationToken model either.
+model Account {
+  id                String  @id @default(uuid())
+  userId            String  @map("user_id")
+  type              String
+  provider          String
+  providerAccountId String  @map("provider_account_id")
+  refresh_token     String?
+  access_token      String?
+  expires_at        Int?
+  token_type        String?
+  scope             String?
+  id_token          String?
+  session_state     String?
+  user              User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([provider, providerAccountId])
+  @@map("accounts")
 }
 
 // 8. Selve oppgaven & Subtasks

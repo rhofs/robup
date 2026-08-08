@@ -2,11 +2,12 @@ import { NextResponse } from 'next/server';
 // Adjust this import to match how you fetch the Prisma client elsewhere in your project
 // (usually a singleton in e.g. lib/prisma.ts)
 import { prisma, publicUserSelect } from '@/lib/prisma';
+import { getCurrentUserId } from '@/lib/auth/session';
 
-export async function GET(req: Request) {
-  const userId = new URL(req.url).searchParams.get('userId');
-  // No identity asserted -> no workspaces. This app has no real login (see PLANNING.md), so
-  // "You are: (none)" must not be a way to bypass every private workspace's membership check.
+export async function GET() {
+  const userId = await getCurrentUserId();
+  // No identity asserted -> no workspaces. Real login now backs this identity (see auth.ts) —
+  // signed-out requests must not be a way to bypass every private workspace's membership check.
   if (!userId) return NextResponse.json([]);
 
   const workspaces = await prisma.workspace.findMany({
@@ -50,13 +51,14 @@ export async function GET(req: Request) {
 }
 
 export async function POST(req: Request) {
+  const userId = await getCurrentUserId();
+  if (!userId) return NextResponse.json({ error: 'Not authenticated' }, { status: 401 });
   const body = await req.json();
-  if (!body.userId) return NextResponse.json({ error: 'Missing userId' }, { status: 400 });
 
   const workspace = await prisma.workspace.create({
     data: {
       name: body.name || 'Untitled workspace',
-      members: { connect: { id: body.userId } },
+      members: { connect: { id: userId } },
     },
     select: { id: true, name: true, messageOfTheDay: true, createdAt: true },
   });

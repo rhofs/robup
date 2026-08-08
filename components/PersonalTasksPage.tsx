@@ -41,7 +41,7 @@ export default function PersonalTasksPage({ currentUser, tasks, statuses, ensure
   if (!currentUser) {
     return (
       <div className="max-w-xl mx-auto text-[11px] text-neutral-500 px-1 py-8 text-center border border-dashed border-neutral-800 rounded">
-        Pick "You are: ..." in the sidebar to see your tasks.
+        Sign in to see your tasks.
       </div>
     );
   }

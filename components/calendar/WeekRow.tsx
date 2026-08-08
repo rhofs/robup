@@ -98,13 +98,17 @@ export default function WeekRow({
           {weekDays.map((day, i) => {
             const outOfMonth = monthAnchor ? day.getMonth() !== monthAnchor.getMonth() : false;
             const isToday = isSameDay(day, today);
+            const isWeekend = day.getDay() === 0 || day.getDay() === 6;
+            // Priority mirrors how the day-number badge already reads: out-of-month is the
+            // dimmest/most muted signal, today is the strongest, weekend is a subtle in-between
+            // tint (same idea as Google Calendar/Notion's faint weekend column shading) — never
+            // combined, so the grid doesn't get visually noisy.
+            const cellBg = outOfMonth ? 'bg-neutral-950/40' : isToday ? 'bg-blue-500/[0.06]' : isWeekend ? 'bg-white/[0.025]' : '';
             return (
               <div key={i} className="relative group/day">
                 <button
                   onClick={() => onDrillDay(day)}
-                  className={`w-full h-full flex flex-col items-start text-left border-r border-b border-neutral-800/60 last:border-r-0 px-1.5 pt-1 cursor-pointer hover:bg-neutral-800/30 transition ${
-                    outOfMonth ? 'bg-neutral-950/40' : ''
-                  }`}
+                  className={`w-full h-full flex flex-col items-start text-left border-r border-b border-neutral-800/60 last:border-r-0 px-1.5 pt-1 cursor-pointer hover:bg-neutral-800/30 transition ${cellBg}`}
                 >
                   <span
                     className={`text-[10px] font-mono inline-flex items-center justify-center w-5 h-5 rounded-full ${

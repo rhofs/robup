@@ -26,6 +26,7 @@ import {
   Calendar as CalendarIcon,
   Users,
   UserCircle,
+  LogOut,
   Zap,
   Archive,
   Plus,
@@ -60,10 +61,12 @@ import {
   Settings,
   type LucideIcon,
 } from 'lucide-react';
-import { useTaskStore, HierarchySpace, HierarchyFolder, HierarchyList, HierarchyDocFolder, HierarchyRoom, HierarchyWorkspace, StatusDef, CustomFieldDef, Task, TaskDoc } from '../store/useTaskStore';
+import { useTaskStore, HierarchySpace, HierarchyFolder, HierarchyList, HierarchyDocFolder, HierarchyRoom, HierarchyWorkspace, StatusDef, CustomFieldDef, Task, TaskDoc, AppUser } from '../store/useTaskStore';
 import { useHistoryStore } from '../store/useHistoryStore';
 import { useSessionStore } from '../store/useSessionStore';
 import { usePresenceConnection } from '../lib/collab/usePresenceConnection';
+import { SessionSync } from '../components/SessionSync';
+import { signOut } from 'next-auth/react';
 import { collectListIdsUnder, isDescendantOf, getOrderedListIds } from '../lib/folderTree';
 import { isDescendantOfDocFolder } from '../lib/docFolderTree';
 import { buildNavQueryString, dateKey, parseNavUrl } from '../lib/navUrl';
@@ -415,15 +418,6 @@ const listPathLabel = (space: HierarchySpace, listId: string): string => {
   return parts.join(' / ');
 };
 
-const initialsFromName = (name: string) =>
-  name
-    .trim()
-    .split(/\s+/)
-    .map((p) => p[0])
-    .join('')
-    .slice(0, 2)
-    .toUpperCase();
-
 const DEFAULT_COLUMN_WIDTHS: Record<string, number> = { name: 280 };
 const NAME_WIDTH_RANGE = { min: 140, max: 640 };
 const COLUMN_WIDTH_RANGE = { min: 70, max: 300 };
@@ -515,9 +509,7 @@ function PageContent() {
     createCustomField,
     updateCustomField,
     deleteCustomField,
-    addUser,
     updateUser,
-    deleteUser,
     createRoom,
     updateRoom,
     deleteRoom,
@@ -557,7 +549,7 @@ function PageContent() {
     reorderDocs,
   } = useTaskStore();
 
-  const { currentUserId, setCurrentUserId } = useSessionStore();
+  const { currentUserId } = useSessionStore();
   usePresenceConnection();
 
   const [sortBy, setSortBy] = useState<'dueDate' | 'startDate' | 'name' | 'none'>('none');
@@ -592,8 +584,7 @@ function PageContent() {
   const [modalAssigneeOpen, setModalAssigneeOpen] = useState(false);
 
   const [teamOpen, setTeamOpen] = useState(false);
-  const [newUserName, setNewUserName] = useState('');
-  const [newUserColor, setNewUserColor] = useState(FIELD_COLOR_CHOICES[1]);
+  const [memberToRemove, setMemberToRemove] = useState<AppUser | null>(null);
 
   const [newCommentBody, setNewCommentBody] = useState('');
   const [commentAsUserId, setCommentAsUserId] = useState(currentUserId ?? '');
@@ -1157,12 +1148,6 @@ function PageContent() {
     createStatus(currentSpace.id, newStatusName, newStatusColor);
     setNewStatusName('');
     setStatusMenuOpen(false);
-  };
-
-  const handleAddUser = () => {
-    if (!newUserName.trim()) return;
-    addUser(newUserName.trim(), initialsFromName(newUserName), newUserColor);
-    setNewUserName('');
   };
 
   const handleQuickAdd = () => {
@@ -2054,7 +2039,7 @@ function PageContent() {
             ) : (
               <button
                 onClick={() =>
-                  currentUserId ? setCreatingWorkspace(true) : showToast('Pick "You are: ..." first to create a workspace.')
+                  currentUserId ? setCreatingWorkspace(true) : showToast('Sign in first to create a workspace.')
                 }
                 className="w-full text-left px-3 py-1.5 text-xs text-blue-400 hover:bg-neutral-800/60 cursor-pointer flex items-center gap-1.5"
               >
@@ -2202,7 +2187,7 @@ function PageContent() {
             {(() => {
               const me = users.find((u) => u.id === currentUserId);
               if (!me) {
-                return <div className="text-[11px] text-neutral-500 px-1 py-1">Pick "You are: ..." below to see your tasks.</div>;
+                return <div className="text-[11px] text-neutral-500 px-1 py-1">Sign in to see your tasks.</div>;
               }
               return (
                 <div className="space-y-1">
@@ -2505,10 +2490,7 @@ function PageContent() {
         </div>
 
         <div className="p-3 m-3 space-y-2">
-          <div
-            className="w-full flex items-center gap-2 bg-neutral-950/60 rounded border border-neutral-800/80 px-3 py-2 text-[11px] text-neutral-300"
-            title="Who you're acting as — attributed on activity you generate (task creation, edits, etc). Stand-in for real login/sessions, coming later."
-          >
+          <div className="w-full flex items-center gap-2 bg-neutral-950/60 rounded border border-neutral-800/80 px-3 py-2 text-[11px] text-neutral-300">
             {(() => {
               const me = users.find((u) => u.id === currentUserId);
               if (!me) return <UserCircle className="w-3.5 h-3.5 text-neutral-500 shrink-0" />;
@@ -2523,18 +2505,7 @@ function PageContent() {
                 </span>
               );
             })()}
-            <select
-              value={currentUserId ?? ''}
-              onChange={(e) => setCurrentUserId(e.target.value || null)}
-              className="flex-1 bg-transparent text-[11px] text-neutral-300 focus:outline-none cursor-pointer"
-            >
-              <option value="">You are: (none)</option>
-              {users.map((u) => (
-                <option key={u.id} value={u.id}>
-                  You are: {u.name}
-                </option>
-              ))}
-            </select>
+            <span className="flex-1 truncate">{users.find((u) => u.id === currentUserId)?.name ?? 'Not signed in'}</span>
             {currentUserId && (
               <button
                 onClick={handleCopyCalendarLink}
@@ -2550,7 +2521,7 @@ function PageContent() {
                 const connected = !!me?.googleEmail;
                 return (
                   <a
-                    href={connected ? undefined : `/api/google/oauth/start?userId=${currentUserId}`}
+                    href={connected ? undefined : '/api/google/oauth/start'}
                     title={connected ? `Google Docs export connected as ${me!.googleEmail}` : 'Connect Google account for Doc export'}
                     className={`shrink-0 p-1 rounded ${
                       connected ? 'text-green-500' : 'text-neutral-500 hover:text-neutral-300 hover:bg-neutral-800/60 cursor-pointer'
@@ -2560,13 +2531,22 @@ function PageContent() {
                   </a>
                 );
               })()}
+            {currentUserId && (
+              <button
+                onClick={() => signOut({ redirectTo: '/login' })}
+                title="Sign out"
+                className="shrink-0 p-1 rounded text-neutral-500 hover:text-neutral-300 hover:bg-neutral-800/60 cursor-pointer"
+              >
+                <LogOut className="w-3.5 h-3.5" />
+              </button>
+            )}
           </div>
           <button
             onClick={() => setTeamOpen(true)}
             className="w-full flex items-center justify-between bg-neutral-950/60 rounded border border-neutral-800/80 px-3 py-2 text-[11px] text-neutral-300 hover:border-neutral-700 cursor-pointer"
           >
             <span className="flex items-center gap-2"><Users className="w-3.5 h-3.5" /> Team</span>
-            <span className="text-neutral-500 font-mono">{users.length}</span>
+            <span className="text-neutral-500 font-mono">{currentWorkspace?.members.length ?? 0}</span>
           </button>
           <div className="bg-neutral-950/60 rounded border border-neutral-800/80 px-3 py-2 text-[11px] text-neutral-400 flex items-center justify-between">
             <span className="flex items-center gap-1.5"><Zap className="w-3.5 h-3.5" /> RobUp</span>
@@ -4094,7 +4074,15 @@ function PageContent() {
         }}
       />
 
-      {/* ================= TEAM / USER ADMIN MODAL ================= */}
+      {/* ================= TEAM MODAL — current workspace's members only ================= */}
+      {/* Used to list literally every user in the whole database (across every workspace) with a
+          one-click, unconfirmed "delete this account entirely" button — a leftover from the
+          pre-auth shared-identity model. Now scoped to currentWorkspace.members (already in
+          memory from GET /api/workspaces, no extra fetch), and "delete" is "remove from
+          workspace" (removeWorkspaceMember, membership-checked server-side) behind a confirm
+          dialog, not full account deletion — see components/ProfilePage.tsx's own "Delete my
+          account" for that, which only ever acts on your own account. The old "+ Add user"
+          quick-create-a-fake-person form is gone too — real accounts come from /login now. */}
       {teamOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-neutral-950/70 backdrop-blur-xs" onClick={() => setTeamOpen(false)}>
           <div onClick={(e) => e.stopPropagation()} className="w-[420px] bg-neutral-900 border border-neutral-800 rounded shadow-2xl overflow-hidden">
@@ -4106,8 +4094,10 @@ function PageContent() {
             </div>
 
             <div className="p-5 space-y-3 max-h-72 overflow-y-auto">
-              {users.length === 0 && <p className="text-xs text-neutral-500">No users yet — add the first one below.</p>}
-              {users.map((u) => (
+              {(currentWorkspace?.members ?? []).length === 0 && (
+                <p className="text-xs text-neutral-500">No members in this workspace yet.</p>
+              )}
+              {(currentWorkspace?.members ?? []).map((u) => (
                 <div key={u.id} className="flex items-center justify-between bg-neutral-950/60 border border-neutral-800 rounded px-3 py-2">
                   <div className="flex items-center gap-2.5">
                     <span className="w-7 h-7 rounded-full text-[10px] font-bold flex items-center justify-center text-white" style={{ backgroundColor: u.color }}>
@@ -4115,45 +4105,29 @@ function PageContent() {
                     </span>
                     <span className="text-xs text-neutral-200 font-medium">{u.name}</span>
                   </div>
-                  <button onClick={() => deleteUser(u.id)} className="text-neutral-500 hover:text-red-400 text-xs cursor-pointer">
-                    <Trash2 className="w-3.5 h-3.5" />
-                  </button>
+                  {u.id !== currentUserId && (
+                    <button onClick={() => setMemberToRemove(u)} title="Remove from workspace" className="text-neutral-500 hover:text-red-400 text-xs cursor-pointer">
+                      <Trash2 className="w-3.5 h-3.5" />
+                    </button>
+                  )}
                 </div>
               ))}
-            </div>
-
-            <div className="p-5 border-t border-neutral-800 space-y-2.5">
-              <input
-                value={newUserName}
-                onChange={(e) => setNewUserName(e.target.value)}
-                onKeyDown={(e) => e.key === 'Enter' && handleAddUser()}
-                placeholder="Full name (e.g. Robin Hansen)"
-                className="w-full bg-neutral-950 border border-neutral-700 rounded px-3 py-2 text-xs text-white focus:outline-none focus:border-blue-500"
-              />
-              <div className="flex items-center justify-between">
-                <div className="flex gap-1.5">
-                  {FIELD_COLOR_CHOICES.map((c) => (
-                    <button
-                      key={c}
-                      onClick={() => setNewUserColor(c)}
-                      className={`w-5 h-5 rounded-full cursor-pointer ${newUserColor === c ? 'ring-2 ring-white' : ''}`}
-                      style={{ backgroundColor: c }}
-                    />
-                  ))}
-                </div>
-                {newUserName.trim() && (
-                  <span className="w-7 h-7 rounded-full text-[10px] font-bold flex items-center justify-center text-white" style={{ backgroundColor: newUserColor }}>
-                    {initialsFromName(newUserName)}
-                  </span>
-                )}
-              </div>
-              <button onClick={handleAddUser} className="w-full bg-blue-600 hover:bg-blue-500 text-white text-xs py-2 rounded font-medium cursor-pointer">
-                + Add user
-              </button>
             </div>
           </div>
         </div>
       )}
+
+      <ConfirmDialog
+        open={!!memberToRemove}
+        title="Remove from workspace?"
+        message={memberToRemove ? `This removes ${memberToRemove.name} from this workspace. Their account itself isn't deleted — they can be re-added later.` : ''}
+        confirmLabel="Remove"
+        onCancel={() => setMemberToRemove(null)}
+        onConfirm={() => {
+          if (memberToRemove && currentWorkspace) removeWorkspaceMember(currentWorkspace.id, memberToRemove.id);
+          setMemberToRemove(null);
+        }}
+      />
 
       <ConfirmDialog
         open={!!docToDelete}
@@ -4337,6 +4311,7 @@ function PageContent() {
 
       {trashOpen && <TrashPanel onClose={() => setTrashOpen(false)} />}
       {settingsOpen && <SettingsPanel onClose={() => setSettingsOpen(false)} onChange={() => setHiddenNavTabs(readHiddenNavTabs())} />}
+      <SessionSync />
     </div>
     </DndContext>
   );

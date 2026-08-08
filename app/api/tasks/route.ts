@@ -1,8 +1,9 @@
 import { NextResponse } from 'next/server';
 import { prisma, publicUserSelect } from '@/lib/prisma';
+import { getCurrentUserId } from '@/lib/auth/session';
 
-export async function GET(req: Request) {
-  const userId = new URL(req.url).searchParams.get('userId');
+export async function GET() {
+  const userId = await getCurrentUserId();
   // Same "no identity, no data" rule as GET /api/workspaces — a private workspace's tasks must
   // never be sent to a request that isn't asserting a member's identity.
   if (!userId) return NextResponse.json([]);

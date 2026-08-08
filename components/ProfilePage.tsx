@@ -1,7 +1,8 @@
 'use client';
 
 import { useState } from 'react';
-import { Image as ImageIcon, Pencil, Link2, Globe, X } from 'lucide-react';
+import { signOut } from 'next-auth/react';
+import { Image as ImageIcon, Pencil, Link2, Globe, X, AlertTriangle } from 'lucide-react';
 import { AppUser } from '../store/useTaskStore';
 import { EditableField } from './OfficePage';
 
@@ -20,7 +21,7 @@ export default function ProfilePage({ currentUser, onUpdate }: ProfilePageProps)
   if (!currentUser) {
     return (
       <div className="max-w-xl mx-auto text-[11px] text-neutral-500 px-1 py-8 text-center border border-dashed border-neutral-800 rounded">
-        Pick "You are: ..." in the sidebar to see your profile.
+        Sign in to see your profile.
       </div>
     );
   }
@@ -51,6 +52,102 @@ export default function ProfilePage({ currentUser, onUpdate }: ProfilePageProps)
           />
         </div>
       </div>
+
+      <DangerZone user={currentUser} />
+    </div>
+  );
+}
+
+// Deleting your own account entirely — distinct from the Team panel's "remove from workspace"
+// (app/page.tsx), which only ever un-links membership, never touches the account itself. This is
+// the one place a whole User row can be destroyed, and it only ever acts on the signed-in
+// caller's own id (enforced again server-side in DELETE /api/users/[id], not just here). Needs
+// re-proving identity before it fires — password re-entry for Credentials accounts, or typing
+// your exact email for Google-only accounts (no password to check against).
+function DangerZone({ user }: { user: AppUser }) {
+  const [confirming, setConfirming] = useState(false);
+  const [password, setPassword] = useState('');
+  const [confirmEmail, setConfirmEmail] = useState('');
+  const [error, setError] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
+
+  const reset = () => {
+    setConfirming(false);
+    setPassword('');
+    setConfirmEmail('');
+    setError(null);
+  };
+
+  const handleDelete = async () => {
+    setError(null);
+    setBusy(true);
+    const res = await fetch(`/api/users/${user.id}`, {
+      method: 'DELETE',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(user.hasPassword ? { password } : { confirmEmail }),
+    });
+    if (!res.ok) {
+      const data = await res.json().catch(() => null);
+      setError(data?.error || 'Could not delete account');
+      setBusy(false);
+      return;
+    }
+    await signOut({ redirectTo: '/login' });
+  };
+
+  return (
+    <div className="max-w-xl mx-auto border border-red-900/50 bg-red-950/10 rounded p-5 space-y-3">
+      <div className="flex items-start gap-2">
+        <AlertTriangle className="w-4 h-4 text-red-400 shrink-0 mt-0.5" />
+        <div>
+          <div className="text-xs font-semibold text-red-400">Danger zone</div>
+          <p className="text-[11px] text-neutral-500 mt-0.5">Deleting your account is permanent — every task, comment, and doc tied only to you goes with it. This can't be undone.</p>
+        </div>
+      </div>
+
+      {!confirming ? (
+        <button
+          onClick={() => setConfirming(true)}
+          className="text-[11px] text-red-400 hover:text-red-300 border border-red-900/60 hover:bg-red-950/40 rounded px-3 py-1.5 cursor-pointer transition"
+        >
+          Delete my account
+        </button>
+      ) : (
+        <div className="space-y-2">
+          {user.hasPassword ? (
+            <input
+              type="password"
+              autoFocus
+              placeholder="Confirm your password"
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              className="w-full bg-neutral-950 border border-neutral-700 rounded px-3 py-2 text-xs text-white focus:outline-none focus:border-red-500"
+            />
+          ) : (
+            <input
+              type="email"
+              autoFocus
+              placeholder={`Type "${user.email ?? 'your email'}" to confirm`}
+              value={confirmEmail}
+              onChange={(e) => setConfirmEmail(e.target.value)}
+              className="w-full bg-neutral-950 border border-neutral-700 rounded px-3 py-2 text-xs text-white focus:outline-none focus:border-red-500"
+            />
+          )}
+          {error && <p className="text-[11px] text-red-400">{error}</p>}
+          <div className="flex gap-2">
+            <button
+              onClick={handleDelete}
+              disabled={busy || (user.hasPassword ? !password : !confirmEmail)}
+              className="flex-1 bg-red-600 hover:bg-red-500 disabled:opacity-40 disabled:cursor-not-allowed text-white text-xs py-2 rounded font-medium cursor-pointer transition"
+            >
+              Permanently delete
+            </button>
+            <button onClick={reset} className="flex-1 border border-neutral-700 hover:border-neutral-600 text-neutral-300 text-xs py-2 rounded cursor-pointer transition">
+              Cancel
+            </button>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

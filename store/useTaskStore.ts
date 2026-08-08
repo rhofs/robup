@@ -35,6 +35,12 @@ export type AppUser = {
   bio: string | null;
   linkedinUrl: string | null;
   websiteUrl: string | null;
+  // Only ever populated on the entry matching the signed-in caller (see GET /api/users) — used by
+  // ProfilePage's account-deletion confirmation to decide between "confirm your password" and
+  // "type your email to confirm" (Google-only accounts have no password). Undefined for every
+  // other user's AppUser object, never leaked.
+  email?: string | null;
+  hasPassword?: boolean;
 };
 
 export type Task = PrismaTask & {

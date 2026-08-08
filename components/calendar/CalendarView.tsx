@@ -1,6 +1,6 @@
 'use client';
 
-import { useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { ChevronLeft, ChevronRight, Plus } from 'lucide-react';
 import {
   addDays,
@@ -46,6 +46,23 @@ export default function CalendarView({ tasks, statuses, workspaces, onOpenTask, 
   const gridContainerRef = useRef<HTMLDivElement>(null);
   // Sticky lane memory across renders — see assignLanes' doc comment for why this matters.
   const previousLanesRef = useRef<Map<string, number>>(new Map());
+
+  // Row height used to be purely content-driven (just tall enough for the day number + however
+  // many task bars are in it), which left a large dead void below the grid on a light/empty
+  // month — the bordered container fills the page via flex-1, but its content only ever occupied
+  // its natural (short) height. Measuring the container lets rowHeight below stretch rows to
+  // fill the available space instead, matching how Google Calendar/Notion always fill the
+  // viewport regardless of how many events exist.
+  const [containerHeight, setContainerHeight] = useState(0);
+  useEffect(() => {
+    const el = gridContainerRef.current;
+    if (!el) return;
+    const update = () => setContainerHeight(el.clientHeight);
+    update();
+    const ro = new ResizeObserver(update);
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, []);
 
   const today = useMemo(() => startOfDay(new Date()), []);
   const statusColorOf = (name: string) => statuses.find((s) => s.name === name)?.color || '#94a3b8';
@@ -141,8 +158,13 @@ export default function CalendarView({ tasks, statuses, workspaces, onOpenTask, 
     const laneCount = Math.max(1, Math.min(maxVisibleLanes, used));
     const hasOverflow = segmentsByWeek.flat().some((s) => s.lane >= maxVisibleLanes);
     const top = DAY_NUM_H + laneCount * (BAR_H + BAR_GAP);
-    return { rowHeight: top + (hasOverflow ? OVERFLOW_H : 0), overflowTop: top };
-  }, [granularity, segmentsByWeek, maxVisibleLanes]);
+    const contentHeight = top + (hasOverflow ? OVERFLOW_H : 0);
+    // overflowTop stays anchored to the content height (where the "+N more" strip actually
+    // starts) regardless of stretching — only the row's own total height grows to fill the
+    // container, leaving extra blank space at the bottom of each cell, not moving that strip.
+    const stretched = weeks.length > 0 && containerHeight > 0 ? Math.max(contentHeight, containerHeight / weeks.length) : contentHeight;
+    return { rowHeight: stretched, overflowTop: top };
+  }, [granularity, segmentsByWeek, maxVisibleLanes, containerHeight, weeks.length]);
 
   const gridStartDate = weeks.length > 0 ? weeks[0][0] : today;
 

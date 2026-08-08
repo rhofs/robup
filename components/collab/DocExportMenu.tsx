@@ -14,7 +14,7 @@ type DocExportMenuProps = {
 // Small "Link existing"/"Link to task" style popover (same FloatingPopover already used right
 // next to where this sits at both call sites) with two export paths: a plain download link for
 // PDF (the server sets Content-Disposition: attachment, no client JS needed), and an action
-// button for Google Docs, which needs the current "You are: ..." identity to know which Google
+// button for Google Docs, which needs the current signed-in identity to know which Google
 // account to use/connect.
 export default function DocExportMenu({ docId, onToast }: DocExportMenuProps) {
   const [open, setOpen] = useState(false);
@@ -25,7 +25,7 @@ export default function DocExportMenu({ docId, onToast }: DocExportMenuProps) {
 
   const handleExportGoogle = async () => {
     if (!currentUserId) {
-      onToast?.('Pick "You are: ..." first so the export knows which Google account to use.');
+      onToast?.('Sign in first so the export knows which Google account to use.');
       return;
     }
     if (!currentUser?.googleEmail) {
