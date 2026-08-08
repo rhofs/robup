@@ -20,6 +20,10 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
   if (body.status !== undefined) data.status = body.status;
   if (body.isDnd !== undefined) data.isDnd = body.isDnd;
   if (body.roomId !== undefined) data.roomId = body.roomId;
+  if (body.avatarUrl !== undefined) data.avatarUrl = body.avatarUrl;
+  if (body.bio !== undefined) data.bio = body.bio;
+  if (body.linkedinUrl !== undefined) data.linkedinUrl = body.linkedinUrl;
+  if (body.websiteUrl !== undefined) data.websiteUrl = body.websiteUrl;
 
   // Unlike GET (the one deliberate place calendarToken is returned, to its own owner), PATCH is
   // called by anyone editing a name/color/phone — select the public shape so it doesn't leak here.

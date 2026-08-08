@@ -1,15 +1,16 @@
 import { startOfDay } from './calendarDates';
 
 export type NavGranularity = 'month' | 'week' | 'day';
-export type NavView = 'board' | 'calendar' | 'docs' | 'office';
+export type NavView = 'board' | 'calendar' | 'docs' | 'office' | 'mytasks' | 'mypersonal' | 'profile';
 
-// `spaceId`/`listIds` are nullable — null means the URL simply didn't mention them at all, which
-// is distinct from an explicit `space=everything`. That distinction lets a bare first visit to
-// `/` keep the app's existing "auto-select the first Space" behavior instead of a parser forcing
-// it back to 'everything'. Every other field always resolves to a concrete default when absent,
-// since forcing those is already today's real default behavior.
+// `workspaceId`/`spaceId`/`listIds` are nullable — null means the URL simply didn't mention them
+// at all, which is distinct from an explicit `space=everything`. That distinction lets a bare
+// first visit to `/` keep the app's existing "auto-select the first Space" behavior instead of a
+// parser forcing it back to 'everything'. Every other field always resolves to a concrete default
+// when absent, since forcing those is already today's real default behavior.
 export type ParsedNavUrl = {
   view: NavView;
+  workspaceId: string | null;
   spaceId: string | null;
   listIds: string[] | null;
   modalStack: string[];
@@ -23,6 +24,7 @@ export type ParsedNavUrl = {
 
 export type NavState = {
   view: NavView;
+  workspaceId: string | null;
   spaceId: string;
   listIds: string[];
   modalStack: string[];
@@ -49,7 +51,20 @@ export const parseDateKey = (s: string): Date | null => {
 export function parseNavUrl(params: URLSearchParams): ParsedNavUrl {
   const viewParam = params.get('view');
   const view: NavView =
-    viewParam === 'calendar' ? 'calendar' : viewParam === 'docs' ? 'docs' : viewParam === 'office' ? 'office' : 'board';
+    viewParam === 'calendar'
+      ? 'calendar'
+      : viewParam === 'docs'
+        ? 'docs'
+        : viewParam === 'office'
+          ? 'office'
+          : viewParam === 'mytasks'
+            ? 'mytasks'
+            : viewParam === 'mypersonal'
+              ? 'mypersonal'
+              : viewParam === 'profile'
+                ? 'profile'
+                : 'board';
+  const workspaceId = params.get('workspace');
   const spaceId = params.has('space') ? params.get('space') : null;
   const listIds = params.has('lists') ? (params.get('lists') || '').split(',').filter(Boolean) : null;
   const modalStack = (params.get('modal') || '').split(',').filter(Boolean);
@@ -61,7 +76,7 @@ export function parseNavUrl(params: URLSearchParams): ParsedNavUrl {
   const docId = params.get('doc');
   const officeUserId = params.get('officeUser');
   const officeRoomId = params.get('officeRoom');
-  return { view, spaceId, listIds, modalStack, granularity, focusDate, docFolderId, docId, officeUserId, officeRoomId };
+  return { view, workspaceId, spaceId, listIds, modalStack, granularity, focusDate, docFolderId, docId, officeUserId, officeRoomId };
 }
 
 // Always-explicit canonical serialization of a fully-resolved nav state (as opposed to
@@ -69,6 +84,7 @@ export function parseNavUrl(params: URLSearchParams): ParsedNavUrl {
 export function buildNavQueryString(state: NavState): string {
   const params = new URLSearchParams();
   if (state.view !== 'board') params.set('view', state.view);
+  if (state.workspaceId) params.set('workspace', state.workspaceId);
   if (state.spaceId !== 'everything') params.set('space', state.spaceId);
   if (state.listIds.length > 0) params.set('lists', [...state.listIds].sort().join(','));
   if (state.modalStack.length > 0) params.set('modal', state.modalStack.join(','));

@@ -1,9 +1,14 @@
 import { NextResponse } from 'next/server';
 import { prisma, publicUserSelect } from '@/lib/prisma';
 
-export async function GET() {
+export async function GET(req: Request) {
+  const userId = new URL(req.url).searchParams.get('userId');
+  // Same "no identity, no data" rule as GET /api/workspaces — a private workspace's tasks must
+  // never be sent to a request that isn't asserting a member's identity.
+  if (!userId) return NextResponse.json([]);
+
   const tasks = await prisma.task.findMany({
-    where: { deletedAt: null },
+    where: { deletedAt: null, list: { space: { workspace: { members: { some: { id: userId } } } } } },
     include: { assignees: { select: publicUserSelect } },
     orderBy: { createdAt: 'desc' },
   });

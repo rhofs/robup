@@ -23,5 +23,9 @@ export const publicUserSelect = {
   isDnd: true,
   roomId: true,
   googleEmail: true,
+  avatarUrl: true,
+  bio: true,
+  linkedinUrl: true,
+  websiteUrl: true,
   createdAt: true,
 } as const;

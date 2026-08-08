@@ -175,7 +175,7 @@ export default function OfficePage({
   );
 }
 
-function EditableField({
+export function EditableField({
   icon: Icon,
   value,
   placeholder,

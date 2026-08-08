@@ -14,6 +14,19 @@ model Workspace {
   messageOfTheDay String?  @map("message_of_the_day")
   spaces          Space[]
   rooms           Room[]
+  // Same implicit-M2M shape as Task.assignees/User.tasks below — no separate join model needed.
+  // A workspace with exactly one member is what "private" means in this app: nobody else is ever
+  // a member, so nothing scoped under it is ever returned to anyone else's GET /api/tasks etc.
+  members         User[]   @relation("WorkspaceMembers")
+  // The one auto-created single-member workspace behind the sidebar's private "My tasks" list —
+  // distinguishes it from any other single-member workspace a user creates by hand via the
+  // normal switcher (which should still show up there; this one deliberately doesn't).
+  isPersonal      Boolean  @default(false) @map("is_personal")
+  // Unique per user — makes find-or-create atomic via a single upsert (POST
+  // /api/workspaces/personal) instead of a separate findFirst-then-create, which raced under
+  // React Strict Mode's dev-mode double-invoke (two near-simultaneous requests both saw "no
+  // existing personal workspace" and both created one). Null for every non-personal workspace.
+  personalOwnerId String?  @unique @map("personal_owner_id")
   createdAt       DateTime @default(now()) @map("created_at")
 }
 
@@ -123,9 +136,16 @@ model User {
   // display-only ("Connected as ..."), not sensitive, so it stays IN publicUserSelect like phone.
   googleRefreshToken String? @map("google_refresh_token")
   googleEmail        String? @map("google_email")
+  // Personal profile ("Me" zone) — avatarUrl is a plain URL string, same "no upload, just a
+  // URL" precedent as Space.coverImageUrl (this app has no file/blob storage).
+  avatarUrl     String?   @map("avatar_url")
+  bio           String?
+  linkedinUrl   String?   @map("linkedin_url")
+  websiteUrl    String?   @map("website_url")
   roomId        String?   @map("room_id")
   room          Room?     @relation(fields: [roomId], references: [id], onDelete: SetNull)
   tasks         Task[]    @relation("TaskAssignees")
+  workspaces    Workspace[] @relation("WorkspaceMembers")
   comments      Comment[]
   createdAt     DateTime  @default(now()) @map("created_at")
 }

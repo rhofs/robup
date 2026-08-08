@@ -67,14 +67,22 @@ export default function PersonAvatar({
       style={style}
       className={`relative shrink-0 rounded-full cursor-grab active:cursor-grabbing ${className ?? ''}`}
     >
-      <span
-        className={`${SIZE_CLASSES[size]} rounded-full font-bold flex items-center justify-center text-white transition ${
-          user.isDnd ? 'ring-2 ring-red-500' : ''
-        }`}
-        style={{ backgroundColor: user.color }}
-      >
-        {user.initials}
-      </span>
+      {user.avatarUrl ? (
+        <img
+          src={user.avatarUrl}
+          alt={user.name}
+          className={`${SIZE_CLASSES[size]} rounded-full object-cover transition ${user.isDnd ? 'ring-2 ring-red-500' : ''}`}
+        />
+      ) : (
+        <span
+          className={`${SIZE_CLASSES[size]} rounded-full font-bold flex items-center justify-center text-white transition ${
+            user.isDnd ? 'ring-2 ring-red-500' : ''
+          }`}
+          style={{ backgroundColor: user.color }}
+        >
+          {user.initials}
+        </span>
+      )}
       {showDndToggle && (
         <span
           role="button"

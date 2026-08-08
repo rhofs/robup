@@ -55,6 +55,9 @@ import {
   Search,
   Unlink,
   Share2,
+  ListChecks,
+  ClipboardCheck,
+  Settings,
   type LucideIcon,
 } from 'lucide-react';
 import { useTaskStore, HierarchySpace, HierarchyFolder, HierarchyList, HierarchyDocFolder, HierarchyRoom, HierarchyWorkspace, StatusDef, CustomFieldDef, Task, TaskDoc } from '../store/useTaskStore';
@@ -76,8 +79,12 @@ import SpaceHome from '../components/SpaceHome';
 import DocFolderTree from '../components/DocFolderTree';
 import DocsBrowser from '../components/DocsBrowser';
 import OfficePage from '../components/OfficePage';
+import MyTasksPage from '../components/MyTasksPage';
+import PersonalTasksPage from '../components/PersonalTasksPage';
+import ProfilePage from '../components/ProfilePage';
 import CommandPalette from '../components/CommandPalette';
 import TrashPanel from '../components/TrashPanel';
+import SettingsPanel, { readHiddenNavTabs, type NavTabId } from '../components/SettingsPanel';
 import MentionText from '../components/MentionText';
 import MentionTextarea from '../components/MentionTextarea';
 
@@ -471,6 +478,8 @@ function PageContent() {
     users,
     comments,
     docs,
+    activeWorkspaceId,
+    setActiveWorkspaceId,
     activeSpaceId,
     activeListIds,
     isLoading,
@@ -514,6 +523,10 @@ function PageContent() {
     deleteRoom,
     assignUserToRoom,
     updateWorkspaceMessage,
+    createWorkspace,
+    addWorkspaceMember,
+    removeWorkspaceMember,
+    ensurePersonalWorkspace,
     updateSpace,
     reorderSpace,
     createSpace,
@@ -593,7 +606,15 @@ function PageContent() {
   const [spaceToDelete, setSpaceToDelete] = useState<HierarchySpace | null>(null);
   const [creatingSpace, setCreatingSpace] = useState(false);
   const [trashOpen, setTrashOpen] = useState(false);
+  const [settingsOpen, setSettingsOpen] = useState(false);
+  const [hiddenNavTabs, setHiddenNavTabs] = useState<Set<NavTabId>>(() => new Set());
+  useEffect(() => {
+    setHiddenNavTabs(readHiddenNavTabs());
+  }, []);
   const [newSpaceDraft, setNewSpaceDraft] = useState('');
+  const [workspaceSwitcherOpen, setWorkspaceSwitcherOpen] = useState(false);
+  const [creatingWorkspace, setCreatingWorkspace] = useState(false);
+  const [newWorkspaceDraft, setNewWorkspaceDraft] = useState('');
   const [collapsedSpaceIds, setCollapsedSpaceIds] = useState<Set<string>>(() => readCollapsedSpaces());
   const toggleSpaceCollapsed = (spaceId: string) => {
     setCollapsedSpaceIds((prev) => {
@@ -602,6 +623,19 @@ function PageContent() {
       if (collapsed) next.add(spaceId);
       else next.delete(spaceId);
       setSpaceCollapsed(spaceId, collapsed);
+      return next;
+    });
+  };
+  // Clicking anywhere on the row body (name included, not just the dedicated icon/chevron slot)
+  // should force the Space open — same as ClickUp — not toggle it shut again on a second click of
+  // the name. Only the icon slot's own handler (which stops propagation before this ever runs)
+  // is a real toggle.
+  const expandSpace = (spaceId: string) => {
+    setCollapsedSpaceIds((prev) => {
+      if (!prev.has(spaceId)) return prev;
+      const next = new Set(prev);
+      next.delete(spaceId);
+      setSpaceCollapsed(spaceId, false);
       return next;
     });
   };
@@ -707,9 +741,14 @@ function PageContent() {
   const [modalTitleDraft, setModalTitleDraft] = useState('');
   const [renamingTaskId, setRenamingTaskId] = useState<string | null>(null);
 
+  // Re-fetches whenever the "You are: ..." identity changes, not just on mount — workspace-scoped
+  // endpoints (workspaces/tasks/task-docs) filter by whoever's currently asserted, so switching
+  // identity needs to pull that person's own workspaces rather than keep showing the previous
+  // person's data (or nothing, if the app started with no identity selected).
   useEffect(() => {
     fetchInitialData();
-  }, [fetchInitialData]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [fetchInitialData, currentUserId]);
 
   // ---- Browser back/forward: nav state <-> URL query string ----
   // Two effects, each a no-op when the URL and the app's nav state already agree — that mutual
@@ -740,6 +779,7 @@ function PageContent() {
     if (!hasHydratedFromUrlRef.current) return;
     const qs = buildNavQueryString({
       view: activeView,
+      workspaceId: activeWorkspaceId,
       spaceId: activeSpaceId,
       listIds: [...activeListIds],
       modalStack: modalTaskStack,
@@ -755,6 +795,7 @@ function PageContent() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [
     activeView,
+    activeWorkspaceId,
     activeSpaceId,
     urlListIdsKey,
     urlModalStackKey,
@@ -774,6 +815,14 @@ function PageContent() {
     const parsed = parseNavUrl(searchParams);
 
     if (parsed.view !== activeView) setActiveView(parsed.view);
+
+    // Same "URL says nothing -> leave it" rule as spaceId below, just simpler since workspace has
+    // no distinct "explicit default" value the way Space has 'everything' — a stale/deleted
+    // workspace id (e.g. this identity is no longer a member) silently falls back to whichever
+    // workspace fetchInitialData already picked, rather than erroring.
+    if (parsed.workspaceId && parsed.workspaceId !== activeWorkspaceId && workspaces.some((w) => w.id === parsed.workspaceId)) {
+      setActiveWorkspaceId(parsed.workspaceId);
+    }
 
     // A bare URL (no `space=`) means two different things depending on when we see it: on the very
     // first hydration pass it means "no opinion" and leaves whatever fetchInitialData's own
@@ -905,6 +954,15 @@ function PageContent() {
     setFolderMenu(null);
     setBulkMoveOpen(false);
   };
+
+  // Falls back to the first non-personal workspace only while activeWorkspaceId hasn't resolved
+  // yet (e.g. the very first render before fetchInitialData's own selection lands) — every other
+  // "which workspace" call site in this file should read this instead of workspaces[0] directly.
+  // A personal workspace (the hidden one behind "My tasks") is never "the current workspace."
+  const currentWorkspace = useMemo(
+    () => workspaces.find((w) => w.id === activeWorkspaceId) ?? workspaces.find((w) => !w.isPersonal),
+    [workspaces, activeWorkspaceId]
+  );
 
   const currentSpace = useMemo(() => {
     if (activeSpaceId === 'everything') return null;
@@ -1114,9 +1172,9 @@ function PageContent() {
 
     if (!targetListId && currentSpace && currentSpace.lists.length > 0) {
       targetListId = currentSpace.lists[0].id;
-    } else if (!targetListId && workspaces[0]?.spaces[0]?.lists[0]) {
-      targetListId = workspaces[0].spaces[0].lists[0].id;
-      targetSpaceId = workspaces[0].spaces[0].id;
+    } else if (!targetListId && currentWorkspace?.spaces[0]?.lists[0]) {
+      targetListId = currentWorkspace.spaces[0].lists[0].id;
+      targetSpaceId = currentWorkspace.spaces[0].id;
     }
 
     if (targetListId) {
@@ -1209,7 +1267,7 @@ function PageContent() {
 
   const commitNewSpace = () => {
     const trimmed = newSpaceDraft.trim();
-    if (trimmed && workspaces[0]) createSpace(workspaces[0].id, trimmed);
+    if (trimmed && currentWorkspace) createSpace(currentWorkspace.id, trimmed);
     setNewSpaceDraft('');
     setCreatingSpace(false);
   };
@@ -1919,74 +1977,209 @@ function PageContent() {
   // expand animation is unaffected.
   const navScope = `${activeSpaceId}|${activeListIdsKey}`;
 
-  // Which scope the currently-open task modal's layoutId should match: the main list's
-  // navScope if opened from there, or the parent task's subtask-table scope if opened
-  // by drilling into a subtask (so the "row grows into modal" animation still connects
-  // to whichever row was actually clicked).
-  const modalLayoutScope =
-    modalTaskStack.length > 1 ? `subtasks-${modalTaskStack[modalTaskStack.length - 2]}` : navScope;
-
   return (
     <DndContext sensors={taskSensors} collisionDetection={closestCenter} onDragStart={handleTaskDragStart} onDragOver={handleTaskDragOver} onDragEnd={handleTaskDragEnd}>
-    <div className="flex h-screen bg-neutral-950 text-neutral-100 font-sans overflow-hidden select-none">
+    <div className="flex flex-col h-screen bg-neutral-950 text-neutral-100 font-sans overflow-hidden select-none">
+      {/* ================= TOP BAR — workspace + search, so the icon rail/sidebar below don't
+          have to carry that weight themselves (previously both lived stacked at the very top
+          of the sidebar, which read as cramped). ================= */}
+      <header className="h-14 shrink-0 border-b border-neutral-800/80 bg-neutral-950 flex items-center px-3 gap-4">
+        <div className="flex items-center gap-2 shrink-0 w-64">
+          <div className="w-8 h-8 rounded bg-gradient-to-br from-blue-500 to-blue-700 flex items-center justify-center font-black text-white shadow-lg shadow-blue-500/20 shrink-0">
+            R
+          </div>
+          <FloatingPopover
+            open={workspaceSwitcherOpen}
+            onClose={() => {
+              setWorkspaceSwitcherOpen(false);
+              setCreatingWorkspace(false);
+            }}
+            panelClassName="w-64 bg-neutral-900 border border-neutral-800 rounded shadow-xl py-1 max-h-[70vh] overflow-y-auto"
+            anchor={
+              <button
+                onClick={() => setWorkspaceSwitcherOpen((o) => !o)}
+                className="min-w-0 flex-1 flex items-center justify-between gap-1 cursor-pointer group"
+                title="Switch workspace"
+              >
+                <div className="min-w-0 text-left">
+                  <h1 className="font-bold tracking-tight text-white leading-tight text-sm truncate">
+                    {currentWorkspace?.name || 'RobUp Workspace'}
+                  </h1>
+                  <p className="text-[9px] text-emerald-400 font-mono flex items-center gap-1">
+                    <span className="w-1 h-1 rounded-full bg-emerald-400 animate-pulse shrink-0"></span> Zero-Cloud SQLite
+                  </p>
+                </div>
+                <ChevronDown className="w-3.5 h-3.5 text-neutral-500 group-hover:text-neutral-300 shrink-0" />
+              </button>
+            }
+          >
+            <div className="text-[10px] uppercase tracking-wide text-neutral-500 px-3 py-1">Workspaces</div>
+            {workspaces.filter((ws) => !ws.isPersonal).map((ws) => (
+              <button
+                key={ws.id}
+                onClick={() => {
+                  setActiveWorkspaceId(ws.id);
+                  setWorkspaceSwitcherOpen(false);
+                }}
+                className={`w-full text-left px-3 py-1.5 text-xs hover:bg-neutral-800/60 cursor-pointer flex items-center justify-between gap-2 ${
+                  ws.id === currentWorkspace?.id ? 'text-blue-400' : 'text-neutral-300'
+                }`}
+              >
+                <span className="truncate">{ws.name}</span>
+                {ws.members.length === 1 && <span className="text-[9px] text-neutral-600 shrink-0">Private</span>}
+              </button>
+            ))}
+            <div className="border-t border-neutral-800 my-1" />
+            {creatingWorkspace ? (
+              <input
+                autoFocus
+                value={newWorkspaceDraft}
+                onChange={(e) => setNewWorkspaceDraft(e.target.value)}
+                onBlur={() => {
+                  const trimmed = newWorkspaceDraft.trim();
+                  if (trimmed && currentUserId) createWorkspace(trimmed, currentUserId);
+                  setNewWorkspaceDraft('');
+                  setCreatingWorkspace(false);
+                }}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') (e.target as HTMLInputElement).blur();
+                  if (e.key === 'Escape') {
+                    setNewWorkspaceDraft('');
+                    setCreatingWorkspace(false);
+                  }
+                }}
+                placeholder="Workspace name..."
+                className="w-[calc(100%-1.5rem)] mx-3 my-1 bg-neutral-950 border border-blue-500 rounded px-2 py-1 text-xs text-white focus:outline-none"
+              />
+            ) : (
+              <button
+                onClick={() =>
+                  currentUserId ? setCreatingWorkspace(true) : showToast('Pick "You are: ..." first to create a workspace.')
+                }
+                className="w-full text-left px-3 py-1.5 text-xs text-blue-400 hover:bg-neutral-800/60 cursor-pointer flex items-center gap-1.5"
+              >
+                <Plus className="w-3 h-3" /> New workspace
+              </button>
+            )}
+            {currentWorkspace && (
+              <>
+                <div className="border-t border-neutral-800 my-1" />
+                <div className="text-[10px] uppercase tracking-wide text-neutral-500 px-3 py-1">Members</div>
+                {currentWorkspace.members.map((m) => (
+                  <div key={m.id} className="w-full px-3 py-1 text-xs text-neutral-300 flex items-center justify-between gap-2">
+                    <span className="truncate">{m.name}</span>
+                    {currentWorkspace.members.length > 1 && (
+                      <button
+                        onClick={() => removeWorkspaceMember(currentWorkspace.id, m.id)}
+                        title="Remove from workspace"
+                        className="text-neutral-600 hover:text-red-400 cursor-pointer shrink-0"
+                      >
+                        <X className="w-3 h-3" />
+                      </button>
+                    )}
+                  </div>
+                ))}
+                {users
+                  .filter((u) => !currentWorkspace.members.some((m) => m.id === u.id))
+                  .map((u) => (
+                    <button
+                      key={u.id}
+                      onClick={() => addWorkspaceMember(currentWorkspace.id, u.id)}
+                      className="w-full text-left px-3 py-1.5 text-xs text-blue-400 hover:bg-neutral-800/60 cursor-pointer flex items-center gap-1.5"
+                    >
+                      <Plus className="w-3 h-3" /> {u.name}
+                    </button>
+                  ))}
+              </>
+            )}
+          </FloatingPopover>
+        </div>
+        <div className="flex-1 flex justify-center">
+          <button
+            onClick={() => setCommandPaletteOpen(true)}
+            className="w-full max-w-md flex items-center gap-2 bg-neutral-900/60 rounded border border-neutral-800/80 px-3 py-1.5 text-[11px] text-neutral-500 hover:border-neutral-700 hover:text-neutral-300 cursor-pointer"
+          >
+            <Search className="w-3.5 h-3.5" />
+            <span className="flex-1 text-left">Search...</span>
+            <span className="text-[9px] font-mono text-neutral-600">Ctrl+K</span>
+          </button>
+        </div>
+        <div className="w-64 shrink-0" aria-hidden />
+      </header>
+
+      <div className="flex flex-1 overflow-hidden">
       {/* ================= ICON RAIL ================= */}
       <nav className="w-14 bg-neutral-950 border-r border-neutral-800/80 flex flex-col items-center py-4 gap-2 shrink-0 select-none">
-        <div className="w-8 h-8 rounded bg-gradient-to-br from-blue-500 to-blue-700 flex items-center justify-center font-black text-white shadow-lg shadow-blue-500/20 mb-3">
-          R
-        </div>
-        <button
-          onClick={() => setActiveView('board')}
-          title="Tasks"
-          className={`w-10 h-10 rounded flex flex-col items-center justify-center gap-0.5 transition cursor-pointer ${
-            activeView === 'board' ? 'bg-neutral-800 text-blue-400' : 'text-neutral-500 hover:bg-neutral-800/60 hover:text-neutral-200'
-          }`}
-        >
-          <ListIcon className="w-4 h-4" />
-          <span className="text-[8px] font-medium leading-none">Tasks</span>
-        </button>
-        <button
-          onClick={() => setActiveView('calendar')}
-          title="Planner"
-          className={`w-10 h-10 rounded flex flex-col items-center justify-center gap-0.5 transition cursor-pointer ${
-            activeView === 'calendar' ? 'bg-neutral-800 text-blue-400' : 'text-neutral-500 hover:bg-neutral-800/60 hover:text-neutral-200'
-          }`}
-        >
-          <CalendarIcon className="w-4 h-4" />
-          <span className="text-[8px] font-medium leading-none">Planner</span>
-        </button>
-        <button
-          onClick={() => setActiveView('docs')}
-          title="Docs"
-          className={`w-10 h-10 rounded flex flex-col items-center justify-center gap-0.5 transition cursor-pointer ${
-            activeView === 'docs' ? 'bg-neutral-800 text-blue-400' : 'text-neutral-500 hover:bg-neutral-800/60 hover:text-neutral-200'
-          }`}
-        >
-          <FileText className="w-4 h-4" />
-          <span className="text-[8px] font-medium leading-none">Docs</span>
-        </button>
-        <button
-          onClick={() => {
-            // Always resets to the team grid, even if Office was already the active tab — same
-            // "click the rail icon to go home" expectation as clicking a nav icon in most apps,
-            // not just a tab switch. Without this, clicking Office while already viewing a
-            // person's page did nothing (setActiveView('office') is a no-op when already there).
-            setActiveView('office');
-            setActiveOfficeUserId(null);
-            setActiveOfficeRoomId(null);
-          }}
-          title="Office"
-          className={`w-10 h-10 rounded flex flex-col items-center justify-center gap-0.5 transition cursor-pointer ${
-            activeView === 'office' ? 'bg-neutral-800 text-blue-400' : 'text-neutral-500 hover:bg-neutral-800/60 hover:text-neutral-200'
-          }`}
-        >
-          <Building2 className="w-4 h-4" />
-          <span className="text-[8px] font-medium leading-none">Office</span>
-        </button>
+        {!hiddenNavTabs.has('board') && (
+          <button
+            onClick={() => setActiveView('board')}
+            title="Tasks"
+            className={`w-10 h-10 rounded flex flex-col items-center justify-center gap-0.5 transition cursor-pointer ${
+              activeView === 'board' ? 'bg-neutral-800 text-blue-400' : 'text-neutral-500 hover:bg-neutral-800/60 hover:text-neutral-200'
+            }`}
+          >
+            <ListIcon className="w-4 h-4" />
+            <span className="text-[8px] font-medium leading-none">Tasks</span>
+          </button>
+        )}
+        {!hiddenNavTabs.has('calendar') && (
+          <button
+            onClick={() => setActiveView('calendar')}
+            title="Planner"
+            className={`w-10 h-10 rounded flex flex-col items-center justify-center gap-0.5 transition cursor-pointer ${
+              activeView === 'calendar' ? 'bg-neutral-800 text-blue-400' : 'text-neutral-500 hover:bg-neutral-800/60 hover:text-neutral-200'
+            }`}
+          >
+            <CalendarIcon className="w-4 h-4" />
+            <span className="text-[8px] font-medium leading-none">Planner</span>
+          </button>
+        )}
+        {!hiddenNavTabs.has('docs') && (
+          <button
+            onClick={() => setActiveView('docs')}
+            title="Docs"
+            className={`w-10 h-10 rounded flex flex-col items-center justify-center gap-0.5 transition cursor-pointer ${
+              activeView === 'docs' ? 'bg-neutral-800 text-blue-400' : 'text-neutral-500 hover:bg-neutral-800/60 hover:text-neutral-200'
+            }`}
+          >
+            <FileText className="w-4 h-4" />
+            <span className="text-[8px] font-medium leading-none">Docs</span>
+          </button>
+        )}
+        {!hiddenNavTabs.has('office') && (
+          <button
+            onClick={() => {
+              // Always resets to the team grid, even if Office was already the active tab — same
+              // "click the rail icon to go home" expectation as clicking a nav icon in most apps,
+              // not just a tab switch. Without this, clicking Office while already viewing a
+              // person's page did nothing (setActiveView('office') is a no-op when already there).
+              setActiveView('office');
+              setActiveOfficeUserId(null);
+              setActiveOfficeRoomId(null);
+            }}
+            title="Office"
+            className={`w-10 h-10 rounded flex flex-col items-center justify-center gap-0.5 transition cursor-pointer ${
+              activeView === 'office' ? 'bg-neutral-800 text-blue-400' : 'text-neutral-500 hover:bg-neutral-800/60 hover:text-neutral-200'
+            }`}
+          >
+            <Building2 className="w-4 h-4" />
+            <span className="text-[8px] font-medium leading-none">Office</span>
+          </button>
+        )}
 
-        {/* Pushes Trash down to the bottom, visually separated from the view-switching tabs above
-            it — it isn't a tab, so it shouldn't sit in the same run as Tasks/Planner/Docs/Office. */}
+        {/* Pushes Trash/Settings down to the bottom, visually separated from the view-switching
+            tabs above — neither is a tab, so they shouldn't sit in the same run as Tasks/Planner/
+            Docs/Office. */}
         <div className="flex-1" />
         <div className="w-8 border-t border-neutral-800/80 mb-2" />
+        <button
+          onClick={() => setSettingsOpen(true)}
+          title="Settings"
+          className="w-10 h-10 rounded flex flex-col items-center justify-center gap-0.5 transition cursor-pointer text-neutral-500 hover:bg-neutral-800/60 hover:text-neutral-200"
+        >
+          <Settings className="w-4 h-4" />
+          <span className="text-[8px] font-medium leading-none">Settings</span>
+        </button>
         <button
           onClick={() => setTrashOpen(true)}
           title="Trash"
@@ -2000,27 +2193,66 @@ function PageContent() {
       {/* ================= LEFT MENU (SIDEBAR) ================= */}
       <aside className="w-64 bg-neutral-900/90 border-r border-neutral-800/80 flex flex-col justify-between shrink-0 select-none">
         <div>
-          <div className="px-4 py-4 border-b border-neutral-800/80">
-            <h1 className="font-bold tracking-tight text-white leading-tight text-sm">
-              {workspaces[0]?.name || 'RobUp Workspace'}
-            </h1>
-            <p className="text-[10px] text-emerald-400 font-mono flex items-center gap-1 mt-0.5">
-              <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse"></span> Zero-Cloud SQLite
-            </p>
+          {/* Persistent "Me" zone — above the workspace switcher, not a nav-rail tab. Avatar
+              opens the profile page; the two lists below split what used to be one cross-
+              workspace "My Tasks" nav icon into a private personal list (spans every workspace,
+              only this identity ever sees it) and an assigned-tasks list scoped to whichever
+              workspace is currently active. */}
+          <div className="px-4 py-3 border-b border-neutral-800/80">
+            {(() => {
+              const me = users.find((u) => u.id === currentUserId);
+              if (!me) {
+                return <div className="text-[11px] text-neutral-500 px-1 py-1">Pick "You are: ..." below to see your tasks.</div>;
+              }
+              return (
+                <div className="space-y-1">
+                  <button
+                    onClick={() => setActiveView('profile')}
+                    className={`w-full flex items-center gap-2.5 px-1 py-1 rounded cursor-pointer transition ${
+                      activeView === 'profile' ? 'bg-neutral-800' : 'hover:bg-neutral-800/40'
+                    }`}
+                  >
+                    {me.avatarUrl ? (
+                      <img src={me.avatarUrl} alt={me.name} className="w-8 h-8 rounded-full object-cover shrink-0" />
+                    ) : (
+                      <span
+                        className="w-8 h-8 rounded-full text-xs font-bold flex items-center justify-center text-white shrink-0"
+                        style={{ backgroundColor: me.color }}
+                      >
+                        {me.initials}
+                      </span>
+                    )}
+                    <div className="min-w-0 text-left">
+                      <div className="text-xs font-semibold text-white truncate">{me.name}</div>
+                      <div className="text-[10px] text-neutral-500">View profile</div>
+                    </div>
+                  </button>
+                  <button
+                    // ensurePersonalWorkspace itself is called by PersonalTasksPage.tsx's own
+                    // mount effect, not here — calling it from both places raced (worse, doubled
+                    // again by React Strict Mode's dev double-invoke) before the /personal route
+                    // was made atomic; this also makes deep-linking straight to ?view=mypersonal
+                    // work without needing the sidebar click at all.
+                    onClick={() => setActiveView('mypersonal')}
+                    className={`w-full text-left px-2 py-1.5 rounded text-[11px] cursor-pointer flex items-center gap-1.5 transition ${
+                      activeView === 'mypersonal' ? 'bg-neutral-800 text-blue-400' : 'text-neutral-400 hover:bg-neutral-800/40 hover:text-neutral-200'
+                    }`}
+                  >
+                    <ListChecks className="w-3 h-3" /> My tasks
+                  </button>
+                  <button
+                    onClick={() => setActiveView('mytasks')}
+                    className={`w-full text-left px-2 py-1.5 rounded text-[11px] cursor-pointer flex items-center gap-1.5 transition ${
+                      activeView === 'mytasks' ? 'bg-neutral-800 text-blue-400' : 'text-neutral-400 hover:bg-neutral-800/40 hover:text-neutral-200'
+                    }`}
+                  >
+                    <ClipboardCheck className="w-3 h-3" /> My assigned tasks
+                  </button>
+                </div>
+              );
+            })()}
           </div>
-
-          <div className="px-3 pt-3">
-            <button
-              onClick={() => setCommandPaletteOpen(true)}
-              className="w-full flex items-center gap-2 bg-neutral-950/60 rounded border border-neutral-800/80 px-3 py-1.5 text-[11px] text-neutral-500 hover:border-neutral-700 hover:text-neutral-300 cursor-pointer"
-            >
-              <Search className="w-3.5 h-3.5" />
-              <span className="flex-1 text-left">Search...</span>
-              <span className="text-[9px] font-mono text-neutral-600">Ctrl+K</span>
-            </button>
-          </div>
-
-          <div className="p-3 space-y-4 overflow-y-auto max-h-[calc(100vh-140px)]">
+          <div className="p-3 space-y-4 overflow-y-auto max-h-[calc(100vh-96px)]">
             {activeView === 'board' && (
             <button
               onClick={() => {
@@ -2126,7 +2358,7 @@ function PageContent() {
                   className="w-full bg-neutral-950 border border-blue-500 rounded px-2 py-1 text-[11px] text-white focus:outline-none"
                 />
               )}
-              {[...(workspaces[0]?.spaces ?? [])].sort((a, b) => a.order - b.order).map((space: HierarchySpace) => {
+              {[...(currentWorkspace?.spaces ?? [])].sort((a, b) => a.order - b.order).map((space: HierarchySpace) => {
                 const isSpaceActive = activeView === 'board' && activeSpaceId === space.id && activeListIds.size === 0 && modalTaskStack.length === 0;
                 const spaceListIds = collectListIdsUnder(space, null);
                 const spaceTasksCount = tasks.filter(
@@ -2146,6 +2378,7 @@ function PageContent() {
                           {...drag.attributes}
                           {...drag.listeners}
                           onClick={() => {
+                            expandSpace(space.id);
                             if (activeView === 'calendar') {
                               toggleCalendarSpace(space);
                             } else if (activeView === 'docs') {
@@ -2166,6 +2399,11 @@ function PageContent() {
                           } ${isOver ? 'ring-1 ring-inset ring-neutral-500 bg-neutral-700/40' : ''}`}
                         >
                           <span className="flex items-center gap-2 truncate">
+                            {/* Same hover-reveal treatment as FolderTree.tsx's FolderRow — no
+                                permanently-visible chevron. Space's own "icon" is just a colored
+                                dot (not a Lucide shape like Folder has), so it fades out and the
+                                chevron fades in over the same slot on hover, rather than morphing
+                                the icon itself. */}
                             <span
                               role="button"
                               tabIndex={0}
@@ -2180,13 +2418,20 @@ function PageContent() {
                                   toggleSpaceCollapsed(space.id);
                                 }
                               }}
-                              className="shrink-0 text-neutral-500 hover:text-neutral-300 cursor-pointer"
+                              title={collapsedSpaceIds.has(space.id) ? 'Expand' : 'Collapse'}
+                              className="shrink-0 cursor-pointer flex items-center justify-center p-1.5 -m-1.5"
                             >
-                              {collapsedSpaceIds.has(space.id) ? (
-                                <ChevronRight className="w-3 h-3" />
-                              ) : (
-                                <ChevronDown className="w-3 h-3" />
-                              )}
+                              <span className="relative w-3 h-3 flex items-center justify-center">
+                                <span
+                                  className="w-2.5 h-2.5 rounded-full opacity-100 group-hover:opacity-0 transition"
+                                  style={{ backgroundColor: space.color || '#6366f1' }}
+                                />
+                                {collapsedSpaceIds.has(space.id) ? (
+                                  <ChevronRight className="absolute inset-0 w-3 h-3 text-neutral-400 opacity-0 group-hover:opacity-100 transition" />
+                                ) : (
+                                  <ChevronDown className="absolute inset-0 w-3 h-3 text-neutral-400 opacity-0 group-hover:opacity-100 transition" />
+                                )}
+                              </span>
                             </span>
                             {activeView === 'calendar' && (
                               <span
@@ -2201,7 +2446,6 @@ function PageContent() {
                                 {spaceAllChecked && <Check className="w-2.5 h-2.5" />}
                               </span>
                             )}
-                            <span className="w-2.5 h-2.5 rounded-full shrink-0" style={{ backgroundColor: space.color || '#6366f1' }}></span>
                             <span className="truncate">{space.name}</span>
                           </span>
                           {activeView === 'board' && <span className="text-[10px] text-neutral-500 font-mono">{spaceTasksCount}</span>}
@@ -2267,15 +2511,16 @@ function PageContent() {
           >
             {(() => {
               const me = users.find((u) => u.id === currentUserId);
-              return me ? (
+              if (!me) return <UserCircle className="w-3.5 h-3.5 text-neutral-500 shrink-0" />;
+              return me.avatarUrl ? (
+                <img src={me.avatarUrl} alt={me.name} className="w-4 h-4 rounded-full object-cover shrink-0" />
+              ) : (
                 <span
                   className="w-4 h-4 rounded-full text-[8px] font-bold flex items-center justify-center text-white shrink-0"
                   style={{ backgroundColor: me.color }}
                 >
                   {me.initials}
                 </span>
-              ) : (
-                <UserCircle className="w-3.5 h-3.5 text-neutral-500 shrink-0" />
               );
             })()}
             <select
@@ -2499,7 +2744,29 @@ function PageContent() {
             </div>
             )}
 
-            {activeView === 'office' ? (
+            {activeView === 'mytasks' ? (
+              <MyTasksPage
+                currentUser={users.find((u) => u.id === currentUserId) ?? null}
+                currentWorkspace={currentWorkspace}
+                tasks={tasks}
+                statuses={statuses}
+                onOpenTask={(id) => setModalTaskStack([id])}
+              />
+            ) : activeView === 'mypersonal' ? (
+              <PersonalTasksPage
+                currentUser={users.find((u) => u.id === currentUserId) ?? null}
+                tasks={tasks}
+                statuses={statuses}
+                ensurePersonalWorkspace={ensurePersonalWorkspace}
+                onCreateTask={(title, listId, spaceId) => optimisticCreateTask(title, listId, spaceId)}
+                onOpenTask={(id) => setModalTaskStack([id])}
+              />
+            ) : activeView === 'profile' ? (
+              <ProfilePage
+                currentUser={users.find((u) => u.id === currentUserId) ?? null}
+                onUpdate={(patch) => currentUserId && updateUser(currentUserId, patch)}
+              />
+            ) : activeView === 'office' ? (
               <OfficePage
                 users={users}
                 activeUserId={activeOfficeUserId}
@@ -2733,6 +3000,7 @@ function PageContent() {
           </div>
         </div>
       </main>
+      </div>
 
       {/* ================= BULK ACTION BAR ================= */}
       {selectedIds.size > 0 && (
@@ -3330,24 +3598,23 @@ function PageContent() {
           key="task-modal-backdrop"
           initial={{ opacity: 0 }}
           animate={{ opacity: 1 }}
-          exit={{ opacity: 0 }}
-          transition={{ duration: 0.2 }}
+          transition={{ duration: 0.15 }}
           className="fixed inset-0 z-50 flex items-center justify-center bg-neutral-950/55 backdrop-blur-[3px] p-6 md:p-10"
           onClick={() => setModalTaskStack([])}
         >
+          {/* Plain fade-in, no shared-layout zoom from the row (dropped layoutId here — TaskRow.tsx
+              keeps its own layout/layoutId untouched, that still drives its independent list-reflow
+              animation). No `exit` prop on this div or its children below: a motion component with
+              no exit unmounts the instant it's removed from the tree, so closing (X, backdrop
+              click, or Escape) snaps away immediately instead of playing a reverse transition. */}
           <motion.div
-            layoutId={`task-${modalLayoutScope}-${activeModalTask.id}`}
             onClick={(e) => e.stopPropagation()}
-            transition={{ duration: 0.32, ease: [0.32, 0.72, 0, 1] }}
-            className="w-full max-w-6xl h-[88vh] bg-neutral-900 border border-neutral-800 rounded shadow-2xl overflow-hidden"
-          >
-          <motion.div
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
-            transition={{ duration: 0.15, delay: 0.15 }}
-            className="flex flex-col h-full"
+            transition={{ duration: 0.15 }}
+            className="w-full max-w-6xl h-[88vh] bg-neutral-900 border border-neutral-800 rounded shadow-2xl overflow-hidden"
           >
+          <div className="flex flex-col h-full">
             <div className="px-6 py-4 border-b border-neutral-800 flex items-center justify-between bg-neutral-950/40 shrink-0">
               <div className="flex items-center gap-2 text-xs text-neutral-400 font-mono overflow-x-auto">
                 <button onClick={() => setModalTaskStack([])} className="hover:text-blue-400 cursor-pointer shrink-0 inline-flex items-center gap-1.5">
@@ -3810,7 +4077,7 @@ function PageContent() {
               )}
               </AnimatePresence>
             </div>
-          </motion.div>
+          </div>
           </motion.div>
         </motion.div>
       )}
@@ -4069,6 +4336,7 @@ function PageContent() {
       />
 
       {trashOpen && <TrashPanel onClose={() => setTrashOpen(false)} />}
+      {settingsOpen && <SettingsPanel onClose={() => setSettingsOpen(false)} onChange={() => setHiddenNavTabs(readHiddenNavTabs())} />}
     </div>
     </DndContext>
   );

@@ -67,7 +67,7 @@ export const FOLDER_ICON_MAP: Record<string, LucideIcon> = {
 type FolderTreeProps = {
   space: HierarchySpace;
   tasks: Task[];
-  activeView: 'board' | 'calendar' | 'docs' | 'office';
+  activeView: 'board' | 'calendar' | 'docs' | 'office' | 'mytasks' | 'mypersonal' | 'profile';
   activeListIds: Set<string>;
   calendarVisibleListIds: Set<string>;
   onNavigateList: (e: React.MouseEvent, listId: string) => void;
@@ -107,7 +107,12 @@ function FolderLevel(props: FolderTreeProps & { parentId: string | null; depth: 
   };
 
   return (
-    <div className={depth === 0 ? 'space-y-0.5' : 'ml-4 pl-2 border-l border-neutral-800 space-y-0.5'}>
+    // Bumped from ml-4 pl-2 — the previous per-level step was too subtle to read as "nested"
+    // at a glance, especially two-plus levels deep. This is a flat increment that compounds
+    // through natural DOM nesting (each recursive level adds another one on top), not a
+    // depth-multiplied value — List rows inherit it automatically since they render in this
+    // same wrapper.
+    <div className={depth === 0 ? 'space-y-0.5' : 'ml-6 pl-3 border-l border-neutral-800 space-y-0.5'}>
       {folders.map((folder) => (
         <FolderRow key={folder.id} {...props} folder={folder} />
       ))}
@@ -268,15 +273,6 @@ function FolderRow(props: FolderTreeProps & { folder: HierarchyFolder; parentId:
         } ${isOver ? 'ring-1 ring-inset ring-neutral-500 bg-neutral-700/40' : ''} ${isDragging ? 'opacity-40' : ''}`}
       >
         <span className="truncate flex items-center gap-1.5 min-w-0">
-          <button
-            onClick={(e) => {
-              e.stopPropagation();
-              setExpanded((v) => !v);
-            }}
-            className="shrink-0 text-neutral-500 hover:text-neutral-300 cursor-pointer"
-          >
-            {expanded ? <ChevronDown className="w-3 h-3" /> : <ChevronRight className="w-3 h-3" />}
-          </button>
           {activeView === 'calendar' && (
             <span
               onClick={(e) => {
@@ -294,11 +290,36 @@ function FolderRow(props: FolderTreeProps & { folder: HierarchyFolder; parentId:
               {allChecked && <Check className="w-2.5 h-2.5" />}
             </span>
           )}
-          {(() => {
-            const CustomIcon = folder.icon ? FOLDER_ICON_MAP[folder.icon] : null;
-            const Icon = CustomIcon || (expanded ? FolderOpen : FolderIconLucide);
-            return <Icon className="w-3 h-3 shrink-0" style={{ color: folder.color || undefined }} />;
-          })()}
+          {/* No permanently-visible chevron — the folder's own icon shows by default and morphs
+              into a chevron (matching current expand state) on hover, reusing the same
+              group/group-hover:opacity idiom already used for this row's Rename/Delete buttons
+              below, rather than new JS-driven hover state. */}
+          <button
+            onClick={(e) => {
+              e.stopPropagation();
+              setExpanded((v) => !v);
+            }}
+            title={expanded ? 'Collapse' : 'Expand'}
+            className="shrink-0 cursor-pointer flex items-center justify-center p-1.5 -m-1.5"
+          >
+            <span className="relative w-3 h-3 flex items-center justify-center">
+              {(() => {
+                const CustomIcon = folder.icon ? FOLDER_ICON_MAP[folder.icon] : null;
+                const Icon = CustomIcon || (expanded ? FolderOpen : FolderIconLucide);
+                return (
+                  <Icon
+                    className="absolute inset-0 w-3 h-3 opacity-100 group-hover:opacity-0 transition"
+                    style={{ color: folder.color || undefined }}
+                  />
+                );
+              })()}
+              {expanded ? (
+                <ChevronDown className="absolute inset-0 w-3 h-3 text-neutral-400 opacity-0 group-hover:opacity-100 transition" />
+              ) : (
+                <ChevronRight className="absolute inset-0 w-3 h-3 text-neutral-400 opacity-0 group-hover:opacity-100 transition" />
+              )}
+            </span>
+          </button>
           <span className="truncate">{folder.name}</span>
         </span>
         <span className="flex items-center gap-1 shrink-0">

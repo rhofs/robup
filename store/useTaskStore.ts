@@ -31,6 +31,10 @@ export type AppUser = {
   isDnd: boolean;
   roomId: string | null;
   googleEmail: string | null;
+  avatarUrl: string | null;
+  bio: string | null;
+  linkedinUrl: string | null;
+  websiteUrl: string | null;
 };
 
 export type Task = PrismaTask & {
@@ -123,6 +127,11 @@ export type HierarchyWorkspace = {
   messageOfTheDay: string | null;
   spaces: HierarchySpace[];
   rooms: HierarchyRoom[];
+  members: AppUser[];
+  // The one auto-created workspace behind the sidebar's private "My tasks" list — deliberately
+  // excluded from the workspace switcher and from ever being auto-selected as "the current
+  // workspace" (see the workspace switcher and fetchInitialData's initial pick).
+  isPersonal: boolean;
 };
 
 // --- Snapshot shapes used by cascading-delete undo (Task/List/Folder/Space) ---
@@ -135,7 +144,10 @@ interface TaskStore {
   workspaces: HierarchyWorkspace[];
   comments: Record<string, TaskComment[]>;
   docs: Record<string, TaskDoc[]>;
-  activeView: 'board' | 'calendar' | 'docs' | 'office';
+  activeView: 'board' | 'calendar' | 'docs' | 'office' | 'mytasks' | 'mypersonal' | 'profile';
+  // Which Workspace the sidebar/nav is currently scoped to — null only until the first
+  // fetchInitialData() resolves (or if the current identity has no workspaces at all).
+  activeWorkspaceId: string | null;
   activeSpaceId: string | 'everything';
   activeListIds: Set<string>;
   // Planner's own position — lifted out of CalendarView.tsx's local state so back/forward can
@@ -158,7 +170,8 @@ interface TaskStore {
   fetchInitialData: () => Promise<void>;
   refetchWorkspaces: () => Promise<void>;
   refetchTasks: () => Promise<void>;
-  setActiveView: (view: 'board' | 'calendar' | 'docs' | 'office') => void;
+  setActiveView: (view: 'board' | 'calendar' | 'docs' | 'office' | 'mytasks' | 'mypersonal' | 'profile') => void;
+  setActiveWorkspaceId: (id: string) => void;
   setNavigation: (spaceId: string, listIds?: string[]) => void;
   setCalendarGranularity: (g: 'month' | 'week' | 'day') => void;
   setCalendarFocusDate: (d: Date) => void;
@@ -216,6 +229,10 @@ interface TaskStore {
       status?: string | null;
       isDnd?: boolean;
       roomId?: string | null;
+      avatarUrl?: string | null;
+      bio?: string | null;
+      linkedinUrl?: string | null;
+      websiteUrl?: string | null;
     }
   ) => Promise<void>;
   deleteUser: (userId: string) => Promise<void>;
@@ -230,6 +247,10 @@ interface TaskStore {
   deleteRoom: (roomId: string) => Promise<void>;
   assignUserToRoom: (userId: string, roomId: string | null) => Promise<void>;
   updateWorkspaceMessage: (workspaceId: string, message: string | null) => Promise<void>;
+  createWorkspace: (name: string, userId: string) => Promise<void>;
+  addWorkspaceMember: (workspaceId: string, userId: string) => Promise<void>;
+  removeWorkspaceMember: (workspaceId: string, userId: string) => Promise<void>;
+  ensurePersonalWorkspace: (userId: string) => Promise<{ workspaceId: string; spaceId: string; listId: string }>;
 
   updateSpace: (
     spaceId: string,
@@ -317,6 +338,7 @@ export const useTaskStore = create<TaskStore>((set, get) => {
     comments: {},
     docs: {},
     activeView: 'board',
+    activeWorkspaceId: null,
     activeSpaceId: 'everything',
     activeListIds: new Set(),
     calendarGranularity: 'month',
@@ -331,18 +353,31 @@ export const useTaskStore = create<TaskStore>((set, get) => {
     fetchInitialData: async () => {
       set({ isLoading: true });
       try {
+        // Workspace-scoped endpoints need to know who's asking — "You are: (none)" deliberately
+        // sees zero workspaces (see PLANNING.md), so this can genuinely come back empty.
+        const userId = useSessionStore.getState().currentUserId ?? '';
         const [workspacesRes, tasksRes, usersRes, taskDocsRes] = await Promise.all([
-          fetch('/api/workspaces'),
-          fetch('/api/tasks'),
+          fetch(`/api/workspaces?userId=${userId}`),
+          fetch(`/api/tasks?userId=${userId}`),
           fetch('/api/users'),
-          fetch('/api/task-docs'),
+          fetch(`/api/task-docs?userId=${userId}`),
         ]);
         const workspaces = await workspacesRes.json();
         const tasks = await tasksRes.json();
         const users = await usersRes.json();
         const taskDocs = await taskDocsRes.json();
 
-        const firstSpaceId = workspaces[0]?.spaces[0]?.id || 'everything';
+        // Keep the current workspace selection if the newly-fetched list still contains it
+        // (e.g. a plain refetch, or an identity switch to someone who's also a member of the
+        // same workspace) — otherwise fall back to the first non-personal workspace this identity
+        // can see. A personal workspace (the hidden one behind "My tasks") never becomes "the
+        // current workspace" — it has no Space/List browsing UI of its own.
+        const previousWorkspaceId = get().activeWorkspaceId;
+        const activeWorkspaceId = workspaces.some((w: HierarchyWorkspace) => w.id === previousWorkspaceId && !w.isPersonal)
+          ? previousWorkspaceId
+          : (workspaces.find((w: HierarchyWorkspace) => !w.isPersonal)?.id ?? null);
+        const activeWorkspace = workspaces.find((w: HierarchyWorkspace) => w.id === activeWorkspaceId);
+        const firstSpaceId = activeWorkspace?.spaces[0]?.id || 'everything';
 
         // Seeds `docs` (normally populated lazily per-task via fetchDocs on modal-open) with
         // every task-scoped doc up front, purely so it's searchable app-wide — fetchDocs still
@@ -358,6 +393,7 @@ export const useTaskStore = create<TaskStore>((set, get) => {
           tasks,
           users,
           docs: docsByTask,
+          activeWorkspaceId,
           activeSpaceId: firstSpaceId,
           isLoading: false,
         });
@@ -375,7 +411,8 @@ export const useTaskStore = create<TaskStore>((set, get) => {
     // large cascading delete (Folder/Space).
     refetchWorkspaces: async () => {
       try {
-        const res = await fetch('/api/workspaces');
+        const userId = useSessionStore.getState().currentUserId ?? '';
+        const res = await fetch(`/api/workspaces?userId=${userId}`);
         const workspaces = await res.json();
         set({ workspaces });
       } catch (error) {
@@ -387,7 +424,8 @@ export const useTaskStore = create<TaskStore>((set, get) => {
     // deleted List/Folder/Space's tasks, as a safety net on top of the individual restore calls.
     refetchTasks: async () => {
       try {
-        const res = await fetch('/api/tasks');
+        const userId = useSessionStore.getState().currentUserId ?? '';
+        const res = await fetch(`/api/tasks?userId=${userId}`);
         const tasks = await res.json();
         set({ tasks });
       } catch (error) {
@@ -396,6 +434,15 @@ export const useTaskStore = create<TaskStore>((set, get) => {
     },
 
     setActiveView: (activeView) => set({ activeView }),
+
+    // Switching workspace is a nav-context change, same shape as switching Space — resets
+    // Space/List selection to that workspace's own default rather than carrying over a
+    // selection that (usually) doesn't even exist there.
+    setActiveWorkspaceId: (id) => {
+      const workspace = get().workspaces.find((w) => w.id === id);
+      const firstSpaceId = workspace?.spaces[0]?.id || 'everything';
+      set({ activeWorkspaceId: id, activeSpaceId: firstSpaceId, activeListIds: new Set() });
+    },
 
     setNavigation: (spaceId, listIds = []) =>
       set({
@@ -905,6 +952,10 @@ export const useTaskStore = create<TaskStore>((set, get) => {
         if (patch.status !== undefined) oldPatch.status = oldUser.status;
         if (patch.isDnd !== undefined) oldPatch.isDnd = oldUser.isDnd;
         if (patch.roomId !== undefined) oldPatch.roomId = oldUser.roomId;
+        if (patch.avatarUrl !== undefined) oldPatch.avatarUrl = oldUser.avatarUrl;
+        if (patch.bio !== undefined) oldPatch.bio = oldUser.bio;
+        if (patch.linkedinUrl !== undefined) oldPatch.linkedinUrl = oldUser.linkedinUrl;
+        if (patch.websiteUrl !== undefined) oldPatch.websiteUrl = oldUser.websiteUrl;
         useHistoryStore.getState().push({
           label: 'Update team member',
           undo: () => get().updateUser(userId, oldPatch),
@@ -1046,6 +1097,68 @@ export const useTaskStore = create<TaskStore>((set, get) => {
           redo: () => get().updateWorkspaceMessage(workspaceId, message),
         });
       }
+    },
+
+    // No undo/redo here (unlike createSpace/createRoom) — there's no delete-workspace route yet,
+    // out of scope for the multi-workspace feature this session. Refetches rather than hand-
+    // splicing a new workspace into local state, since the fully-shaped nested include (spaces,
+    // rooms, members) is nontrivial to fake locally and this is a rare, deliberate action.
+    createWorkspace: async (name, userId) => {
+      const res = await fetch('/api/workspaces', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name, userId }),
+      });
+      const created = await res.json();
+      await get().refetchWorkspaces();
+      get().setActiveWorkspaceId(created.id);
+    },
+
+    addWorkspaceMember: async (workspaceId, userId) => {
+      const user = get().users.find((u) => u.id === userId);
+      if (!user) return;
+      set((state) => ({
+        workspaces: state.workspaces.map((ws) => (ws.id === workspaceId ? { ...ws, members: [...ws.members, user] } : ws)),
+      }));
+      await fetch(`/api/workspaces/${workspaceId}/members`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ userId }),
+      });
+      useHistoryStore.getState().push({
+        label: `Add ${user.name} to workspace`,
+        undo: () => get().removeWorkspaceMember(workspaceId, userId),
+        redo: () => get().addWorkspaceMember(workspaceId, userId),
+      });
+    },
+
+    removeWorkspaceMember: async (workspaceId, userId) => {
+      set((state) => ({
+        workspaces: state.workspaces.map((ws) =>
+          ws.id === workspaceId ? { ...ws, members: ws.members.filter((m) => m.id !== userId) } : ws
+        ),
+      }));
+      await fetch(`/api/workspaces/${workspaceId}/members/${userId}`, { method: 'DELETE' });
+      useHistoryStore.getState().push({
+        label: 'Remove workspace member',
+        undo: () => get().addWorkspaceMember(workspaceId, userId),
+        redo: () => get().removeWorkspaceMember(workspaceId, userId),
+      });
+    },
+
+    // Find-or-create the caller's personal workspace/Space/List behind the sidebar's private "My
+    // tasks" — called lazily on first use, not eagerly at startup. No undo/redo (there's nothing
+    // meaningful to undo — creating it is idempotent from the caller's perspective either way).
+    // Deliberately does NOT refetch/patch `workspaces` local state: the personal workspace is
+    // excluded from the switcher and never becomes "the current workspace," so nothing in the UI
+    // actually needs it to exist in that array — callers only need the returned ids.
+    ensurePersonalWorkspace: async (userId) => {
+      const res = await fetch('/api/workspaces/personal', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ userId }),
+      });
+      return res.json();
     },
 
     updateSpace: async (spaceId, patch) => {
