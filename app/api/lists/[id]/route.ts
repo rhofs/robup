@@ -1,6 +1,10 @@
 import { NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { cascadeList } from '@/lib/trashCascade';
+import { getCurrentUserId } from '@/lib/auth/session';
+import { getWorkspaceRole, canManageWorkspace } from '@/lib/auth/access';
+
+const LIST_SELECT = { id: true, name: true, color: true, icon: true, spaceId: true, folderId: true, order: true, isPrivate: true, accessJson: true } as const;
 
 export async function PATCH(req: Request, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
@@ -8,10 +12,7 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
 
   if (body.restore === true) {
     await cascadeList(id, null);
-    const list = await prisma.list.findUniqueOrThrow({
-      where: { id },
-      select: { id: true, name: true, color: true, icon: true, spaceId: true, folderId: true, order: true },
-    });
+    const list = await prisma.list.findUniqueOrThrow({ where: { id }, select: LIST_SELECT });
     return NextResponse.json(list);
   }
 
@@ -23,10 +24,23 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
   if (body.order !== undefined) data.order = body.order;
   if (body.spaceId !== undefined) data.spaceId = body.spaceId;
 
+  // Same Owner/Admin gate as Space's own PATCH — see that route's comment for why only the
+  // privacy fields specifically get a caller-identity check here.
+  if (body.isPrivate !== undefined || body.accessJson !== undefined) {
+    const callerId = await getCurrentUserId();
+    if (!callerId) return NextResponse.json({ error: 'Not authenticated' }, { status: 401 });
+    const existing = await prisma.list.findUnique({ where: { id }, select: { space: { select: { workspaceId: true } } } });
+    if (!existing) return NextResponse.json({ error: 'Not found' }, { status: 404 });
+    const role = await getWorkspaceRole(existing.space.workspaceId, callerId);
+    if (!canManageWorkspace(role)) return NextResponse.json({ error: 'Only the workspace owner/admins can change access' }, { status: 403 });
+    if (body.isPrivate !== undefined) data.isPrivate = body.isPrivate;
+    if (body.accessJson !== undefined) data.accessJson = body.accessJson;
+  }
+
   const list = await prisma.list.update({
     where: { id },
     data,
-    select: { id: true, name: true, color: true, icon: true, spaceId: true, folderId: true, order: true },
+    select: LIST_SELECT,
   });
   return NextResponse.json(list);
 }

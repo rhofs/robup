@@ -19,7 +19,9 @@ export async function POST() {
       name: 'Personal',
       isPersonal: true,
       personalOwnerId: userId,
-      members: { connect: { id: userId } },
+      // Sole member, always 'owner' — there's only ever one person in a personal workspace, so
+      // the tier is moot in practice, but stays consistent with every other workspace's shape.
+      memberships: { create: { userId, role: 'owner' } },
       spaces: { create: [{ name: 'Personal', lists: { create: [{ name: 'My tasks' }] } }] },
     },
     include: { spaces: { include: { lists: true } } },

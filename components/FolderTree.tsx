@@ -12,6 +12,7 @@ import {
   Pencil,
   Trash2,
   Check,
+  Lock,
   Star,
   Rocket,
   Briefcase,
@@ -321,6 +322,7 @@ function FolderRow(props: FolderTreeProps & { folder: HierarchyFolder; parentId:
             </span>
           </button>
           <span className="truncate">{folder.name}</span>
+          {folder.isPrivate && <Lock className="w-2.5 h-2.5 text-neutral-500 shrink-0" />}
         </span>
         <span className="flex items-center gap-1 shrink-0">
           {activeView === 'board' && <span className="text-[10px] text-neutral-500 font-mono">{folderTaskCount}</span>}
@@ -466,6 +468,7 @@ function ListRow({
           return <Icon className="w-3 h-3 shrink-0" style={{ color: list.color || undefined }} />;
         })()}
         <span className="truncate">{list.name}</span>
+        {list.isPrivate && <Lock className="w-2.5 h-2.5 text-neutral-500 shrink-0" />}
       </span>
       <span className="flex items-center gap-1 shrink-0">
         {!filterMode && <span className="text-[9px] text-neutral-500 font-mono">{count}</span>}

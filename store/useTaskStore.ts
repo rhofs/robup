@@ -81,6 +81,8 @@ export type HierarchyFolder = {
   spaceId: string;
   parentId: string | null;
   order: number;
+  isPrivate: boolean;
+  accessJson: string;
 };
 
 export type HierarchyDocFolder = {
@@ -100,6 +102,8 @@ export type HierarchyList = {
   icon: string | null;
   folderId: string | null;
   order: number;
+  isPrivate: boolean;
+  accessJson: string;
 };
 
 export type HierarchySpace = {
@@ -115,6 +119,17 @@ export type HierarchySpace = {
   lists: HierarchyList[];
   docFolders: HierarchyDocFolder[];
   spaceDocs: TaskDoc[];
+  isPrivate: boolean;
+  accessJson: string;
+};
+
+export type WorkspaceRole = 'owner' | 'admin' | 'member';
+
+export type HierarchyRole = {
+  id: string;
+  name: string;
+  color: string;
+  memberIds: string[];
 };
 
 export type HierarchyRoom = {
@@ -133,7 +148,10 @@ export type HierarchyWorkspace = {
   messageOfTheDay: string | null;
   spaces: HierarchySpace[];
   rooms: HierarchyRoom[];
-  members: AppUser[];
+  // Each member's own tier (owner/admin/member) is attached directly onto their entry rather
+  // than a parallel lookup structure — see app/api/workspaces/route.ts's mapping.
+  members: (AppUser & { workspaceRole: WorkspaceRole })[];
+  roles: HierarchyRole[];
   // The one auto-created workspace behind the sidebar's private "My tasks" list — deliberately
   // excluded from the workspace switcher and from ever being auto-selected as "the current
   // workspace" (see the workspace switcher and fetchInitialData's initial pick).
@@ -203,6 +221,7 @@ interface TaskStore {
   optimisticSetCustomFieldValue: (taskId: string, fieldId: string, value: string) => void;
   optimisticSetDates: (taskId: string, startDate: string | null, dueDate: string | null) => void;
   optimisticSetList: (taskId: string, listId: string) => void;
+  setTaskPrivacy: (taskId: string, isPrivate: boolean, accessJson: string) => void;
   optimisticSetParent: (taskId: string, parentId: string | null) => void;
   optimisticSetTitle: (taskId: string, title: string) => void;
 
@@ -256,11 +275,31 @@ interface TaskStore {
   createWorkspace: (name: string, userId: string) => Promise<void>;
   addWorkspaceMember: (workspaceId: string, userId: string) => Promise<void>;
   removeWorkspaceMember: (workspaceId: string, userId: string) => Promise<void>;
+  // Owner/Admin only server-side (see app/api/workspaces/[id]/members/[userId]/route.ts PATCH) —
+  // promote a 'member' to 'admin' or demote back, never targets/produces 'owner'.
+  changeWorkspaceMemberRole: (workspaceId: string, userId: string, role: 'admin' | 'member') => Promise<void>;
+  // Owner only server-side. No undo — a destroyed workspace's full nested tree isn't something
+  // this app's undo model attempts to resurrect (unlike the Trash/cascade-delete undo for
+  // Space/Folder/List/Task, which restores from a captured snapshot; nothing captures a whole
+  // workspace's snapshot today).
+  deleteWorkspace: (workspaceId: string) => Promise<void>;
+  createRole: (workspaceId: string, name: string, color: string) => Promise<void>;
+  updateRole: (workspaceId: string, roleId: string, patch: { name?: string; color?: string }) => Promise<void>;
+  deleteRole: (workspaceId: string, roleId: string) => Promise<void>;
+  assignRole: (workspaceId: string, roleId: string, userId: string) => Promise<void>;
+  unassignRole: (workspaceId: string, roleId: string, userId: string) => Promise<void>;
   ensurePersonalWorkspace: (userId: string) => Promise<{ workspaceId: string; spaceId: string; listId: string }>;
 
   updateSpace: (
     spaceId: string,
-    patch: { name?: string; color?: string; description?: string | null; coverImageUrl?: string | null }
+    patch: {
+      name?: string;
+      color?: string;
+      description?: string | null;
+      coverImageUrl?: string | null;
+      isPrivate?: boolean;
+      accessJson?: string;
+    }
   ) => Promise<void>;
   reorderSpace: (spaceId: string, order: number) => Promise<void>;
   createSpace: (workspaceId: string, name: string, id?: string) => Promise<void>;
@@ -268,7 +307,11 @@ interface TaskStore {
 
   createList: (spaceId: string, name: string, folderId?: string | null, id?: string) => Promise<void>;
   renameList: (spaceId: string, listId: string, name: string) => Promise<void>;
-  updateList: (spaceId: string, listId: string, patch: { name?: string; color?: string | null; icon?: string | null }) => Promise<void>;
+  updateList: (
+    spaceId: string,
+    listId: string,
+    patch: { name?: string; color?: string | null; icon?: string | null; isPrivate?: boolean; accessJson?: string }
+  ) => Promise<void>;
   // `targetSpaceId`, when given and different from `spaceId`, moves the list to a different
   // Space entirely (not just a different folder within the same one) — see the comment above
   // the implementation for why that needs a slower refetch-based path instead of a local patch.
@@ -281,7 +324,7 @@ interface TaskStore {
   updateFolder: (
     spaceId: string,
     folderId: string,
-    patch: { name?: string; color?: string | null; icon?: string | null; order?: number }
+    patch: { name?: string; color?: string | null; icon?: string | null; order?: number; isPrivate?: boolean; accessJson?: string }
   ) => Promise<void>;
   moveFolder: (spaceId: string, folderId: string, parentId: string | null, targetSpaceId?: string) => Promise<void>;
   deleteFolder: (spaceId: string, folderId: string) => Promise<void>;
@@ -650,6 +693,30 @@ export const useTaskStore = create<TaskStore>((set, get) => {
           label: 'Change field value',
           undo: () => get().optimisticSetCustomFieldValue(taskId, fieldId, oldValue),
           redo: () => get().optimisticSetCustomFieldValue(taskId, fieldId, value),
+        });
+      }
+    },
+
+    // Server-side rejects this (403) unless the caller is the workspace's Owner/Admin — see
+    // app/api/tasks/[id]/route.ts. Same shape as Space/Folder/List's own privacy toggle (each
+    // independent, see PLANNING.md), just Task's own dedicated action since (unlike those three)
+    // Task fields already each have their own separate optimisticSetX action rather than one
+    // generic patch entry point.
+    setTaskPrivacy: (taskId, isPrivate, accessJson) => {
+      const oldTask = get().tasks.find((t) => t.id === taskId);
+      set((state) => ({
+        tasks: state.tasks.map((t) => (t.id === taskId ? { ...t, isPrivate, accessJson } : t)),
+      }));
+      fetch(`/api/tasks/${taskId}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ isPrivate, accessJson }),
+      });
+      if (oldTask) {
+        useHistoryStore.getState().push({
+          label: 'Change task access',
+          undo: () => get().setTaskPrivacy(taskId, oldTask.isPrivate, oldTask.accessJson),
+          redo: () => get().setTaskPrivacy(taskId, isPrivate, accessJson),
         });
       }
     },
@@ -1123,8 +1190,12 @@ export const useTaskStore = create<TaskStore>((set, get) => {
     addWorkspaceMember: async (workspaceId, userId) => {
       const user = get().users.find((u) => u.id === userId);
       if (!user) return;
+      // Always added as 'member' — matches the server (app/api/workspaces/[id]/members/route.ts
+      // always creates the row that way too; promoting to Admin is always a separate action).
       set((state) => ({
-        workspaces: state.workspaces.map((ws) => (ws.id === workspaceId ? { ...ws, members: [...ws.members, user] } : ws)),
+        workspaces: state.workspaces.map((ws) =>
+          ws.id === workspaceId ? { ...ws, members: [...ws.members, { ...user, workspaceRole: 'member' as const }] } : ws
+        ),
       }));
       await fetch(`/api/workspaces/${workspaceId}/members`, {
         method: 'POST',
@@ -1150,6 +1221,96 @@ export const useTaskStore = create<TaskStore>((set, get) => {
         undo: () => get().addWorkspaceMember(workspaceId, userId),
         redo: () => get().removeWorkspaceMember(workspaceId, userId),
       });
+    },
+
+    changeWorkspaceMemberRole: async (workspaceId, userId, role) => {
+      const oldRole = get()
+        .workspaces.find((w) => w.id === workspaceId)
+        ?.members.find((m) => m.id === userId)?.workspaceRole;
+      set((state) => ({
+        workspaces: state.workspaces.map((ws) =>
+          ws.id === workspaceId
+            ? { ...ws, members: ws.members.map((m) => (m.id === userId ? { ...m, workspaceRole: role } : m)) }
+            : ws
+        ),
+      }));
+      await fetch(`/api/workspaces/${workspaceId}/members/${userId}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ role }),
+      });
+      if (oldRole && oldRole !== 'owner' && oldRole !== role) {
+        useHistoryStore.getState().push({
+          label: `Change member role to ${role}`,
+          undo: () => get().changeWorkspaceMemberRole(workspaceId, userId, oldRole),
+          redo: () => get().changeWorkspaceMemberRole(workspaceId, userId, role),
+        });
+      }
+    },
+
+    // No optimistic local removal — the caller is about to lose access to this workspace
+    // entirely, and refetchWorkspaces() (which the UI calls right after) naturally drops it once
+    // the server confirms it's gone.
+    deleteWorkspace: async (workspaceId) => {
+      await fetch(`/api/workspaces/${workspaceId}`, { method: 'DELETE' });
+    },
+
+    createRole: async (workspaceId, name, color) => {
+      const res = await fetch(`/api/workspaces/${workspaceId}/roles`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name, color }),
+      });
+      const created = await res.json();
+      set((state) => ({
+        workspaces: state.workspaces.map((ws) => (ws.id === workspaceId ? { ...ws, roles: [...ws.roles, created] } : ws)),
+      }));
+    },
+
+    updateRole: async (workspaceId, roleId, patch) => {
+      set((state) => ({
+        workspaces: state.workspaces.map((ws) =>
+          ws.id === workspaceId ? { ...ws, roles: ws.roles.map((r) => (r.id === roleId ? { ...r, ...patch } : r)) } : ws
+        ),
+      }));
+      await fetch(`/api/workspaces/${workspaceId}/roles/${roleId}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(patch),
+      });
+    },
+
+    deleteRole: async (workspaceId, roleId) => {
+      set((state) => ({
+        workspaces: state.workspaces.map((ws) => (ws.id === workspaceId ? { ...ws, roles: ws.roles.filter((r) => r.id !== roleId) } : ws)),
+      }));
+      await fetch(`/api/workspaces/${workspaceId}/roles/${roleId}`, { method: 'DELETE' });
+    },
+
+    assignRole: async (workspaceId, roleId, userId) => {
+      set((state) => ({
+        workspaces: state.workspaces.map((ws) =>
+          ws.id === workspaceId
+            ? { ...ws, roles: ws.roles.map((r) => (r.id === roleId ? { ...r, memberIds: [...r.memberIds, userId] } : r)) }
+            : ws
+        ),
+      }));
+      await fetch(`/api/workspaces/${workspaceId}/roles/${roleId}/members`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ userId }),
+      });
+    },
+
+    unassignRole: async (workspaceId, roleId, userId) => {
+      set((state) => ({
+        workspaces: state.workspaces.map((ws) =>
+          ws.id === workspaceId
+            ? { ...ws, roles: ws.roles.map((r) => (r.id === roleId ? { ...r, memberIds: r.memberIds.filter((id) => id !== userId) } : r)) }
+            : ws
+        ),
+      }));
+      await fetch(`/api/workspaces/${workspaceId}/roles/${roleId}/members/${userId}`, { method: 'DELETE' });
     },
 
     // Find-or-create the caller's personal workspace/Space/List behind the sidebar's private "My
@@ -1190,6 +1351,8 @@ export const useTaskStore = create<TaskStore>((set, get) => {
         if (patch.color !== undefined) oldPatch.color = oldSpace.color;
         if (patch.description !== undefined) oldPatch.description = oldSpace.description;
         if (patch.coverImageUrl !== undefined) oldPatch.coverImageUrl = oldSpace.coverImageUrl;
+        if (patch.isPrivate !== undefined) oldPatch.isPrivate = oldSpace.isPrivate;
+        if (patch.accessJson !== undefined) oldPatch.accessJson = oldSpace.accessJson;
         useHistoryStore.getState().push({
           label: 'Update space',
           undo: () => get().updateSpace(spaceId, oldPatch),
@@ -1333,6 +1496,8 @@ export const useTaskStore = create<TaskStore>((set, get) => {
         if (patch.name !== undefined) oldPatch.name = oldList.name;
         if (patch.color !== undefined) oldPatch.color = oldList.color;
         if (patch.icon !== undefined) oldPatch.icon = oldList.icon;
+        if (patch.isPrivate !== undefined) oldPatch.isPrivate = oldList.isPrivate;
+        if (patch.accessJson !== undefined) oldPatch.accessJson = oldList.accessJson;
         useHistoryStore.getState().push({
           label: 'Update list',
           undo: () => get().updateList(spaceId, listId, oldPatch),
@@ -1502,6 +1667,8 @@ export const useTaskStore = create<TaskStore>((set, get) => {
         if (patch.color !== undefined) oldPatch.color = oldFolder.color;
         if (patch.icon !== undefined) oldPatch.icon = oldFolder.icon;
         if (patch.order !== undefined) oldPatch.order = oldFolder.order;
+        if (patch.isPrivate !== undefined) oldPatch.isPrivate = oldFolder.isPrivate;
+        if (patch.accessJson !== undefined) oldPatch.accessJson = oldFolder.accessJson;
         useHistoryStore.getState().push({
           label: 'Update folder',
           undo: () => get().updateFolder(spaceId, folderId, oldPatch),

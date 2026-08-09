@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { prisma, publicUserSelect } from '@/lib/prisma';
 import { getCurrentUserId } from '@/lib/auth/session';
+import { getTaskVisibilityContext } from '@/lib/auth/access';
 
 export async function GET() {
   const userId = await getCurrentUserId();
@@ -8,12 +9,21 @@ export async function GET() {
   // never be sent to a request that isn't asserting a member's identity.
   if (!userId) return NextResponse.json([]);
 
+  const visibility = await getTaskVisibilityContext(userId);
+  if (!visibility) return NextResponse.json([]);
+
   const tasks = await prisma.task.findMany({
-    where: { deletedAt: null, list: { space: { workspace: { members: { some: { id: userId } } } } } },
-    include: { assignees: { select: publicUserSelect } },
+    where: { deletedAt: null, list: { space: { workspace: { memberships: { some: { userId } } } } } },
+    include: {
+      assignees: { select: publicUserSelect },
+      list: { select: { isPrivate: true, accessJson: true, folderId: true, space: { select: { isPrivate: true, accessJson: true, workspaceId: true } } } },
+    },
     orderBy: { createdAt: 'desc' },
   });
-  return NextResponse.json(tasks);
+
+  const visible = tasks.filter((t) => visibility.isTaskVisible(t)).map(({ list, ...t }) => t);
+
+  return NextResponse.json(visible);
 }
 
 export async function POST(req: Request) {

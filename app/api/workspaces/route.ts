@@ -3,6 +3,7 @@ import { NextResponse } from 'next/server';
 // (usually a singleton in e.g. lib/prisma.ts)
 import { prisma, publicUserSelect } from '@/lib/prisma';
 import { getCurrentUserId } from '@/lib/auth/session';
+import { getAccessContext, canSee, buildFolderChainVisibility } from '@/lib/auth/access';
 
 export async function GET() {
   const userId = await getCurrentUserId();
@@ -11,16 +12,23 @@ export async function GET() {
   if (!userId) return NextResponse.json([]);
 
   const workspaces = await prisma.workspace.findMany({
-    where: { members: { some: { id: userId } } },
+    where: { memberships: { some: { userId } } },
     include: {
-      members: { select: publicUserSelect },
+      memberships: { include: { user: { select: publicUserSelect } } },
+      roles: { orderBy: { createdAt: 'asc' }, include: { members: { select: { id: true } } } },
       rooms: { orderBy: { order: 'asc' } },
       spaces: {
         where: { deletedAt: null },
         orderBy: { order: 'asc' },
         include: {
-          folders: { where: { deletedAt: null }, select: { id: true, name: true, color: true, icon: true, spaceId: true, parentId: true, order: true } },
-          lists: { where: { deletedAt: null }, select: { id: true, name: true, color: true, icon: true, folderId: true, order: true } },
+          folders: {
+            where: { deletedAt: null },
+            select: { id: true, name: true, color: true, icon: true, spaceId: true, parentId: true, order: true, isPrivate: true, accessJson: true },
+          },
+          lists: {
+            where: { deletedAt: null },
+            select: { id: true, name: true, color: true, icon: true, folderId: true, order: true, isPrivate: true, accessJson: true },
+          },
           statuses: { orderBy: { order: 'asc' } },
           customFields: true,
           // Space.docs is already scoped by the spaceId foreign key — task-scoped docs (spaceId
@@ -32,20 +40,45 @@ export async function GET() {
     },
   });
 
-  const mapped = workspaces.map((ws) => ({
-    ...ws,
-    spaces: ws.spaces.map(({ docs, ...s }) => ({
-      ...s,
-      // Prisma's relation is named `docs` (matching the Doc model's `space` relation) — renamed
-      // here to `spaceDocs` to match HierarchySpace's frontend field and avoid any confusion with
-      // the store's separate top-level `docs: Record<taskId, TaskDoc[]>` state.
-      spaceDocs: docs,
-      customFields: s.customFields.map((cf) => ({
-        ...cf,
-        options: JSON.parse(cf.options),
-      })),
-    })),
-  }));
+  const mapped = await Promise.all(
+    workspaces.map(async (ws) => {
+      // One access-context lookup per workspace (not per row) — see lib/auth/access.ts.
+      const ctx = await getAccessContext(ws.id, userId);
+
+      return {
+        ...ws,
+        members: ws.memberships.map((m) => ({ ...m.user, workspaceRole: m.role })),
+        memberships: undefined,
+        roles: ws.roles.map((r) => ({ id: r.id, name: r.name, color: r.color, memberIds: r.members.map((m) => m.id) })),
+        // Spaces/Folders/Lists a private-and-inaccessible caller can't see are dropped entirely
+        // here, not just visually hidden client-side — matches how GET already returns [] for a
+        // signed-out request rather than trusting the client to not render what it received.
+        spaces: ws.spaces
+          .filter((s) => canSee(s, ctx))
+          .map(({ docs, folders, lists, ...s }) => {
+            // A Folder or List nested inside a private-and-inaccessible ancestor Folder must stay
+            // hidden even if it isn't independently marked private itself — folderChainVisible
+            // walks the full (unfiltered) folders array's parentId chain to check that, not just
+            // each row's own isPrivate flag (see lib/auth/access.ts's comment on why this needs
+            // its own helper rather than a plain .filter(canSee)).
+            const folderChainVisible = buildFolderChainVisibility(folders);
+            return {
+              ...s,
+              folders: folders.filter((f) => canSee(f, ctx) && folderChainVisible(f.parentId, ctx)),
+              lists: lists.filter((l) => canSee(l, ctx) && folderChainVisible(l.folderId, ctx)),
+              // Prisma's relation is named `docs` (matching the Doc model's `space` relation) —
+              // renamed here to `spaceDocs` to match HierarchySpace's frontend field and avoid any
+              // confusion with the store's separate top-level `docs: Record<taskId, TaskDoc[]>` state.
+              spaceDocs: docs,
+              customFields: s.customFields.map((cf) => ({
+                ...cf,
+                options: JSON.parse(cf.options),
+              })),
+            };
+          }),
+      };
+    })
+  );
 
   return NextResponse.json(mapped);
 }
@@ -58,7 +91,10 @@ export async function POST(req: Request) {
   const workspace = await prisma.workspace.create({
     data: {
       name: body.name || 'Untitled workspace',
-      members: { connect: { id: userId } },
+      // The creator is always 'owner' — the one workspace-level tier that's permanent and
+      // exclusive (see lib/auth/access.ts / PLANNING.md for why this couldn't stay a plain
+      // implicit User<->Workspace M2M once a role tier needed attaching to the membership itself).
+      memberships: { create: { userId, role: 'owner' } },
     },
     select: { id: true, name: true, messageOfTheDay: true, createdAt: true },
   });

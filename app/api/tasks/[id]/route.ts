@@ -1,6 +1,8 @@
 import { NextResponse } from 'next/server';
 import { prisma, publicUserSelect } from '@/lib/prisma';
 import { cascadeTask } from '@/lib/trashCascade';
+import { getCurrentUserId } from '@/lib/auth/session';
+import { getWorkspaceRole, canManageWorkspace } from '@/lib/auth/access';
 
 export async function PATCH(req: Request, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
@@ -32,6 +34,19 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
 
   if (body.assigneeIds !== undefined) {
     data.assignees = { set: body.assigneeIds.map((id: string) => ({ id })) };
+  }
+
+  // Same Owner/Admin gate as Space/Folder/List's own PATCH routes — see Space's for why only the
+  // privacy fields specifically get a caller-identity check here.
+  if (body.isPrivate !== undefined || body.accessJson !== undefined) {
+    const callerId = await getCurrentUserId();
+    if (!callerId) return NextResponse.json({ error: 'Not authenticated' }, { status: 401 });
+    const owning = await prisma.task.findUnique({ where: { id }, select: { list: { select: { space: { select: { workspaceId: true } } } } } });
+    if (!owning) return NextResponse.json({ error: 'Not found' }, { status: 404 });
+    const role = await getWorkspaceRole(owning.list.space.workspaceId, callerId);
+    if (!canManageWorkspace(role)) return NextResponse.json({ error: 'Only the workspace owner/admins can change access' }, { status: 403 });
+    if (body.isPrivate !== undefined) data.isPrivate = body.isPrivate;
+    if (body.accessJson !== undefined) data.accessJson = body.accessJson;
   }
 
   const task = await prisma.task.update({

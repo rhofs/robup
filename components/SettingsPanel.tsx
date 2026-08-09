@@ -54,7 +54,7 @@ export default function SettingsPanel({ onClose, onChange }: { onClose: () => vo
       <div onClick={(e) => e.stopPropagation()} className="w-[360px] bg-neutral-900 border border-neutral-800 rounded shadow-2xl overflow-hidden">
         <div className="px-5 py-4 border-b border-neutral-800 flex items-center justify-between">
           <h3 className="font-bold text-sm text-white flex items-center gap-1.5">
-            <Settings className="w-4 h-4" /> Settings
+            <Settings className="w-4 h-4" /> Workspace Settings
           </h3>
           <button onClick={onClose} className="text-neutral-400 hover:text-white cursor-pointer">
             <X className="w-3.5 h-3.5" />

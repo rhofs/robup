@@ -14,10 +14,13 @@ model Workspace {
   messageOfTheDay String?  @map("message_of_the_day")
   spaces          Space[]
   rooms           Room[]
-  // Same implicit-M2M shape as Task.assignees/User.tasks below — no separate join model needed.
-  // A workspace with exactly one member is what "private" means in this app: nobody else is ever
-  // a member, so nothing scoped under it is ever returned to anyone else's GET /api/tasks etc.
-  members         User[]   @relation("WorkspaceMembers")
+  // Explicit join model, not a plain implicit M2M like Task.assignees/User.tasks below — this one
+  // needs to carry a role tier (owner/admin/member) per membership row, which an implicit M2M
+  // can't do. A workspace with exactly one member is still what "private" means in this app:
+  // nobody else is ever a member, so nothing scoped under it is ever returned to anyone else's
+  // GET /api/tasks etc.
+  memberships     WorkspaceMembership[]
+  roles           Role[]
   // The one auto-created single-member workspace behind the sidebar's private "My tasks" list —
   // distinguishes it from any other single-member workspace a user creates by hand via the
   // normal switcher (which should still show up there; this one deliberately doesn't).
@@ -28,6 +31,37 @@ model Workspace {
   // existing personal workspace" and both created one). Null for every non-personal workspace.
   personalOwnerId String?  @unique @map("personal_owner_id")
   createdAt       DateTime @default(now()) @map("created_at")
+}
+
+// Workspace membership + role tier (owner/admin/member) — governs who can manage the workspace
+// itself: create/delete Roles, mark Spaces/Folders/Lists/Tasks private, manage other members'
+// Admin status. Exactly one 'owner' row per workspace (the creator; enforced at the application
+// layer, not the schema — SQLite/Prisma has no partial-unique-index support to express "at most
+// one row per workspaceId where role='owner'"). Distinct from Role below: this tier is a fixed,
+// three-value governance concept, not an arbitrary user-created access-grouping tag.
+model WorkspaceMembership {
+  id          String    @id @default(uuid())
+  workspaceId String    @map("workspace_id")
+  workspace   Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  userId      String    @map("user_id")
+  user        User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  role        String    @default("member") // 'owner' | 'admin' | 'member'
+  createdAt   DateTime  @default(now()) @map("created_at")
+
+  @@unique([workspaceId, userId])
+}
+
+// Arbitrary, workspace-scoped, user-named groups (Discord-style) — used purely for granting
+// access to private Spaces/Folders/Lists/Tasks (see their accessJson below), not permission bits.
+// A user's Role membership only matters within that Role's own workspace.
+model Role {
+  id          String    @id @default(uuid())
+  workspaceId String    @map("workspace_id")
+  workspace   Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  name        String
+  color       String    @default("#6366F1")
+  members     User[]    @relation("RoleMembers")
+  createdAt   DateTime  @default(now()) @map("created_at")
 }
 
 // Kosé "kontorer" i Office-fanen — rent visuelt/organisatorisk, ingen kobling til Space-treet.
@@ -62,40 +96,56 @@ model Space {
   customFields  CustomField[]
   docFolders    DocFolder[]
   docs          Doc[]
+  // Independent per-level private access (Space/Folder/List/Task each have this same pair) — a
+  // private item is visible only to the workspace's Owner/Admins plus whoever accessJson grants.
+  // Defaults keep every existing row (and every new one until someone opts in) fully open, same
+  // as today — purely additive. JSON array of { type: 'user' | 'role', id: string }, same
+  // "small flexible list as a JSON string" shape as CustomField.options below — a stale
+  // user/role id left behind after a deletion is harmless here for the same reason @mentions
+  // already tolerate dangling targets (falls back to "not visible to anyone but Owner/Admin,"
+  // never a crash).
+  isPrivate     Boolean       @default(false) @map("is_private")
+  accessJson    String        @default("[]") @map("access_json")
   createdAt     DateTime      @default(now()) @map("created_at")
 }
 
 // 3. Valgfritt mellomnivå (Mappe) — kan nøstes vilkårlig dypt i seg selv
 model Folder {
-  id        String    @id @default(uuid())
-  name      String
-  color     String?
-  icon      String?
-  deletedAt DateTime? @map("deleted_at")
-  spaceId   String    @map("space_id")
-  space     Space     @relation(fields: [spaceId], references: [id], onDelete: Cascade)
-  parentId  String?   @map("parent_id")
-  parent    Folder?   @relation("FolderChildren", fields: [parentId], references: [id], onDelete: Cascade)
-  children  Folder[]  @relation("FolderChildren")
-  lists     List[]
-  order     Int       @default(0)
-  createdAt DateTime  @default(now()) @map("created_at")
+  id         String    @id @default(uuid())
+  name       String
+  color      String?
+  icon       String?
+  deletedAt  DateTime? @map("deleted_at")
+  spaceId    String    @map("space_id")
+  space      Space     @relation(fields: [spaceId], references: [id], onDelete: Cascade)
+  parentId   String?   @map("parent_id")
+  parent     Folder?   @relation("FolderChildren", fields: [parentId], references: [id], onDelete: Cascade)
+  children   Folder[]  @relation("FolderChildren")
+  lists      List[]
+  order      Int       @default(0)
+  // See Space.isPrivate/accessJson above — same shape, independent at this level.
+  isPrivate  Boolean   @default(false) @map("is_private")
+  accessJson String    @default("[]") @map("access_json")
+  createdAt  DateTime  @default(now()) @map("created_at")
 }
 
 // 4. Endestasjon for oppgaver (Lister)
 model List {
-  id        String    @id @default(uuid())
-  name      String
-  color     String?
-  icon      String?
-  deletedAt DateTime? @map("deleted_at")
-  spaceId   String    @map("space_id")
-  space     Space     @relation(fields: [spaceId], references: [id], onDelete: Cascade)
-  folderId  String?   @map("folder_id")
-  folder    Folder?   @relation(fields: [folderId], references: [id], onDelete: Cascade)
-  order     Int       @default(0)
-  tasks     Task[]
-  createdAt DateTime  @default(now()) @map("created_at")
+  id         String    @id @default(uuid())
+  name       String
+  color      String?
+  icon       String?
+  deletedAt  DateTime? @map("deleted_at")
+  spaceId    String    @map("space_id")
+  space      Space     @relation(fields: [spaceId], references: [id], onDelete: Cascade)
+  folderId   String?   @map("folder_id")
+  folder     Folder?   @relation(fields: [folderId], references: [id], onDelete: Cascade)
+  order      Int       @default(0)
+  tasks      Task[]
+  // See Space.isPrivate/accessJson above — same shape, independent at this level.
+  isPrivate  Boolean   @default(false) @map("is_private")
+  accessJson String    @default("[]") @map("access_json")
+  createdAt  DateTime  @default(now()) @map("created_at")
 }
 
 // 5. Egendefinerte statuser per Space
@@ -172,7 +222,8 @@ model User {
   roomId        String?   @map("room_id")
   room          Room?     @relation(fields: [roomId], references: [id], onDelete: SetNull)
   tasks         Task[]    @relation("TaskAssignees")
-  workspaces    Workspace[] @relation("WorkspaceMembers")
+  workspaceMemberships WorkspaceMembership[]
+  roles         Role[]    @relation("RoleMembers")
   comments      Comment[]
   createdAt     DateTime  @default(now()) @map("created_at")
 }
@@ -226,6 +277,10 @@ model Task {
   docs      Doc[]
 
   customFieldValues String @default("{}") @map("custom_field_values")
+
+  // See Space.isPrivate/accessJson above — same shape, independent at this level.
+  isPrivate  Boolean @default(false) @map("is_private")
+  accessJson String  @default("[]") @map("access_json")
 
   createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime @updatedAt @map("updated_at")

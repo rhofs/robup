@@ -10,7 +10,7 @@ export async function POST(req: Request) {
       name: body.name,
       folderId: body.folderId ?? null,
     },
-    select: { id: true, name: true, spaceId: true, folderId: true, order: true },
+    select: { id: true, name: true, color: true, icon: true, spaceId: true, folderId: true, order: true, isPrivate: true, accessJson: true },
   });
   return NextResponse.json(list);
 }

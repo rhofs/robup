@@ -1,6 +1,8 @@
 import { NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { cascadeFolder } from '@/lib/trashCascade';
+import { getCurrentUserId } from '@/lib/auth/session';
+import { getWorkspaceRole, canManageWorkspace } from '@/lib/auth/access';
 
 // Folder/List rows each carry their own `spaceId` directly (not derived from ancestry), so
 // moving a folder into a different Space only updates its own row unless we walk its subtree
@@ -26,7 +28,7 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
     await cascadeFolder(id, null);
     const folder = await prisma.folder.findUniqueOrThrow({
       where: { id },
-      select: { id: true, name: true, color: true, icon: true, spaceId: true, parentId: true, order: true },
+      select: { id: true, name: true, color: true, icon: true, spaceId: true, parentId: true, order: true, isPrivate: true, accessJson: true },
     });
     return NextResponse.json(folder);
   }
@@ -38,6 +40,19 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
   if (body.parentId !== undefined) data.parentId = body.parentId;
   if (body.order !== undefined) data.order = body.order;
   if (body.spaceId !== undefined) data.spaceId = body.spaceId;
+
+  // Same Owner/Admin gate as Space's own PATCH — see that route's comment for why only the
+  // privacy fields specifically get a caller-identity check here.
+  if (body.isPrivate !== undefined || body.accessJson !== undefined) {
+    const callerId = await getCurrentUserId();
+    if (!callerId) return NextResponse.json({ error: 'Not authenticated' }, { status: 401 });
+    const existing = await prisma.folder.findUnique({ where: { id }, select: { space: { select: { workspaceId: true } } } });
+    if (!existing) return NextResponse.json({ error: 'Not found' }, { status: 404 });
+    const role = await getWorkspaceRole(existing.space.workspaceId, callerId);
+    if (!canManageWorkspace(role)) return NextResponse.json({ error: 'Only the workspace owner/admins can change access' }, { status: 403 });
+    if (body.isPrivate !== undefined) data.isPrivate = body.isPrivate;
+    if (body.accessJson !== undefined) data.accessJson = body.accessJson;
+  }
 
   if (body.spaceId !== undefined) {
     const descendantFolderIds = await collectDescendantFolderIds(id);

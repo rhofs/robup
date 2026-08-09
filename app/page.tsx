@@ -45,6 +45,7 @@ import {
   MessageSquare,
   ChevronUp,
   ChevronDown,
+  Lock,
   ChevronRight,
   GripVertical,
   CornerDownRight,
@@ -55,13 +56,12 @@ import {
   Building2,
   Search,
   Unlink,
-  Share2,
   ListChecks,
   ClipboardCheck,
   Settings,
   type LucideIcon,
 } from 'lucide-react';
-import { useTaskStore, HierarchySpace, HierarchyFolder, HierarchyList, HierarchyDocFolder, HierarchyRoom, HierarchyWorkspace, StatusDef, CustomFieldDef, Task, TaskDoc, AppUser } from '../store/useTaskStore';
+import { useTaskStore, HierarchySpace, HierarchyFolder, HierarchyList, HierarchyDocFolder, HierarchyRoom, HierarchyWorkspace, StatusDef, CustomFieldDef, Task, TaskDoc, AppUser, WorkspaceRole } from '../store/useTaskStore';
 import { useHistoryStore } from '../store/useHistoryStore';
 import { useSessionStore } from '../store/useSessionStore';
 import { usePresenceConnection } from '../lib/collab/usePresenceConnection';
@@ -88,6 +88,9 @@ import ProfilePage from '../components/ProfilePage';
 import CommandPalette from '../components/CommandPalette';
 import TrashPanel from '../components/TrashPanel';
 import SettingsPanel, { readHiddenNavTabs, type NavTabId } from '../components/SettingsPanel';
+import TeamPanel from '../components/TeamPanel';
+import AccessControlPanel from '../components/AccessControlPanel';
+import AccountSettingsPanel from '../components/AccountSettingsPanel';
 import MentionText from '../components/MentionText';
 import MentionTextarea from '../components/MentionTextarea';
 
@@ -503,6 +506,7 @@ function PageContent() {
     optimisticSetList,
     optimisticSetParent,
     optimisticSetTitle,
+    setTaskPrivacy,
     createStatus,
     updateStatus,
     deleteStatus,
@@ -518,6 +522,13 @@ function PageContent() {
     createWorkspace,
     addWorkspaceMember,
     removeWorkspaceMember,
+    changeWorkspaceMemberRole,
+    deleteWorkspace,
+    createRole,
+    updateRole,
+    deleteRole,
+    assignRole,
+    unassignRole,
     ensurePersonalWorkspace,
     updateSpace,
     reorderSpace,
@@ -584,7 +595,21 @@ function PageContent() {
   const [modalAssigneeOpen, setModalAssigneeOpen] = useState(false);
 
   const [teamOpen, setTeamOpen] = useState(false);
-  const [memberToRemove, setMemberToRemove] = useState<AppUser | null>(null);
+  const [memberToRemove, setMemberToRemove] = useState<(AppUser & { workspaceRole: WorkspaceRole }) | null>(null);
+  const [userMenuOpen, setUserMenuOpen] = useState(false);
+  const [accountSettingsOpen, setAccountSettingsOpen] = useState(false);
+  // Shared by Space/Folder/List/Task's own "Manage access" trigger — see AccessControlPanel.
+  const [accessControlTarget, setAccessControlTarget] = useState<{
+    kind: 'space' | 'folder' | 'list' | 'task';
+    id: string;
+    // updateFolder/updateList are keyed by (spaceId, id) — spaceId is required for those two
+    // kinds specifically (it's how the store finds which Space's folders/lists array to patch
+    // locally, not just part of the URL), unused for 'space'/'task'.
+    spaceId?: string;
+    label: string;
+    isPrivate: boolean;
+    accessJson: string;
+  } | null>(null);
 
   const [newCommentBody, setNewCommentBody] = useState('');
   const [commentAsUserId, setCommentAsUserId] = useState(currentUserId ?? '');
@@ -954,6 +979,13 @@ function PageContent() {
     () => workspaces.find((w) => w.id === activeWorkspaceId) ?? workspaces.find((w) => !w.isPersonal),
     [workspaces, activeWorkspaceId]
   );
+  // Owner or Admin of the current workspace — gates role management, member role changes, and
+  // the "make private" control on Space/Folder/List/Task (server re-checks this independently on
+  // every mutating route, this is only for what the UI offers to click).
+  const canManageCurrentWorkspace = useMemo(() => {
+    const myRole = currentWorkspace?.members.find((m) => m.id === currentUserId)?.workspaceRole;
+    return myRole === 'owner' || myRole === 'admin';
+  }, [currentWorkspace, currentUserId]);
 
   const currentSpace = useMemo(() => {
     if (activeSpaceId === 'everything') return null;
@@ -2159,7 +2191,7 @@ function PageContent() {
         <div className="w-8 border-t border-neutral-800/80 mb-2" />
         <button
           onClick={() => setSettingsOpen(true)}
-          title="Settings"
+          title="Workspace settings"
           className="w-10 h-10 rounded flex flex-col items-center justify-center gap-0.5 transition cursor-pointer text-neutral-500 hover:bg-neutral-800/60 hover:text-neutral-200"
         >
           <Settings className="w-4 h-4" />
@@ -2191,27 +2223,83 @@ function PageContent() {
               }
               return (
                 <div className="space-y-1">
-                  <button
-                    onClick={() => setActiveView('profile')}
-                    className={`w-full flex items-center gap-2.5 px-1 py-1 rounded cursor-pointer transition ${
-                      activeView === 'profile' ? 'bg-neutral-800' : 'hover:bg-neutral-800/40'
-                    }`}
-                  >
-                    {me.avatarUrl ? (
-                      <img src={me.avatarUrl} alt={me.name} className="w-8 h-8 rounded-full object-cover shrink-0" />
-                    ) : (
-                      <span
-                        className="w-8 h-8 rounded-full text-xs font-bold flex items-center justify-center text-white shrink-0"
-                        style={{ backgroundColor: me.color }}
+                  <FloatingPopover
+                    open={userMenuOpen}
+                    onClose={() => setUserMenuOpen(false)}
+                    panelClassName="w-60 bg-neutral-900 border border-neutral-800 rounded shadow-xl py-1"
+                    anchor={
+                      <button
+                        onClick={() => setUserMenuOpen((o) => !o)}
+                        className={`w-full flex items-center gap-2.5 px-1 py-1 rounded cursor-pointer transition ${
+                          activeView === 'profile' || userMenuOpen ? 'bg-neutral-800' : 'hover:bg-neutral-800/40'
+                        }`}
                       >
-                        {me.initials}
-                      </span>
-                    )}
-                    <div className="min-w-0 text-left">
-                      <div className="text-xs font-semibold text-white truncate">{me.name}</div>
-                      <div className="text-[10px] text-neutral-500">View profile</div>
+                        {me.avatarUrl ? (
+                          <img src={me.avatarUrl} alt={me.name} className="w-8 h-8 rounded-full object-cover shrink-0" />
+                        ) : (
+                          <span
+                            className="w-8 h-8 rounded-full text-xs font-bold flex items-center justify-center text-white shrink-0"
+                            style={{ backgroundColor: me.color }}
+                          >
+                            {me.initials}
+                          </span>
+                        )}
+                        <div className="min-w-0 text-left flex-1">
+                          <div className="text-xs font-semibold text-white truncate">{me.name}</div>
+                          <div className="text-[10px] text-neutral-500">View profile</div>
+                        </div>
+                        <ChevronDown className="w-3.5 h-3.5 text-neutral-500 shrink-0" />
+                      </button>
+                    }
+                  >
+                    <div className="px-3 py-2.5 border-b border-neutral-800 flex items-center gap-2.5">
+                      {me.avatarUrl ? (
+                        <img src={me.avatarUrl} alt={me.name} className="w-8 h-8 rounded-full object-cover shrink-0" />
+                      ) : (
+                        <span
+                          className="w-8 h-8 rounded-full text-xs font-bold flex items-center justify-center text-white shrink-0"
+                          style={{ backgroundColor: me.color }}
+                        >
+                          {me.initials}
+                        </span>
+                      )}
+                      <div className="min-w-0">
+                        <div className="text-xs font-medium text-white truncate">{me.name}</div>
+                        {me.email && <div className="text-[10px] text-neutral-500 truncate">{me.email}</div>}
+                      </div>
                     </div>
-                  </button>
+                    <button
+                      onClick={() => {
+                        setActiveView('profile');
+                        setUserMenuOpen(false);
+                      }}
+                      className="w-full flex items-center gap-2.5 px-3 py-2 text-left hover:bg-neutral-800/60 cursor-pointer"
+                    >
+                      <UserCircle className="w-3.5 h-3.5 text-neutral-400" />
+                      <span className="text-xs text-neutral-300">My Profile</span>
+                    </button>
+                    <button
+                      onClick={() => {
+                        setAccountSettingsOpen(true);
+                        setUserMenuOpen(false);
+                      }}
+                      className="w-full flex items-center gap-2.5 px-3 py-2 text-left hover:bg-neutral-800/60 cursor-pointer"
+                    >
+                      <Settings className="w-3.5 h-3.5 text-neutral-400" />
+                      <span className="text-xs text-neutral-300">Settings</span>
+                    </button>
+                    <div className="border-t border-neutral-800 my-1" />
+                    <button
+                      onClick={() => {
+                        setUserMenuOpen(false);
+                        signOut({ redirectTo: '/login' });
+                      }}
+                      className="w-full flex items-center gap-2.5 px-3 py-2 text-left hover:bg-neutral-800/60 cursor-pointer"
+                    >
+                      <LogOut className="w-3.5 h-3.5 text-neutral-400" />
+                      <span className="text-xs text-neutral-300">Sign out</span>
+                    </button>
+                  </FloatingPopover>
                   <button
                     // ensurePersonalWorkspace itself is called by PersonalTasksPage.tsx's own
                     // mount effect, not here — calling it from both places raced (worse, doubled
@@ -2432,6 +2520,7 @@ function PageContent() {
                               </span>
                             )}
                             <span className="truncate">{space.name}</span>
+                            {space.isPrivate && <Lock className="w-2.5 h-2.5 text-neutral-500 shrink-0" />}
                           </span>
                           {activeView === 'board' && <span className="text-[10px] text-neutral-500 font-mono">{spaceTasksCount}</span>}
                         </button>
@@ -2490,57 +2579,6 @@ function PageContent() {
         </div>
 
         <div className="p-3 m-3 space-y-2">
-          <div className="w-full flex items-center gap-2 bg-neutral-950/60 rounded border border-neutral-800/80 px-3 py-2 text-[11px] text-neutral-300">
-            {(() => {
-              const me = users.find((u) => u.id === currentUserId);
-              if (!me) return <UserCircle className="w-3.5 h-3.5 text-neutral-500 shrink-0" />;
-              return me.avatarUrl ? (
-                <img src={me.avatarUrl} alt={me.name} className="w-4 h-4 rounded-full object-cover shrink-0" />
-              ) : (
-                <span
-                  className="w-4 h-4 rounded-full text-[8px] font-bold flex items-center justify-center text-white shrink-0"
-                  style={{ backgroundColor: me.color }}
-                >
-                  {me.initials}
-                </span>
-              );
-            })()}
-            <span className="flex-1 truncate">{users.find((u) => u.id === currentUserId)?.name ?? 'Not signed in'}</span>
-            {currentUserId && (
-              <button
-                onClick={handleCopyCalendarLink}
-                title="Copy your personal .ics calendar feed link"
-                className="shrink-0 p-1 rounded text-neutral-500 hover:text-neutral-300 hover:bg-neutral-800/60 cursor-pointer"
-              >
-                <Link2 className="w-3.5 h-3.5" />
-              </button>
-            )}
-            {currentUserId &&
-              (() => {
-                const me = users.find((u) => u.id === currentUserId);
-                const connected = !!me?.googleEmail;
-                return (
-                  <a
-                    href={connected ? undefined : '/api/google/oauth/start'}
-                    title={connected ? `Google Docs export connected as ${me!.googleEmail}` : 'Connect Google account for Doc export'}
-                    className={`shrink-0 p-1 rounded ${
-                      connected ? 'text-green-500' : 'text-neutral-500 hover:text-neutral-300 hover:bg-neutral-800/60 cursor-pointer'
-                    }`}
-                  >
-                    <Share2 className="w-3.5 h-3.5" />
-                  </a>
-                );
-              })()}
-            {currentUserId && (
-              <button
-                onClick={() => signOut({ redirectTo: '/login' })}
-                title="Sign out"
-                className="shrink-0 p-1 rounded text-neutral-500 hover:text-neutral-300 hover:bg-neutral-800/60 cursor-pointer"
-              >
-                <LogOut className="w-3.5 h-3.5" />
-              </button>
-            )}
-          </div>
           <button
             onClick={() => setTeamOpen(true)}
             className="w-full flex items-center justify-between bg-neutral-950/60 rounded border border-neutral-800/80 px-3 py-2 text-[11px] text-neutral-300 hover:border-neutral-700 cursor-pointer"
@@ -3080,6 +3118,17 @@ function PageContent() {
             <button onClick={() => startEditSpace(spaceMenu.space)} className="w-full text-left px-3 py-1.5 text-xs text-neutral-300 hover:bg-neutral-800/60 cursor-pointer flex items-center gap-2">
               <Pencil className="w-3.5 h-3.5" /> Edit appearance
             </button>
+            {canManageCurrentWorkspace && (
+              <button
+                onClick={() => {
+                  setAccessControlTarget({ kind: 'space', id: spaceMenu.space.id, label: 'Space', isPrivate: spaceMenu.space.isPrivate, accessJson: spaceMenu.space.accessJson });
+                  setSpaceMenu(null);
+                }}
+                className="w-full text-left px-3 py-1.5 text-xs text-neutral-300 hover:bg-neutral-800/60 cursor-pointer flex items-center gap-2"
+              >
+                <Lock className="w-3.5 h-3.5" /> Manage access
+              </button>
+            )}
             <button
               onClick={() => {
                 setSpaceToDelete(spaceMenu.space);
@@ -3110,6 +3159,17 @@ function PageContent() {
             >
               <Pencil className="w-3.5 h-3.5" /> Rename
             </button>
+            {canManageCurrentWorkspace && (
+              <button
+                onClick={() => {
+                  setAccessControlTarget({ kind: 'folder', id: folderMenu.folder.id, spaceId: folderMenu.folder.spaceId, label: 'Folder', isPrivate: folderMenu.folder.isPrivate, accessJson: folderMenu.folder.accessJson });
+                  setFolderMenu(null);
+                }}
+                className="w-full text-left px-3 py-1.5 text-xs text-neutral-300 hover:bg-neutral-800/60 cursor-pointer flex items-center gap-2"
+              >
+                <Lock className="w-3.5 h-3.5" /> Manage access
+              </button>
+            )}
             <button
               onClick={() => {
                 setFolderToDelete(folderMenu.folder);
@@ -3143,6 +3203,17 @@ function PageContent() {
             >
               <Pencil className="w-3.5 h-3.5" /> Rename
             </button>
+            {canManageCurrentWorkspace && (
+              <button
+                onClick={() => {
+                  setAccessControlTarget({ kind: 'list', id: listMenu.list.id, spaceId: listMenu.spaceId, label: 'List', isPrivate: listMenu.list.isPrivate, accessJson: listMenu.list.accessJson });
+                  setListMenu(null);
+                }}
+                className="w-full text-left px-3 py-1.5 text-xs text-neutral-300 hover:bg-neutral-800/60 cursor-pointer flex items-center gap-2"
+              >
+                <Lock className="w-3.5 h-3.5" /> Manage access
+              </button>
+            )}
             <button
               onClick={() => {
                 setListToDelete({ list: listMenu.list, spaceId: listMenu.spaceId });
@@ -3625,6 +3696,27 @@ function PageContent() {
                 })}
               </div>
               <div className="flex items-center gap-2 shrink-0">
+                {canManageCurrentWorkspace && (
+                  <button
+                    onClick={() =>
+                      setAccessControlTarget({
+                        kind: 'task',
+                        id: activeModalTask.id,
+                        label: 'Task',
+                        isPrivate: activeModalTask.isPrivate,
+                        accessJson: activeModalTask.accessJson,
+                      })
+                    }
+                    title={activeModalTask.isPrivate ? 'Private — manage access' : 'Manage access'}
+                    className={`text-[11px] px-2.5 py-1 rounded border cursor-pointer transition flex items-center gap-1.5 ${
+                      activeModalTask.isPrivate
+                        ? 'bg-neutral-800 text-blue-400 border-neutral-700'
+                        : 'text-neutral-400 border-neutral-800 hover:bg-neutral-800/60'
+                    }`}
+                  >
+                    <Lock className="w-3.5 h-3.5" />
+                  </button>
+                )}
                 <button
                   onClick={() => setShowActivityPanel((v) => !v)}
                   title={showActivityPanel ? 'Hide Activity & Comments' : 'Show Activity & Comments'}
@@ -4074,47 +4166,28 @@ function PageContent() {
         }}
       />
 
-      {/* ================= TEAM MODAL — current workspace's members only ================= */}
-      {/* Used to list literally every user in the whole database (across every workspace) with a
-          one-click, unconfirmed "delete this account entirely" button — a leftover from the
-          pre-auth shared-identity model. Now scoped to currentWorkspace.members (already in
-          memory from GET /api/workspaces, no extra fetch), and "delete" is "remove from
-          workspace" (removeWorkspaceMember, membership-checked server-side) behind a confirm
-          dialog, not full account deletion — see components/ProfilePage.tsx's own "Delete my
-          account" for that, which only ever acts on your own account. The old "+ Add user"
-          quick-create-a-fake-person form is gone too — real accounts come from /login now. */}
-      {teamOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-neutral-950/70 backdrop-blur-xs" onClick={() => setTeamOpen(false)}>
-          <div onClick={(e) => e.stopPropagation()} className="w-[420px] bg-neutral-900 border border-neutral-800 rounded shadow-2xl overflow-hidden">
-            <div className="px-5 py-4 border-b border-neutral-800 flex items-center justify-between">
-              <h3 className="font-bold text-sm text-white flex items-center gap-1.5"><Users className="w-4 h-4" /> Team</h3>
-              <button onClick={() => setTeamOpen(false)} className="text-neutral-400 hover:text-white cursor-pointer">
-                <X className="w-3.5 h-3.5" />
-              </button>
-            </div>
-
-            <div className="p-5 space-y-3 max-h-72 overflow-y-auto">
-              {(currentWorkspace?.members ?? []).length === 0 && (
-                <p className="text-xs text-neutral-500">No members in this workspace yet.</p>
-              )}
-              {(currentWorkspace?.members ?? []).map((u) => (
-                <div key={u.id} className="flex items-center justify-between bg-neutral-950/60 border border-neutral-800 rounded px-3 py-2">
-                  <div className="flex items-center gap-2.5">
-                    <span className="w-7 h-7 rounded-full text-[10px] font-bold flex items-center justify-center text-white" style={{ backgroundColor: u.color }}>
-                      {u.initials}
-                    </span>
-                    <span className="text-xs text-neutral-200 font-medium">{u.name}</span>
-                  </div>
-                  {u.id !== currentUserId && (
-                    <button onClick={() => setMemberToRemove(u)} title="Remove from workspace" className="text-neutral-500 hover:text-red-400 text-xs cursor-pointer">
-                      <Trash2 className="w-3.5 h-3.5" />
-                    </button>
-                  )}
-                </div>
-              ))}
-            </div>
-          </div>
-        </div>
+      {/* ================= TEAM PANEL — members (with owner/admin/member tier) + roles ================= */}
+      {/* Replaced the old flat "Team" modal (every registered user on the server, one-click
+          unconfirmed "delete this account entirely" — a leftover from the pre-auth shared-
+          identity model) two sessions ago with a workspace-scoped member list + safe "remove
+          from workspace." This session adds the Owner/Admin/Member tier itself and a Roles tab
+          (Discord-style, purely for granting access to private Spaces/Folders/Lists/Tasks — see
+          components/AccessControlPanel.tsx). */}
+      {teamOpen && currentWorkspace && (
+        <TeamPanel
+          workspace={currentWorkspace}
+          currentUserId={currentUserId}
+          canManage={canManageCurrentWorkspace}
+          onClose={() => setTeamOpen(false)}
+          onRequestRemoveMember={(m) => setMemberToRemove(m)}
+          onChangeMemberRole={(userId, role) => changeWorkspaceMemberRole(currentWorkspace.id, userId, role)}
+          onCreateRole={(name, color) => createRole(currentWorkspace.id, name, color)}
+          onRenameRole={(roleId, name) => updateRole(currentWorkspace.id, roleId, { name })}
+          onRecolorRole={(roleId, color) => updateRole(currentWorkspace.id, roleId, { color })}
+          onDeleteRole={(roleId) => deleteRole(currentWorkspace.id, roleId)}
+          onAssignRole={(roleId, userId) => assignRole(currentWorkspace.id, roleId, userId)}
+          onUnassignRole={(roleId, userId) => unassignRole(currentWorkspace.id, roleId, userId)}
+        />
       )}
 
       <ConfirmDialog
@@ -4311,6 +4384,30 @@ function PageContent() {
 
       {trashOpen && <TrashPanel onClose={() => setTrashOpen(false)} />}
       {settingsOpen && <SettingsPanel onClose={() => setSettingsOpen(false)} onChange={() => setHiddenNavTabs(readHiddenNavTabs())} />}
+      {accountSettingsOpen &&
+        (() => {
+          const me = users.find((u) => u.id === currentUserId);
+          if (!me) return null;
+          return <AccountSettingsPanel user={me} onClose={() => setAccountSettingsOpen(false)} onCopyCalendarLink={handleCopyCalendarLink} />;
+        })()}
+
+      {accessControlTarget && currentWorkspace && (
+        <AccessControlPanel
+          label={accessControlTarget.label}
+          isPrivate={accessControlTarget.isPrivate}
+          accessJson={accessControlTarget.accessJson}
+          members={currentWorkspace.members}
+          roles={currentWorkspace.roles}
+          onClose={() => setAccessControlTarget(null)}
+          onSave={(isPrivate, accessJson) => {
+            const { kind, id, spaceId } = accessControlTarget;
+            if (kind === 'space') updateSpace(id, { isPrivate, accessJson });
+            else if (kind === 'folder' && spaceId) updateFolder(spaceId, id, { isPrivate, accessJson });
+            else if (kind === 'list' && spaceId) updateList(spaceId, id, { isPrivate, accessJson });
+            else if (kind === 'task') setTaskPrivacy(id, isPrivate, accessJson);
+          }}
+        />
+      )}
       <SessionSync />
     </div>
     </DndContext>

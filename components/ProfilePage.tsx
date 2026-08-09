@@ -2,7 +2,7 @@
 
 import { useState } from 'react';
 import { signOut } from 'next-auth/react';
-import { Image as ImageIcon, Pencil, Link2, Globe, X, AlertTriangle } from 'lucide-react';
+import { Image as ImageIcon, Pencil, Link2, Globe, X, AlertTriangle, ChevronRight } from 'lucide-react';
 import { AppUser } from '../store/useTaskStore';
 import { EditableField } from './OfficePage';
 
@@ -64,7 +64,13 @@ export default function ProfilePage({ currentUser, onUpdate }: ProfilePageProps)
 // caller's own id (enforced again server-side in DELETE /api/users/[id], not just here). Needs
 // re-proving identity before it fires — password re-entry for Credentials accounts, or typing
 // your exact email for Google-only accounts (no password to check against).
+//
+// Collapsed behind its own expand toggle, not shown outright on page load — an extra layer of
+// friction before the red "delete" UI is even visible at all, on top of the confirm step inside
+// it. Collapsing back on cancel/close also resets the confirm step, so re-expanding always starts
+// from the same neutral state.
 function DangerZone({ user }: { user: AppUser }) {
+  const [expanded, setExpanded] = useState(false);
   const [confirming, setConfirming] = useState(false);
   const [password, setPassword] = useState('');
   const [confirmEmail, setConfirmEmail] = useState('');
@@ -76,6 +82,11 @@ function DangerZone({ user }: { user: AppUser }) {
     setPassword('');
     setConfirmEmail('');
     setError(null);
+  };
+
+  const collapse = () => {
+    setExpanded(false);
+    reset();
   };
 
   const handleDelete = async () => {
@@ -95,14 +106,33 @@ function DangerZone({ user }: { user: AppUser }) {
     await signOut({ redirectTo: '/login' });
   };
 
+  if (!expanded) {
+    return (
+      <div className="max-w-xl mx-auto border border-neutral-800/80 rounded">
+        <button
+          onClick={() => setExpanded(true)}
+          className="w-full flex items-center justify-between px-5 py-3 text-left cursor-pointer group"
+        >
+          <span className="text-xs font-medium text-neutral-400 group-hover:text-neutral-300">Danger zone</span>
+          <ChevronRight className="w-3.5 h-3.5 text-neutral-600 group-hover:text-neutral-400" />
+        </button>
+      </div>
+    );
+  }
+
   return (
     <div className="max-w-xl mx-auto border border-red-900/50 bg-red-950/10 rounded p-5 space-y-3">
-      <div className="flex items-start gap-2">
-        <AlertTriangle className="w-4 h-4 text-red-400 shrink-0 mt-0.5" />
-        <div>
-          <div className="text-xs font-semibold text-red-400">Danger zone</div>
-          <p className="text-[11px] text-neutral-500 mt-0.5">Deleting your account is permanent — every task, comment, and doc tied only to you goes with it. This can't be undone.</p>
+      <div className="flex items-start justify-between gap-2">
+        <div className="flex items-start gap-2">
+          <AlertTriangle className="w-4 h-4 text-red-400 shrink-0 mt-0.5" />
+          <div>
+            <div className="text-xs font-semibold text-red-400">Danger zone</div>
+            <p className="text-[11px] text-neutral-500 mt-0.5">Deleting your account is permanent — every task, comment, and doc tied only to you goes with it. This can't be undone.</p>
+          </div>
         </div>
+        <button onClick={collapse} title="Collapse" className="shrink-0 text-neutral-500 hover:text-neutral-300 cursor-pointer">
+          <X className="w-3.5 h-3.5" />
+        </button>
       </div>
 
       {!confirming ? (
