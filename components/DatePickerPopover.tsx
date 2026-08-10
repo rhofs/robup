@@ -9,6 +9,13 @@ type DatePickerPopoverProps = {
   onChange: (iso: string | null) => void;
   placeholder?: string;
   align?: 'left' | 'right';
+  // Urgency (see lib/dateBadgeColor.ts) — this component stays agnostic to which date it
+  // represents (start vs due) or how urgency is computed; callers pass the resolved hex color (or
+  // omit it to keep today's plain neutral look) and a tooltip with the exact relative time (e.g.
+  // "Overdue by 2 days") — a filled pill alone still asks the reader to remember what each color
+  // means, the tooltip removes that guesswork on hover.
+  badgeColorHex?: string;
+  tooltip?: string;
 };
 
 const WEEKDAY_LABELS = ['Mo', 'Tu', 'We', 'Th', 'Fr', 'Sa', 'Su'];
@@ -36,7 +43,7 @@ const isSameDay = (a: Date | null, b: Date | null) =>
 
 const formatShort = (d: Date) => `${d.getDate()}. ${MONTH_LABELS[d.getMonth()].slice(0, 3)}`;
 
-export default function DatePickerPopover({ value, onChange, placeholder = 'Not set', align = 'left' }: DatePickerPopoverProps) {
+export default function DatePickerPopover({ value, onChange, placeholder = 'Not set', align = 'left', badgeColorHex, tooltip }: DatePickerPopoverProps) {
   const [open, setOpen] = useState(false);
   const [showTimeInput, setShowTimeInput] = useState(false);
 
@@ -92,9 +99,15 @@ export default function DatePickerPopover({ value, onChange, placeholder = 'Not 
         <button
           type="button"
           onClick={() => setOpen((o) => !o)}
+          title={selected ? tooltip : undefined}
           className={`px-2 py-1 rounded cursor-pointer text-xs font-sans transition ${
-            selected ? 'text-neutral-300 hover:bg-neutral-800/70 hover:text-white' : 'text-neutral-500 hover:bg-neutral-800/70 hover:text-neutral-300'
+            selected
+              ? badgeColorHex
+                ? 'hover:bg-neutral-800/70'
+                : 'text-neutral-300 hover:bg-neutral-800/70 hover:text-white'
+              : 'text-neutral-500 hover:bg-neutral-800/70 hover:text-neutral-300'
           }`}
+          style={selected && badgeColorHex ? { color: badgeColorHex } : undefined}
         >
           {selected ? (
             <span className="inline-flex items-baseline gap-1.5 tabular-nums">

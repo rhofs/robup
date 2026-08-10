@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react';
 import { X } from 'lucide-react';
 import { HierarchyWorkspace } from '../store/useTaskStore';
 import DatePickerPopover from './DatePickerPopover';
+import { startDateColor, dueDateColor, DATE_BADGE_COLOR_HEX, startDateTooltip, dueDateTooltip } from '../lib/dateBadgeColor';
 
 type CreateTaskModalProps = {
   open: boolean;
@@ -107,13 +108,31 @@ export default function CreateTaskModal({ open, workspaces, defaultStartDate, on
             <div className="space-y-1.5">
               <label className="text-[10px] uppercase tracking-wide text-neutral-500 font-semibold">Start date</label>
               <div className="bg-neutral-950 border border-neutral-700 rounded px-1 py-0.5 inline-block">
-                <DatePickerPopover value={startDate} onChange={setStartDate} placeholder="Not set" />
+                <DatePickerPopover
+                  value={startDate}
+                  onChange={setStartDate}
+                  placeholder="Not set"
+                  badgeColorHex={(() => {
+                    const c = startDateColor(startDate, dueDate);
+                    return c ? DATE_BADGE_COLOR_HEX[c] : undefined;
+                  })()}
+                  tooltip={startDateTooltip(startDate)}
+                />
               </div>
             </div>
             <div className="space-y-1.5">
               <label className="text-[10px] uppercase tracking-wide text-neutral-500 font-semibold">Due date</label>
               <div className="bg-neutral-950 border border-neutral-700 rounded px-1 py-0.5 inline-block">
-                <DatePickerPopover value={dueDate} onChange={setDueDate} placeholder="Not set" />
+                <DatePickerPopover
+                  value={dueDate}
+                  onChange={setDueDate}
+                  placeholder="Not set"
+                  badgeColorHex={(() => {
+                    const c = dueDateColor(dueDate);
+                    return c ? DATE_BADGE_COLOR_HEX[c] : undefined;
+                  })()}
+                  tooltip={dueDateTooltip(dueDate)}
+                />
               </div>
             </div>
           </div>

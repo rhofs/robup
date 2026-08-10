@@ -21,6 +21,7 @@ model Workspace {
   // GET /api/tasks etc.
   memberships     WorkspaceMembership[]
   roles           Role[]
+  invites         WorkspaceInvite[]
   // The one auto-created single-member workspace behind the sidebar's private "My tasks" list —
   // distinguishes it from any other single-member workspace a user creates by hand via the
   // normal switcher (which should still show up there; this one deliberately doesn't).
@@ -64,6 +65,22 @@ model Role {
   createdAt   DateTime  @default(now()) @map("created_at")
 }
 
+// Shareable, Discord-style invite link (the `id` itself is the code in /invite/[id]) — reusable
+// and unlimited by default (no expiry/max-uses in this pass, matching Discord's own default
+// invite behavior; not asked for, a deliberate scope cut rather than a silent gap). "Revoking" an
+// invite is just deleting this row — GET/accept both treat a missing row as an invalid link, so
+// no separate `revoked` flag is needed. Never carries role: 'owner' — that tier is fixed at
+// workspace creation with no transfer mechanism.
+model WorkspaceInvite {
+  id          String    @id @default(uuid())
+  workspaceId String    @map("workspace_id")
+  workspace   Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  role        String    @default("member") // 'admin' | 'member'
+  createdById String    @map("created_by_id")
+  createdBy   User      @relation(fields: [createdById], references: [id], onDelete: Cascade)
+  createdAt   DateTime  @default(now()) @map("created_at")
+}
+
 // Kosé "kontorer" i Office-fanen — rent visuelt/organisatorisk, ingen kobling til Space-treet.
 // Sletting av et rom fjerner ikke medlemmene, de blir bare urepresenterte (SetNull).
 model Room {
@@ -84,6 +101,11 @@ model Space {
   id            String        @id @default(uuid())
   name          String
   color         String        @default("#3B82F6")
+  // Same nullable lucide-icon-name shape as Folder.icon/List.icon below (FOLDER_ICON_MAP in
+  // components/FolderTree.tsx maps the string to a component) — null means "no icon chosen yet,"
+  // rendered as today's plain color dot instead. Personalizing a Space before this was just typing
+  // an emoji into its name; this is the real, dedicated field.
+  icon          String?
   order         Int           @default(0)
   description   String?
   coverImageUrl String?       @map("cover_image_url")
@@ -224,6 +246,7 @@ model User {
   tasks         Task[]    @relation("TaskAssignees")
   workspaceMemberships WorkspaceMembership[]
   roles         Role[]    @relation("RoleMembers")
+  invitesCreated WorkspaceInvite[]
   comments      Comment[]
   createdAt     DateTime  @default(now()) @map("created_at")
 }

@@ -1,12 +1,37 @@
 'use client';
 
-import { useState } from 'react';
-import { useRouter } from 'next/navigation';
+import { Suspense, useState } from 'react';
+import { useRouter, useSearchParams } from 'next/navigation';
 import { signIn } from 'next-auth/react';
 
+// Thin Suspense wrapper around the real page — useSearchParams() (needed below for
+// callbackUrl/mode) requires one for production builds, same precedent as app/page.tsx's own
+// PageContent split (see PLANNING.md's browser back/forward session).
 export default function LoginPage() {
+  return (
+    <Suspense fallback={null}>
+      <LoginPageContent />
+    </Suspense>
+  );
+}
+
+function LoginPageContent() {
   const router = useRouter();
-  const [mode, setMode] = useState<'signin' | 'signup'>('signin');
+  const searchParams = useSearchParams();
+  // Where to land after a successful sign-in/sign-up — defaults to the app shell, but an invite
+  // link routes through here as /login?callbackUrl=/invite/[code] so the person ends up back on
+  // the invite page (now signed in) instead of the plain dashboard. Auth.js's own auto-redirect
+  // to this page (when an unauthenticated visit hits proxy.ts) can hand back an *absolute*
+  // callbackUrl built from its own inferred origin rather than the browser's actual one — harmless
+  // when that happens to be the same host, but on a LAN a second machine reaching this app via
+  // e.g. http://192.168.1.51:3000 got redirected back to http://localhost:3000/ after signing
+  // in — an address that resolves to *that machine's own* loopback, not this server. Since a
+  // same-app redirect should never actually need to leave the current origin, stripping any
+  // protocol+host prefix down to just the path+query makes this correct regardless of which
+  // origin is serving the app.
+  const rawCallbackUrl = searchParams.get('callbackUrl') || '/';
+  const callbackUrl = rawCallbackUrl.replace(/^https?:\/\/[^/]+/, '') || '/';
+  const [mode, setMode] = useState<'signin' | 'signup'>(searchParams.get('mode') === 'signup' ? 'signup' : 'signin');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [name, setName] = useState('');
@@ -37,7 +62,7 @@ export default function LoginPage() {
         setBusy(false);
         return;
       }
-      router.push('/');
+      router.push(callbackUrl);
       router.refresh();
     } catch {
       setError('Something went wrong');
@@ -85,7 +110,7 @@ export default function LoginPage() {
 
           <button
             type="button"
-            onClick={() => signIn('google', { redirectTo: '/' })}
+            onClick={() => signIn('google', { redirectTo: callbackUrl })}
             className="w-full flex items-center justify-center gap-2 bg-neutral-950 border border-neutral-700 rounded px-3 py-2 text-xs text-white hover:bg-neutral-800/60 transition cursor-pointer mb-4"
           >
             Continue with Google

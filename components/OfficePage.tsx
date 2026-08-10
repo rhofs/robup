@@ -1,7 +1,7 @@
 'use client';
 
 import { useMemo, useState } from 'react';
-import { Phone, Pencil, ArrowLeft, Briefcase, Smile } from 'lucide-react';
+import { Phone, Pencil, ArrowLeft, Briefcase, Smile, DoorOpen } from 'lucide-react';
 import { HierarchyWorkspace, HierarchyRoom, AppUser, Task, StatusDef } from '../store/useTaskStore';
 import OfficeRooms from './OfficeRooms';
 import RoomDetail from './RoomDetail';
@@ -17,6 +17,8 @@ type OfficePageProps = {
   activeUserId: string | null;
   activeRoomId: string | null;
   workspaces: HierarchyWorkspace[];
+  currentUserId: string | null;
+  canManage: boolean;
   tasks: Task[];
   statuses: StatusDef[];
   onSelectUser: (userId: string | null) => void;
@@ -25,6 +27,7 @@ type OfficePageProps = {
   onUpdatePhone: (userId: string, phone: string | null) => void;
   onUpdateUserField: (userId: string, field: 'title' | 'status', value: string | null) => void;
   onDeleteRoomRequest: (room: HierarchyRoom) => void;
+  onRequestRemoveMember: (user: AppUser) => void;
 };
 
 export default function OfficePage({
@@ -32,6 +35,8 @@ export default function OfficePage({
   activeUserId,
   activeRoomId,
   workspaces,
+  currentUserId,
+  canManage,
   tasks,
   statuses,
   onSelectUser,
@@ -40,6 +45,7 @@ export default function OfficePage({
   onUpdatePhone,
   onUpdateUserField,
   onDeleteRoomRequest,
+  onRequestRemoveMember,
 }: OfficePageProps) {
   // taskId's List/Space aren't embedded on Task itself — build the lookup once from the tree,
   // same shape as the cross-Space breadcrumbs elsewhere in the app (e.g. CreateTaskModal).
@@ -57,17 +63,32 @@ export default function OfficePage({
 
   const statusColorOf = (name: string) => statuses.find((s) => s.name === name)?.color || '#94a3b8';
 
-  const activeUser = users.find((u) => u.id === activeUserId) ?? null;
-  const activeRoom = !activeUser ? (workspaces.flatMap((w) => w.rooms).find((r) => r.id === activeRoomId) ?? null) : null;
   const workspace = workspaces[0];
+  // `users` is the app-wide registered-user list (used elsewhere for task-assignee pickers etc.)
+  // — Office needs to show only THIS workspace's members, otherwise someone just removed via the
+  // manage popover (or who simply isn't in this workspace at all) would still linger in the
+  // Lobby/rooms forever, since roomId placement is a plain field on User with no workspace scoping
+  // of its own. Scoping here, once, keeps every Office view (rooms, Lobby, profile lookup)
+  // consistent without touching the global `users` list's other, unrelated uses.
+  const officeUsers = useMemo(
+    () => (workspace ? users.filter((u) => workspace.members.some((m) => m.id === u.id)) : []),
+    [users, workspace]
+  );
 
-  if (activeRoom) {
+  const activeUser = officeUsers.find((u) => u.id === activeUserId) ?? null;
+  const activeRoom = !activeUser ? (workspaces.flatMap((w) => w.rooms).find((r) => r.id === activeRoomId) ?? null) : null;
+
+  if (activeRoom && workspace) {
     return (
       <RoomDetail
         room={activeRoom}
-        members={users.filter((u) => u.roomId === activeRoom.id)}
+        members={officeUsers.filter((u) => u.roomId === activeRoom.id)}
+        workspace={workspace}
+        currentUserId={currentUserId}
+        canManage={canManage}
         onBack={() => onSelectRoom(null)}
         onSelectUser={onSelectUser}
+        onRequestRemoveMember={onRequestRemoveMember}
       />
     );
   }
@@ -76,14 +97,15 @@ export default function OfficePage({
     if (!workspace) return null;
     return (
       <OfficeRooms
-        workspaceId={workspace.id}
-        messageOfTheDay={workspace.messageOfTheDay}
-        rooms={workspace.rooms}
-        users={users}
+        workspace={workspace}
+        currentUserId={currentUserId}
+        canManage={canManage}
+        users={officeUsers}
         tasks={tasks}
         onSelectUser={(id) => onSelectUser(id)}
         onSelectRoom={(id) => onSelectRoom(id)}
         onDeleteRoomRequest={onDeleteRoomRequest}
+        onRequestRemoveMember={onRequestRemoveMember}
       />
     );
   }
@@ -91,6 +113,10 @@ export default function OfficePage({
   const myTasks = tasks
     .filter((t) => !t.archived && t.assignees.some((a) => a.id === activeUser.id))
     .sort((a, b) => (a.dueDate ? new Date(a.dueDate).getTime() : Infinity) - (b.dueDate ? new Date(b.dueDate).getTime() : Infinity));
+
+  // Which room this person sits in, if any — otherwise unresolvable from this page alone (the
+  // floor plan is the only other place it's shown), so surface it here too.
+  const activeUserRoom = activeUser.roomId ? (workspace?.rooms.find((r) => r.id === activeUser.roomId) ?? null) : null;
 
   return (
     <div className="max-w-3xl mx-auto space-y-4">
@@ -132,6 +158,22 @@ export default function OfficePage({
             onCommit={(v) => onUpdateUserField(activeUser.id, 'status', v)}
           />
           <EditableField icon={Phone} value={activeUser.phone} placeholder="Add phone number..." onCommit={(v) => onUpdatePhone(activeUser.id, v)} />
+          <button
+            onClick={() => {
+              // Jump to the floor plan — clearing activeUser is what makes OfficePage render
+              // OfficeRooms again; a room's own "step inside" view still starts from there.
+              onSelectUser(null);
+              onSelectRoom(null);
+            }}
+            className="flex items-center gap-1.5 text-xs text-neutral-400 hover:text-neutral-200 cursor-pointer"
+          >
+            <DoorOpen className="w-3 h-3 shrink-0" />
+            {activeUserRoom ? (
+              <>Sits in <span className="text-neutral-300">{activeUserRoom.icon || '🏠'} {activeUserRoom.name}</span></>
+            ) : (
+              <span className="italic">Not assigned to a room — Lobby</span>
+            )}
+          </button>
         </div>
       </div>
 

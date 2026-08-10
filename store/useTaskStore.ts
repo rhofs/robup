@@ -110,6 +110,7 @@ export type HierarchySpace = {
   id: string;
   name: string;
   color: string;
+  icon: string | null;
   order: number;
   description: string | null;
   coverImageUrl: string | null;
@@ -295,6 +296,7 @@ interface TaskStore {
     patch: {
       name?: string;
       color?: string;
+      icon?: string | null;
       description?: string | null;
       coverImageUrl?: string | null;
       isPrivate?: boolean;
@@ -1349,6 +1351,7 @@ export const useTaskStore = create<TaskStore>((set, get) => {
         const oldPatch: typeof patch = {};
         if (patch.name !== undefined) oldPatch.name = oldSpace.name;
         if (patch.color !== undefined) oldPatch.color = oldSpace.color;
+        if (patch.icon !== undefined) oldPatch.icon = oldSpace.icon;
         if (patch.description !== undefined) oldPatch.description = oldSpace.description;
         if (patch.coverImageUrl !== undefined) oldPatch.coverImageUrl = oldSpace.coverImageUrl;
         if (patch.isPrivate !== undefined) oldPatch.isPrivate = oldSpace.isPrivate;

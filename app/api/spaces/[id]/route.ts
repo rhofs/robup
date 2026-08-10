@@ -20,6 +20,7 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
   const data: any = {};
   if (body.name !== undefined) data.name = body.name;
   if (body.color !== undefined) data.color = body.color;
+  if (body.icon !== undefined) data.icon = body.icon;
   if (body.order !== undefined) data.order = body.order;
   if (body.description !== undefined) data.description = body.description;
   if (body.coverImageUrl !== undefined) data.coverImageUrl = body.coverImageUrl;

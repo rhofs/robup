@@ -1,7 +1,10 @@
 'use client';
 
-import { useState } from 'react';
-import { X, Settings, Check } from 'lucide-react';
+import { useEffect, useRef, useState } from 'react';
+import Papa from 'papaparse';
+import { X, Settings, Check, Trash2, Plus, Link2, Upload } from 'lucide-react';
+import { useTaskStore, type HierarchyWorkspace } from '../store/useTaskStore';
+import ColorSwatchPicker from './ColorSwatchPicker';
 
 const HIDDEN_NAV_TABS_STORAGE_KEY = 'robup.hiddenNavTabs';
 
@@ -36,10 +39,88 @@ export function setNavTabHidden(tabId: NavTabId, hidden: boolean) {
   } catch {}
 }
 
+const ROLE_COLOR_CHOICES = ['#6366F1', '#3B82F6', '#10B981', '#F59E0B', '#EF4444', '#EC4899', '#8B5CF6', '#94A3B8'];
+
+type InviteRow = { id: string; role: 'admin' | 'member'; createdAt: string; createdBy: { name: string } };
+type ClickUpRow = Record<string, string>;
+
+type ImportPreview = {
+  taskCount: number;
+  spaceNames: Set<string>;
+  listNames: Set<string>;
+  folderPaths: Set<string>;
+  statusNames: Set<string>;
+  matchedAssignees: Set<string>;
+  unmatchedAssignees: Set<string>;
+  skippedCount: number;
+};
+
+type ImportResult = {
+  tasksCreated: number;
+  spacesCreated: number;
+  foldersCreated: number;
+  listsCreated: number;
+  statusesCreated: number;
+  unmatchedAssignees: string[];
+  skippedRows: { taskName: string; reason: string }[];
+};
+
+// Aggregate-only preview (counts, not a per-row table — real exports run into the thousands of
+// rows) computed purely client-side from the parsed CSV, before anything is sent to the server —
+// lets a bad file be inspected and abandoned with zero side effects.
+function buildImportPreview(rows: ClickUpRow[], memberNames: Set<string>): ImportPreview {
+  const preview: ImportPreview = {
+    taskCount: 0,
+    spaceNames: new Set(),
+    listNames: new Set(),
+    folderPaths: new Set(),
+    statusNames: new Set(),
+    matchedAssignees: new Set(),
+    unmatchedAssignees: new Set(),
+    skippedCount: 0,
+  };
+  for (const row of rows) {
+    const title = row['Task Name']?.trim();
+    if (!title || !row['Space Name']?.trim() || !row['List Name']?.trim()) {
+      preview.skippedCount++;
+      continue;
+    }
+    preview.taskCount++;
+    preview.spaceNames.add(row['Space Name'].trim());
+    preview.listNames.add(row['List Name'].trim());
+    if (row['Status']?.trim()) preview.statusNames.add(row['Status'].trim());
+    try {
+      const segments = JSON.parse(row['Folder Name/Path'] || '[]');
+      if (Array.isArray(segments) && segments.length) preview.folderPaths.add(segments.join(' / '));
+    } catch {}
+    const inner = (row['Assignees'] || '').trim().replace(/^\[/, '').replace(/\]$/, '').trim();
+    if (inner) {
+      inner.split(',').map((s) => s.trim()).filter(Boolean).forEach((n) => {
+        (memberNames.has(n) ? preview.matchedAssignees : preview.unmatchedAssignees).add(n);
+      });
+    }
+  }
+  return preview;
+}
+
 // Structurally identical to TrashPanel.tsx (self-contained, onClose prop, centered overlay) —
 // deliberately no framer-motion, instant mount/unmount, matching the "cheaper feel" direction of
-// this session's other changes.
-export default function SettingsPanel({ onClose, onChange }: { onClose: () => void; onChange: () => void }) {
+// this session's other changes. Absorbed Roles/Invite/Import from the old TeamPanel.tsx (now
+// deleted) — those are workspace governance actions, not personal UI prefs like the tab-visibility
+// toggles below, so they're Owner/Admin-gated (`canManage`) while General stays open to everyone.
+export default function SettingsPanel({
+  workspace,
+  canManage,
+  onClose,
+  onChange,
+}: {
+  workspace: HierarchyWorkspace;
+  canManage: boolean;
+  onClose: () => void;
+  onChange: () => void;
+}) {
+  const { createRole, updateRole, deleteRole, assignRole, unassignRole } = useTaskStore();
+  const [tab, setTab] = useState<'general' | 'roles' | 'invite' | 'import'>('general');
   const [hidden, setHidden] = useState(() => readHiddenNavTabs());
 
   const toggle = (tabId: NavTabId) => {
@@ -49,9 +130,94 @@ export default function SettingsPanel({ onClose, onChange }: { onClose: () => vo
     onChange();
   };
 
+  // --- Roles ---
+  const [creatingRole, setCreatingRole] = useState(false);
+  const [newRoleName, setNewRoleName] = useState('');
+  const [newRoleColor, setNewRoleColor] = useState(ROLE_COLOR_CHOICES[0]);
+  const [expandedRoleId, setExpandedRoleId] = useState<string | null>(null);
+
+  // --- Invite --- (local, Owner/Admin-only UI state, not part of the global store shape — a
+  // workspace's invite-link list doesn't need to live in the hierarchy every member fetches)
+  const [invites, setInvites] = useState<InviteRow[] | null>(null);
+  const [newInviteRole, setNewInviteRole] = useState<'admin' | 'member'>('member');
+  const [copiedId, setCopiedId] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (tab !== 'invite' || !canManage) return;
+    fetch(`/api/workspaces/${workspace.id}/invites`)
+      .then((r) => r.json())
+      .then(setInvites)
+      .catch(() => setInvites([]));
+  }, [tab, canManage, workspace.id]);
+
+  const createInvite = async () => {
+    const res = await fetch(`/api/workspaces/${workspace.id}/invites`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ role: newInviteRole }),
+    });
+    const created = await res.json();
+    setInvites((prev) => [created, ...(prev ?? [])]);
+  };
+
+  const revokeInvite = async (inviteId: string) => {
+    setInvites((prev) => (prev ?? []).filter((i) => i.id !== inviteId));
+    await fetch(`/api/workspaces/${workspace.id}/invites/${inviteId}`, { method: 'DELETE' });
+  };
+
+  const copyInviteLink = (inviteId: string) => {
+    navigator.clipboard.writeText(`${window.location.origin}/invite/${inviteId}`);
+    setCopiedId(inviteId);
+    setTimeout(() => setCopiedId((id) => (id === inviteId ? null : id)), 1500);
+  };
+
+  // --- Import ---
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const [csvRows, setCsvRows] = useState<ClickUpRow[] | null>(null);
+  const [csvFileName, setCsvFileName] = useState('');
+  const [importPreview, setImportPreview] = useState<ImportPreview | null>(null);
+  const [importBusy, setImportBusy] = useState(false);
+  const [importResult, setImportResult] = useState<ImportResult | null>(null);
+  const [importError, setImportError] = useState<string | null>(null);
+
+  const memberNames = new Set(workspace.members.map((m) => m.name));
+
+  const handleCsvFile = async (file: File) => {
+    setImportResult(null);
+    setImportError(null);
+    setCsvFileName(file.name);
+    const text = await file.text();
+    const parsed = Papa.parse<ClickUpRow>(text, { header: true, skipEmptyLines: true });
+    setCsvRows(parsed.data);
+    setImportPreview(buildImportPreview(parsed.data, memberNames));
+  };
+
+  const confirmImport = async () => {
+    if (!csvRows) return;
+    setImportBusy(true);
+    setImportError(null);
+    try {
+      const res = await fetch(`/api/workspaces/${workspace.id}/import/clickup`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ rows: csvRows }),
+      });
+      if (!res.ok) throw new Error('Import failed');
+      const result: ImportResult = await res.json();
+      setImportResult(result);
+      setCsvRows(null);
+      setImportPreview(null);
+      await Promise.all([useTaskStore.getState().refetchWorkspaces(), useTaskStore.getState().refetchTasks()]);
+    } catch {
+      setImportError('Something went wrong during import. No partial changes were rolled back — check the workspace before retrying.');
+    } finally {
+      setImportBusy(false);
+    }
+  };
+
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-neutral-950/70 backdrop-blur-xs" onClick={onClose}>
-      <div onClick={(e) => e.stopPropagation()} className="w-[360px] bg-neutral-900 border border-neutral-800 rounded shadow-2xl overflow-hidden">
+      <div onClick={(e) => e.stopPropagation()} className="w-[440px] bg-neutral-900 border border-neutral-800 rounded shadow-2xl overflow-hidden">
         <div className="px-5 py-4 border-b border-neutral-800 flex items-center justify-between">
           <h3 className="font-bold text-sm text-white flex items-center gap-1.5">
             <Settings className="w-4 h-4" /> Workspace Settings
@@ -60,28 +226,250 @@ export default function SettingsPanel({ onClose, onChange }: { onClose: () => vo
             <X className="w-3.5 h-3.5" />
           </button>
         </div>
-        <div className="p-4 space-y-1">
-          <div className="text-[10px] uppercase tracking-wide text-neutral-500 px-1 pb-1">Visible tabs</div>
-          {NAV_TABS.map((tab) => {
-            const visible = !hidden.has(tab.id);
-            return (
-              <button
-                key={tab.id}
-                onClick={() => toggle(tab.id)}
-                className="w-full flex items-center justify-between px-2 py-1.5 rounded hover:bg-neutral-800/60 cursor-pointer"
-              >
-                <span className="text-xs text-neutral-300">{tab.label}</span>
-                <span
-                  className={`w-4 h-4 rounded border flex items-center justify-center ${
-                    visible ? 'bg-blue-600 border-blue-600' : 'border-neutral-700'
-                  }`}
-                >
-                  {visible && <Check className="w-3 h-3 text-white" />}
-                </span>
-              </button>
-            );
-          })}
+
+        <div className="flex border-b border-neutral-800">
+          <button
+            onClick={() => setTab('general')}
+            className={`flex-1 text-xs py-2 cursor-pointer transition ${tab === 'general' ? 'text-white border-b-2 border-blue-500' : 'text-neutral-500 hover:text-neutral-300'}`}
+          >
+            General
+          </button>
+          {canManage && (
+            <button
+              onClick={() => setTab('roles')}
+              className={`flex-1 text-xs py-2 cursor-pointer transition ${tab === 'roles' ? 'text-white border-b-2 border-blue-500' : 'text-neutral-500 hover:text-neutral-300'}`}
+            >
+              Roles
+            </button>
+          )}
+          {canManage && (
+            <button
+              onClick={() => setTab('invite')}
+              className={`flex-1 text-xs py-2 cursor-pointer transition ${tab === 'invite' ? 'text-white border-b-2 border-blue-500' : 'text-neutral-500 hover:text-neutral-300'}`}
+            >
+              Invite
+            </button>
+          )}
+          {canManage && (
+            <button
+              onClick={() => setTab('import')}
+              className={`flex-1 text-xs py-2 cursor-pointer transition ${tab === 'import' ? 'text-white border-b-2 border-blue-500' : 'text-neutral-500 hover:text-neutral-300'}`}
+            >
+              Import
+            </button>
+          )}
         </div>
+
+        {tab === 'general' ? (
+          <div className="p-4 space-y-1">
+            <div className="text-[10px] uppercase tracking-wide text-neutral-500 px-1 pb-1">Visible tabs</div>
+            {NAV_TABS.map((navTab) => {
+              const visible = !hidden.has(navTab.id);
+              return (
+                <button
+                  key={navTab.id}
+                  onClick={() => toggle(navTab.id)}
+                  className="w-full flex items-center justify-between px-2 py-1.5 rounded hover:bg-neutral-800/60 cursor-pointer"
+                >
+                  <span className="text-xs text-neutral-300">{navTab.label}</span>
+                  <span
+                    className={`w-4 h-4 rounded border flex items-center justify-center ${
+                      visible ? 'bg-blue-600 border-blue-600' : 'border-neutral-700'
+                    }`}
+                  >
+                    {visible && <Check className="w-3 h-3 text-white" />}
+                  </span>
+                </button>
+              );
+            })}
+          </div>
+        ) : tab === 'roles' ? (
+          <div className="p-5 space-y-2 max-h-96 overflow-y-auto">
+            {workspace.roles.length === 0 && !creatingRole && <p className="text-xs text-neutral-500">No roles yet — roles let you grant specific people access to private Spaces, Folders, Lists, and Tasks.</p>}
+            {workspace.roles.map((r) => {
+              const expanded = expandedRoleId === r.id;
+              return (
+                <div key={r.id} className="bg-neutral-950/60 border border-neutral-800 rounded overflow-hidden">
+                  <button
+                    onClick={() => setExpandedRoleId(expanded ? null : r.id)}
+                    className="w-full flex items-center justify-between px-3 py-2 cursor-pointer text-left"
+                  >
+                    <div className="flex items-center gap-2 min-w-0">
+                      <span className="w-2.5 h-2.5 rounded-full shrink-0" style={{ backgroundColor: r.color }} />
+                      <span className="text-xs text-neutral-200 font-medium truncate">{r.name}</span>
+                      <span className="text-[10px] text-neutral-600 font-mono">{r.memberIds.length}</span>
+                    </div>
+                    <span
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        deleteRole(workspace.id, r.id);
+                      }}
+                      className="text-neutral-500 hover:text-red-400 cursor-pointer"
+                    >
+                      <Trash2 className="w-3.5 h-3.5" />
+                    </span>
+                  </button>
+                  {expanded && (
+                    <div className="border-t border-neutral-800 px-3 py-2 space-y-1.5">
+                      <div className="pb-1.5">
+                        <ColorSwatchPicker value={r.color} onChange={(color) => updateRole(workspace.id, r.id, { color })} choices={ROLE_COLOR_CHOICES} size="sm" />
+                      </div>
+                      {workspace.members.map((m) => {
+                        const has = r.memberIds.includes(m.id);
+                        return (
+                          <button
+                            key={m.id}
+                            onClick={() => (has ? unassignRole(workspace.id, r.id, m.id) : assignRole(workspace.id, r.id, m.id))}
+                            className="w-full flex items-center gap-2 px-1 py-1 rounded hover:bg-neutral-800/60 cursor-pointer text-left"
+                          >
+                            <span
+                              className={`w-3.5 h-3.5 rounded border flex items-center justify-center shrink-0 ${has ? 'bg-blue-600 border-blue-600' : 'border-neutral-700'}`}
+                            >
+                              {has && <span className="w-1.5 h-1.5 rounded-full bg-white" />}
+                            </span>
+                            <span className="text-xs text-neutral-300 truncate">{m.name}</span>
+                          </button>
+                        );
+                      })}
+                    </div>
+                  )}
+                </div>
+              );
+            })}
+
+            {creatingRole ? (
+              <div className="space-y-2 pt-1">
+                <input
+                  autoFocus
+                  value={newRoleName}
+                  onChange={(e) => setNewRoleName(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter' && newRoleName.trim()) {
+                      createRole(workspace.id, newRoleName.trim(), newRoleColor);
+                      setNewRoleName('');
+                      setCreatingRole(false);
+                    }
+                    if (e.key === 'Escape') setCreatingRole(false);
+                  }}
+                  placeholder="Role name..."
+                  className="w-full bg-neutral-950 border border-blue-500 rounded px-2 py-1.5 text-xs text-white focus:outline-none"
+                />
+                <ColorSwatchPicker value={newRoleColor} onChange={setNewRoleColor} choices={ROLE_COLOR_CHOICES} size="sm" />
+                <button
+                  onClick={() => {
+                    if (!newRoleName.trim()) return;
+                    createRole(workspace.id, newRoleName.trim(), newRoleColor);
+                    setNewRoleName('');
+                    setCreatingRole(false);
+                  }}
+                  className="w-full bg-blue-600 hover:bg-blue-500 text-white text-xs py-1.5 rounded font-medium cursor-pointer"
+                >
+                  Create role
+                </button>
+              </div>
+            ) : (
+              <button
+                onClick={() => setCreatingRole(true)}
+                className="w-full flex items-center gap-1.5 justify-center text-xs text-blue-400 hover:bg-neutral-800/60 rounded py-2 cursor-pointer"
+              >
+                <Plus className="w-3.5 h-3.5" /> New role
+              </button>
+            )}
+          </div>
+        ) : tab === 'invite' ? (
+          <div className="p-5 space-y-2 max-h-96 overflow-y-auto">
+            <p className="text-[11px] text-neutral-500">Anyone with this link can join {workspace.name} — share it however you'd like (Slack, email, text). Links don't expire; revoke one to stop it from working.</p>
+
+            <div className="flex items-center gap-2 pt-1">
+              <select
+                value={newInviteRole}
+                onChange={(e) => setNewInviteRole(e.target.value as 'admin' | 'member')}
+                className="bg-neutral-950 border border-neutral-700 rounded px-2 py-1.5 text-xs text-white focus:outline-none"
+              >
+                <option value="member">Joins as Member</option>
+                <option value="admin">Joins as Admin</option>
+              </select>
+              <button
+                onClick={createInvite}
+                className="flex-1 flex items-center gap-1.5 justify-center bg-blue-600 hover:bg-blue-500 text-white text-xs py-1.5 rounded font-medium cursor-pointer"
+              >
+                <Plus className="w-3.5 h-3.5" /> Create invite link
+              </button>
+            </div>
+
+            <div className="space-y-1.5 pt-1">
+              {invites === null ? (
+                <p className="text-xs text-neutral-500">Loading…</p>
+              ) : invites.length === 0 ? (
+                <p className="text-xs text-neutral-500">No active invite links.</p>
+              ) : (
+                invites.map((inv) => (
+                  <div key={inv.id} className="flex items-center justify-between bg-neutral-950/60 border border-neutral-800 rounded px-3 py-2">
+                    <div className="min-w-0">
+                      <div className="text-xs text-neutral-300 truncate">Joins as {inv.role === 'admin' ? 'Admin' : 'Member'}</div>
+                      <div className="text-[10px] text-neutral-600">by {inv.createdBy.name}</div>
+                    </div>
+                    <div className="flex items-center gap-2 shrink-0">
+                      <button onClick={() => copyInviteLink(inv.id)} title="Copy link" className="text-neutral-500 hover:text-blue-400 cursor-pointer">
+                        {copiedId === inv.id ? <Check className="w-3.5 h-3.5 text-green-500" /> : <Link2 className="w-3.5 h-3.5" />}
+                      </button>
+                      <button onClick={() => revokeInvite(inv.id)} title="Revoke link" className="text-neutral-500 hover:text-red-400 cursor-pointer">
+                        <Trash2 className="w-3.5 h-3.5" />
+                      </button>
+                    </div>
+                  </div>
+                ))
+              )}
+            </div>
+          </div>
+        ) : (
+          <div className="p-5 space-y-3 max-h-96 overflow-y-auto">
+            <p className="text-[11px] text-neutral-500">
+              Import a ClickUp CSV export (Everything view → Export). Spaces, Folders, Lists, and Statuses referenced in the file are matched by name or created; existing ones are reused, never duplicated.
+            </p>
+
+            <input ref={fileInputRef} type="file" accept=".csv" className="hidden" onChange={(e) => e.target.files?.[0] && handleCsvFile(e.target.files[0])} />
+            <button
+              onClick={() => fileInputRef.current?.click()}
+              className="w-full flex items-center gap-1.5 justify-center border border-neutral-700 hover:border-neutral-600 text-neutral-300 text-xs py-2 rounded cursor-pointer"
+            >
+              <Upload className="w-3.5 h-3.5" /> {csvFileName || 'Choose CSV file...'}
+            </button>
+
+            {importPreview && (
+              <div className="bg-neutral-950/60 border border-neutral-800 rounded px-3 py-2.5 space-y-1 text-xs text-neutral-300">
+                <div>{importPreview.taskCount} tasks will be created{importPreview.skippedCount > 0 && `, ${importPreview.skippedCount} rows skipped (missing name/list)`}</div>
+                <div className="text-neutral-500">{importPreview.spaceNames.size} Spaces · {importPreview.folderPaths.size} Folder paths · {importPreview.listNames.size} Lists · {importPreview.statusNames.size} Statuses</div>
+                <div className="text-neutral-500">
+                  Assignees: {importPreview.matchedAssignees.size} matched to workspace members
+                  {importPreview.unmatchedAssignees.size > 0 && `, ${importPreview.unmatchedAssignees.size} unmatched (will be skipped): ${[...importPreview.unmatchedAssignees].join(', ')}`}
+                </div>
+                <button
+                  onClick={confirmImport}
+                  disabled={importBusy}
+                  className="w-full mt-1.5 bg-blue-600 hover:bg-blue-500 disabled:opacity-50 disabled:cursor-not-allowed text-white text-xs py-1.5 rounded font-medium cursor-pointer"
+                >
+                  {importBusy ? 'Importing…' : 'Confirm import'}
+                </button>
+              </div>
+            )}
+
+            {importError && <p className="text-[11px] text-red-400">{importError}</p>}
+
+            {importResult && (
+              <div className="bg-neutral-950/60 border border-neutral-800 rounded px-3 py-2.5 space-y-1 text-xs text-neutral-300">
+                <div className="text-green-400 font-medium">Import complete</div>
+                <div>{importResult.tasksCreated} tasks, {importResult.spacesCreated} Spaces, {importResult.foldersCreated} Folders, {importResult.listsCreated} Lists, {importResult.statusesCreated} Statuses created</div>
+                {importResult.unmatchedAssignees.length > 0 && (
+                  <div className="text-amber-400">Unmatched assignees (skipped): {importResult.unmatchedAssignees.join(', ')}</div>
+                )}
+                {importResult.skippedRows.length > 0 && (
+                  <div className="text-neutral-500">{importResult.skippedRows.length} rows skipped</div>
+                )}
+              </div>
+            )}
+          </div>
+        )}
       </div>
     </div>
   );

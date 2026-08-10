@@ -7,6 +7,7 @@ import { Check, Pencil, RefreshCw, MoreHorizontal } from 'lucide-react';
 import { useTaskStore, StatusDef, CustomFieldDef, Task } from '../store/useTaskStore';
 import DatePickerPopover from './DatePickerPopover';
 import FloatingPopover from './FloatingPopover';
+import { startDateColor, dueDateColor, DATE_BADGE_COLOR_HEX, startDateTooltip, dueDateTooltip } from '../lib/dateBadgeColor';
 
 export type ColumnDef = {
   key: string;
@@ -327,6 +328,11 @@ function TaskRowImpl({
                 value={task.startDate}
                 placeholder="---"
                 onChange={(iso) => optimisticSetDates(task.id, iso, task.dueDate ? new Date(task.dueDate).toISOString() : null)}
+                badgeColorHex={(() => {
+                  const c = startDateColor(task.startDate, task.dueDate);
+                  return c ? DATE_BADGE_COLOR_HEX[c] : undefined;
+                })()}
+                tooltip={startDateTooltip(task.startDate)}
               />
             )}
             {col.kind === 'dueDate' && (
@@ -334,6 +340,11 @@ function TaskRowImpl({
                 value={task.dueDate}
                 placeholder="---"
                 onChange={(iso) => optimisticSetDates(task.id, task.startDate ? new Date(task.startDate).toISOString() : null, iso)}
+                badgeColorHex={(() => {
+                  const c = dueDateColor(task.dueDate);
+                  return c ? DATE_BADGE_COLOR_HEX[c] : undefined;
+                })()}
+                tooltip={dueDateTooltip(task.dueDate)}
               />
             )}
             {col.kind === 'custom' && col.field && renderCustomFieldCell(col.field)}

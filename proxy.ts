@@ -9,6 +9,8 @@ export const config = {
   // Deliberately excludes /api/* — API routes are not protected by bouncing to an HTML login
   // page (wrong response shape for fetch/XHR callers); each one re-verifies its own session and
   // returns 401 JSON instead (see lib/auth/session.ts's getCurrentUserId(), used throughout
-  // app/api/*). Also excludes /login itself to avoid a redirect loop.
-  matcher: ['/((?!api|login|_next/static|_next/image|favicon.ico).*)'],
+  // app/api/*). Also excludes /login itself to avoid a redirect loop, and /invite — an invite
+  // link's whole point is showing "you're invited to X" to someone who doesn't have a session
+  // yet, so that page has to be reachable before auth, not gated behind it.
+  matcher: ['/((?!api|login|invite|_next/static|_next/image|favicon.ico).*)'],
 };

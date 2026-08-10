@@ -2,24 +2,31 @@
 
 import { useState } from 'react';
 import { ArrowLeft, DoorOpen, DoorClosed } from 'lucide-react';
-import { useTaskStore, HierarchyRoom, AppUser } from '../store/useTaskStore';
-import PersonAvatar from './PersonAvatar';
+import { useTaskStore, HierarchyRoom, HierarchyWorkspace, AppUser } from '../store/useTaskStore';
+import ManageableAvatar from './ManageableAvatar';
+import ColorSwatchPicker from './ColorSwatchPicker';
 
 const ROOM_ICON_CHOICES = ['☕', '🌱', '🎮', '📚', '🎨', '🍕', '🎵', '🛋️', '🌟', '🔥'];
 const ROOM_COLOR_CHOICES = ['#c89642', '#618cd1', '#9a61d1', '#349f7c', '#cd6565', '#31a0b3', '#cb6798', '#8d97a5'];
 
-// "Step inside" a room — reached from FloorRoom's expand button. This is now the one place a room
+// "Step inside" a room — reached from RoomBox's expand button. This is now the one place a room
 // gets decorated (icon/color, moved off the old floor-header popover) and where its DND state gets
-// a real labeled toggle rather than just the small door icon on the floor itself. Members here are
-// browse-only (click to open their own page) — dragging them stays the floor/Lobby view's job.
+// a real labeled toggle rather than just the small door icon on the box itself. Members here are
+// browse-only (click to open their own page) — dragging them stays the floor plan/Lobby view's
+// job. Owner/Admins still get the manage badge (promote/demote/Roles/remove) via ManageableAvatar,
+// same surface as the top-down floor plan.
 type RoomDetailProps = {
   room: HierarchyRoom;
   members: AppUser[];
+  workspace: HierarchyWorkspace;
+  currentUserId: string | null;
+  canManage: boolean;
   onBack: () => void;
   onSelectUser: (userId: string) => void;
+  onRequestRemoveMember: (user: AppUser) => void;
 };
 
-export default function RoomDetail({ room, members, onBack, onSelectUser }: RoomDetailProps) {
+export default function RoomDetail({ room, members, workspace, currentUserId, canManage, onBack, onSelectUser, onRequestRemoveMember }: RoomDetailProps) {
   const { updateRoom } = useTaskStore();
   const [editingName, setEditingName] = useState(false);
   const [nameDraft, setNameDraft] = useState(room.name);
@@ -101,16 +108,7 @@ export default function RoomDetail({ room, members, onBack, onSelectUser }: Room
               </button>
             ))}
           </div>
-          <div className="flex flex-wrap gap-1.5">
-            {ROOM_COLOR_CHOICES.map((c) => (
-              <button
-                key={c}
-                onClick={() => updateRoom(room.id, { color: c })}
-                className={`w-6 h-6 rounded-full cursor-pointer ${room.color === c ? 'ring-2 ring-white' : ''}`}
-                style={{ backgroundColor: c }}
-              />
-            ))}
-          </div>
+          <ColorSwatchPicker value={room.color} onChange={(color) => updateRoom(room.id, { color })} choices={ROOM_COLOR_CHOICES} />
         </div>
       </div>
 
@@ -123,16 +121,24 @@ export default function RoomDetail({ room, members, onBack, onSelectUser }: Room
         ) : (
           <div className="bg-neutral-900/60 border border-neutral-800/80 rounded divide-y divide-neutral-800/50">
             {members.map((u) => (
-              // A <div>, not a <button> — PersonAvatar's own root is already a <button>, and
-              // nesting a real button inside another is invalid HTML. Clicking anywhere in the
-              // row (including the avatar, which has no onClick of its own here) still bubbles
-              // up to this div's handler.
+              // A <div>, not a <button> — PersonAvatar's own root (inside ManageableAvatar) is
+              // already a <button>, and nesting a real button inside another is invalid HTML.
+              // Clicking anywhere in the row (including the avatar, which has no onClick of its
+              // own here) still bubbles up to this div's handler; the manage badge stops its own
+              // propagation so it doesn't also trigger this row click.
               <div
                 key={u.id}
                 onClick={() => onSelectUser(u.id)}
                 className="w-full text-left px-4 py-2.5 flex items-center gap-3 hover:bg-neutral-800/30 transition cursor-pointer"
               >
-                <PersonAvatar user={u} size="md" />
+                <ManageableAvatar
+                  user={u}
+                  workspace={workspace}
+                  currentUserId={currentUserId}
+                  canManage={canManage}
+                  onRequestRemove={onRequestRemoveMember}
+                  size="md"
+                />
                 <div className="min-w-0 flex-1">
                   <div className="text-xs text-neutral-200 truncate">{u.name}</div>
                   {u.title && <div className="text-[10px] text-neutral-500 truncate">{u.title}</div>}

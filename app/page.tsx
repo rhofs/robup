@@ -24,7 +24,6 @@ import {
   List as ListIcon,
   Folder as FolderIconLucide,
   Calendar as CalendarIcon,
-  Users,
   UserCircle,
   LogOut,
   Zap,
@@ -61,7 +60,7 @@ import {
   Settings,
   type LucideIcon,
 } from 'lucide-react';
-import { useTaskStore, HierarchySpace, HierarchyFolder, HierarchyList, HierarchyDocFolder, HierarchyRoom, HierarchyWorkspace, StatusDef, CustomFieldDef, Task, TaskDoc, AppUser, WorkspaceRole } from '../store/useTaskStore';
+import { useTaskStore, HierarchySpace, HierarchyFolder, HierarchyList, HierarchyDocFolder, HierarchyRoom, HierarchyWorkspace, StatusDef, CustomFieldDef, Task, TaskDoc, AppUser } from '../store/useTaskStore';
 import { useHistoryStore } from '../store/useHistoryStore';
 import { useSessionStore } from '../store/useSessionStore';
 import { usePresenceConnection } from '../lib/collab/usePresenceConnection';
@@ -71,6 +70,8 @@ import { collectListIdsUnder, isDescendantOf, getOrderedListIds } from '../lib/f
 import { isDescendantOfDocFolder } from '../lib/docFolderTree';
 import { buildNavQueryString, dateKey, parseNavUrl } from '../lib/navUrl';
 import DatePickerPopover from '../components/DatePickerPopover';
+import { startDateColor, dueDateColor, DATE_BADGE_COLOR_HEX, startDateTooltip, dueDateTooltip } from '../lib/dateBadgeColor';
+import ColorSwatchPicker from '../components/ColorSwatchPicker';
 import ConfirmDialog from '../components/ConfirmDialog';
 import FloatingPopover from '../components/FloatingPopover';
 import DocExportMenu from '../components/collab/DocExportMenu';
@@ -88,7 +89,6 @@ import ProfilePage from '../components/ProfilePage';
 import CommandPalette from '../components/CommandPalette';
 import TrashPanel from '../components/TrashPanel';
 import SettingsPanel, { readHiddenNavTabs, type NavTabId } from '../components/SettingsPanel';
-import TeamPanel from '../components/TeamPanel';
 import AccessControlPanel from '../components/AccessControlPanel';
 import AccountSettingsPanel from '../components/AccountSettingsPanel';
 import MentionText from '../components/MentionText';
@@ -278,18 +278,8 @@ function SortableStatusRow({
         </button>
       </div>
       {paletteOpen && (
-        <div className="flex gap-1 pl-6">
-          {colorChoices.map((c) => (
-            <button
-              key={c}
-              onClick={() => {
-                onChangeColor(c);
-                setPaletteOpen(false);
-              }}
-              className={`w-4 h-4 rounded-full cursor-pointer ${status.color === c ? 'ring-2 ring-white' : ''}`}
-              style={{ backgroundColor: c }}
-            />
-          ))}
+        <div className="pl-6">
+          <ColorSwatchPicker value={status.color} onChange={onChangeColor} choices={colorChoices} size="sm" />
         </div>
       )}
     </div>
@@ -356,18 +346,8 @@ function SortableFieldOption({
         </button>
       </div>
       {paletteOpen && (
-        <div className="flex gap-1 pl-6">
-          {colorChoices.map((c) => (
-            <button
-              key={c}
-              onClick={() => {
-                onChangeColor(c);
-                setPaletteOpen(false);
-              }}
-              className={`w-4 h-4 rounded-full cursor-pointer ${option.color === c ? 'ring-2 ring-white' : ''}`}
-              style={{ backgroundColor: c }}
-            />
-          ))}
+        <div className="pl-6">
+          <ColorSwatchPicker value={option.color} onChange={onChangeColor} choices={colorChoices} size="sm" />
         </div>
       )}
     </div>
@@ -522,13 +502,7 @@ function PageContent() {
     createWorkspace,
     addWorkspaceMember,
     removeWorkspaceMember,
-    changeWorkspaceMemberRole,
     deleteWorkspace,
-    createRole,
-    updateRole,
-    deleteRole,
-    assignRole,
-    unassignRole,
     ensurePersonalWorkspace,
     updateSpace,
     reorderSpace,
@@ -582,6 +556,7 @@ function PageContent() {
   const [calendarVisibleListIds, setCalendarVisibleListIds] = useState<Set<string>>(new Set());
   const calendarFilterInitRef = useRef(false);
   const [columnMenuOpen, setColumnMenuOpen] = useState(false);
+  const [clearOverdueConfirmOpen, setClearOverdueConfirmOpen] = useState(false);
   const [newFieldOpen, setNewFieldOpen] = useState(false);
   const [newFieldName, setNewFieldName] = useState('');
   const [newFieldType, setNewFieldType] = useState<CustomFieldDef['type']>('text');
@@ -594,8 +569,7 @@ function PageContent() {
   const [modalStatusOpen, setModalStatusOpen] = useState(false);
   const [modalAssigneeOpen, setModalAssigneeOpen] = useState(false);
 
-  const [teamOpen, setTeamOpen] = useState(false);
-  const [memberToRemove, setMemberToRemove] = useState<(AppUser & { workspaceRole: WorkspaceRole }) | null>(null);
+  const [memberToRemove, setMemberToRemove] = useState<AppUser | null>(null);
   const [userMenuOpen, setUserMenuOpen] = useState(false);
   const [accountSettingsOpen, setAccountSettingsOpen] = useState(false);
   // Shared by Space/Folder/List/Task's own "Manage access" trigger — see AccessControlPanel.
@@ -619,6 +593,7 @@ function PageContent() {
   const [spaceEditTarget, setSpaceEditTarget] = useState<HierarchySpace | null>(null);
   const [editSpaceName, setEditSpaceName] = useState('');
   const [editSpaceColor, setEditSpaceColor] = useState(FIELD_COLOR_CHOICES[0]);
+  const [editSpaceIcon, setEditSpaceIcon] = useState<string | null>(null);
   const [spaceToDelete, setSpaceToDelete] = useState<HierarchySpace | null>(null);
   const [creatingSpace, setCreatingSpace] = useState(false);
   const [trashOpen, setTrashOpen] = useState(false);
@@ -1083,6 +1058,15 @@ function PageContent() {
     return result;
   }, [tasks, activeSpaceId, activeListIds, modalTaskStack, sortBy, sortOrder, showArchived]);
 
+  // Scoped to whatever's currently visible/filtered in the board (filteredTasks), not the whole
+  // workspace — the "Clear overdue" toolbar button below only ever touches what's on screen, so
+  // its effect is predictable. `dueDateColor` (same util driving the date badges' red state) is
+  // the single source of truth for "overdue," so this and the visible badges never disagree.
+  const overdueTasksInView = useMemo(
+    () => filteredTasks.filter((t) => dueDateColor(t.dueDate) === 'red'),
+    [filteredTasks]
+  );
+
   // Calendar has its own independent multi-select filter (which Spaces/Lists are visible),
   // separate from the Tasks tab's single-selection navigation.
   const calendarFilteredTasks = useMemo(
@@ -1273,12 +1257,13 @@ function PageContent() {
     setSpaceEditTarget(space);
     setEditSpaceName(space.name);
     setEditSpaceColor(space.color);
+    setEditSpaceIcon(space.icon);
     setSpaceMenu(null);
   };
 
   const saveSpaceEdit = () => {
     if (!spaceEditTarget) return;
-    updateSpace(spaceEditTarget.id, { name: editSpaceName.trim() || spaceEditTarget.name, color: editSpaceColor });
+    updateSpace(spaceEditTarget.id, { name: editSpaceName.trim() || spaceEditTarget.name, color: editSpaceColor, icon: editSpaceIcon });
     setSpaceEditTarget(null);
   };
 
@@ -2473,10 +2458,11 @@ function PageContent() {
                         >
                           <span className="flex items-center gap-2 truncate">
                             {/* Same hover-reveal treatment as FolderTree.tsx's FolderRow — no
-                                permanently-visible chevron. Space's own "icon" is just a colored
-                                dot (not a Lucide shape like Folder has), so it fades out and the
-                                chevron fades in over the same slot on hover, rather than morphing
-                                the icon itself. */}
+                                permanently-visible chevron. A chosen Space icon (same
+                                FOLDER_ICON_MAP as Folder/List) fades out and the chevron fades in
+                                over the same slot on hover; a Space with no icon set falls back to
+                                the plain color dot it's always shown, so nothing changes visually
+                                for existing Spaces until someone opts in. */}
                             <span
                               role="button"
                               tabIndex={0}
@@ -2494,15 +2480,29 @@ function PageContent() {
                               title={collapsedSpaceIds.has(space.id) ? 'Expand' : 'Collapse'}
                               className="shrink-0 cursor-pointer flex items-center justify-center p-1.5 -m-1.5"
                             >
-                              <span className="relative w-3 h-3 flex items-center justify-center">
-                                <span
-                                  className="w-2.5 h-2.5 rounded-full opacity-100 group-hover:opacity-0 transition"
-                                  style={{ backgroundColor: space.color || '#6366f1' }}
-                                />
+                              <span className="relative w-3.5 h-3.5 flex items-center justify-center">
+                                {(() => {
+                                  const SpaceIcon = space.icon ? FOLDER_ICON_MAP[space.icon] : null;
+                                  return SpaceIcon ? (
+                                    <SpaceIcon
+                                      className="absolute inset-0 w-3.5 h-3.5 opacity-100 group-hover:opacity-0 transition"
+                                      style={{ color: space.color || undefined }}
+                                    />
+                                  ) : (
+                                    // Bigger + a faint white ring so the dot stays legible at a
+                                    // glance even for darker chosen colors that would otherwise
+                                    // blend into the near-black sidebar — was too small/weak
+                                    // to read as "this Space's color" before this pass.
+                                    <span
+                                      className="w-3 h-3 rounded-full ring-1 ring-white/15 opacity-100 group-hover:opacity-0 transition"
+                                      style={{ backgroundColor: space.color || '#6366f1' }}
+                                    />
+                                  );
+                                })()}
                                 {collapsedSpaceIds.has(space.id) ? (
-                                  <ChevronRight className="absolute inset-0 w-3 h-3 text-neutral-400 opacity-0 group-hover:opacity-100 transition" />
+                                  <ChevronRight className="absolute inset-0 w-3.5 h-3.5 text-neutral-400 opacity-0 group-hover:opacity-100 transition" />
                                 ) : (
-                                  <ChevronDown className="absolute inset-0 w-3 h-3 text-neutral-400 opacity-0 group-hover:opacity-100 transition" />
+                                  <ChevronDown className="absolute inset-0 w-3.5 h-3.5 text-neutral-400 opacity-0 group-hover:opacity-100 transition" />
                                 )}
                               </span>
                             </span>
@@ -2579,13 +2579,6 @@ function PageContent() {
         </div>
 
         <div className="p-3 m-3 space-y-2">
-          <button
-            onClick={() => setTeamOpen(true)}
-            className="w-full flex items-center justify-between bg-neutral-950/60 rounded border border-neutral-800/80 px-3 py-2 text-[11px] text-neutral-300 hover:border-neutral-700 cursor-pointer"
-          >
-            <span className="flex items-center gap-2"><Users className="w-3.5 h-3.5" /> Team</span>
-            <span className="text-neutral-500 font-mono">{currentWorkspace?.members.length ?? 0}</span>
-          </button>
           <div className="bg-neutral-950/60 rounded border border-neutral-800/80 px-3 py-2 text-[11px] text-neutral-400 flex items-center justify-between">
             <span className="flex items-center gap-1.5"><Zap className="w-3.5 h-3.5" /> RobUp</span>
             <span className="text-emerald-400 font-mono">Flat List</span>
@@ -2673,6 +2666,17 @@ function PageContent() {
             <div className="flex items-center justify-between">
               <div className="text-neutral-500 font-mono text-[10px]">{filteredTasks.length} tasks</div>
               <div className="flex items-center gap-1.5">
+                {overdueTasksInView.length > 0 && (
+                  <button
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setClearOverdueConfirmOpen(true);
+                    }}
+                    className="text-[11px] rounded px-2.5 py-1 flex items-center gap-1 border text-red-400 bg-neutral-900 border-red-500/30 hover:border-red-500/60 cursor-pointer"
+                  >
+                    Clear overdue ({overdueTasksInView.length})
+                  </button>
+                )}
                 {activeView === 'board' && (
                 <div className="relative">
                   <button
@@ -2790,6 +2794,8 @@ function PageContent() {
                 activeUserId={activeOfficeUserId}
                 activeRoomId={activeOfficeRoomId}
                 workspaces={workspaces}
+                currentUserId={currentUserId}
+                canManage={canManageCurrentWorkspace}
                 tasks={tasks}
                 statuses={statuses}
                 onSelectUser={setActiveOfficeUserId}
@@ -2798,6 +2804,7 @@ function PageContent() {
                 onUpdatePhone={(userId, phone) => updateUser(userId, { phone })}
                 onUpdateUserField={(userId, field, value) => updateUser(userId, { [field]: value })}
                 onDeleteRoomRequest={setRoomToDelete}
+                onRequestRemoveMember={(user) => setMemberToRemove(user)}
               />
             ) : activeView === 'docs' ? (
               !currentSpace ? (
@@ -2933,7 +2940,22 @@ function PageContent() {
                 className="grid items-center px-4 py-2.5 text-[10px] font-semibold text-neutral-500 uppercase tracking-wider border-b border-neutral-800 bg-neutral-950/40"
                 style={{ gridTemplateColumns: rowGridTemplate }}
               >
-                <div></div>
+                <div className="flex items-center">
+                  {filteredTasks.length > 0 && (() => {
+                    const allSelected = filteredTasks.every((t) => selectedIds.has(t.id));
+                    return (
+                      <button
+                        onClick={() => (allSelected ? clearSelection() : setSelectedIds(new Set(filteredTasks.map((t) => t.id))))}
+                        title={allSelected ? 'Deselect all' : 'Select all'}
+                        className={`w-3.5 h-3.5 rounded border flex items-center justify-center cursor-pointer transition ${
+                          allSelected ? 'bg-blue-500 border-blue-500 text-white' : 'border-neutral-600 hover:border-neutral-400'
+                        }`}
+                      >
+                        {allSelected && <Check className="w-2.5 h-2.5" />}
+                      </button>
+                    );
+                  })()}
+                </div>
                 <div></div>
                 <div className="relative flex items-center pr-2">
                   <button onClick={() => toggleSort('name')} className="flex items-center gap-1 hover:text-neutral-300 cursor-pointer text-left">
@@ -3327,19 +3349,45 @@ function PageContent() {
               </div>
               <div>
                 <label className="text-[11px] text-neutral-400 mb-1 block">Color</label>
-                <div className="flex gap-1.5">
-                  {FIELD_COLOR_CHOICES.map((c) => (
-                    <button
-                      key={c}
-                      onClick={() => setEditSpaceColor(c)}
-                      className={`w-6 h-6 rounded-full cursor-pointer ${editSpaceColor === c ? 'ring-2 ring-white' : ''}`}
-                      style={{ backgroundColor: c }}
-                    />
-                  ))}
+                <ColorSwatchPicker value={editSpaceColor} onChange={setEditSpaceColor} choices={FIELD_COLOR_CHOICES} />
+              </div>
+              <div>
+                <label className="text-[11px] text-neutral-400 mb-1 block">Icon</label>
+                <div className="flex flex-wrap gap-1.5">
+                  <button
+                    onClick={() => setEditSpaceIcon(null)}
+                    title="Default (plain color dot)"
+                    className={`w-7 h-7 rounded bg-neutral-950 border border-neutral-700 flex items-center justify-center cursor-pointer ${
+                      editSpaceIcon === null ? 'border-blue-500' : ''
+                    }`}
+                  >
+                    <span className="w-2.5 h-2.5 rounded-full" style={{ backgroundColor: editSpaceColor }} />
+                  </button>
+                  {FOLDER_ICON_CHOICES.map((iconKey) => {
+                    const Icon = FOLDER_ICON_MAP[iconKey];
+                    return (
+                      <button
+                        key={iconKey}
+                        onClick={() => setEditSpaceIcon(iconKey)}
+                        className={`w-7 h-7 rounded bg-neutral-950 border border-neutral-700 flex items-center justify-center cursor-pointer text-neutral-300 ${
+                          editSpaceIcon === iconKey ? 'border-blue-500 text-blue-400' : ''
+                        }`}
+                      >
+                        <Icon className="w-3.5 h-3.5" />
+                      </button>
+                    );
+                  })}
                 </div>
               </div>
               <div className="flex items-center gap-2 bg-neutral-950/60 border border-neutral-800 rounded px-3 py-2">
-                <span className="w-2.5 h-2.5 rounded-full" style={{ backgroundColor: editSpaceColor }}></span>
+                {(() => {
+                  const PreviewIcon = editSpaceIcon ? FOLDER_ICON_MAP[editSpaceIcon] : null;
+                  return PreviewIcon ? (
+                    <PreviewIcon className="w-3.5 h-3.5" style={{ color: editSpaceColor }} />
+                  ) : (
+                    <span className="w-2.5 h-2.5 rounded-full" style={{ backgroundColor: editSpaceColor }}></span>
+                  );
+                })()}
                 <span className="text-xs text-neutral-300">{editSpaceName || 'Preview'}</span>
               </div>
               <button onClick={saveSpaceEdit} className="w-full bg-blue-600 hover:bg-blue-500 text-white text-xs py-2 rounded font-medium cursor-pointer">
@@ -3372,24 +3420,17 @@ function PageContent() {
               </div>
               <div>
                 <label className="text-[11px] text-neutral-400 mb-1 block">Color</label>
-                <div className="flex flex-wrap gap-1.5">
+                <div className="flex flex-wrap items-center gap-1.5">
                   <button
                     onClick={() => setEditFolderColor(null)}
                     title="Default"
-                    className={`w-6 h-6 rounded-full cursor-pointer bg-neutral-700 flex items-center justify-center ${
+                    className={`w-6 h-6 rounded-full cursor-pointer bg-neutral-700 flex items-center justify-center shrink-0 ${
                       editFolderColor === null ? 'ring-2 ring-white' : ''
                     }`}
                   >
                     {editFolderColor === null && <Check className="w-3 h-3 text-white" />}
                   </button>
-                  {FIELD_COLOR_CHOICES.map((c) => (
-                    <button
-                      key={c}
-                      onClick={() => setEditFolderColor(c)}
-                      className={`w-6 h-6 rounded-full cursor-pointer ${editFolderColor === c ? 'ring-2 ring-white' : ''}`}
-                      style={{ backgroundColor: c }}
-                    />
-                  ))}
+                  <ColorSwatchPicker value={editFolderColor} onChange={setEditFolderColor} choices={FIELD_COLOR_CHOICES} />
                 </div>
               </div>
               <div>
@@ -3457,24 +3498,17 @@ function PageContent() {
               </div>
               <div>
                 <label className="text-[11px] text-neutral-400 mb-1 block">Color</label>
-                <div className="flex flex-wrap gap-1.5">
+                <div className="flex flex-wrap items-center gap-1.5">
                   <button
                     onClick={() => setEditListColor(null)}
                     title="Default"
-                    className={`w-6 h-6 rounded-full cursor-pointer bg-neutral-700 flex items-center justify-center ${
+                    className={`w-6 h-6 rounded-full cursor-pointer bg-neutral-700 flex items-center justify-center shrink-0 ${
                       editListColor === null ? 'ring-2 ring-white' : ''
                     }`}
                   >
                     {editListColor === null && <Check className="w-3 h-3 text-white" />}
                   </button>
-                  {FIELD_COLOR_CHOICES.map((c) => (
-                    <button
-                      key={c}
-                      onClick={() => setEditListColor(c)}
-                      className={`w-6 h-6 rounded-full cursor-pointer ${editListColor === c ? 'ring-2 ring-white' : ''}`}
-                      style={{ backgroundColor: c }}
-                    />
-                  ))}
+                  <ColorSwatchPicker value={editListColor} onChange={setEditListColor} choices={FIELD_COLOR_CHOICES} />
                 </div>
               </div>
               <div>
@@ -3623,16 +3657,7 @@ function PageContent() {
                   placeholder="New status (e.g. Blocked)"
                   className="w-full bg-neutral-950 border border-neutral-700 rounded px-2 py-1.5 text-xs text-white focus:outline-none focus:border-blue-500"
                 />
-                <div className="flex gap-1">
-                  {FIELD_COLOR_CHOICES.map((c) => (
-                    <button
-                      key={c}
-                      onClick={() => setNewStatusColor(c)}
-                      className={`w-5 h-5 rounded-full cursor-pointer ${newStatusColor === c ? 'ring-2 ring-white' : ''}`}
-                      style={{ backgroundColor: c }}
-                    />
-                  ))}
-                </div>
+                <ColorSwatchPicker value={newStatusColor} onChange={setNewStatusColor} choices={FIELD_COLOR_CHOICES} size="sm" />
                 <button onClick={handleAddStatus} className="w-full bg-blue-600 hover:bg-blue-500 text-white text-xs py-1.5 rounded cursor-pointer">
                   Create status
                 </button>
@@ -3979,6 +4004,11 @@ function PageContent() {
                               activeModalTask.dueDate ? new Date(activeModalTask.dueDate).toISOString() : null
                             )
                           }
+                          badgeColorHex={(() => {
+                            const c = startDateColor(activeModalTask.startDate, activeModalTask.dueDate);
+                            return c ? DATE_BADGE_COLOR_HEX[c] : undefined;
+                          })()}
+                          tooltip={startDateTooltip(activeModalTask.startDate)}
                         />
                       </div>
                       <div className="flex items-center justify-between gap-2">
@@ -3992,6 +4022,11 @@ function PageContent() {
                               iso
                             )
                           }
+                          badgeColorHex={(() => {
+                            const c = dueDateColor(activeModalTask.dueDate);
+                            return c ? DATE_BADGE_COLOR_HEX[c] : undefined;
+                          })()}
+                          tooltip={dueDateTooltip(activeModalTask.dueDate)}
                         />
                       </div>
                     </div>
@@ -4166,30 +4201,10 @@ function PageContent() {
         }}
       />
 
-      {/* ================= TEAM PANEL — members (with owner/admin/member tier) + roles ================= */}
-      {/* Replaced the old flat "Team" modal (every registered user on the server, one-click
-          unconfirmed "delete this account entirely" — a leftover from the pre-auth shared-
-          identity model) two sessions ago with a workspace-scoped member list + safe "remove
-          from workspace." This session adds the Owner/Admin/Member tier itself and a Roles tab
-          (Discord-style, purely for granting access to private Spaces/Folders/Lists/Tasks — see
-          components/AccessControlPanel.tsx). */}
-      {teamOpen && currentWorkspace && (
-        <TeamPanel
-          workspace={currentWorkspace}
-          currentUserId={currentUserId}
-          canManage={canManageCurrentWorkspace}
-          onClose={() => setTeamOpen(false)}
-          onRequestRemoveMember={(m) => setMemberToRemove(m)}
-          onChangeMemberRole={(userId, role) => changeWorkspaceMemberRole(currentWorkspace.id, userId, role)}
-          onCreateRole={(name, color) => createRole(currentWorkspace.id, name, color)}
-          onRenameRole={(roleId, name) => updateRole(currentWorkspace.id, roleId, { name })}
-          onRecolorRole={(roleId, color) => updateRole(currentWorkspace.id, roleId, { color })}
-          onDeleteRole={(roleId) => deleteRole(currentWorkspace.id, roleId)}
-          onAssignRole={(roleId, userId) => assignRole(currentWorkspace.id, roleId, userId)}
-          onUnassignRole={(roleId, userId) => unassignRole(currentWorkspace.id, roleId, userId)}
-        />
-      )}
-
+      {/* Team membership management (promote/demote, Roles, remove) moved into Office's
+          ManageableAvatar popover — this ConfirmDialog is its one remaining shared piece, reused
+          by whichever avatar's manage popover requests a removal (see onRequestRemoveMember
+          threaded into OfficePage below). */}
       <ConfirmDialog
         open={!!memberToRemove}
         title="Remove from workspace?"
@@ -4199,6 +4214,20 @@ function PageContent() {
         onConfirm={() => {
           if (memberToRemove && currentWorkspace) removeWorkspaceMember(currentWorkspace.id, memberToRemove.id);
           setMemberToRemove(null);
+        }}
+      />
+
+      <ConfirmDialog
+        open={clearOverdueConfirmOpen}
+        title="Clear overdue due dates?"
+        message={`This clears the due date on ${overdueTasksInView.length} overdue task${overdueTasksInView.length === 1 ? '' : 's'} in this view. Start dates are left untouched.`}
+        confirmLabel="Clear"
+        onCancel={() => setClearOverdueConfirmOpen(false)}
+        onConfirm={() => {
+          for (const t of overdueTasksInView) {
+            optimisticSetDates(t.id, t.startDate ? new Date(t.startDate).toISOString() : null, null);
+          }
+          setClearOverdueConfirmOpen(false);
         }}
       />
 
@@ -4383,7 +4412,14 @@ function PageContent() {
       />
 
       {trashOpen && <TrashPanel onClose={() => setTrashOpen(false)} />}
-      {settingsOpen && <SettingsPanel onClose={() => setSettingsOpen(false)} onChange={() => setHiddenNavTabs(readHiddenNavTabs())} />}
+      {settingsOpen && currentWorkspace && (
+        <SettingsPanel
+          workspace={currentWorkspace}
+          canManage={canManageCurrentWorkspace}
+          onClose={() => setSettingsOpen(false)}
+          onChange={() => setHiddenNavTabs(readHiddenNavTabs())}
+        />
+      )}
       {accountSettingsOpen &&
         (() => {
           const me = users.find((u) => u.id === currentUserId);
