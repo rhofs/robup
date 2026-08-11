@@ -1,14 +1,53 @@
-type Mark = { type: string };
+type Mark = { type: string; attrs?: Record<string, any> };
 type PMNode = {
   type: string;
   text?: string;
   marks?: Mark[];
-  attrs?: { level?: number; kind?: string; id?: string; label?: string };
+  attrs?: { level?: number; kind?: string; id?: string; label?: string; textAlign?: string };
   content?: PMNode[];
 };
 
-type Run = { text: string; bold: boolean; italic: boolean };
-type Line = { runs: Run[]; headingLevel?: number; listType?: 'bullet' | 'ordered' };
+type Run = {
+  text: string;
+  bold: boolean;
+  italic: boolean;
+  underline: boolean;
+  strike: boolean;
+  color?: string;
+  highlightColor?: string;
+  fontSize?: number;
+  fontFamily?: string;
+  link?: string;
+};
+type Line = { runs: Run[]; headingLevel?: number; listType?: 'bullet' | 'ordered'; textAlign?: string };
+
+// Same curated font-family choices as DocFormatPanel.tsx/docJSONToPdf.ts, mapped to real font
+// names Google Docs' weightedFontFamily field can render exactly — no font embedding involved
+// either way, since Google Docs already has these fonts available.
+function googleFontFamily(cssFontFamily?: string): string | undefined {
+  if (!cssFontFamily) return undefined;
+  const lower = cssFontFamily.toLowerCase();
+  if (lower.includes('courier') || lower.includes('monospace')) return 'Courier New';
+  if (lower.includes('georgia') || lower.includes('serif')) return 'Georgia';
+  return undefined;
+}
+
+// Google Docs' updateTextStyle color fields want {color: {rgbColor: {red, green, blue}}} with
+// 0-1 floats, not hex strings.
+function hexToRgbColor(hex: string) {
+  const clean = hex.replace('#', '');
+  const r = parseInt(clean.substring(0, 2), 16) / 255;
+  const g = parseInt(clean.substring(2, 4), 16) / 255;
+  const b = parseInt(clean.substring(4, 6), 16) / 255;
+  return { color: { rgbColor: { red: r, green: g, blue: b } } };
+}
+
+const ALIGN_TO_NAMED: Record<string, string> = {
+  left: 'START',
+  center: 'CENTER',
+  right: 'END',
+  justify: 'JUSTIFIED',
+};
 
 // Mentions render as their plain label — same simplification lib/collab/docJSONToPdf.ts makes,
 // since Google Docs has no equivalent of this app's internal clickable-entity concept.
@@ -16,10 +55,24 @@ function inlineRuns(nodes: PMNode[] = []): Run[] {
   return nodes
     .map((node) => {
       const marks = node.marks ?? [];
+      const textStyle = marks.find((m) => m.type === 'textStyle')?.attrs;
+      const highlight = marks.find((m) => m.type === 'highlight')?.attrs?.color;
+      const link = marks.find((m) => m.type === 'link')?.attrs?.href;
       let text = '';
       if (node.type === 'text') text = node.text ?? '';
       else if (node.type === 'mention' && node.attrs?.label) text = node.attrs.label;
-      return { text, bold: marks.some((m) => m.type === 'bold'), italic: marks.some((m) => m.type === 'italic') };
+      return {
+        text,
+        bold: marks.some((m) => m.type === 'bold'),
+        italic: marks.some((m) => m.type === 'italic'),
+        underline: marks.some((m) => m.type === 'underline'),
+        strike: marks.some((m) => m.type === 'strike'),
+        color: textStyle?.color ?? undefined,
+        highlightColor: highlight ?? undefined,
+        fontSize: textStyle?.fontSize ? parseInt(textStyle.fontSize, 10) : undefined,
+        fontFamily: googleFontFamily(textStyle?.fontFamily),
+        link,
+      };
     })
     .filter((run) => run.text);
 }
@@ -30,17 +83,17 @@ function inlineRuns(nodes: PMNode[] = []): Run[] {
 // compute those ranges.
 function flattenLines(node: PMNode, out: Line[]) {
   if (node.type === 'heading') {
-    out.push({ runs: inlineRuns(node.content), headingLevel: node.attrs?.level ?? 1 });
+    out.push({ runs: inlineRuns(node.content), headingLevel: node.attrs?.level ?? 1, textAlign: node.attrs?.textAlign });
     return;
   }
   if (node.type === 'paragraph') {
-    out.push({ runs: inlineRuns(node.content) });
+    out.push({ runs: inlineRuns(node.content), textAlign: node.attrs?.textAlign });
     return;
   }
   if (node.type === 'subpagesIndex') {
     // Atom block, no static representation of a live table — an honest placeholder line rather
     // than silently contributing nothing (the generic child-recursing fallback below would).
-    out.push({ runs: [{ text: '[Subpages]', bold: true, italic: false }] });
+    out.push({ runs: [{ text: '[Subpages]', bold: true, italic: false, underline: false, strike: false }] });
     return;
   }
   if (node.type === 'bulletList' || node.type === 'orderedList') {
@@ -86,13 +139,23 @@ export function docJSONToGoogleRequests(json: { content?: PMNode[] }) {
       text += run.text;
       offset += run.text.length;
       const runEnd = offset;
-      if (run.bold || run.italic) {
-        const fields = [run.bold && 'bold', run.italic && 'italic'].filter(Boolean).join(',');
+      const textStyle: Record<string, any> = {};
+      const fields: string[] = [];
+      if (run.bold) { textStyle.bold = true; fields.push('bold'); }
+      if (run.italic) { textStyle.italic = true; fields.push('italic'); }
+      if (run.underline) { textStyle.underline = true; fields.push('underline'); }
+      if (run.strike) { textStyle.strikethrough = true; fields.push('strikethrough'); }
+      if (run.color) { textStyle.foregroundColor = hexToRgbColor(run.color); fields.push('foregroundColor'); }
+      if (run.highlightColor) { textStyle.backgroundColor = hexToRgbColor(run.highlightColor); fields.push('backgroundColor'); }
+      if (run.fontFamily) { textStyle.weightedFontFamily = { fontFamily: run.fontFamily }; fields.push('weightedFontFamily'); }
+      if (run.fontSize) { textStyle.fontSize = { magnitude: run.fontSize, unit: 'PT' }; fields.push('fontSize'); }
+      if (run.link) { textStyle.link = { url: run.link }; fields.push('link'); }
+      if (fields.length > 0) {
         textStyleRequests.push({
           updateTextStyle: {
             range: { startIndex: runStart, endIndex: runEnd },
-            textStyle: { bold: run.bold || undefined, italic: run.italic || undefined },
-            fields,
+            textStyle,
+            fields: fields.join(','),
           },
         });
       }
@@ -101,12 +164,22 @@ export function docJSONToGoogleRequests(json: { content?: PMNode[] }) {
     offset += 1;
     const lineEnd = offset;
 
-    if (line.headingLevel) {
+    if (line.headingLevel || line.textAlign) {
+      const paragraphStyle: Record<string, any> = {};
+      const fields: string[] = [];
+      if (line.headingLevel) {
+        paragraphStyle.namedStyleType = line.headingLevel === 1 ? 'HEADING_1' : 'HEADING_2';
+        fields.push('namedStyleType');
+      }
+      if (line.textAlign && ALIGN_TO_NAMED[line.textAlign]) {
+        paragraphStyle.alignment = ALIGN_TO_NAMED[line.textAlign];
+        fields.push('alignment');
+      }
       paragraphStyleRequests.push({
         updateParagraphStyle: {
           range: { startIndex: lineStart, endIndex: lineEnd },
-          paragraphStyle: { namedStyleType: line.headingLevel === 1 ? 'HEADING_1' : 'HEADING_2' },
-          fields: 'namedStyleType',
+          paragraphStyle,
+          fields: fields.join(','),
         },
       });
     }

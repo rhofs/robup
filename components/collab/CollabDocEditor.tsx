@@ -14,10 +14,16 @@ import BulletList from '@tiptap/extension-bullet-list';
 import OrderedList from '@tiptap/extension-ordered-list';
 import ListItem from '@tiptap/extension-list-item';
 import HardBreak from '@tiptap/extension-hard-break';
+import Underline from '@tiptap/extension-underline';
+import Strike from '@tiptap/extension-strike';
+import TextAlign from '@tiptap/extension-text-align';
+import Link from '@tiptap/extension-link';
+import { TextStyle, Color, FontFamily, FontSize } from '@tiptap/extension-text-style';
+import Highlight from '@tiptap/extension-highlight';
 import Collaboration from '@tiptap/extension-collaboration';
 import CollaborationCaret from '@tiptap/extension-collaboration-caret';
 import Placeholder from '@tiptap/extension-placeholder';
-import { MessageSquare } from 'lucide-react';
+import { MessageSquare, Link2 } from 'lucide-react';
 import { ClientMentionNode } from './mentionNodeView';
 import { ClientSubpagesIndexNode } from './subpagesIndexNodeView';
 import { ClientCommentMark } from './commentMarkView';
@@ -68,6 +74,7 @@ export default function CollabDocEditor({
   const [commentDraft, setCommentDraft] = useState<string | null>(null);
   const [commentsExpanded, setCommentsExpanded] = useState(false);
   const [activeCommentId, setActiveCommentId] = useState<string | null>(null);
+  const [linkDraft, setLinkDraft] = useState<string | null>(null);
 
   // Provider lifecycle lives in an effect, not useMemo — its constructor opens a real WebSocket,
   // a side effect that isn't safe inside useMemo (React's dev-mode Strict Mode double-invokes
@@ -101,6 +108,15 @@ export default function CollabDocEditor({
             OrderedList,
             ListItem,
             HardBreak,
+            Underline,
+            Strike,
+            TextAlign.configure({ types: ['heading', 'paragraph'] }),
+            Link.configure({ openOnClick: false }),
+            TextStyle,
+            Color,
+            FontFamily,
+            FontSize,
+            Highlight.configure({ multicolor: true }),
             GapCursor,
             ClientMentionNode.configure({ onJump }),
             ClientSubpagesIndexNode.configure({ onOpenDoc: (id: string) => onJump('doc', id) }),
@@ -142,21 +158,41 @@ export default function CollabDocEditor({
     setCommentsExpanded(true);
   };
 
+  const submitLink = () => {
+    if (!editor) return;
+    const url = linkDraft?.trim();
+    if (url) editor.chain().focus().extendMarkRange('link').setLink({ href: url }).run();
+    else editor.chain().focus().extendMarkRange('link').unsetLink().run();
+    setLinkDraft(null);
+  };
+
   return (
     <div className={`flex items-start gap-3 ${className ?? ''}`}>
       <div className="flex-1 min-w-0">
         {provider && <PresenceBar provider={provider} />}
         {editor && (
           <BubbleMenu editor={editor} shouldShow={({ from, to }) => from !== to}>
-            {commentDraft === null ? (
-              <button
-                onMouseDown={(e) => e.preventDefault()}
-                onClick={() => setCommentDraft('')}
-                className="flex items-center gap-1.5 bg-neutral-900 border border-neutral-700 rounded shadow-xl px-2.5 py-1.5 text-[11px] text-neutral-200 hover:bg-neutral-800 cursor-pointer"
-              >
-                <MessageSquare className="w-3.5 h-3.5" /> Comment
-              </button>
-            ) : (
+            {commentDraft === null && linkDraft === null ? (
+              <div className="flex items-center gap-1 bg-neutral-900 border border-neutral-700 rounded shadow-xl p-1">
+                <button
+                  onMouseDown={(e) => e.preventDefault()}
+                  onClick={() => setCommentDraft('')}
+                  className="flex items-center gap-1.5 px-2 py-1 rounded text-[11px] text-neutral-200 hover:bg-neutral-800 cursor-pointer"
+                >
+                  <MessageSquare className="w-3.5 h-3.5" /> Comment
+                </button>
+                <div className="w-px h-4 bg-neutral-700" />
+                <button
+                  onMouseDown={(e) => e.preventDefault()}
+                  onClick={() => setLinkDraft(editor.getAttributes('link').href ?? '')}
+                  className={`flex items-center gap-1.5 px-2 py-1 rounded text-[11px] cursor-pointer ${
+                    editor.isActive('link') ? 'text-blue-400 bg-neutral-800' : 'text-neutral-200 hover:bg-neutral-800'
+                  }`}
+                >
+                  <Link2 className="w-3.5 h-3.5" /> Link
+                </button>
+              </div>
+            ) : commentDraft !== null ? (
               <div className="w-56 bg-neutral-900 border border-neutral-700 rounded shadow-xl p-2 space-y-1.5">
                 <textarea
                   autoFocus
@@ -187,6 +223,51 @@ export default function CollabDocEditor({
                     className="text-[10px] bg-blue-600 hover:bg-blue-500 text-white rounded px-2 py-1 cursor-pointer"
                   >
                     Comment
+                  </button>
+                </div>
+              </div>
+            ) : (
+              <div className="w-64 bg-neutral-900 border border-neutral-700 rounded shadow-xl p-2 space-y-1.5">
+                <input
+                  autoFocus
+                  value={linkDraft ?? ''}
+                  onChange={(e) => setLinkDraft(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter') {
+                      e.preventDefault();
+                      submitLink();
+                    }
+                    if (e.key === 'Escape') setLinkDraft(null);
+                  }}
+                  placeholder="https://..."
+                  className="w-full bg-neutral-950 border border-neutral-800 rounded px-2 py-1 text-[11px] text-white focus:outline-none focus:border-blue-500"
+                />
+                <div className="flex items-center justify-end gap-1.5">
+                  {editor.isActive('link') && (
+                    <button
+                      onMouseDown={(e) => e.preventDefault()}
+                      onClick={() => {
+                        editor.chain().focus().extendMarkRange('link').unsetLink().run();
+                        setLinkDraft(null);
+                      }}
+                      className="text-[10px] text-red-400 hover:text-red-300 cursor-pointer px-2 py-1 mr-auto"
+                    >
+                      Remove
+                    </button>
+                  )}
+                  <button
+                    onMouseDown={(e) => e.preventDefault()}
+                    onClick={() => setLinkDraft(null)}
+                    className="text-[10px] text-neutral-500 hover:text-neutral-300 cursor-pointer px-2 py-1"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    onMouseDown={(e) => e.preventDefault()}
+                    onClick={submitLink}
+                    className="text-[10px] bg-blue-600 hover:bg-blue-500 text-white rounded px-2 py-1 cursor-pointer"
+                  >
+                    Apply
                   </button>
                 </div>
               </div>
