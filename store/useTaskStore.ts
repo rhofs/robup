@@ -58,6 +58,22 @@ export type TaskComment = {
   createdAt: string;
 };
 
+// Selection-anchored comment on a Doc's own content (lib/collab/commentMark.ts anchors the text
+// itself via the shared markId). Flat, one level of replies via parentId — thread root has
+// parentId: null and is the only row where `resolved` is meaningful.
+export type DocComment = {
+  id: string;
+  body: string;
+  docId: string;
+  markId: string;
+  parentId: string | null;
+  quotedText: string | null;
+  resolved: boolean;
+  authorId: string | null;
+  author: AppUser | null;
+  createdAt: string;
+};
+
 // A Doc can be task-scoped (taskId set, today's behavior — the task modal's Documents tab),
 // Space/DocFolder-scoped (spaceId set, the standalone Docs tab), or in principle both — the same
 // underlying row shape either way, so one type covers both contexts.
@@ -65,10 +81,17 @@ export type TaskDoc = {
   id: string;
   title: string;
   content: string;
+  color: string | null;
   order: number;
   taskId: string | null;
   spaceId: string | null;
   folderId: string | null;
+  // Subpages — a doc nested under another doc, independent of folderId (see PLANNING.md). A
+  // subpage's own folderId is always null; it's reached only through its parent's Subpages table
+  // or the sidebar's own expand-in-place.
+  parentId: string | null;
+  ownerId: string | null;
+  contributorIds: string[];
   createdAt: string;
   updatedAt: string;
 };
@@ -168,6 +191,7 @@ interface TaskStore {
   users: AppUser[];
   workspaces: HierarchyWorkspace[];
   comments: Record<string, TaskComment[]>;
+  docComments: Record<string, DocComment[]>;
   docs: Record<string, TaskDoc[]>;
   activeView: 'board' | 'calendar' | 'docs' | 'office' | 'mytasks' | 'mypersonal' | 'profile';
   // Which Workspace the sidebar/nav is currently scoped to — null only until the first
@@ -339,10 +363,17 @@ interface TaskStore {
   createSpaceDoc: (
     spaceId: string,
     folderId: string | null,
-    opts?: { id?: string; title?: string; content?: string; order?: number }
+    opts?: { id?: string; title?: string; content?: string; order?: number; parentId?: string | null }
   ) => Promise<TaskDoc | null>;
-  updateSpaceDoc: (docId: string, spaceId: string, patch: { title?: string }) => void;
+  updateSpaceDoc: (
+    docId: string,
+    spaceId: string,
+    patch: { title?: string; color?: string | null; ownerId?: string | null; contributorIds?: string[] }
+  ) => void;
   moveSpaceDoc: (spaceId: string, docId: string, folderId: string | null, targetSpaceId?: string) => Promise<void>;
+  // Reparents a doc under another doc (a "subpage"), or back to null (top-level) — folderId is
+  // left untouched here; a doc created as a subpage already gets folderId: null server-side.
+  moveDocParent: (spaceId: string, docId: string, parentId: string | null) => Promise<void>;
   reorderSpaceDoc: (spaceId: string, docId: string, order: number) => Promise<void>;
   deleteSpaceDoc: (docId: string, spaceId: string) => Promise<void>;
   // Attaches (taskId set) or detaches (taskId null) an existing doc to/from a task, without
@@ -353,6 +384,11 @@ interface TaskStore {
   addComment: (taskId: string, body: string, authorId?: string | null) => Promise<void>;
   deleteComment: (taskId: string, commentId: string) => Promise<void>;
   logActivity: (taskId: string, body: string, kind: string) => Promise<void>;
+
+  fetchDocComments: (docId: string) => Promise<void>;
+  addDocComment: (docId: string, opts: { id?: string; body: string; markId: string; parentId?: string | null; quotedText?: string | null }) => Promise<DocComment | null>;
+  resolveDocComment: (docId: string, commentId: string, resolved: boolean) => Promise<void>;
+  deleteDocComment: (docId: string, commentId: string) => Promise<void>;
 
   fetchDocs: (taskId: string) => Promise<void>;
   createDoc: (taskId: string, opts?: { id?: string; title?: string; content?: string; order?: number }) => Promise<TaskDoc | null>;
@@ -387,6 +423,7 @@ export const useTaskStore = create<TaskStore>((set, get) => {
     users: [],
     workspaces: [],
     comments: {},
+    docComments: {},
     docs: {},
     activeView: 'board',
     activeWorkspaceId: null,
@@ -1878,6 +1915,7 @@ export const useTaskStore = create<TaskStore>((set, get) => {
           body: JSON.stringify({
             id: opts?.id,
             folderId,
+            parentId: opts?.parentId,
             title: opts?.title ?? 'Untitled',
             content: opts?.content ?? '',
             order: opts?.order,
@@ -1888,7 +1926,7 @@ export const useTaskStore = create<TaskStore>((set, get) => {
         set((state) => ({
           workspaces: state.workspaces.map((ws) => ({
             ...ws,
-            spaces: ws.spaces.map((s) => (s.id === spaceId ? { ...s, spaceDocs: [...s.spaceDocs, doc] } : s)),
+            spaces: ws.spaces.map((s) => (s.id === spaceId ? { ...s, spaceDocs: [...s.spaceDocs, { ...doc, contributorIds: [] }] } : s)),
           })),
         }));
         if (!opts?.id) {
@@ -1896,7 +1934,7 @@ export const useTaskStore = create<TaskStore>((set, get) => {
             label: 'Create document',
             undo: () => get().deleteSpaceDoc(doc.id, spaceId),
             redo: async () => {
-              await get().createSpaceDoc(spaceId, folderId, { id: doc.id, title: doc.title, content: doc.content, order: doc.order });
+              await get().createSpaceDoc(spaceId, folderId, { id: doc.id, title: doc.title, content: doc.content, order: doc.order, parentId: doc.parentId });
             },
           });
         }
@@ -1905,6 +1943,32 @@ export const useTaskStore = create<TaskStore>((set, get) => {
         console.error('Failed to create document:', error);
         return null;
       }
+    },
+
+    moveDocParent: async (spaceId, docId, parentId) => {
+      const oldDoc = get()
+        .workspaces.flatMap((w) => w.spaces)
+        .find((s) => s.id === spaceId)
+        ?.spaceDocs.find((d) => d.id === docId);
+      const oldParentId = oldDoc?.parentId ?? null;
+      set((state) => ({
+        workspaces: state.workspaces.map((ws) => ({
+          ...ws,
+          spaces: ws.spaces.map((s) =>
+            s.id === spaceId ? { ...s, spaceDocs: s.spaceDocs.map((d) => (d.id === docId ? { ...d, parentId } : d)) } : s
+          ),
+        })),
+      }));
+      await fetch(`/api/docs/${docId}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ parentId }),
+      });
+      useHistoryStore.getState().push({
+        label: 'Move page',
+        undo: () => get().moveDocParent(spaceId, docId, oldParentId),
+        redo: () => get().moveDocParent(spaceId, docId, parentId),
+      });
     },
 
     // Autosave, same coalesced-undo shape as updateDoc (task-scoped docs) — see its comment.
@@ -1929,6 +1993,9 @@ export const useTaskStore = create<TaskStore>((set, get) => {
       if (oldDoc) {
         const oldPatch: typeof patch = {};
         if (patch.title !== undefined) oldPatch.title = oldDoc.title;
+        if (patch.color !== undefined) oldPatch.color = oldDoc.color;
+        if (patch.ownerId !== undefined) oldPatch.ownerId = oldDoc.ownerId;
+        if (patch.contributorIds !== undefined) oldPatch.contributorIds = oldDoc.contributorIds;
         useHistoryStore.getState().pushCoalesced(`doc-${docId}`, {
           label: 'Edit document',
           undo: () => get().updateSpaceDoc(docId, spaceId, oldPatch),
@@ -2004,10 +2071,21 @@ export const useTaskStore = create<TaskStore>((set, get) => {
     deleteSpaceDoc: async (docId, spaceId) => {
       const space = get().workspaces.flatMap((w) => w.spaces).find((s) => s.id === spaceId);
       const doc = space?.spaceDocs.find((d) => d.id === docId);
+      // Subpages have no folderId of their own, only a parentId chain — collect the full subtree
+      // locally (server-side cascadeDoc already removes it in the DB) so optimistic state matches.
+      const removedIds = new Set([docId]);
+      if (space) {
+        let frontier = [docId];
+        while (frontier.length > 0) {
+          const children = space.spaceDocs.filter((d) => d.parentId && frontier.includes(d.parentId));
+          frontier = children.map((d) => d.id);
+          frontier.forEach((id) => removedIds.add(id));
+        }
+      }
       set((state) => ({
         workspaces: state.workspaces.map((ws) => ({
           ...ws,
-          spaces: ws.spaces.map((s) => (s.id === spaceId ? { ...s, spaceDocs: s.spaceDocs.filter((d) => d.id !== docId) } : s)),
+          spaces: ws.spaces.map((s) => (s.id === spaceId ? { ...s, spaceDocs: s.spaceDocs.filter((d) => !removedIds.has(d.id)) } : s)),
         })),
       }));
       const res = await fetch(`/api/docs/${docId}`, { method: 'DELETE' }).catch(() => null);
@@ -2104,6 +2182,75 @@ export const useTaskStore = create<TaskStore>((set, get) => {
         comments: { ...state.comments, [taskId]: (state.comments[taskId] || []).filter((c) => c.id !== commentId) },
       }));
       await fetch(`/api/tasks/${taskId}/comments/${commentId}`, { method: 'DELETE' });
+    },
+
+    // Same fetch-replaces-wholesale / append-after-server-response / optimistic-delete shape as
+    // fetchComments/addComment/deleteComment above — authorId comes straight from the real signed-
+    // in identity (useSessionStore), not a "comment as ..." picker (that's a pre-auth artifact on
+    // the task panel, not worth replicating for a new feature).
+    fetchDocComments: async (docId) => {
+      try {
+        const res = await fetch(`/api/docs/${docId}/comments`);
+        if (!res.ok) return;
+        const docComments = await res.json();
+        set((state) => ({ docComments: { ...state.docComments, [docId]: docComments } }));
+      } catch (error) {
+        console.error('Failed to fetch doc comments:', error);
+      }
+    },
+
+    addDocComment: async (docId, opts) => {
+      try {
+        const authorId = useSessionStore.getState().currentUserId;
+        const res = await fetch(`/api/docs/${docId}/comments`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ ...opts, authorId }),
+        });
+        if (!res.ok) {
+          console.error('Doc comment API returned an error:', res.status);
+          return null;
+        }
+        const comment = await res.json();
+        set((state) => ({
+          docComments: { ...state.docComments, [docId]: [...(state.docComments[docId] || []), comment] },
+        }));
+        useHistoryStore.getState().push({
+          label: 'Add comment',
+          undo: () => get().deleteDocComment(docId, comment.id),
+          redo: async () => {
+            await get().addDocComment(docId, { ...opts, id: comment.id });
+          },
+        });
+        return comment;
+      } catch (error) {
+        console.error('Failed to send doc comment:', error);
+        return null;
+      }
+    },
+
+    resolveDocComment: async (docId, commentId, resolved) => {
+      set((state) => ({
+        docComments: {
+          ...state.docComments,
+          [docId]: (state.docComments[docId] || []).map((c) => (c.id === commentId ? { ...c, resolved } : c)),
+        },
+      }));
+      await fetch(`/api/docs/${docId}/comments/${commentId}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ resolved }),
+      });
+    },
+
+    deleteDocComment: async (docId, commentId) => {
+      set((state) => ({
+        docComments: {
+          ...state.docComments,
+          [docId]: (state.docComments[docId] || []).filter((c) => c.id !== commentId && c.parentId !== commentId),
+        },
+      }));
+      await fetch(`/api/docs/${docId}/comments/${commentId}`, { method: 'DELETE' });
     },
 
     // For activity that the client itself decides is log-worthy (currently: one entry per doc

@@ -248,6 +248,8 @@ model User {
   roles         Role[]    @relation("RoleMembers")
   invitesCreated WorkspaceInvite[]
   comments      Comment[]
+  ownedDocs     Doc[]     @relation("DocOwner")
+  docComments   DocComment[]
   createdAt     DateTime  @default(now()) @map("created_at")
 }
 
@@ -332,6 +334,7 @@ model Doc {
   id        String    @id @default(uuid())
   title     String    @default("Untitled")
   content   String    @default("")
+  color     String?
   ydoc      Bytes?
   order     Int       @default(0)
   deletedAt DateTime? @map("deleted_at")
@@ -345,8 +348,53 @@ model Doc {
   folderId String?    @map("doc_folder_id")
   folder   DocFolder? @relation(fields: [folderId], references: [id], onDelete: Cascade)
 
+  // Subpages — a Doc nested under another Doc (independent of the folderId/DocFolder tree above).
+  // A child doc's own folderId is left null; it's reached only through its parent's Subpages table
+  // or the sidebar's own expand-in-place, never the flat folder listing (see PLANNING.md).
+  parentId String? @map("parent_doc_id")
+  parent   Doc?    @relation("DocChildren", fields: [parentId], references: [id], onDelete: Cascade)
+  children Doc[]   @relation("DocChildren")
+
+  // Set once at creation to whoever created the doc; never auto-changes afterward.
+  ownerId String? @map("owner_id")
+  owner   User?   @relation("DocOwner", fields: [ownerId], references: [id], onDelete: SetNull)
+
+  // JSON-encoded array of userIds who have connected to edit this doc (see collabServer.ts's
+  // onAuthenticate) — same JSON-in-String convention as accessJson elsewhere in this schema.
+  contributorIdsJson String @default("[]") @map("contributor_ids_json")
+
+  docComments DocComment[]
+
   createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime @updatedAt @map("updated_at")
+}
+
+// Selection-anchored comments on a Doc's own content — separate from Comment (Task-only, no
+// anchor/range concept, no reply-threading) rather than overloading it. markId is shared by every
+// comment in one thread and is also stored as the Tiptap `comment` mark's own attribute in the
+// live doc content (lib/collab/commentMark.ts) — that's what links highlighted text back to its
+// thread. parentId self-relation gives one level of replies (thread root = parentId: null).
+model DocComment {
+  id     String @id @default(uuid())
+  body   String
+  docId  String @map("doc_id")
+  doc    Doc    @relation(fields: [docId], references: [id], onDelete: Cascade)
+  markId String @map("mark_id")
+
+  parentId String?      @map("parent_id")
+  parent   DocComment?  @relation("DocCommentReplies", fields: [parentId], references: [id], onDelete: Cascade)
+  replies  DocComment[] @relation("DocCommentReplies")
+
+  // Only meaningful on the thread root — a snapshot of the commented text at creation time, so
+  // the panel can still show what was commented on even after resolving removes the live
+  // highlight, or the text itself gets edited away entirely.
+  quotedText String?  @map("quoted_text")
+  resolved   Boolean  @default(false)
+
+  authorId String? @map("author_id")
+  author   User?   @relation(fields: [authorId], references: [id], onDelete: SetNull)
+
+  createdAt DateTime @default(now()) @map("created_at")
 }
 
 // 11. Mappe-struktur for løsrevne (ikke task-bundne) Docs — speiler Folder (Space > Folder > List)

@@ -37,6 +37,12 @@ function flattenLines(node: PMNode, out: Line[]) {
     out.push({ runs: inlineRuns(node.content) });
     return;
   }
+  if (node.type === 'subpagesIndex') {
+    // Atom block, no static representation of a live table — an honest placeholder line rather
+    // than silently contributing nothing (the generic child-recursing fallback below would).
+    out.push({ runs: [{ text: '[Subpages]', bold: true, italic: false }] });
+    return;
+  }
   if (node.type === 'bulletList' || node.type === 'orderedList') {
     const listType = node.type === 'orderedList' ? 'ordered' : 'bullet';
     (node.content ?? []).forEach((item) => {

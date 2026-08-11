@@ -65,6 +65,14 @@ function renderBlock(doc: PDFKit.PDFDocument, node: PMNode, depth: number) {
     doc.moveDown(0.4);
     return;
   }
+  if (node.type === 'subpagesIndex') {
+    // Atom block, no static representation of a live table — an honest placeholder rather than
+    // silently contributing nothing (the generic child-recursing fallback below would, since this
+    // node has no `content`).
+    writeLine(doc, undefined, { size: BODY_SIZE, bold: true, indent: depth * LIST_INDENT, marker: '[Subpages]' });
+    doc.moveDown(0.4);
+    return;
+  }
   if (node.type === 'bulletList' || node.type === 'orderedList') {
     (node.content ?? []).forEach((item, index) => {
       const marker = node.type === 'orderedList' ? `${index + 1}. ` : '• ';

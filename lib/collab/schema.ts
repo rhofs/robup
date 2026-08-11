@@ -10,6 +10,8 @@ import OrderedList from '@tiptap/extension-ordered-list';
 import ListItem from '@tiptap/extension-list-item';
 import HardBreak from '@tiptap/extension-hard-break';
 import { MentionNode } from './mentionNode';
+import { SubpagesIndexNode } from './subpagesIndexNode';
+import { CommentMark } from './commentMark';
 
 // Paragraphs + mentions + bold/italic/headings(1-2)/bullet+ordered lists. Shared by the server
 // (schema/migration) and the client editor (as part of its fuller extension list) so both ever
@@ -27,6 +29,8 @@ export const collabExtensions = [
   ListItem,
   HardBreak,
   MentionNode,
+  SubpagesIndexNode,
+  CommentMark,
 ];
 
 export const collabSchema = getSchema(collabExtensions);

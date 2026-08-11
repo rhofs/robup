@@ -50,11 +50,34 @@ export async function cascadeList(listId: string, when: Date | null) {
   ]);
 }
 
+// A subpage (Doc.parentId set) carries no folderId of its own — it's reached only through its
+// parent Doc's parentId chain, never the flat folder listing (see PLANNING.md) — so a folder's
+// doc sweep has to expand each directly-filed doc's own subtree too, not just filter by folderId.
+async function collectDocSubtreeIds(rootDocId: string): Promise<string[]> {
+  const ids: string[] = [rootDocId];
+  let frontier = [rootDocId];
+  while (frontier.length > 0) {
+    const children = await prisma.doc.findMany({ where: { parentId: { in: frontier } }, select: { id: true } });
+    const childIds = children.map((c) => c.id);
+    ids.push(...childIds);
+    frontier = childIds;
+  }
+  return ids;
+}
+
+export async function cascadeDoc(docId: string, when: Date | null) {
+  const docIds = await collectDocSubtreeIds(docId);
+  await prisma.doc.updateMany({ where: { id: { in: docIds } }, data: { deletedAt: when } });
+}
+
 export async function cascadeDocFolder(docFolderId: string, when: Date | null) {
   const folderIds = await collectDocFolderSubtreeIds(docFolderId);
+  const rootDocs = await prisma.doc.findMany({ where: { folderId: { in: folderIds } }, select: { id: true } });
+  const docSubtrees = await Promise.all(rootDocs.map((d) => collectDocSubtreeIds(d.id)));
+  const docIds = docSubtrees.flat();
   await prisma.$transaction([
     prisma.docFolder.updateMany({ where: { id: { in: folderIds } }, data: { deletedAt: when } }),
-    prisma.doc.updateMany({ where: { folderId: { in: folderIds } }, data: { deletedAt: when } }),
+    prisma.doc.updateMany({ where: { id: { in: docIds } }, data: { deletedAt: when } }),
   ]);
 }
 

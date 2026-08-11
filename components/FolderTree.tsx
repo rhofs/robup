@@ -8,6 +8,7 @@ import {
   Folder as FolderIconLucide,
   FolderOpen,
   List as ListIcon,
+  FileText,
   Plus,
   Pencil,
   Trash2,
@@ -88,8 +89,9 @@ import {
   Users,
   type LucideIcon,
 } from 'lucide-react';
-import { useTaskStore, HierarchySpace, HierarchyFolder, HierarchyList, Task } from '../store/useTaskStore';
+import { useTaskStore, HierarchySpace, HierarchyFolder, HierarchyList, Task, TaskDoc } from '../store/useTaskStore';
 import { getChildFolders, getListsIn, collectListIdsUnder } from '../lib/folderTree';
+import { getSpaceDocsIn } from '../lib/docFolderTree';
 
 const COLLAPSED_FOLDERS_STORAGE_KEY = 'robup.collapsedFolders';
 
@@ -223,6 +225,16 @@ type FolderTreeProps = {
   onDeleteListRequest: (list: HierarchyList) => void;
   renameListId: string | null;
   onRenameListHandled: () => void;
+  // Docs as a sidebar-native sibling of List/Folder — additive to the separate Docs-tab nav
+  // (DocFolderTree.tsx), which keeps working exactly as before. activeStandaloneDocId highlights
+  // a Doc row when it's open, regardless of which activeView is currently selected (see
+  // app/page.tsx's hoisted doc-editor render).
+  activeStandaloneDocId: string | null;
+  onOpenDoc: (docId: string) => void;
+  onDeleteDocRequest: (doc: TaskDoc) => void;
+  onDocContextMenu: (e: React.MouseEvent, doc: TaskDoc) => void;
+  renameDocId: string | null;
+  onRenameDocHandled: () => void;
 };
 
 export default function FolderTree(props: FolderTreeProps) {
@@ -231,18 +243,22 @@ export default function FolderTree(props: FolderTreeProps) {
 
 function FolderLevel(props: FolderTreeProps & { parentId: string | null; depth: number }) {
   const { space, tasks, activeView, activeListIds, calendarVisibleListIds, onNavigateList, toggleCalendarList, parentId, depth } = props;
-  const { createList, createFolder, renameList } = useTaskStore();
-  const [addMode, setAddMode] = useState<'list' | 'folder' | null>(null);
+  const { createList, createFolder, createSpaceDoc, renameList } = useTaskStore();
+  const [addMode, setAddMode] = useState<'list' | 'folder' | 'doc' | null>(null);
   const [draft, setDraft] = useState('');
 
   const folders = getChildFolders(space, parentId);
   const lists = getListsIn(space, parentId);
+  const docs = getSpaceDocsIn(space, parentId);
 
-  const commitAdd = () => {
+  const commitAdd = async () => {
     const trimmed = draft.trim();
     if (trimmed) {
       if (addMode === 'list') createList(space.id, trimmed, parentId);
       else if (addMode === 'folder') createFolder(space.id, trimmed, parentId);
+      // Doesn't navigate into the new doc — matches ClickUp's own "keep stubbing out pages while
+      // staying put" behavior, same as the book panel's own "Add page" button.
+      else if (addMode === 'doc') await createSpaceDoc(space.id, parentId, { title: trimmed });
     }
     setDraft('');
     setAddMode(null);
@@ -281,6 +297,19 @@ function FolderLevel(props: FolderTreeProps & { parentId: string | null; depth: 
         );
       })}
 
+      {docs.map((doc) => (
+        <DocRow
+          key={doc.id}
+          doc={doc}
+          isActive={props.activeStandaloneDocId === doc.id}
+          onOpen={() => props.onOpenDoc(doc.id)}
+          onDeleteRequest={() => props.onDeleteDocRequest(doc)}
+          onContextMenu={(e) => props.onDocContextMenu(e, doc)}
+          renameDocId={props.renameDocId}
+          onRenameDocHandled={props.onRenameDocHandled}
+        />
+      ))}
+
       {addMode ? (
         <input
           autoFocus
@@ -295,7 +324,7 @@ function FolderLevel(props: FolderTreeProps & { parentId: string | null; depth: 
               setAddMode(null);
             }
           }}
-          placeholder={addMode === 'list' ? 'List name...' : 'Folder name...'}
+          placeholder={addMode === 'list' ? 'List name...' : addMode === 'doc' ? 'Doc title...' : 'Folder name...'}
           className="w-full bg-neutral-950 border border-blue-500 rounded px-2 py-1 text-[11px] text-white focus:outline-none"
         />
       ) : (
@@ -312,6 +341,16 @@ function FolderLevel(props: FolderTreeProps & { parentId: string | null; depth: 
           <button
             onClick={() => {
               setDraft('');
+              setAddMode('doc');
+            }}
+            title="New doc"
+            className="px-1.5 py-1 rounded text-[11px] text-neutral-500 hover:text-blue-400 hover:bg-neutral-800/30 cursor-pointer"
+          >
+            <FileText className="w-3 h-3" />
+          </button>
+          <button
+            onClick={() => {
+              setDraft('');
               setAddMode('folder');
             }}
             title="New folder"
@@ -321,6 +360,90 @@ function FolderLevel(props: FolderTreeProps & { parentId: string | null; depth: 
           </button>
         </div>
       )}
+    </div>
+  );
+}
+
+function DocRow({
+  doc,
+  isActive,
+  onOpen,
+  onDeleteRequest,
+  onContextMenu,
+  renameDocId,
+  onRenameDocHandled,
+}: {
+  doc: TaskDoc;
+  isActive: boolean;
+  onOpen: () => void;
+  onDeleteRequest: () => void;
+  onContextMenu: (e: React.MouseEvent) => void;
+  renameDocId: string | null;
+  onRenameDocHandled: () => void;
+}) {
+  const { updateSpaceDoc } = useTaskStore();
+  const [editing, setEditing] = useState(false);
+  const [draft, setDraft] = useState(doc.title);
+
+  // Triggered by the "Rename" item in the doc's right-click context menu (page.tsx), same
+  // pattern as ListRow's equivalent effect.
+  useEffect(() => {
+    if (renameDocId === doc.id) {
+      setDraft(doc.title);
+      setEditing(true);
+      onRenameDocHandled();
+    }
+  }, [renameDocId, doc.id, doc.title, onRenameDocHandled]);
+
+  const commit = () => {
+    setEditing(false);
+    const trimmed = draft.trim();
+    if (trimmed && trimmed !== doc.title) updateSpaceDoc(doc.id, doc.spaceId!, { title: trimmed });
+    else setDraft(doc.title);
+  };
+
+  if (editing) {
+    return (
+      <input
+        autoFocus
+        value={draft}
+        onChange={(e) => setDraft(e.target.value)}
+        onBlur={commit}
+        onKeyDown={(e) => {
+          if (e.key === 'Enter') commit();
+          if (e.key === 'Escape') {
+            setDraft(doc.title);
+            setEditing(false);
+          }
+        }}
+        onClick={(e) => e.stopPropagation()}
+        className="w-full bg-neutral-950 border border-blue-500 rounded px-2 py-1 text-[11px] text-white focus:outline-none"
+      />
+    );
+  }
+
+  return (
+    <div
+      onClick={onOpen}
+      onContextMenu={onContextMenu}
+      className={`group w-full text-left px-2 py-1 rounded text-[11px] transition flex items-center justify-between cursor-pointer ${
+        isActive ? 'bg-neutral-800 text-blue-400 font-medium' : 'text-neutral-400 hover:text-neutral-200 hover:bg-neutral-800/30'
+      }`}
+    >
+      <span className="truncate flex items-center gap-1.5 min-w-0">
+        <FileText className="w-3 h-3 shrink-0" style={{ color: doc.color || undefined }} />
+        <span className="truncate">{doc.title || 'Untitled'}</span>
+      </span>
+      <button
+        onClick={(e) => {
+          e.stopPropagation();
+          onDeleteRequest();
+        }}
+        title="Delete"
+        className="opacity-0 group-hover:opacity-100 text-neutral-500 hover:text-red-400 cursor-pointer shrink-0"
+      >
+        <Trash2 className="w-2.5 h-2.5" />
+      </button>
     </div>
   );
 }

@@ -1,12 +1,14 @@
 import { NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
+import { cascadeDoc } from '@/lib/trashCascade';
 
 export async function PATCH(req: Request, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
   const body = await req.json();
 
   if (body.restore === true) {
-    const doc = await prisma.doc.update({ where: { id }, data: { deletedAt: null } });
+    await cascadeDoc(id, null);
+    const doc = await prisma.doc.findUniqueOrThrow({ where: { id } });
     return NextResponse.json(doc);
   }
 
@@ -16,10 +18,14 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
   // own writes and could clobber live edits.
   const data: any = {};
   if (body.title !== undefined) data.title = body.title;
+  if (body.color !== undefined) data.color = body.color;
   if (body.order !== undefined) data.order = body.order;
   if (body.taskId !== undefined) data.taskId = body.taskId;
   if (body.folderId !== undefined) data.folderId = body.folderId;
   if (body.spaceId !== undefined) data.spaceId = body.spaceId;
+  if (body.parentId !== undefined) data.parentId = body.parentId;
+  if (body.ownerId !== undefined) data.ownerId = body.ownerId;
+  if (body.contributorIds !== undefined) data.contributorIdsJson = JSON.stringify(body.contributorIds);
 
   const doc = await prisma.doc.update({
     where: { id },
@@ -33,9 +39,14 @@ export async function DELETE(req: Request, { params }: { params: Promise<{ id: s
   const url = new URL(req.url);
   const authorId = url.searchParams.get('authorId');
   const permanent = url.searchParams.get('permanent') === 'true';
-  const doc = permanent
-    ? await prisma.doc.delete({ where: { id } })
-    : await prisma.doc.update({ where: { id }, data: { deletedAt: new Date() } });
+  let doc;
+  if (permanent) {
+    // The FK's own onDelete: Cascade already hard-deletes the full subpage subtree.
+    doc = await prisma.doc.delete({ where: { id } });
+  } else {
+    doc = await prisma.doc.findUniqueOrThrow({ where: { id } });
+    await cascadeDoc(id, new Date());
+  }
   // Activity & Comments is a task-scoped concept — a standalone (Space/DocFolder) doc has no
   // task to log against, so only write the activity entry when this doc actually belonged to one.
   if (doc.taskId) {

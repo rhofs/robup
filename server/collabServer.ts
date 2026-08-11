@@ -68,6 +68,26 @@ const server = new Server({
       select: { id: true },
     });
     if (!membership) throw new Error(`Unauthorized: user is not a member of workspace ${workspaceId}`);
+
+    // Best-effort "contributor" tracking for the Docs Subpages table's avatar column — deliberately
+    // approximate (records "has connected to edit this doc," not "has made a specific edit"; see
+    // PLANNING.md). A presence room isn't a real Doc row, so skip it the same way the load/store
+    // hooks below do. Fire-and-forget: a lost race on this display-only field isn't worth blocking
+    // the connection over.
+    if (!isPresenceDocumentName(documentName)) {
+      prisma.doc
+        .findUnique({ where: { id: documentName }, select: { contributorIdsJson: true } })
+        .then((doc) => {
+          if (!doc) return null;
+          const ids: string[] = JSON.parse(doc.contributorIdsJson);
+          if (ids.includes(userId)) return null;
+          return prisma.doc.update({
+            where: { id: documentName },
+            data: { contributorIdsJson: JSON.stringify([...ids, userId]) },
+          });
+        })
+        .catch((err) => console.error('Failed to record doc contributor:', err));
+    }
   },
 
   async onLoadDocument({ document, documentName }) {

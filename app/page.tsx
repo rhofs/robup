@@ -82,6 +82,8 @@ import CreateTaskModal from '../components/CreateTaskModal';
 import SpaceHome from '../components/SpaceHome';
 import DocFolderTree from '../components/DocFolderTree';
 import DocsBrowser from '../components/DocsBrowser';
+import DocSubpagesPanel from '../components/DocSubpagesPanel';
+import { getChildDocs } from '../lib/docFolderTree';
 import OfficePage from '../components/OfficePage';
 import MyTasksPage from '../components/MyTasksPage';
 import PersonalTasksPage from '../components/PersonalTasksPage';
@@ -645,6 +647,13 @@ function PageContent() {
   const [editListIcon, setEditListIcon] = useState<string | null>(null);
   const [renameListId, setRenameListId] = useState<string | null>(null);
   const [listToDelete, setListToDelete] = useState<{ list: HierarchyList; spaceId: string } | null>(null);
+
+  const [docMenu, setDocMenu] = useState<{ x: number; y: number; doc: TaskDoc; spaceId: string } | null>(null);
+  const [docEditTarget, setDocEditTarget] = useState<{ doc: TaskDoc; spaceId: string } | null>(null);
+  const [editDocColor, setEditDocColor] = useState<string | null>(null);
+  const [renameDocId, setRenameDocId] = useState<string | null>(null);
+  const [docOwnerPickerOpen, setDocOwnerPickerOpen] = useState(false);
+  const [docContributorsPickerOpen, setDocContributorsPickerOpen] = useState(false);
 
   const [columnMenu, setColumnMenu] = useState<{ x: number; y: number; col: ColumnDef } | null>(null);
   const [taskListPicker, setTaskListPicker] = useState<{ x: number; y: number; taskId: string; options: { id: string; label: string }[] } | null>(null);
@@ -1318,6 +1327,24 @@ function PageContent() {
     setListEditTarget(null);
   };
 
+  const openDocMenu = (e: React.MouseEvent, doc: TaskDoc, spaceId: string) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setDocMenu({ x: e.clientX, y: e.clientY, doc, spaceId });
+  };
+
+  const startEditDoc = (doc: TaskDoc, spaceId: string) => {
+    setDocEditTarget({ doc, spaceId });
+    setEditDocColor(doc.color);
+    setDocMenu(null);
+  };
+
+  const saveDocEdit = () => {
+    if (!docEditTarget) return;
+    updateSpaceDoc(docEditTarget.doc.id, docEditTarget.spaceId, { color: editDocColor });
+    setDocEditTarget(null);
+  };
+
   // ---- Bulk-valg ----
   const toggleSelect = (taskId: string) => {
     setSelectedIds((prev) => {
@@ -1926,6 +1953,37 @@ function PageContent() {
 
   // ---- Docs tab: full-page editor — live collaborative content via CollabDocEditor ----
   const activeStandaloneDoc = currentSpace?.spaceDocs.find((d) => d.id === activeStandaloneDocId) ?? null;
+
+  // Doc-ancestor breadcrumb (Space > [DocFolder chain, if the root ancestor lives in one] > Doc >
+  // ... > current doc) — built entirely from the already-loaded spaceDocs/docFolders, same
+  // parentId-walk technique DocsBrowser.tsx already uses for its own Space > DocFolder trail, no
+  // extra fetch needed either way.
+  const docBreadcrumb = useMemo(() => {
+    if (!currentSpace || !activeStandaloneDoc) return { folderChain: [] as HierarchyDocFolder[], docChain: [] as TaskDoc[] };
+    const docChain: TaskDoc[] = [];
+    let docCursor: TaskDoc | null = activeStandaloneDoc;
+    while (docCursor) {
+      docChain.unshift(docCursor);
+      const parentId: string | null = docCursor.parentId;
+      docCursor = parentId ? currentSpace.spaceDocs.find((d) => d.id === parentId) ?? null : null;
+    }
+    const rootDoc = docChain[0];
+    const folderChain: HierarchyDocFolder[] = [];
+    let folderCursor = rootDoc?.folderId ? currentSpace.docFolders.find((f) => f.id === rootDoc.folderId) ?? null : null;
+    while (folderCursor) {
+      folderChain.unshift(folderCursor);
+      const parentId: string | null = folderCursor.parentId;
+      folderCursor = parentId ? currentSpace.docFolders.find((f) => f.id === parentId) ?? null : null;
+    }
+    return { folderChain, docChain };
+  }, [currentSpace, activeStandaloneDoc]);
+
+  // The "book" this doc belongs to is rooted at docBreadcrumb.docChain[0] (already walked all the
+  // way up). Every page in the book is reachable as some depth of descendant of that root, so
+  // checking the root's own direct children is enough to know whether the book has any pages
+  // beyond a lone empty doc — no separate recursive count needed.
+  const docBookRoot = docBreadcrumb.docChain[0] ?? null;
+  const docBookHasPages = !!(currentSpace && docBookRoot && getChildDocs(currentSpace, docBookRoot.id).length > 0);
 
   const handleNewSpaceDoc = async () => {
     if (!currentSpace) return;
@@ -2546,6 +2604,9 @@ function PageContent() {
                           }}
                           onDeleteFolderRequest={setDocFolderToDelete}
                           onDeleteDocRequest={setSpaceDocToDelete}
+                          onDocContextMenu={(e, doc) => openDocMenu(e, doc, space.id)}
+                          renameDocId={renameDocId}
+                          onRenameDocHandled={() => setRenameDocId(null)}
                         />
                       ) : (
                         <FolderTree
@@ -2568,6 +2629,15 @@ function PageContent() {
                           onDeleteListRequest={(list) => setListToDelete({ list, spaceId: space.id })}
                           renameListId={renameListId}
                           onRenameListHandled={() => setRenameListId(null)}
+                          activeStandaloneDocId={activeSpaceId === space.id ? activeStandaloneDocId : null}
+                          onOpenDoc={(docId) => {
+                            setNavigation(space.id, []);
+                            setDocsNavigation(null, docId);
+                          }}
+                          onDeleteDocRequest={setSpaceDocToDelete}
+                          onDocContextMenu={(e, doc) => openDocMenu(e, doc, space.id)}
+                          renameDocId={renameDocId}
+                          onRenameDocHandled={() => setRenameDocId(null)}
                         />
                       ))}
                     {spaceDropIndicator?.targetId === space.id && spaceDropIndicator.position === 'below' && (
@@ -2588,6 +2658,20 @@ function PageContent() {
           </div>
         </div>
       </aside>
+
+      {currentSpace && activeStandaloneDoc && docBookRoot && docBookHasPages && (
+        <DocSubpagesPanel
+          space={currentSpace}
+          rootDoc={docBookRoot}
+          activeDocId={activeStandaloneDoc.id}
+          members={users}
+          onOpenDoc={(docId) => setDocsNavigation(activeDocFolderId, docId)}
+          onAddPage={(parentId) => createSpaceDoc(currentSpace.id, null, { parentId })}
+          onDocContextMenu={(e, doc) => openDocMenu(e, doc, currentSpace.id)}
+          renameDocId={renameDocId}
+          onRenameDocHandled={() => setRenameDocId(null)}
+        />
+      )}
 
       {/* ================= MAIN AREA ================= */}
       <main className="flex-1 flex flex-col h-full overflow-hidden bg-neutral-950 relative">
@@ -2769,7 +2853,257 @@ function PageContent() {
             </div>
             )}
 
-            {activeView === 'mytasks' ? (
+            {activeStandaloneDoc && currentSpace && (activeView === 'board' || activeView === 'docs') ? (
+              <div className="max-w-3xl mx-auto space-y-2">
+                {!docBookHasPages && (
+                  <button
+                    onClick={() => createSpaceDoc(currentSpace.id, null, { parentId: activeStandaloneDoc.id })}
+                    className="text-[11px] text-neutral-500 hover:text-blue-400 hover:bg-neutral-800/30 px-2 py-1 -ml-2 rounded cursor-pointer flex items-center gap-1.5"
+                  >
+                    <Plus className="w-3 h-3" /> Add page
+                  </button>
+                )}
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-1 text-[11px] text-neutral-500 min-w-0 flex-wrap">
+                    <button
+                      onClick={() => setDocsNavigation(docBreadcrumb.folderChain[0]?.id ?? null, null)}
+                      className="cursor-pointer hover:text-neutral-300 shrink-0"
+                    >
+                      {currentSpace.name}
+                    </button>
+                    {docBreadcrumb.folderChain.map((folder, i) => (
+                      <span key={folder.id} className="flex items-center gap-1 shrink-0">
+                        <ChevronRight className="w-3 h-3" />
+                        <button
+                          onClick={() => setDocsNavigation(docBreadcrumb.folderChain[i + 1]?.id ?? folder.id, null)}
+                          className="cursor-pointer hover:text-neutral-300"
+                        >
+                          {folder.name}
+                        </button>
+                      </span>
+                    ))}
+                    {docBreadcrumb.docChain.map((doc, i) => {
+                      const isLast = i === docBreadcrumb.docChain.length - 1;
+                      return (
+                        <span key={doc.id} className="flex items-center gap-1 min-w-0">
+                          <ChevronRight className="w-3 h-3 shrink-0" />
+                          <button
+                            onClick={() => setDocsNavigation(activeDocFolderId, doc.id)}
+                            disabled={isLast}
+                            className={`truncate ${isLast ? 'text-neutral-300 font-medium' : 'cursor-pointer hover:text-neutral-300'}`}
+                          >
+                            {doc.title || 'Untitled'}
+                          </button>
+                        </span>
+                      );
+                    })}
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <DocExportMenu docId={activeStandaloneDoc.id} onToast={showToast} />
+                    {activeStandaloneDoc.taskId ? (
+                      (() => {
+                        const linkedTask = tasks.find((t) => t.id === activeStandaloneDoc.taskId);
+                        return (
+                          <span className="flex items-center gap-1 text-[10px] text-neutral-500">
+                            <Link2 className="w-3 h-3 shrink-0" />
+                            Linked to{' '}
+                            <button
+                              onClick={() => linkedTask && setModalTaskStack([linkedTask.id])}
+                              className="text-blue-400 hover:underline cursor-pointer"
+                            >
+                              {linkedTask?.title ?? 'task'}
+                            </button>
+                            <button
+                              onClick={() => setDocTaskLink(activeStandaloneDoc.id, null)}
+                              title="Unlink"
+                              className="text-neutral-500 hover:text-red-400 cursor-pointer"
+                            >
+                              <Unlink className="w-3 h-3" />
+                            </button>
+                          </span>
+                        );
+                      })()
+                    ) : (
+                      linkableTasks.length > 0 && (
+                        <FloatingPopover
+                          open={linkTaskOpen}
+                          onClose={() => setLinkTaskOpen(false)}
+                          panelClassName="w-56 max-h-64 overflow-y-auto bg-neutral-900 border border-neutral-800 rounded shadow-xl py-1"
+                          anchor={
+                            <button
+                              onClick={() => setLinkTaskOpen((o) => !o)}
+                              className="text-[11px] text-neutral-400 hover:text-blue-400 px-2 py-1 rounded hover:bg-neutral-800/60 cursor-pointer flex items-center gap-1"
+                            >
+                              <Link2 className="w-3 h-3" /> Link to task
+                            </button>
+                          }
+                        >
+                          <div className="text-[10px] uppercase tracking-wide text-neutral-500 px-3 py-1">From this Space</div>
+                          {linkableTasks.map((t) => (
+                            <button
+                              key={t.id}
+                              onClick={() => {
+                                setDocTaskLink(activeStandaloneDoc.id, t.id);
+                                setLinkTaskOpen(false);
+                              }}
+                              className="w-full text-left px-3 py-1.5 text-xs text-neutral-300 hover:bg-neutral-800/60 cursor-pointer truncate"
+                            >
+                              {t.title}
+                            </button>
+                          ))}
+                        </FloatingPopover>
+                      )
+                    )}
+                  </div>
+                </div>
+                <div className="bg-neutral-900/60 border border-neutral-800/80 rounded p-6 space-y-3">
+                  <input
+                    value={activeStandaloneDoc.title}
+                    onChange={(e) => updateSpaceDoc(activeStandaloneDoc.id, currentSpace.id, { title: e.target.value })}
+                    className="w-full bg-transparent text-lg font-semibold text-white focus:outline-none"
+                    placeholder="Document title"
+                  />
+                  {(() => {
+                    const owner = activeStandaloneDoc.ownerId ? users.find((u) => u.id === activeStandaloneDoc.ownerId) : undefined;
+                    const contributors = activeStandaloneDoc.contributorIds.map((id) => users.find((u) => u.id === id)).filter((u): u is AppUser => !!u);
+                    const updated = new Date(activeStandaloneDoc.updatedAt);
+                    return (
+                      <div className="flex items-center gap-3 text-[11px] text-neutral-500 -mt-1">
+                        <FloatingPopover
+                          open={docOwnerPickerOpen}
+                          onClose={() => setDocOwnerPickerOpen(false)}
+                          panelClassName="w-44 bg-neutral-900 border border-neutral-800 rounded shadow-xl p-1.5"
+                          anchor={
+                            <button
+                              onClick={() => setDocOwnerPickerOpen((o) => !o)}
+                              onContextMenu={(e) => {
+                                e.preventDefault();
+                                setDocOwnerPickerOpen(true);
+                              }}
+                              className="flex items-center gap-1.5 cursor-pointer hover:text-neutral-300"
+                            >
+                              Owner
+                              {owner ? (
+                                <>
+                                  <span
+                                    title={owner.name}
+                                    className="w-4 h-4 rounded-full text-[8px] font-bold flex items-center justify-center text-white shrink-0"
+                                    style={{ backgroundColor: owner.color }}
+                                  >
+                                    {owner.initials}
+                                  </span>
+                                  {owner.name}
+                                </>
+                              ) : (
+                                <span className="w-4 h-4 rounded-full border border-dashed border-neutral-600 flex items-center justify-center shrink-0">+</span>
+                              )}
+                            </button>
+                          }
+                        >
+                          <div className="text-[10px] uppercase tracking-wide text-neutral-500 px-2 py-1">Owner</div>
+                          {users.map((u) => (
+                            <button
+                              key={u.id}
+                              onClick={() => {
+                                updateSpaceDoc(activeStandaloneDoc.id, currentSpace.id, { ownerId: u.id });
+                                setDocOwnerPickerOpen(false);
+                              }}
+                              className="w-full flex items-center gap-2 text-[11px] text-neutral-300 px-2 py-1 rounded hover:bg-neutral-800/60 cursor-pointer"
+                            >
+                              <span
+                                className={`w-3.5 h-3.5 rounded border flex items-center justify-center shrink-0 transition ${
+                                  owner?.id === u.id ? 'bg-blue-500 border-blue-500 text-white' : 'border-neutral-600'
+                                }`}
+                              >
+                                {owner?.id === u.id && <Check className="w-2.5 h-2.5" />}
+                              </span>
+                              <span className="w-4 h-4 rounded-full text-[8px] font-bold flex items-center justify-center text-white" style={{ backgroundColor: u.color }}>
+                                {u.initials}
+                              </span>
+                              {u.name}
+                            </button>
+                          ))}
+                        </FloatingPopover>
+
+                        <span>
+                          Last updated {updated.toLocaleDateString()} at {updated.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                        </span>
+
+                        <FloatingPopover
+                          open={docContributorsPickerOpen}
+                          onClose={() => setDocContributorsPickerOpen(false)}
+                          panelClassName="w-44 bg-neutral-900 border border-neutral-800 rounded shadow-xl p-1.5"
+                          anchor={
+                            <button
+                              onClick={() => setDocContributorsPickerOpen((o) => !o)}
+                              onContextMenu={(e) => {
+                                e.preventDefault();
+                                setDocContributorsPickerOpen(true);
+                              }}
+                              className="flex items-center gap-1.5 cursor-pointer hover:text-neutral-300"
+                            >
+                              Contributors
+                              <span className="flex items-center -space-x-1">
+                                {contributors.length === 0 && (
+                                  <span className="w-4 h-4 rounded-full border border-dashed border-neutral-600 flex items-center justify-center shrink-0">+</span>
+                                )}
+                                {contributors.slice(0, 5).map((u) => (
+                                  <span
+                                    key={u.id}
+                                    title={u.name}
+                                    className="w-4 h-4 rounded-full border border-neutral-900 text-[8px] font-bold flex items-center justify-center text-white"
+                                    style={{ backgroundColor: u.color }}
+                                  >
+                                    {u.initials}
+                                  </span>
+                                ))}
+                              </span>
+                            </button>
+                          }
+                        >
+                          <div className="text-[10px] uppercase tracking-wide text-neutral-500 px-2 py-1">Contributors</div>
+                          {users.map((u) => {
+                            const checked = activeStandaloneDoc.contributorIds.includes(u.id);
+                            return (
+                              <button
+                                key={u.id}
+                                onClick={() => {
+                                  const next = checked
+                                    ? activeStandaloneDoc.contributorIds.filter((id) => id !== u.id)
+                                    : [...activeStandaloneDoc.contributorIds, u.id];
+                                  updateSpaceDoc(activeStandaloneDoc.id, currentSpace.id, { contributorIds: next });
+                                }}
+                                className="w-full flex items-center gap-2 text-[11px] text-neutral-300 px-2 py-1 rounded hover:bg-neutral-800/60 cursor-pointer"
+                              >
+                                <span
+                                  className={`w-3.5 h-3.5 rounded border flex items-center justify-center shrink-0 transition ${
+                                    checked ? 'bg-blue-500 border-blue-500 text-white' : 'border-neutral-600'
+                                  }`}
+                                >
+                                  {checked && <Check className="w-2.5 h-2.5" />}
+                                </span>
+                                <span className="w-4 h-4 rounded-full text-[8px] font-bold flex items-center justify-center text-white" style={{ backgroundColor: u.color }}>
+                                  {u.initials}
+                                </span>
+                                {u.name}
+                              </button>
+                            );
+                          })}
+                        </FloatingPopover>
+                      </div>
+                    );
+                  })()}
+                  <CollabDocEditor
+                    key={activeStandaloneDoc.id}
+                    docId={activeStandaloneDoc.id}
+                    spaceId={currentSpace.id}
+                    onJump={jumpToMention}
+                    placeholder="Write anything..."
+                    className="min-h-[24em] text-sm text-neutral-300"
+                  />
+                </div>
+              </div>
+            ) : activeView === 'mytasks' ? (
               <MyTasksPage
                 currentUser={users.find((u) => u.id === currentUserId) ?? null}
                 currentWorkspace={currentWorkspace}
@@ -2813,89 +3147,6 @@ function PageContent() {
               !currentSpace ? (
                 <div className="text-[11px] text-neutral-500 px-1 py-8 text-center border border-dashed border-neutral-800 rounded">
                   Pick a Space in the sidebar to browse its Docs.
-                </div>
-              ) : activeStandaloneDoc ? (
-                <div className="max-w-3xl mx-auto space-y-2">
-                  <div className="flex items-center justify-between">
-                    <button
-                      onClick={() => setDocsNavigation(activeDocFolderId, null)}
-                      className="text-[11px] text-neutral-500 hover:text-neutral-300 cursor-pointer"
-                    >
-                      &larr; Back to {currentSpace.name}
-                    </button>
-                    <div className="flex items-center gap-2">
-                      <DocExportMenu docId={activeStandaloneDoc.id} onToast={showToast} />
-                      {activeStandaloneDoc.taskId ? (
-                        (() => {
-                          const linkedTask = tasks.find((t) => t.id === activeStandaloneDoc.taskId);
-                          return (
-                            <span className="flex items-center gap-1 text-[10px] text-neutral-500">
-                              <Link2 className="w-3 h-3 shrink-0" />
-                              Linked to{' '}
-                              <button
-                                onClick={() => linkedTask && setModalTaskStack([linkedTask.id])}
-                                className="text-blue-400 hover:underline cursor-pointer"
-                              >
-                                {linkedTask?.title ?? 'task'}
-                              </button>
-                              <button
-                                onClick={() => setDocTaskLink(activeStandaloneDoc.id, null)}
-                                title="Unlink"
-                                className="text-neutral-500 hover:text-red-400 cursor-pointer"
-                              >
-                                <Unlink className="w-3 h-3" />
-                              </button>
-                            </span>
-                          );
-                        })()
-                      ) : (
-                        linkableTasks.length > 0 && (
-                          <FloatingPopover
-                            open={linkTaskOpen}
-                            onClose={() => setLinkTaskOpen(false)}
-                            panelClassName="w-56 max-h-64 overflow-y-auto bg-neutral-900 border border-neutral-800 rounded shadow-xl py-1"
-                            anchor={
-                              <button
-                                onClick={() => setLinkTaskOpen((o) => !o)}
-                                className="text-[11px] text-neutral-400 hover:text-blue-400 px-2 py-1 rounded hover:bg-neutral-800/60 cursor-pointer flex items-center gap-1"
-                              >
-                                <Link2 className="w-3 h-3" /> Link to task
-                              </button>
-                            }
-                          >
-                            <div className="text-[10px] uppercase tracking-wide text-neutral-500 px-3 py-1">From this Space</div>
-                            {linkableTasks.map((t) => (
-                              <button
-                                key={t.id}
-                                onClick={() => {
-                                  setDocTaskLink(activeStandaloneDoc.id, t.id);
-                                  setLinkTaskOpen(false);
-                                }}
-                                className="w-full text-left px-3 py-1.5 text-xs text-neutral-300 hover:bg-neutral-800/60 cursor-pointer truncate"
-                              >
-                                {t.title}
-                              </button>
-                            ))}
-                          </FloatingPopover>
-                        )
-                      )}
-                    </div>
-                  </div>
-                  <div className="bg-neutral-900/60 border border-neutral-800/80 rounded p-6 space-y-3">
-                    <input
-                      value={activeStandaloneDoc.title}
-                      onChange={(e) => updateSpaceDoc(activeStandaloneDoc.id, currentSpace.id, { title: e.target.value })}
-                      className="w-full bg-transparent text-lg font-semibold text-white focus:outline-none"
-                      placeholder="Document title"
-                    />
-                    <CollabDocEditor
-                      key={activeStandaloneDoc.id}
-                      docId={activeStandaloneDoc.id}
-                      onJump={jumpToMention}
-                      placeholder="Write anything..."
-                      className="min-h-[24em] text-sm text-neutral-300"
-                    />
-                  </div>
                 </div>
               ) : (
                 <>
@@ -3252,6 +3503,39 @@ function PageContent() {
         </>
       )}
 
+      {/* ================= CONTEXT MENU: DOC ================= */}
+      {docMenu && (
+        <>
+          <div className="fixed inset-0 z-[60]" onClick={() => setDocMenu(null)} onContextMenu={(e) => { e.preventDefault(); setDocMenu(null); }} />
+          <div className="fixed z-[61] w-48 bg-neutral-900 border border-neutral-800 rounded shadow-2xl py-1" style={{ top: docMenu.y, left: docMenu.x }}>
+            <button
+              onClick={() => startEditDoc(docMenu.doc, docMenu.spaceId)}
+              className="w-full text-left px-3 py-1.5 text-xs text-neutral-300 hover:bg-neutral-800/60 cursor-pointer flex items-center gap-2"
+            >
+              <Pencil className="w-3.5 h-3.5" /> Edit appearance
+            </button>
+            <button
+              onClick={() => {
+                setRenameDocId(docMenu.doc.id);
+                setDocMenu(null);
+              }}
+              className="w-full text-left px-3 py-1.5 text-xs text-neutral-300 hover:bg-neutral-800/60 cursor-pointer flex items-center gap-2"
+            >
+              <Pencil className="w-3.5 h-3.5" /> Rename
+            </button>
+            <button
+              onClick={() => {
+                setSpaceDocToDelete(docMenu.doc);
+                setDocMenu(null);
+              }}
+              className="w-full text-left px-3 py-1.5 text-xs text-red-400 hover:bg-neutral-800/60 cursor-pointer flex items-center gap-2"
+            >
+              <Trash2 className="w-3.5 h-3.5" /> Delete doc
+            </button>
+          </div>
+        </>
+      )}
+
       {/* ================= CONTEXT MENU: COLUMN ================= */}
       {columnMenu && (
         <>
@@ -3550,6 +3834,44 @@ function PageContent() {
                 <span className="text-xs text-neutral-300">{editListName || 'Preview'}</span>
               </div>
               <button onClick={saveListEdit} className="w-full bg-blue-600 hover:bg-blue-500 text-white text-xs py-2 rounded font-medium cursor-pointer">
+                Save
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ================= EDIT DOC (color only — icon is fixed, rename is inline) ================= */}
+      {docEditTarget && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-neutral-950/70 backdrop-blur-xs" onClick={() => setDocEditTarget(null)}>
+          <div onClick={(e) => e.stopPropagation()} className="w-[380px] bg-neutral-900 border border-neutral-800 rounded shadow-2xl overflow-hidden">
+            <div className="px-5 py-4 border-b border-neutral-800 flex items-center justify-between">
+              <h3 className="font-bold text-sm text-white">Edit Doc</h3>
+              <button onClick={() => setDocEditTarget(null)} className="text-neutral-400 hover:text-white cursor-pointer">
+                <X className="w-3.5 h-3.5" />
+              </button>
+            </div>
+            <div className="p-5 space-y-3">
+              <div>
+                <label className="text-[11px] text-neutral-400 mb-1 block">Color</label>
+                <div className="flex flex-wrap items-center gap-1.5">
+                  <button
+                    onClick={() => setEditDocColor(null)}
+                    title="Default"
+                    className={`w-6 h-6 rounded-full cursor-pointer bg-neutral-700 flex items-center justify-center shrink-0 ${
+                      editDocColor === null ? 'ring-2 ring-white' : ''
+                    }`}
+                  >
+                    {editDocColor === null && <Check className="w-3 h-3 text-white" />}
+                  </button>
+                  <ColorSwatchPicker value={editDocColor} onChange={setEditDocColor} choices={FIELD_COLOR_CHOICES} />
+                </div>
+              </div>
+              <div className="flex items-center gap-2 bg-neutral-950/60 border border-neutral-800 rounded px-3 py-2">
+                <FileText className="w-3.5 h-3.5" style={{ color: editDocColor || undefined }} />
+                <span className="text-xs text-neutral-300">{docEditTarget.doc.title || 'Untitled'}</span>
+              </div>
+              <button onClick={saveDocEdit} className="w-full bg-blue-600 hover:bg-blue-500 text-white text-xs py-2 rounded font-medium cursor-pointer">
                 Save
               </button>
             </div>

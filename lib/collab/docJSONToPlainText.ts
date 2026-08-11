@@ -28,6 +28,11 @@ function blockToLines(node: ProseMirrorJSONNode): string[] {
   if (node.type === 'paragraph' || node.type === 'heading') {
     return [inlineToText(node.content)];
   }
+  // Atom block, no content array — the generic recurse-into-children fallback below would
+  // silently contribute nothing at all rather than erroring, so give it an explicit placeholder.
+  if (node.type === 'subpagesIndex') {
+    return ['[Subpages]'];
+  }
   if (node.type === 'bulletList' || node.type === 'orderedList') {
     const items = node.content ?? [];
     return items.flatMap((item, index) => {
