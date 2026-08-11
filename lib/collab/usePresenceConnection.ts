@@ -3,15 +3,19 @@ import { HocuspocusProvider } from '@hocuspocus/provider';
 import { useTaskStore } from '../../store/useTaskStore';
 import { useSessionStore } from '../../store/useSessionStore';
 import { usePresenceStore } from '../../store/usePresenceStore';
-import { PRESENCE_DOCUMENT_NAME } from './presenceRoom';
+import { presenceDocumentName } from './presenceRoom';
 
 // Genuine live "who's online" detection, reusing the same Hocuspocus sidecar already running for
 // Doc collaboration (server/collabServer.ts) — a dedicated awareness-only room, no persisted
-// content. Mounted once in app/page.tsx's PageContent for the whole app session, not per-view.
+// content, one per workspace (see presenceDocumentName — an earlier version used a single global
+// room name here, which leaked presence across every workspace regardless of membership; the
+// server now also enforces this via onAuthenticate, this scoping is what makes that check
+// meaningful in the first place). Mounted once in app/page.tsx's PageContent for the whole app
+// session, not per-view — reconnects whenever the active workspace changes.
 // No manual heartbeat needed: Yjs awareness already clears a peer's state the instant its
 // WebSocket disconnects — the same mechanism components/collab/PresenceBar.tsx already relies on
 // for per-doc "who's viewing this doc."
-export function usePresenceConnection(): void {
+export function usePresenceConnection(workspaceId: string | null): void {
   const users = useTaskStore((s) => s.users);
   const currentUserId = useSessionStore((s) => s.currentUserId);
   const currentUser = users.find((u) => u.id === currentUserId);
@@ -23,15 +27,19 @@ export function usePresenceConnection(): void {
   const [provider, setProvider] = useState<HocuspocusProvider | null>(null);
 
   useEffect(() => {
+    if (!workspaceId) {
+      setProvider(null);
+      return;
+    }
     const p = new HocuspocusProvider({
       url: `ws://${window.location.hostname}:1234`,
-      name: PRESENCE_DOCUMENT_NAME,
+      name: presenceDocumentName(workspaceId),
     });
     setProvider(p);
     return () => {
       p.destroy();
     };
-  }, []);
+  }, [workspaceId]);
 
   // Keep the broadcast identity in sync with "You are: ..." without reconnecting the socket.
   useEffect(() => {

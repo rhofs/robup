@@ -535,7 +535,7 @@ function PageContent() {
   } = useTaskStore();
 
   const { currentUserId } = useSessionStore();
-  usePresenceConnection();
+  usePresenceConnection(activeWorkspaceId ?? null);
 
   const [sortBy, setSortBy] = useState<'dueDate' | 'startDate' | 'name' | 'none'>('none');
   const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('asc');

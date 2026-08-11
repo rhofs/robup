@@ -5,8 +5,8 @@
   "scripts": {
     "dev": "concurrently -n next,collab -c blue,magenta \"npm:dev:next\" \"npm:dev:collab\"",
     "dev:next": "next dev",
-    "dev:collab": "tsx watch server/collabServer.ts",
-    "collab:start": "tsx server/collabServer.ts",
+    "dev:collab": "tsx watch --env-file=.env.local server/collabServer.ts",
+    "collab:start": "tsx --env-file=.env.local server/collabServer.ts",
     "build": "next build",
     "start": "next start",
     "lint": "next lint",
