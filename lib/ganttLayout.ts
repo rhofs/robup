@@ -10,6 +10,11 @@ export type DragState = {
   // For 'move': day offset (from grid start) of the day originally grabbed, minus the task's
   // start-day offset — lets us keep the grab point fixed under the cursor while dragging.
   anchorDays: number;
+  // Same idea as deltaDays/anchorDays, one axis over — how many lanes up/down the pointer has
+  // moved since drag-start, and the lane originally grabbed relative to the task's own lane.
+  // Only meaningful for mode 'move' (resizing an edge is a date-only gesture); always 0 otherwise.
+  deltaLanes: number;
+  anchorLane: number;
 };
 
 // Greedy interval-graph coloring: each task gets the lowest lane whose previous occupant
@@ -28,9 +33,29 @@ export type DragState = {
 // and a bar sitting one lane lower than a visibly free lane above it). Recomputing fresh, hint-
 // free, every render is what "compact upward into free space when it opens up" actually requires
 // — the two goals were in direct conflict, and correctness is the one that was actually asked for.
-export function assignLanes(ranges: TaskRange[]): Map<string, number> {
+//
+// `pinnedLanes` (Task.calendarLane, manually chosen by dragging a bar vertically) is a different
+// thing from that old hint — it's an explicit user choice, not a stability nudge, so it's treated
+// as authoritative rather than a soft preference. A pinned task claims its lane outright before
+// the greedy pass runs; the remaining unpinned tasks then pack around it.
+//
+// First cut of this seeded a lane's trailing "occupied until" end-time from the pinned task and
+// reused the plain `laneEnds[lane] < candidateStart` check the unpinned loop already used — which
+// is only correct because that loop processes tasks in start-time order, so whoever currently
+// holds a lane is always guaranteed to have started no later than the candidate being placed. A
+// pin breaks that guarantee: it can claim a lane regardless of where its own start time falls
+// relative to the unpinned tasks being processed. A pinned task starting *later* than an unpinned
+// one (e.g. pinned 28th–29th, unpinned candidate 27th–27th) was wrongly treated as "occupying"
+// the lane for the whole window up to its own end, bumping an earlier, non-overlapping task into
+// overflow it should never have been pushed into. Fixed by tracking each lane's pinned intervals
+// explicitly and checking real interval overlap against them, independent of processing order —
+// the unpinned-vs-unpinned bookkeeping (`laneEnds`, chronological by construction) is unaffected.
+export function assignLanes(ranges: TaskRange[], pinnedLanes?: Map<string, number>): Map<string, number> {
   const sorted = [...ranges].sort((a, b) => a.start.getTime() - b.start.getTime());
   const isFree = (end: number | undefined, startTime: number) => end === undefined || end < startTime;
+  // Same <= reasoning as the cluster-merge below: a single-day range has start === end, so a
+  // strict < would wrongly call two same-day ranges non-overlapping.
+  const overlaps = (aStart: number, aEnd: number, bStart: number, bEnd: number) => aStart <= bEnd && bStart <= aEnd;
   const lanes = new Map<string, number>();
 
   // Lane assignment runs per connected overlap cluster (merge-overlapping-intervals), not
@@ -52,11 +77,34 @@ export function assignLanes(ranges: TaskRange[]): Map<string, number> {
     const cluster = sorted.slice(i, j);
 
     const laneEnds: number[] = [];
+    const pinnedIntervals = new Map<number, { start: number; end: number }[]>();
+
     for (const r of cluster) {
+      const pinned = pinnedLanes?.get(r.id);
+      if (pinned === undefined) continue;
+      lanes.set(r.id, pinned);
+      const list = pinnedIntervals.get(pinned) ?? [];
+      list.push({ start: r.start.getTime(), end: r.end.getTime() });
+      pinnedIntervals.set(pinned, list);
+    }
+
+    // A cluster of N tasks never needs more than N lanes even in the degenerate all-overlapping
+    // case, so this bound is always enough — including for a brand-new, still-unused lane index.
+    const maxLanes = cluster.length;
+    for (const r of cluster) {
+      if (lanes.has(r.id)) continue; // already placed via a pin above
       const startTime = r.start.getTime();
-      let laneIdx = laneEnds.findIndex((end) => isFree(end, startTime));
-      if (laneIdx === -1) laneIdx = laneEnds.length;
-      laneEnds[laneIdx] = r.end.getTime();
+      const endTime = r.end.getTime();
+      let laneIdx = -1;
+      for (let lane = 0; lane < maxLanes; lane++) {
+        if (!isFree(laneEnds[lane], startTime)) continue;
+        const pinnedHere = pinnedIntervals.get(lane);
+        if (pinnedHere?.some((p) => overlaps(startTime, endTime, p.start, p.end))) continue;
+        laneIdx = lane;
+        break;
+      }
+      if (laneIdx === -1) laneIdx = maxLanes; // shouldn't happen, but never leave a task unplaced
+      laneEnds[laneIdx] = endTime;
       lanes.set(r.id, laneIdx);
     }
 

@@ -285,6 +285,12 @@ model Task {
 
   startDate DateTime? @map("start_date")
   dueDate   DateTime? @map("due_date")
+  // Planner/Calendar lane index, manually chosen by dragging a task's bar vertically — null means
+  // "let assignLanes (lib/ganttLayout.ts) auto-pack it," a number pins it to that exact lane
+  // regardless of what the greedy packer would otherwise choose. A single global value, not
+  // per-week-row, so a task spanning multiple weeks renders at the same lane in every row it
+  // appears in.
+  calendarLane Int? @map("calendar_lane")
 
   archived   Boolean   @default(false)
   archivedAt DateTime? @map("archived_at")

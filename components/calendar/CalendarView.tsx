@@ -43,6 +43,7 @@ type CalendarViewProps = {
 export default function CalendarView({ tasks, statuses, workspaces, onOpenTask, onRequestCreateTask }: CalendarViewProps) {
   const {
     optimisticSetDates,
+    optimisticSetCalendarLane,
     calendarGranularity: granularity,
     calendarFocusDate: focusDate,
     setCalendarGranularity: setGranularity,
@@ -110,6 +111,18 @@ export default function CalendarView({ tasks, statuses, workspaces, onOpenTask, 
   const tasksById = useMemo(() => new Map(tasks.map((t) => [t.id, t])), [tasks]);
   const rangesById = useMemo(() => new Map(ranges.map((r) => [r.id, r])), [ranges]);
 
+  // Manually-pinned Planner lanes (dragged vertically — see assignLanes in lib/ganttLayout.ts).
+  // Built once from every task, not scoped per row: assignLanes only ever looks up ids that are
+  // actually present in whichever row's own range set it's packing, so handing it the full map
+  // every time is harmless and means a pin is respected identically in every row a task spans.
+  const pinnedLanes = useMemo(() => {
+    const map = new Map<string, number>();
+    for (const task of tasks) {
+      if (task.calendarLane !== null && task.calendarLane !== undefined) map.set(task.id, task.calendarLane);
+    }
+    return map;
+  }, [tasks]);
+
   const drillToDay = (day: Date) => {
     setFocusDate(day);
     setGranularity('day');
@@ -153,7 +166,7 @@ export default function CalendarView({ tasks, statuses, workspaces, onOpenTask, 
       const weekStart = weekDays[0];
       const weekEnd = weekDays[6];
       const rowRanges = visibleRanges.filter((r) => r.end >= weekStart && r.start <= weekEnd);
-      const rowLanes = assignLanes(rowRanges);
+      const rowLanes = assignLanes(rowRanges, pinnedLanes);
       for (const [id, lane] of rowLanes) allRowLanes.set(id, lane);
       return rowRanges.map((r) => clipRangeToWeek(r, weekDays, rowLanes.get(r.id) ?? 0)).filter((s): s is ClippedSegment => !!s);
     });
@@ -189,13 +202,31 @@ export default function CalendarView({ tasks, statuses, workspaces, onOpenTask, 
     return daysBetween(gridStartDate, weeks[rowIndex][colIndex]);
   };
 
+  // Same idea, one axis over: maps a pointer's Y position to a lane index within whichever row
+  // it's currently over — same math WeekRow.tsx itself uses to position a bar at `seg.lane *
+  // (BAR_H + BAR_GAP)` from the row's own top (DAY_NUM_H down). Clamped to the visible lane cap,
+  // not to whichever lanes happen to be occupied right now — dropping into an empty lane below
+  // the busiest row's current usage is a valid, common case (that's the whole point).
+  const laneOffsetFromPoint = (clientY: number) => {
+    const el = gridContainerRef.current;
+    if (!el || weeks.length === 0) return null;
+    const rect = el.getBoundingClientRect();
+    const relY = clientY - rect.top + el.scrollTop;
+    const rowIndex = Math.min(weeks.length - 1, Math.max(0, Math.floor(relY / rowHeight)));
+    const withinRow = relY - rowIndex * rowHeight - DAY_NUM_H;
+    return Math.max(0, Math.min(maxVisibleLanes - 1, Math.floor(withinRow / (BAR_H + BAR_GAP))));
+  };
+
   const handleDragStart = (taskId: string, mode: DragMode, e: React.PointerEvent) => {
     const range = rangesById.get(taskId);
     const grabOffset = dayOffsetFromPoint(e.clientX, e.clientY);
     if (!range || grabOffset === null) return;
     const taskStartOffset = daysBetween(gridStartDate, range.start);
     const anchorDays = mode === 'move' ? grabOffset - taskStartOffset : 0;
-    setWeekDrag({ taskId, mode, deltaDays: 0, anchorDays });
+    const taskLane = lanes.get(taskId) ?? 0;
+    const grabLane = laneOffsetFromPoint(e.clientY) ?? taskLane;
+    const anchorLane = mode === 'move' ? grabLane - taskLane : 0;
+    setWeekDrag({ taskId, mode, deltaDays: 0, anchorDays, deltaLanes: 0, anchorLane });
   };
 
   const handleDragMove = (e: React.PointerEvent) => {
@@ -210,38 +241,74 @@ export default function CalendarView({ tasks, statuses, workspaces, onOpenTask, 
       if (d.mode === 'move') deltaDays = hoverOffset - d.anchorDays - taskStartOffset;
       else if (d.mode === 'resize-start') deltaDays = hoverOffset - taskStartOffset;
       else deltaDays = hoverOffset - taskEndOffset;
-      return { ...d, deltaDays };
+
+      let deltaLanes = 0;
+      if (d.mode === 'move') {
+        const taskLane = lanes.get(d.taskId) ?? 0;
+        const hoverLane = laneOffsetFromPoint(e.clientY);
+        if (hoverLane !== null) deltaLanes = hoverLane - d.anchorLane - taskLane;
+      }
+      return { ...d, deltaDays, deltaLanes };
     });
   };
 
   const handleDragEnd = (task: Task, mode: DragMode) => {
     const d = weekDrag;
-    if (d && d.deltaDays !== 0) {
+    if (d) {
       const start = task.startDate ? new Date(task.startDate) : null;
       const due = task.dueDate ? new Date(task.dueDate) : null;
       let newStart = start;
       let newDue = due;
-      if (mode === 'move') {
-        if (newStart) newStart = addDays(newStart, d.deltaDays);
-        if (newDue) newDue = addDays(newDue, d.deltaDays);
-      } else if (mode === 'resize-start') {
-        // No start date yet (task only had a due date) — stretching from the start
-        // edge creates one, anchored off the single visible date.
-        const base = start ?? due;
-        if (base) {
-          newStart = addDays(base, d.deltaDays);
-          if (newDue && newStart > newDue) newStart = new Date(newDue);
+      if (d.deltaDays !== 0) {
+        if (mode === 'move') {
+          if (newStart) newStart = addDays(newStart, d.deltaDays);
+          if (newDue) newDue = addDays(newDue, d.deltaDays);
+        } else if (mode === 'resize-start') {
+          // No start date yet (task only had a due date) — stretching from the start
+          // edge creates one, anchored off the single visible date.
+          const base = start ?? due;
+          if (base) {
+            newStart = addDays(base, d.deltaDays);
+            if (newDue && newStart > newDue) newStart = new Date(newDue);
+          }
+        } else if (mode === 'resize-end') {
+          // No due date yet (task only had a start date) — stretching from the end
+          // edge creates one, anchored off the single visible date.
+          const base = due ?? start;
+          if (base) {
+            newDue = addDays(base, d.deltaDays);
+            if (newStart && newDue < newStart) newDue = new Date(newStart);
+          }
         }
-      } else if (mode === 'resize-end') {
-        // No due date yet (task only had a start date) — stretching from the end
-        // edge creates one, anchored off the single visible date.
-        const base = due ?? start;
-        if (base) {
-          newDue = addDays(base, d.deltaDays);
-          if (newStart && newDue < newStart) newDue = new Date(newStart);
+        optimisticSetDates(task.id, newStart ? newStart.toISOString() : null, newDue ? newDue.toISOString() : null);
+      }
+
+      // Vertical drag = manual lane pin — only meaningful for 'move' (resizing an edge is a
+      // date-only gesture). Dropping onto a lane another overlapping task currently occupies
+      // swaps the two: the incumbent takes the dragged task's *original* lane rather than
+      // getting bumped off somewhere else, same "nothing vanishes, two things trade places"
+      // pattern already used for Space/List/Folder drag-reorder elsewhere in this app.
+      if (mode === 'move' && d.deltaLanes !== 0) {
+        const originalLane = lanes.get(task.id) ?? 0;
+        const targetLane = Math.max(0, Math.min(maxVisibleLanes - 1, originalLane + d.deltaLanes));
+        if (targetLane !== originalLane) {
+          const rangeStart = newStart ? startOfDay(newStart) : newDue ? startOfDay(newDue) : null;
+          const rangeEnd = newDue ? startOfDay(newDue) : newStart ? startOfDay(newStart) : null;
+          let swapPartnerId: string | null = null;
+          if (rangeStart && rangeEnd) {
+            for (const [otherId, otherLane] of lanes) {
+              if (otherId === task.id || otherLane !== targetLane) continue;
+              const otherRange = rangesById.get(otherId);
+              if (otherRange && otherRange.start <= rangeEnd && otherRange.end >= rangeStart) {
+                swapPartnerId = otherId;
+                break;
+              }
+            }
+          }
+          optimisticSetCalendarLane(task.id, targetLane);
+          if (swapPartnerId) optimisticSetCalendarLane(swapPartnerId, originalLane);
         }
       }
-      optimisticSetDates(task.id, newStart ? newStart.toISOString() : null, newDue ? newDue.toISOString() : null);
     }
     setWeekDrag(null);
   };
@@ -252,7 +319,9 @@ export default function CalendarView({ tasks, statuses, workspaces, onOpenTask, 
     if (!weekDrag || granularity === 'day') return [];
     const range = rangesById.get(weekDrag.taskId);
     if (!range) return [];
-    const lane = lanes.get(weekDrag.taskId) ?? 0;
+    const baseLane = lanes.get(weekDrag.taskId) ?? 0;
+    const lane =
+      weekDrag.mode === 'move' ? Math.max(0, Math.min(maxVisibleLanes - 1, baseLane + weekDrag.deltaLanes)) : baseLane;
     let newStart = range.start;
     let newEnd = range.end;
     if (weekDrag.mode === 'move') {
@@ -356,6 +425,7 @@ export default function CalendarView({ tasks, statuses, workspaces, onOpenTask, 
                 onDragStart={handleDragStart}
                 onDragMove={handleDragMove}
                 onDragEnd={handleDragEnd}
+                onUnpinLane={(taskId) => optimisticSetCalendarLane(taskId, null)}
               />
             ))}
 

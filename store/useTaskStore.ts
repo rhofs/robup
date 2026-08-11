@@ -245,6 +245,7 @@ interface TaskStore {
   optimisticSetAssignees: (taskId: string, userIds: string[]) => void;
   optimisticSetCustomFieldValue: (taskId: string, fieldId: string, value: string) => void;
   optimisticSetDates: (taskId: string, startDate: string | null, dueDate: string | null) => void;
+  optimisticSetCalendarLane: (taskId: string, lane: number | null) => void;
   optimisticSetList: (taskId: string, listId: string) => void;
   setTaskPrivacy: (taskId: string, isPrivate: boolean, accessJson: string) => void;
   optimisticSetParent: (taskId: string, parentId: string | null) => void;
@@ -780,6 +781,25 @@ export const useTaskStore = create<TaskStore>((set, get) => {
         label: 'Change dates',
         undo: () => get().optimisticSetDates(taskId, oldStart, oldDue),
         redo: () => get().optimisticSetDates(taskId, startDate, dueDate),
+      });
+    },
+
+    // Manual Planner lane pin (see lib/ganttLayout.ts's assignLanes) — same "trivial field,
+    // optimistic set + PATCH + undo/redo" shape as optimisticSetDates just above.
+    optimisticSetCalendarLane: (taskId, lane) => {
+      const oldLane = get().tasks.find((t) => t.id === taskId)?.calendarLane ?? null;
+      set((state) => ({
+        tasks: state.tasks.map((t) => (t.id === taskId ? { ...t, calendarLane: lane } : t)),
+      }));
+      fetch(`/api/tasks/${taskId}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ calendarLane: lane }),
+      });
+      useHistoryStore.getState().push({
+        label: 'Change Planner lane',
+        undo: () => get().optimisticSetCalendarLane(taskId, oldLane),
+        redo: () => get().optimisticSetCalendarLane(taskId, lane),
       });
     },
 

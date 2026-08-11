@@ -1,7 +1,7 @@
 'use client';
 
 import { useRef } from 'react';
-import { Plus } from 'lucide-react';
+import { Plus, Pin } from 'lucide-react';
 import { getISOWeek, isSameDay } from '../../lib/calendarDates';
 import type { ClippedSegment, DragMode, DragState } from '../../lib/ganttLayout';
 import type { Task } from '../../store/useTaskStore';
@@ -28,6 +28,7 @@ type WeekRowProps = {
   onDragStart: (taskId: string, mode: DragMode, e: React.PointerEvent) => void;
   onDragMove: (e: React.PointerEvent) => void;
   onDragEnd: (task: Task, mode: DragMode) => void;
+  onUnpinLane: (taskId: string) => void;
 };
 
 export default function WeekRow({
@@ -46,6 +47,7 @@ export default function WeekRow({
   onDragStart,
   onDragMove,
   onDragEnd,
+  onUnpinLane,
 }: WeekRowProps) {
   const pointerDownXYRef = useRef({ x: 0, y: 0 });
   const draggedRef = useRef(false);
@@ -208,6 +210,23 @@ export default function WeekRow({
                     />
                   )}
                 </div>
+
+                {/* Manually-pinned lane indicator (see Task.calendarLane / assignLanes) — a
+                    sibling of the draggable inner div, not nested inside it, so its own click
+                    never triggers the drag handlers above. Only shown on hover, same corner-badge
+                    convention as PersonAvatar's DND dot elsewhere in this app. */}
+                {task.calendarLane !== null && task.calendarLane !== undefined && (
+                  <button
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      onUnpinLane(task.id);
+                    }}
+                    title="Manually pinned to this lane — click to let it auto-arrange again"
+                    className="absolute -top-1 -right-1 z-10 w-3 h-3 rounded-full bg-neutral-900 border border-neutral-600 text-neutral-300 hover:text-white hover:border-white flex items-center justify-center opacity-0 group-hover/bar:opacity-100 transition cursor-pointer"
+                  >
+                    <Pin className="w-2 h-2" />
+                  </button>
+                )}
               </div>
             );
           })}
