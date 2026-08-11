@@ -2451,8 +2451,6 @@ function PageContent() {
                           className={`w-full text-left px-2.5 py-1.5 rounded text-xs font-medium transition flex items-center justify-between cursor-pointer group ${
                             isSpaceActive
                               ? 'bg-neutral-800 text-blue-400 font-semibold border-l-2 border-blue-500'
-                              : activeView === 'calendar' && spaceAllChecked
-                              ? 'text-blue-400'
                               : 'text-neutral-300 hover:bg-neutral-800/40'
                           } ${isOver ? 'ring-1 ring-inset ring-neutral-500 bg-neutral-700/40' : ''}`}
                         >
@@ -2508,7 +2506,7 @@ function PageContent() {
                             </span>
                             {activeView === 'calendar' && (
                               <span
-                                className={`w-3.5 h-3.5 rounded border flex items-center justify-center shrink-0 transition ${
+                                className={`w-3.5 h-3.5 rounded-xs border flex items-center justify-center shrink-0 transition ${
                                   spaceAllChecked
                                     ? 'bg-blue-500/20 border-blue-500/60 text-blue-400'
                                     : spaceSomeChecked
@@ -2519,7 +2517,12 @@ function PageContent() {
                                 {spaceAllChecked && <Check className="w-2.5 h-2.5" />}
                               </span>
                             )}
-                            <span className="truncate">{space.name}</span>
+                            {/* Own color always, independent of active/checked state — only the
+                                checkbox itself indicates "checked," same convention Google
+                                Calendar's sidebar uses (colored checkbox, plain-colored name). */}
+                            <span className="truncate" style={{ color: isSpaceActive ? undefined : space.color || undefined }}>
+                              {space.name}
+                            </span>
                             {space.isPrivate && <Lock className="w-2.5 h-2.5 text-neutral-500 shrink-0" />}
                           </span>
                           {activeView === 'board' && <span className="text-[10px] text-neutral-500 font-mono">{spaceTasksCount}</span>}

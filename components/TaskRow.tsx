@@ -162,9 +162,9 @@ function TaskRowImpl({
               e.stopPropagation();
               onToggleSelect?.();
             }}
-            className={`w-3.5 h-3.5 rounded border flex items-center justify-center cursor-pointer transition ${
+            className={`w-3.5 h-3.5 rounded-xs border flex items-center justify-center cursor-pointer transition ${
               isSelected
-                ? 'bg-blue-500 border-blue-500 text-white opacity-100'
+                ? 'bg-blue-500/20 border-blue-500/60 text-blue-400 opacity-100'
                 : 'border-neutral-600 opacity-0 group-hover:opacity-100'
             }`}
           >
@@ -191,7 +191,7 @@ function TaskRowImpl({
           {showAsDone && <Check className="w-2.5 h-2.5" />}
         </button>
 
-        <div className={`font-medium flex items-center gap-2 truncate pr-4 ${isSelected ? 'text-blue-400' : 'text-neutral-200'}`}>
+        <div className="font-medium flex items-center gap-2 truncate pr-4 text-neutral-200">
           {editingTitle ? (
             <input
               autoFocus

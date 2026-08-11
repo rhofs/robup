@@ -586,17 +586,13 @@ function ListRow({
         onContextMenu(e);
       }}
       className={`group w-full text-left px-2 py-1 rounded text-[11px] transition flex items-center justify-between cursor-pointer ${
-        isActive
-          ? 'bg-neutral-800 text-blue-400 font-medium'
-          : filterMode && checked
-          ? 'text-blue-400'
-          : 'text-neutral-400 hover:text-neutral-200 hover:bg-neutral-800/30'
+        isActive ? 'bg-neutral-800 text-blue-400 font-medium' : 'text-neutral-400 hover:text-neutral-200 hover:bg-neutral-800/30'
       } ${isOver ? 'ring-1 ring-inset ring-neutral-500 bg-neutral-700/40' : ''} ${isDragging ? 'opacity-40' : ''}`}
     >
       <span className="truncate flex items-center gap-1.5 min-w-0">
         {filterMode && (
           <span
-            className={`w-3.5 h-3.5 rounded border flex items-center justify-center shrink-0 transition ${
+            className={`w-3.5 h-3.5 rounded-xs border flex items-center justify-center shrink-0 transition ${
               checked ? 'bg-blue-500/20 border-blue-500/60 text-blue-400' : 'border-neutral-600'
             }`}
           >
@@ -608,7 +604,12 @@ function ListRow({
           const Icon = CustomIcon || ListIcon;
           return <Icon className="w-3 h-3 shrink-0" style={{ color: list.color || undefined }} />;
         })()}
-        <span className="truncate">{list.name}</span>
+        {/* Own color always, independent of the row's active/checked state — only the checkbox
+            itself (above) should indicate "checked," same convention Google Calendar's sidebar
+            uses (a colored checkbox, plain-colored calendar names). */}
+        <span className="truncate" style={{ color: isActive ? undefined : list.color || undefined }}>
+          {list.name}
+        </span>
         {list.isPrivate && <Lock className="w-2.5 h-2.5 text-neutral-500 shrink-0" />}
       </span>
       <span className="flex items-center gap-1 shrink-0">

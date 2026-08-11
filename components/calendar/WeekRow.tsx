@@ -21,7 +21,6 @@ type WeekRowProps = {
   monthAnchor?: Date;
   maxVisibleLanes: number;
   height: number;
-  overflowTop: number;
   activeDrag: DragState | null;
   onOpenTask: (id: string) => void;
   onDrillDay: (day: Date) => void;
@@ -40,7 +39,6 @@ export default function WeekRow({
   monthAnchor,
   maxVisibleLanes,
   height,
-  overflowTop,
   activeDrag,
   onOpenTask,
   onDrillDay,
@@ -59,6 +57,13 @@ export default function WeekRow({
     .forEach((s) => {
       for (let i = s.colStart; i < s.colStart + s.colSpan; i++) overflowByDay[i] = (overflowByDay[i] || 0) + 1;
     });
+
+  // Computed from THIS row's own bars, not a value shared across the whole month — otherwise a
+  // quiet row's "+N more" chip gets pushed down to match however tall the busiest row in the
+  // month happens to be, landing near the row's own bottom edge/boundary with the next row
+  // instead of sitting right under its own bars.
+  const laneCountInRow = Math.max(1, Math.min(maxVisibleLanes, visibleSegments.reduce((max, s) => Math.max(max, s.lane + 1), 0)));
+  const overflowTop = DAY_NUM_H + laneCountInRow * (BAR_H + BAR_GAP);
 
   const startInteraction = (e: React.PointerEvent, task: Task, mode: DragMode) => {
     e.stopPropagation();
@@ -128,6 +133,26 @@ export default function WeekRow({
                 >
                   <Plus className="w-2.5 h-2.5" />
                 </button>
+                {/* Nested inside this day's own cell (not a separate row-wide strip) so it reads
+                    as part of that day, not a floating element below the grid. Explicit z-10:
+                    this exact chip has previously ended up silently painted over by the day
+                    cell's own full-size button despite later DOM order — root cause never fully
+                    pinned down, so keep the defensive z-index rather than relying on DOM order. */}
+                {overflowByDay[i] > 0 && (
+                  <button
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      onDrillDay(day);
+                    }}
+                    className="absolute left-1 right-1 z-10 text-left cursor-pointer"
+                    style={{ top: overflowTop }}
+                  >
+                    <span className="inline-flex items-center gap-1 text-[9px] leading-none text-neutral-300 bg-neutral-800/70 hover:bg-neutral-700/80 border-l-2 border-neutral-600 rounded-sm pl-1 pr-1.5 py-[3px] transition">
+                      <span className="w-1.5 h-1 rounded-[1px] bg-neutral-500 shrink-0" />
+                      +{overflowByDay[i]} more
+                    </span>
+                  </button>
+                )}
               </div>
             );
           })}
@@ -186,24 +211,6 @@ export default function WeekRow({
               </div>
             );
           })}
-        </div>
-
-        {/* Own reserved strip below the visible lanes — never drawn where a bar could sit on
-            top of it and hide it, which is what happened when this lived in the day-number area.
-            Anchored to the top of the strip (right under its own day's last bar) and styled as a
-            small ghost-bar chip, not plain text, so it reads as "more bars stacked here" rather
-            than floating ambiguously near the row boundary below. */}
-        <div className="absolute inset-x-0 grid grid-cols-7 z-10" style={{ top: overflowTop, bottom: 0 }}>
-          {overflowByDay.map((count, i) => (
-            <button key={i} onClick={() => onDrillDay(weekDays[i])} className="text-left px-1 pt-0.5 cursor-pointer">
-              {count > 0 && (
-                <span className="inline-flex items-center gap-1 text-[9px] leading-none text-neutral-300 bg-neutral-800/70 hover:bg-neutral-700/80 border-l-2 border-neutral-600 rounded-sm pl-1 pr-1.5 py-[3px] transition">
-                  <span className="w-1.5 h-1 rounded-[1px] bg-neutral-500 shrink-0" />
-                  +{count} more
-                </span>
-              )}
-            </button>
-          ))}
         </div>
       </div>
     </div>

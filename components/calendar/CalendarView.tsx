@@ -24,7 +24,13 @@ type Granularity = 'month' | 'week' | 'day';
 // wasting the extra headroom on an early "+N more".
 const MONTH_MAX_LANES = 6;
 const WEEK_MAX_LANES = 12;
-const OVERFLOW_H = 14;
+// Measured against the chip's actual rendered height (24px, from its py-[3px] padding + line
+// height) plus a couple px of breathing room — this used to be 14, comfortably under-budgeted,
+// which was invisible while the old row-wide overflow strip just used `bottom: 0` and absorbed
+// the mismatch, but became a real few-px overflow past the cell's own bottom edge once the chip
+// moved to sit inside a specific day's own reserved space (a row exactly at the lane cap has
+// nothing left to absorb it).
+const OVERFLOW_H = 26;
 
 type CalendarViewProps = {
   tasks: Task[];
@@ -44,8 +50,6 @@ export default function CalendarView({ tasks, statuses, workspaces, onOpenTask, 
   } = useTaskStore();
   const [weekDrag, setWeekDrag] = useState<DragState | null>(null);
   const gridContainerRef = useRef<HTMLDivElement>(null);
-  // Sticky lane memory across renders — see assignLanes' doc comment for why this matters.
-  const previousLanesRef = useRef<Map<string, number>>(new Map());
 
   // Row height used to be purely content-driven (just tall enough for the day number + however
   // many task bars are in it), which left a large dead void below the grid on a light/empty
@@ -137,34 +141,38 @@ export default function CalendarView({ tasks, statuses, workspaces, onOpenTask, 
     const gridStart = days[0];
     const gridEnd = days[days.length - 1];
     const visibleRanges = ranges.filter((r) => r.end >= gridStart && r.start <= gridEnd);
-    lanes = assignLanes(visibleRanges, previousLanesRef.current);
-    previousLanesRef.current = lanes;
-    segmentsByWeek = weeks.map((weekDays) =>
-      visibleRanges
-        .map((r) => clipRangeToWeek(r, weekDays, lanes.get(r.id) ?? 0))
-        .filter((s): s is ClippedSegment => !!s)
-    );
+
+    // assignLanes is called once PER ROW, not once for the whole visible grid — a long chain of
+    // back-to-back overlapping multi-day bars (e.g. several staggered vacation entries) used to
+    // merge into one shared cluster spanning the whole month, so every day inside that chain drew
+    // from the same maxVisibleLanes budget: dragging a task to a different day still inside that
+    // same chain never actually freed a slot, since it never left the shared pool. Scoping the
+    // packing to one row at a time is what makes "N visible per day" actually mean that.
+    const allRowLanes = new Map<string, number>();
+    segmentsByWeek = weeks.map((weekDays) => {
+      const weekStart = weekDays[0];
+      const weekEnd = weekDays[6];
+      const rowRanges = visibleRanges.filter((r) => r.end >= weekStart && r.start <= weekEnd);
+      const rowLanes = assignLanes(rowRanges);
+      for (const [id, lane] of rowLanes) allRowLanes.set(id, lane);
+      return rowRanges.map((r) => clipRangeToWeek(r, weekDays, rowLanes.get(r.id) ?? 0)).filter((s): s is ClippedSegment => !!s);
+    });
+    lanes = allRowLanes;
     maxVisibleLanes = granularity === 'month' ? MONTH_MAX_LANES : WEEK_MAX_LANES;
   }
 
-  // `overflowTop` is where the "+N more" strip for a row starts — right below the last
-  // visible lane. It must be a real reserved strip, not drawn inside the day-number area,
-  // or it silently sits underneath the bars of whichever day is already fully crowded —
-  // which is exactly the day that needs it most, so tasks past the cap looked like they'd
-  // vanished with no indication at all.
-  const { rowHeight, overflowTop } = useMemo(() => {
-    if (granularity === 'day') return { rowHeight: 0, overflowTop: 0 };
-    const used = Math.max(0, ...segmentsByWeek.flat().map((s) => s.lane + 1));
-    const laneCount = Math.max(1, Math.min(maxVisibleLanes, used));
-    const hasOverflow = segmentsByWeek.flat().some((s) => s.lane >= maxVisibleLanes);
-    const top = DAY_NUM_H + laneCount * (BAR_H + BAR_GAP);
-    const contentHeight = top + (hasOverflow ? OVERFLOW_H : 0);
-    // overflowTop stays anchored to the content height (where the "+N more" strip actually
-    // starts) regardless of stretching — only the row's own total height grows to fill the
-    // container, leaving extra blank space at the bottom of each cell, not moving that strip.
-    const stretched = weeks.length > 0 && containerHeight > 0 ? Math.max(contentHeight, containerHeight / weeks.length) : contentHeight;
-    return { rowHeight: stretched, overflowTop: top };
-  }, [granularity, segmentsByWeek, maxVisibleLanes, containerHeight, weeks.length]);
+  // A fixed size, not content-driven — always reserves room for the full maxVisibleLanes cap
+  // plus the overflow strip, whether or not any given render actually uses all of it. Used to be
+  // computed from how many lanes were actually in use *anywhere in the visible month*, which
+  // meant every row's height (and the "+N more" chip's own vertical spot within its row, see
+  // WeekRow.tsx) shifted by OVERFLOW_H the instant overflow appeared or cleared *anywhere* in the
+  // grid — dragging one task in or out of a pileup made the whole calendar grow or shrink under
+  // you. A constant reserved height, same as a real calendar app's day cells, fixes that.
+  const rowHeight = useMemo(() => {
+    if (granularity === 'day') return 0;
+    const contentHeight = DAY_NUM_H + maxVisibleLanes * (BAR_H + BAR_GAP) + OVERFLOW_H;
+    return weeks.length > 0 && containerHeight > 0 ? Math.max(contentHeight, containerHeight / weeks.length) : contentHeight;
+  }, [granularity, maxVisibleLanes, containerHeight, weeks.length]);
 
   const gridStartDate = weeks.length > 0 ? weeks[0][0] : today;
 
@@ -341,7 +349,6 @@ export default function CalendarView({ tasks, statuses, workspaces, onOpenTask, 
                 monthAnchor={granularity === 'month' ? focusDate : undefined}
                 maxVisibleLanes={maxVisibleLanes}
                 height={rowHeight}
-                overflowTop={overflowTop}
                 activeDrag={weekDrag}
                 onOpenTask={onOpenTask}
                 onDrillDay={drillToDay}

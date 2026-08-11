@@ -12,28 +12,31 @@ export type DragState = {
   anchorDays: number;
 };
 
-// Greedy interval-graph coloring: each task gets the first lane whose previous
-// occupant already ended, else a new lane. Computed once over the whole visible
-// range so a task keeps the same lane in every week row it appears in.
+// Greedy interval-graph coloring: each task gets the lowest lane whose previous occupant
+// already ended, else a new lane, processed in start-date order. This is the textbook-optimal
+// algorithm for this problem — first-fit-by-start-time always uses the true minimum number of
+// lanes for a set of overlapping intervals — so it always produces a dense, gap-free packing on
+// its own; no separate compaction step is needed.
 //
-// `previousLanes` (if given) is consulted first: a task tries to keep the lane it
-// had last time before falling back to "first free lane". Without this, moving a
-// single task re-sorts everyone by start date and can shuffle every other task's
-// lane on the same render — including bumping some past the visible lane cap, so
-// they silently vanish into "+N more" even though nothing about them changed.
-export function assignLanes(ranges: TaskRange[], previousLanes?: Map<string, number>): Map<string, number> {
+// A previous version of this function also accepted a `previousLanes` hint (try to keep a task
+// in the lane it had last render, before falling back to first-free) specifically to stop one
+// dragged task from reshuffling every other task's lane on the same render. That traded away
+// correctness for stability in a way that back-fired: a task that could have shared an already-
+// freed lane sometimes didn't, because its neighbors' stale hints kept pointing at their own old
+// (now non-adjacent) slots, leaving a visible gap and inflating the overflow count by one more
+// than necessary — reported twice independently (a stuck "+N more" after dragging a task away,
+// and a bar sitting one lane lower than a visibly free lane above it). Recomputing fresh, hint-
+// free, every render is what "compact upward into free space when it opens up" actually requires
+// — the two goals were in direct conflict, and correctness is the one that was actually asked for.
+export function assignLanes(ranges: TaskRange[]): Map<string, number> {
   const sorted = [...ranges].sort((a, b) => a.start.getTime() - b.start.getTime());
   const isFree = (end: number | undefined, startTime: number) => end === undefined || end < startTime;
   const lanes = new Map<string, number>();
 
-  // Lane assignment AND compaction both run per connected overlap cluster (merge-overlapping-
-  // intervals), not globally across the whole visible range. Without this, a task that moves
-  // away from a crowded pileup keeps whatever lane number the pileup pushed it to, because
-  // compaction only closes a gap when NOTHING in the entire month still occupies the lower
-  // lane numbers — so as long as some unrelated pileup elsewhere keeps lanes 0-3 "in use",
-  // a task with real breathing room on its own day stays stuck past the visible cap forever,
-  // and the day it left behind never drops its "+N more" count either. Clustering scopes both
-  // steps to only the tasks actually competing for space together.
+  // Lane assignment runs per connected overlap cluster (merge-overlapping-intervals), not
+  // globally across the whole visible range — otherwise a task with real breathing room on its
+  // own day/row could still be constrained by an unrelated pileup elsewhere sharing the same
+  // numbering space. Clustering scopes it to only the tasks actually competing for space together.
   let i = 0;
   while (i < sorted.length) {
     let clusterEnd = sorted[i].end.getTime();
@@ -48,30 +51,14 @@ export function assignLanes(ranges: TaskRange[], previousLanes?: Map<string, num
     }
     const cluster = sorted.slice(i, j);
 
-    // Sparse: a "preferred" lane far past what's been used yet leaves holes at the
-    // skipped indices. Array.prototype.findIndex still visits those holes as
-    // `undefined`, and `undefined < x` is always false — so without treating a hole
-    // explicitly as free, those lane slots silently become permanently unusable and
-    // every later task gets pushed further out, past the visible lane cap for good.
-    const laneEnds: (number | undefined)[] = [];
-    const clusterLanes = new Map<string, number>();
+    const laneEnds: number[] = [];
     for (const r of cluster) {
       const startTime = r.start.getTime();
-      const preferred = previousLanes?.get(r.id);
-      let laneIdx =
-        preferred !== undefined && isFree(laneEnds[preferred], startTime)
-          ? preferred
-          : laneEnds.findIndex((end) => isFree(end, startTime));
+      let laneIdx = laneEnds.findIndex((end) => isFree(end, startTime));
       if (laneIdx === -1) laneIdx = laneEnds.length;
       laneEnds[laneIdx] = r.end.getTime();
-      clusterLanes.set(r.id, laneIdx);
+      lanes.set(r.id, laneIdx);
     }
-
-    // Renumber this cluster's lanes actually in use to a dense 0..k-1 range, preserving
-    // relative order, so gaps collapse within the cluster once crowding within it eases.
-    const usedLanes = [...new Set(clusterLanes.values())].sort((a, b) => a - b);
-    const remap = new Map(usedLanes.map((lane, idx) => [lane, idx]));
-    for (const [id, lane] of clusterLanes) lanes.set(id, remap.get(lane)!);
 
     i = j;
   }
