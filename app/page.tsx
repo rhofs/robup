@@ -3466,6 +3466,7 @@ function PageContent() {
                 ensurePersonalWorkspace={ensurePersonalWorkspace}
                 onCreateTask={(title, listId, spaceId) => optimisticCreateTask(title, listId, spaceId)}
                 onOpenTask={(id) => setModalTaskStack([id])}
+                onSetStatus={(taskId, status) => optimisticMoveTask(taskId, status)}
               />
             ) : activeView === 'profile' ? (
               <ProfilePage
