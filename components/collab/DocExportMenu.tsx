@@ -78,6 +78,14 @@ export default function DocExportMenu({ docId, onToast }: DocExportMenuProps) {
       >
         <FileText className="w-3.5 h-3.5 shrink-0" /> Download PDF
       </a>
+      <a
+        href={`/api/docs/${docId}/export/text`}
+        download
+        onClick={() => setOpen(false)}
+        className="w-full text-left px-3 py-1.5 text-xs text-neutral-300 hover:bg-neutral-800/60 cursor-pointer flex items-center gap-2"
+      >
+        <FileText className="w-3.5 h-3.5 shrink-0" /> Download plain text
+      </a>
       <button
         onClick={handleExportGoogle}
         disabled={exporting}

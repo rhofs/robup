@@ -79,13 +79,24 @@ export function assignLanes(ranges: TaskRange[], pinnedLanes?: Map<string, numbe
     const laneEnds: number[] = [];
     const pinnedIntervals = new Map<number, { start: number; end: number }[]>();
 
+    // Two *different* tasks can each carry a pin to the same lane — dragged there at different
+    // times, when their date ranges didn't yet conflict (e.g. before one's due date moved). If
+    // their ranges now genuinely overlap, honoring both pins literally would stack them on top of
+    // each other with no lane conflict ever detected, since this loop only ever checked unpinned
+    // tasks against pins, never a pin against an earlier pin in the same lane. `cluster` is already
+    // start-time ordered (inherited from `sorted`), so the earlier-starting pin wins its lane
+    // outright; a later pin that collides with it is dropped here and falls through to the greedy
+    // pass below, which already knows how to route around occupied pinned intervals.
     for (const r of cluster) {
       const pinned = pinnedLanes?.get(r.id);
       if (pinned === undefined) continue;
+      const startTime = r.start.getTime();
+      const endTime = r.end.getTime();
+      const existing = pinnedIntervals.get(pinned) ?? [];
+      if (existing.some((p) => overlaps(startTime, endTime, p.start, p.end))) continue;
       lanes.set(r.id, pinned);
-      const list = pinnedIntervals.get(pinned) ?? [];
-      list.push({ start: r.start.getTime(), end: r.end.getTime() });
-      pinnedIntervals.set(pinned, list);
+      existing.push({ start: startTime, end: endTime });
+      pinnedIntervals.set(pinned, existing);
     }
 
     // A cluster of N tasks never needs more than N lanes even in the degenerate all-overlapping

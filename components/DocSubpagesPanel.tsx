@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react';
 import { ChevronRight, ChevronDown, FileText, Plus } from 'lucide-react';
 import { useTaskStore, type AppUser, type HierarchySpace, type TaskDoc } from '../store/useTaskStore';
 import { getChildDocs } from '../lib/docFolderTree';
+import { activeGlowStyle } from '../lib/activeGlowStyle';
 
 // A dedicated column between the main app sidebar and the open Doc's own content — not stacked
 // above the document (that was the first cut; moved here per explicit user feedback). Shows the
@@ -142,7 +143,7 @@ function PageRow({
         onClick={() => onOpenDoc(doc.id)}
         onContextMenu={(e) => onContextMenu(e, doc)}
         className={`group w-full flex items-center gap-1 px-1.5 py-1 rounded text-[11px] cursor-pointer transition ${
-          isActive ? 'bg-neutral-800 text-blue-400 font-medium' : 'text-neutral-300 hover:text-neutral-200 hover:bg-neutral-800/40'
+          isActive ? 'bg-neutral-800 font-medium' : 'text-neutral-300 hover:text-neutral-200 hover:bg-neutral-800/40'
         }`}
         style={{ paddingLeft: 6 + depth * 14 }}
       >
@@ -160,7 +161,9 @@ function PageRow({
           <span className="w-3 shrink-0" />
         )}
         <FileText className="w-3 h-3 shrink-0" style={{ color: doc.color || undefined }} />
-        <span className="truncate flex-1">{doc.title || 'Untitled'}</span>
+        <span className="truncate flex-1" style={isActive ? activeGlowStyle(doc.color) : { color: doc.color || undefined }}>
+          {doc.title || 'Untitled'}
+        </span>
         {owner && (
           <span
             title={owner.name}

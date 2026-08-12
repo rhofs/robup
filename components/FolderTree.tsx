@@ -92,6 +92,7 @@ import {
 import { useTaskStore, HierarchySpace, HierarchyFolder, HierarchyList, Task, TaskDoc } from '../store/useTaskStore';
 import { getChildFolders, getListsIn, collectListIdsUnder } from '../lib/folderTree';
 import { getSpaceDocsIn } from '../lib/docFolderTree';
+import { activeGlowStyle } from '../lib/activeGlowStyle';
 
 const COLLAPSED_FOLDERS_STORAGE_KEY = 'robup.collapsedFolders';
 
@@ -297,18 +298,22 @@ function FolderLevel(props: FolderTreeProps & { parentId: string | null; depth: 
         );
       })}
 
-      {docs.map((doc) => (
-        <DocRow
-          key={doc.id}
-          doc={doc}
-          isActive={props.activeStandaloneDocId === doc.id}
-          onOpen={() => props.onOpenDoc(doc.id)}
-          onDeleteRequest={() => props.onDeleteDocRequest(doc)}
-          onContextMenu={(e) => props.onDocContextMenu(e, doc)}
-          renameDocId={props.renameDocId}
-          onRenameDocHandled={props.onRenameDocHandled}
-        />
-      ))}
+      {/* Planner's sidebar is a Lists/Folders filter, not a navigation tree — Docs have no
+          calendar-filter meaning there (clicking one did nothing), so they're only shown in the
+          Tasks-tab (board) rendering of this same shared component. */}
+      {activeView !== 'calendar' &&
+        docs.map((doc) => (
+          <DocRow
+            key={doc.id}
+            doc={doc}
+            isActive={props.activeStandaloneDocId === doc.id}
+            onOpen={() => props.onOpenDoc(doc.id)}
+            onDeleteRequest={() => props.onDeleteDocRequest(doc)}
+            onContextMenu={(e) => props.onDocContextMenu(e, doc)}
+            renameDocId={props.renameDocId}
+            onRenameDocHandled={props.onRenameDocHandled}
+          />
+        ))}
 
       {addMode ? (
         <input
@@ -338,16 +343,18 @@ function FolderLevel(props: FolderTreeProps & { parentId: string | null; depth: 
           >
             <Plus className="w-3 h-3" /> New list
           </button>
-          <button
-            onClick={() => {
-              setDraft('');
-              setAddMode('doc');
-            }}
-            title="New doc"
-            className="px-1.5 py-1 rounded text-[11px] text-neutral-500 hover:text-blue-400 hover:bg-neutral-800/30 cursor-pointer"
-          >
-            <FileText className="w-3 h-3" />
-          </button>
+          {activeView !== 'calendar' && (
+            <button
+              onClick={() => {
+                setDraft('');
+                setAddMode('doc');
+              }}
+              title="New doc"
+              className="px-1.5 py-1 rounded text-[11px] text-neutral-500 hover:text-blue-400 hover:bg-neutral-800/30 cursor-pointer"
+            >
+              <FileText className="w-3 h-3" />
+            </button>
+          )}
           <button
             onClick={() => {
               setDraft('');
@@ -427,12 +434,14 @@ function DocRow({
       onClick={onOpen}
       onContextMenu={onContextMenu}
       className={`group w-full text-left px-2 py-1 rounded text-[11px] transition flex items-center justify-between cursor-pointer ${
-        isActive ? 'bg-neutral-800 text-blue-400 font-medium' : 'text-neutral-400 hover:text-neutral-200 hover:bg-neutral-800/30'
+        isActive ? 'bg-neutral-800 font-medium' : 'text-neutral-400 hover:text-neutral-200 hover:bg-neutral-800/30'
       }`}
     >
       <span className="truncate flex items-center gap-1.5 min-w-0">
         <FileText className="w-3 h-3 shrink-0" style={{ color: doc.color || undefined }} />
-        <span className="truncate">{doc.title || 'Untitled'}</span>
+        <span className="truncate" style={isActive ? activeGlowStyle(doc.color) : { color: doc.color || undefined }}>
+          {doc.title || 'Untitled'}
+        </span>
       </span>
       <button
         onClick={(e) => {
@@ -713,7 +722,7 @@ function ListRow({
         onContextMenu(e);
       }}
       className={`group w-full text-left px-2 py-1 rounded text-[11px] transition flex items-center justify-between cursor-pointer ${
-        isActive ? 'bg-neutral-800 text-blue-400 font-medium' : 'text-neutral-400 hover:text-neutral-200 hover:bg-neutral-800/30'
+        isActive ? 'bg-neutral-800 font-medium' : 'text-neutral-400 hover:text-neutral-200 hover:bg-neutral-800/30'
       } ${isOver ? 'ring-1 ring-inset ring-neutral-500 bg-neutral-700/40' : ''} ${isDragging ? 'opacity-40' : ''}`}
     >
       <span className="truncate flex items-center gap-1.5 min-w-0">
@@ -731,10 +740,10 @@ function ListRow({
           const Icon = CustomIcon || ListIcon;
           return <Icon className="w-3 h-3 shrink-0" style={{ color: list.color || undefined }} />;
         })()}
-        {/* Own color always, independent of the row's active/checked state — only the checkbox
-            itself (above) should indicate "checked," same convention Google Calendar's sidebar
-            uses (a colored checkbox, plain-colored calendar names). */}
-        <span className="truncate" style={{ color: isActive ? undefined : list.color || undefined }}>
+        {/* Own color always — only the checkbox indicates "checked" (Google Calendar's sidebar
+            convention); when active/open, the name glows a bright version of that same color
+            instead of switching to blue. */}
+        <span className="truncate" style={isActive ? activeGlowStyle(list.color) : { color: list.color || undefined }}>
           {list.name}
         </span>
         {list.isPrivate && <Lock className="w-2.5 h-2.5 text-neutral-500 shrink-0" />}

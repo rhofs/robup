@@ -3,7 +3,7 @@ type PMNode = {
   type: string;
   text?: string;
   marks?: Mark[];
-  attrs?: { level?: number; kind?: string; id?: string; label?: string; textAlign?: string };
+  attrs?: { level?: number; kind?: string; id?: string; label?: string; textAlign?: string; src?: string; alt?: string };
   content?: PMNode[];
 };
 
@@ -19,17 +19,17 @@ type Run = {
   fontFamily?: string;
   link?: string;
 };
-type Line = { runs: Run[]; headingLevel?: number; listType?: 'bullet' | 'ordered'; textAlign?: string };
+type Line = { runs: Run[]; headingLevel?: number; listType?: 'bullet' | 'ordered'; textAlign?: string; imageUrl?: string };
 
-// Same curated font-family choices as DocFormatPanel.tsx/docJSONToPdf.ts, mapped to real font
-// names Google Docs' weightedFontFamily field can render exactly — no font embedding involved
-// either way, since Google Docs already has these fonts available.
+// Unlike PDF export (pdfkit only ships 3 built-in families, so it has to round down to the
+// closest), Google Docs' weightedFontFamily field accepts any real font name and renders it
+// directly — so every curated family in DocFormatPanel.tsx's FONT_FAMILIES round-trips exactly
+// here, not just a hardcoded couple. The CSS stack's primary (first) name already *is* that real
+// font name; no lookup table needed on this side.
 function googleFontFamily(cssFontFamily?: string): string | undefined {
   if (!cssFontFamily) return undefined;
-  const lower = cssFontFamily.toLowerCase();
-  if (lower.includes('courier') || lower.includes('monospace')) return 'Courier New';
-  if (lower.includes('georgia') || lower.includes('serif')) return 'Georgia';
-  return undefined;
+  const primary = cssFontFamily.split(',')[0].trim().replace(/^["']|["']$/g, '');
+  return primary || undefined;
 }
 
 // Google Docs' updateTextStyle color fields want {color: {rgbColor: {red, green, blue}}} with
@@ -96,6 +96,13 @@ function flattenLines(node: PMNode, out: Line[]) {
     out.push({ runs: [{ text: '[Subpages]', bold: true, italic: false, underline: false, strike: false }] });
     return;
   }
+  if (node.type === 'image' && node.attrs?.src) {
+    // Real image insert, not a placeholder — unlike PDF export, the Google Docs API's own
+    // insertInlineImage request just needs a `uri` and fetches it server-side, so this round-trips
+    // with no local image-fetching plumbing needed.
+    out.push({ runs: [], imageUrl: node.attrs.src });
+    return;
+  }
   if (node.type === 'bulletList' || node.type === 'orderedList') {
     const listType = node.type === 'orderedList' ? 'ordered' : 'bullet';
     (node.content ?? []).forEach((item) => {
@@ -131,9 +138,15 @@ export function docJSONToGoogleRequests(json: { content?: PMNode[] }) {
   const paragraphStyleRequests: any[] = [];
   const bulletRequests: any[] = [];
   const textStyleRequests: any[] = [];
+  // Applied last, in descending index order (each insert shifts everything after it by one — the
+  // standard "back to front" trick keeps every not-yet-applied index still valid), since
+  // insertInlineImage is itself an insert like insertText, not a style request targeting an
+  // already-final range the way every other request in this file is.
+  const imageInserts: { index: number; uri: string }[] = [];
 
   for (const line of lines) {
     const lineStart = offset;
+    if (line.imageUrl) imageInserts.push({ index: lineStart, uri: line.imageUrl });
     for (const run of line.runs) {
       const runStart = offset;
       text += run.text;
@@ -193,5 +206,15 @@ export function docJSONToGoogleRequests(json: { content?: PMNode[] }) {
     }
   }
 
-  return [{ insertText: { location: { index: 1 }, text } }, ...paragraphStyleRequests, ...bulletRequests, ...textStyleRequests];
+  const sortedImageRequests = imageInserts
+    .sort((a, b) => b.index - a.index)
+    .map(({ index, uri }) => ({ insertInlineImage: { location: { index }, uri } }));
+
+  return [
+    { insertText: { location: { index: 1 }, text } },
+    ...paragraphStyleRequests,
+    ...bulletRequests,
+    ...textStyleRequests,
+    ...sortedImageRequests,
+  ];
 }

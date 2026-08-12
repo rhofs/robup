@@ -14,6 +14,7 @@ const slashCommandPluginKey = new PluginKey('slashCommand');
 export type SlashCommandOptions = {
   spaceId?: string;
   docId: string;
+  onRequestImage?: () => void;
 };
 
 // No persistent Node needed — every command runs editor operations immediately (or, for New
@@ -24,7 +25,7 @@ export const SlashCommand = Extension.create<SlashCommandOptions>({
   name: 'slashCommand',
 
   addOptions() {
-    return { spaceId: undefined, docId: '' };
+    return { spaceId: undefined, docId: '', onRequestImage: undefined };
   },
 
   addProseMirrorPlugins() {

@@ -3,7 +3,7 @@ type PMNode = {
   type: string;
   text?: string;
   marks?: Mark[];
-  attrs?: { level?: number; kind?: string; id?: string; label?: string; textAlign?: string };
+  attrs?: { level?: number; kind?: string; id?: string; label?: string; textAlign?: string; alt?: string; src?: string };
   content?: PMNode[];
 };
 
@@ -18,12 +18,34 @@ const LIST_INDENT = 18;
 // the exact __dirname-relative-asset class of bug pdfkit already bit this project with once
 // (see PLANNING.md's Known bugs). Anything not recognized falls back to the Helvetica family,
 // same as before this feature existed.
+// Looked up by the CSS stack's primary (first, before the comma) font name — not loose substring
+// matching, which previously miscategorized every sans-serif family as serif, since the string
+// "sans-serif" itself contains "serif" as a substring. Keep in sync with DocFormatPanel.tsx's
+// FONT_FAMILIES list.
+const FONT_CATEGORY_BY_NAME: Record<string, 'serif' | 'monospace' | 'sans'> = {
+  arial: 'sans',
+  helvetica: 'sans',
+  verdana: 'sans',
+  tahoma: 'sans',
+  'trebuchet ms': 'sans',
+  'comic sans ms': 'sans',
+  impact: 'sans',
+  georgia: 'serif',
+  'times new roman': 'serif',
+  times: 'serif',
+  'palatino linotype': 'serif',
+  palatino: 'serif',
+  garamond: 'serif',
+  'courier new': 'monospace',
+  courier: 'monospace',
+  'lucida console': 'monospace',
+  monaco: 'monospace',
+};
+
 function familyCategory(cssFontFamily?: string): 'serif' | 'monospace' | 'sans' {
   if (!cssFontFamily) return 'sans';
-  const lower = cssFontFamily.toLowerCase();
-  if (lower.includes('courier') || lower.includes('monospace')) return 'monospace';
-  if (lower.includes('georgia') || lower.includes('serif')) return 'serif';
-  return 'sans';
+  const primary = cssFontFamily.split(',')[0].trim().replace(/^["']|["']$/g, '').toLowerCase();
+  return FONT_CATEGORY_BY_NAME[primary] ?? 'sans';
 }
 
 function fontFor(bold: boolean, italic: boolean, family: 'serif' | 'monospace' | 'sans'): string {
@@ -134,6 +156,14 @@ function renderBlock(doc: PDFKit.PDFDocument, node: PMNode, depth: number) {
     // silently contributing nothing (the generic child-recursing fallback below would, since this
     // node has no `content`).
     writeLine(doc, undefined, { size: BODY_SIZE, bold: true, indent: depth * LIST_INDENT, marker: '[Subpages]' });
+    doc.moveDown(0.4);
+    return;
+  }
+  if (node.type === 'image') {
+    // Placeholder text only, deliberately — pdfkit's doc.image() needs a local Buffer/path, not a
+    // remote URL, so embedding the real image would need async URL-fetching threaded through this
+    // otherwise-synchronous walker. A separate, larger piece of work if wanted later.
+    writeLine(doc, undefined, { size: BODY_SIZE, bold: true, indent: depth * LIST_INDENT, marker: `[Image${node.attrs?.alt ? `: ${node.attrs.alt}` : ''}]` });
     doc.moveDown(0.4);
     return;
   }

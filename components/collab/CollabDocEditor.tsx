@@ -9,7 +9,7 @@ import Paragraph from '@tiptap/extension-paragraph';
 import Text from '@tiptap/extension-text';
 import Bold from '@tiptap/extension-bold';
 import Italic from '@tiptap/extension-italic';
-import Heading from '@tiptap/extension-heading';
+import { ClientHeading } from './headingExtension';
 import BulletList from '@tiptap/extension-bullet-list';
 import OrderedList from '@tiptap/extension-ordered-list';
 import ListItem from '@tiptap/extension-list-item';
@@ -20,10 +20,11 @@ import TextAlign from '@tiptap/extension-text-align';
 import Link from '@tiptap/extension-link';
 import { TextStyle, Color, FontFamily, FontSize } from '@tiptap/extension-text-style';
 import Highlight from '@tiptap/extension-highlight';
+import Image from '@tiptap/extension-image';
 import Collaboration from '@tiptap/extension-collaboration';
 import CollaborationCaret from '@tiptap/extension-collaboration-caret';
 import Placeholder from '@tiptap/extension-placeholder';
-import { MessageSquare, Link2 } from 'lucide-react';
+import { MessageSquare, Link2, X } from 'lucide-react';
 import { ClientMentionNode } from './mentionNodeView';
 import { ClientSubpagesIndexNode } from './subpagesIndexNodeView';
 import { ClientCommentMark } from './commentMarkView';
@@ -75,6 +76,7 @@ export default function CollabDocEditor({
   const [commentsExpanded, setCommentsExpanded] = useState(false);
   const [activeCommentId, setActiveCommentId] = useState<string | null>(null);
   const [linkDraft, setLinkDraft] = useState<string | null>(null);
+  const [imageUrlDraft, setImageUrlDraft] = useState<string | null>(null);
 
   // Provider lifecycle lives in an effect, not useMemo — its constructor opens a real WebSocket,
   // a side effect that isn't safe inside useMemo (React's dev-mode Strict Mode double-invokes
@@ -103,7 +105,7 @@ export default function CollabDocEditor({
             Text,
             Bold,
             Italic,
-            Heading.configure({ levels: [1, 2] }),
+            ClientHeading.configure({ levels: [1, 2] }),
             BulletList,
             OrderedList,
             ListItem,
@@ -117,6 +119,7 @@ export default function CollabDocEditor({
             FontFamily,
             FontSize,
             Highlight.configure({ multicolor: true }),
+            Image,
             GapCursor,
             ClientMentionNode.configure({ onJump }),
             ClientSubpagesIndexNode.configure({ onOpenDoc: (id: string) => onJump('doc', id) }),
@@ -126,7 +129,7 @@ export default function CollabDocEditor({
                 setCommentsExpanded(true);
               },
             }),
-            SlashCommand.configure({ spaceId, docId }),
+            SlashCommand.configure({ spaceId, docId, onRequestImage: () => setImageUrlDraft('') }),
             Placeholder.configure({ placeholder: placeholder ?? 'Write notes, specs, anything...' }),
             Collaboration.configure({ document: provider.document }),
             CollaborationCaret.configure({
@@ -164,6 +167,24 @@ export default function CollabDocEditor({
     if (url) editor.chain().focus().extendMarkRange('link').setLink({ href: url }).run();
     else editor.chain().focus().extendMarkRange('link').unsetLink().run();
     setLinkDraft(null);
+  };
+
+  const submitImage = () => {
+    if (!editor) return;
+    const url = imageUrlDraft?.trim();
+    // A bare `setImage()` can leave the image as the very last node in the doc with nothing
+    // after it — Gapcursor technically still lets you click into that trailing gap, but it's a
+    // thin, easy-to-miss target (reported as "can't place the cursor above/below a pasted
+    // image"). Explicitly inserting a following empty paragraph and landing the cursor in it
+    // guarantees a normal, full-width line is always there to keep typing on immediately.
+    if (url) {
+      editor
+        .chain()
+        .focus()
+        .insertContent([{ type: 'image', attrs: { src: url } }, { type: 'paragraph' }])
+        .run();
+    }
+    setImageUrlDraft(null);
   };
 
   return (
@@ -288,6 +309,37 @@ export default function CollabDocEditor({
           activeCommentId={activeCommentId}
           onActiveCommentHandled={() => setActiveCommentId(null)}
         />
+      )}
+      {imageUrlDraft !== null && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-neutral-950/70 backdrop-blur-xs"
+          onClick={() => setImageUrlDraft(null)}
+        >
+          <div onClick={(e) => e.stopPropagation()} className="w-[380px] bg-neutral-900 border border-neutral-800 rounded shadow-2xl overflow-hidden">
+            <div className="px-5 py-4 border-b border-neutral-800 flex items-center justify-between">
+              <h3 className="font-bold text-sm text-white">Insert Image</h3>
+              <button onClick={() => setImageUrlDraft(null)} className="text-neutral-400 hover:text-white cursor-pointer">
+                <X className="w-3.5 h-3.5" />
+              </button>
+            </div>
+            <div className="p-5 space-y-3">
+              <input
+                autoFocus
+                value={imageUrlDraft}
+                onChange={(e) => setImageUrlDraft(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') submitImage();
+                  if (e.key === 'Escape') setImageUrlDraft(null);
+                }}
+                placeholder="Paste an image URL..."
+                className="w-full bg-neutral-950 border border-neutral-700 rounded px-3 py-2 text-xs text-white focus:outline-none focus:border-blue-500"
+              />
+              <button onClick={submitImage} className="w-full bg-blue-600 hover:bg-blue-500 text-white text-xs py-2 rounded font-medium cursor-pointer">
+                Insert
+              </button>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );

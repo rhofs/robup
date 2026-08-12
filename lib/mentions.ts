@@ -41,6 +41,10 @@ export type ResolvedMention = {
   // Present for 'doc' kind only, needed by jumpToMention to navigate to the right Space/Folder.
   spaceId?: string;
   folderId?: string | null;
+  // Present for 'doc' kind only — the Doc's own assigned color, same field the sidebar tree
+  // already renders it with. Lets a doc-mention chip match the doc's own color instead of a
+  // fixed per-kind accent that ignores it.
+  color?: string | null;
 };
 
 // Live-resolves a mention's current display name from the store; falls back to the label baked
@@ -63,7 +67,7 @@ export const resolveMentionEntity = (
   for (const ws of workspaces) {
     for (const space of ws.spaces) {
       const doc = space.spaceDocs.find((d) => d.id === id);
-      if (doc) return { label: doc.title || 'Untitled', found: true, spaceId: space.id, folderId: doc.folderId };
+      if (doc) return { label: doc.title || 'Untitled', found: true, spaceId: space.id, folderId: doc.folderId, color: doc.color };
     }
   }
   return { label: fallbackLabel, found: false };

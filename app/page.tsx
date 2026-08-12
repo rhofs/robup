@@ -74,6 +74,7 @@ import { startDateColor, dueDateColor, DATE_BADGE_COLOR_HEX, startDateTooltip, d
 import ColorSwatchPicker from '../components/ColorSwatchPicker';
 import ConfirmDialog from '../components/ConfirmDialog';
 import FloatingPopover from '../components/FloatingPopover';
+import { activeGlowStyle } from '../lib/activeGlowStyle';
 import DocExportMenu from '../components/collab/DocExportMenu';
 import TaskRow, { ColumnDef } from '../components/TaskRow';
 import FolderTree, { FOLDER_ICON_CHOICES, FOLDER_ICON_MAP } from '../components/FolderTree';
@@ -667,7 +668,7 @@ function PageContent() {
     if (fieldEditTarget) {
       setFieldNameDraft(fieldEditTarget.name);
       setFieldOptionsDraft(
-        fieldEditTarget.options.map((o) => ({ id: o.id || crypto.randomUUID(), label: o.label, color: o.color }))
+        (fieldEditTarget.options ?? []).map((o) => ({ id: o.id || crypto.randomUUID(), label: o.label, color: o.color }))
       );
     }
   }, [fieldEditTarget]);
@@ -2507,10 +2508,9 @@ function PageContent() {
                           }}
                           onContextMenu={(e) => openSpaceMenu(e, space)}
                           className={`w-full text-left px-2.5 py-1.5 rounded text-xs font-medium transition flex items-center justify-between cursor-pointer group ${
-                            isSpaceActive
-                              ? 'bg-neutral-800 text-blue-400 font-semibold border-l-2 border-blue-500'
-                              : 'text-neutral-300 hover:bg-neutral-800/40'
+                            isSpaceActive ? 'bg-neutral-800 font-semibold border-l-2' : 'text-neutral-300 hover:bg-neutral-800/40'
                           } ${isOver ? 'ring-1 ring-inset ring-neutral-500 bg-neutral-700/40' : ''}`}
+                          style={isSpaceActive ? { borderLeftColor: space.color || '#6366f1' } : undefined}
                         >
                           <span className="flex items-center gap-2 truncate">
                             {/* Same hover-reveal treatment as FolderTree.tsx's FolderRow — no
@@ -2575,10 +2575,10 @@ function PageContent() {
                                 {spaceAllChecked && <Check className="w-2.5 h-2.5" />}
                               </span>
                             )}
-                            {/* Own color always, independent of active/checked state — only the
-                                checkbox itself indicates "checked," same convention Google
-                                Calendar's sidebar uses (colored checkbox, plain-colored name). */}
-                            <span className="truncate" style={{ color: isSpaceActive ? undefined : space.color || undefined }}>
+                            {/* Own color always — only the checkbox indicates "checked" (Google
+                                Calendar's sidebar convention); when active, the name glows a
+                                bright version of that same color instead of switching to blue. */}
+                            <span className="truncate" style={isSpaceActive ? activeGlowStyle(space.color) : { color: space.color || undefined }}>
                               {space.name}
                             </span>
                             {space.isPrivate && <Lock className="w-2.5 h-2.5 text-neutral-500 shrink-0" />}
@@ -2674,7 +2674,7 @@ function PageContent() {
       )}
 
       {/* ================= MAIN AREA ================= */}
-      <main className="flex-1 flex flex-col h-full overflow-hidden bg-neutral-950 relative">
+      <main className="flex-1 flex flex-col h-full overflow-hidden bg-[#121212] relative">
         <header className="border-b border-neutral-800/80 bg-neutral-900/40 shrink-0">
           <div className="h-11 px-6 flex items-center justify-between border-b border-neutral-800/40">
             <div className="flex items-center gap-2 text-xs font-medium">
@@ -2854,7 +2854,7 @@ function PageContent() {
             )}
 
             {activeStandaloneDoc && currentSpace && (activeView === 'board' || activeView === 'docs') ? (
-              <div className="max-w-3xl mx-auto space-y-2">
+              <div className="w-full space-y-2">
                 {!docBookHasPages && (
                   <button
                     onClick={() => createSpaceDoc(currentSpace.id, null, { parentId: activeStandaloneDoc.id })}
@@ -2956,7 +2956,7 @@ function PageContent() {
                     )}
                   </div>
                 </div>
-                <div className="bg-neutral-900/60 border border-neutral-800/80 rounded p-6 space-y-3">
+                <div className="py-2 space-y-3">
                   <input
                     value={activeStandaloneDoc.title}
                     onChange={(e) => updateSpaceDoc(activeStandaloneDoc.id, currentSpace.id, { title: e.target.value })}

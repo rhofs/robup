@@ -36,7 +36,12 @@ export default function MentionText({ text, onJump, className }: MentionTextProp
         if (seg.type === 'text') return <span key={i}>{seg.value}</span>;
         const resolved = resolveMentionEntity(seg.kind, seg.id, seg.label, { tasks, users, workspaces });
         const Icon = KIND_ICON[seg.kind];
-        const color = seg.kind === 'user' ? users.find((u) => u.id === seg.id)?.color ?? KIND_COLOR.user : KIND_COLOR[seg.kind];
+        const color =
+          seg.kind === 'user'
+            ? users.find((u) => u.id === seg.id)?.color ?? KIND_COLOR.user
+            : seg.kind === 'doc'
+              ? resolved.color ?? KIND_COLOR.doc
+              : KIND_COLOR[seg.kind];
         if (!resolved.found) {
           return (
             <span

@@ -533,11 +533,31 @@ export const useTaskStore = create<TaskStore>((set, get) => {
       set({ activeWorkspaceId: id, activeSpaceId: firstSpaceId, activeListIds: new Set() });
     },
 
+    // Clears any open standalone doc too — since the doc-editor view was hoisted to render
+    // regardless of activeView (so a Doc opened from the main board sidebar doesn't force a tab
+    // switch), a List/Space selection made *while* a doc was still open would otherwise leave
+    // that stale activeStandaloneDocId in place forever, permanently blocking the task list
+    // behind it. The few call sites that open a Doc (DocFolderTree's onOpenDoc etc.) always call
+    // setDocsNavigation *after* this, so they still work — this only clears it when nothing reopens
+    // it right after.
+    //
+    // Also bounces activeView back to 'board' when leaving one of the Space/List-agnostic screens
+    // (My Tasks, My Personal, Profile, Office) — those screens ignore activeSpaceId/activeListIds
+    // entirely, so a sidebar List/Doc click made from one of them would otherwise update the nav
+    // state with no visible effect, stranding the user on the same screen. 'board'/'docs'/'calendar'
+    // already handle List/Doc navigation contextually and are left alone.
     setNavigation: (spaceId, listIds = []) =>
-      set({
+      set((state) => ({
         activeSpaceId: spaceId,
         activeListIds: new Set(listIds),
-      }),
+        activeDocFolderId: null,
+        activeStandaloneDocId: null,
+        activeView: (['mytasks', 'mypersonal', 'profile', 'office'] as TaskStore['activeView'][]).includes(
+          state.activeView
+        )
+          ? 'board'
+          : state.activeView,
+      })),
 
     setCalendarGranularity: (calendarGranularity) => set({ calendarGranularity }),
 

@@ -9,6 +9,7 @@ import {
   Strikethrough,
   Heading1,
   Heading2,
+  Pilcrow,
   List,
   ListOrdered,
   AlignLeft,
@@ -19,6 +20,8 @@ import {
   Palette,
   Highlighter,
   ChevronRight,
+  Minus,
+  Plus,
 } from 'lucide-react';
 import FloatingPopover from '../FloatingPopover';
 import ColorSwatchPicker from '../ColorSwatchPicker';
@@ -71,6 +74,13 @@ const MARK_BUTTONS: { key: string; label: string; icon: typeof Bold; isActive: (
     run: (editor) => editor.chain().focus().toggleHeading({ level: 2 }).run(),
   },
   {
+    key: 'paragraph',
+    label: 'Normal text',
+    icon: Pilcrow,
+    isActive: (editor) => editor.isActive('paragraph'),
+    run: (editor) => editor.chain().focus().setParagraph().run(),
+  },
+  {
     key: 'bulletList',
     label: 'Bullet list',
     icon: List,
@@ -93,19 +103,38 @@ const ALIGN_BUTTONS: { key: 'left' | 'center' | 'right' | 'justify'; label: stri
   { key: 'justify', label: 'Justify', icon: AlignJustify },
 ];
 
-// Deliberately a small curated set, not an open font picker — chosen so both export paths
-// (PDF via pdfkit's built-in standard fonts, Google Docs via a real font name string) can render
-// each choice exactly, with zero embedded font files. See lib/collab/docJSONToPdf.ts/
-// docJSONToGoogleRequests.ts for the matching mapping.
+// The classic "web-safe" set — every one of these is pre-installed on essentially every OS, so
+// on-screen and Google Docs export (which can render any real font name Google already knows)
+// both render each one faithfully. PDF export (pdfkit) only ships 3 built-in font families, so it
+// rounds each of these down to the closest of Helvetica/Times/Courier — a documented, deliberate
+// approximation rather than embedding font files (see lib/collab/docJSONToPdf.ts's
+// FONT_CATEGORY_BY_NAME, and PLANNING.md's note on why this project avoids embedded pdfkit
+// assets). Keep each `value`'s primary (first, before the comma) name in sync with that lookup
+// table and with googleFontFamily() in docJSONToGoogleRequests.ts if adding more.
 const FONT_FAMILIES: { label: string; value: string }[] = [
   { label: 'Default', value: '' },
-  { label: 'Serif', value: 'Georgia, serif' },
-  { label: 'Monospace', value: '"Courier New", monospace' },
+  { label: 'Arial', value: 'Arial, Helvetica, sans-serif' },
+  { label: 'Verdana', value: 'Verdana, Geneva, sans-serif' },
+  { label: 'Tahoma', value: 'Tahoma, Geneva, sans-serif' },
+  { label: 'Trebuchet MS', value: '"Trebuchet MS", sans-serif' },
+  { label: 'Georgia', value: 'Georgia, serif' },
+  { label: 'Times New Roman', value: '"Times New Roman", Times, serif' },
+  { label: 'Palatino', value: '"Palatino Linotype", Palatino, serif' },
+  { label: 'Garamond', value: 'Garamond, serif' },
+  { label: 'Courier New', value: '"Courier New", Courier, monospace' },
+  { label: 'Lucida Console', value: '"Lucida Console", Monaco, monospace' },
+  { label: 'Comic Sans MS', value: '"Comic Sans MS", cursive, sans-serif' },
+  { label: 'Impact', value: 'Impact, Charcoal, sans-serif' },
 ];
 
-const FONT_SIZES = ['12px', '14px', '16px', '18px', '24px', '32px'];
+const DEFAULT_FONT_SIZE = 16;
+const MIN_FONT_SIZE = 6;
+const MAX_FONT_SIZE = 120;
 
-const TEXT_COLOR_CHOICES = ['#e5e5e5', '#f87171', '#fb923c', '#facc15', '#4ade80', '#60a5fa', '#c084fc', '#f472b6'];
+// Includes black/dark gray even though the editor's own UI is dark — these matter most for
+// exported documents (PDF, Google Docs), which always render on a white page regardless of the
+// app's own theme, where every one of the original bright/light-only choices would wash out.
+const TEXT_COLOR_CHOICES = ['#000000', '#404040', '#737373', '#e5e5e5', '#f87171', '#fb923c', '#facc15', '#4ade80', '#60a5fa', '#c084fc', '#f472b6'];
 const HIGHLIGHT_COLOR_CHOICES = ['#fef08a', '#bbf7d0', '#bfdbfe', '#fecaca', '#fed7aa', '#e9d5ff', '#fbcfe8'];
 
 export default function DocFormatPanel({ editor }: { editor: Editor }) {
@@ -129,7 +158,7 @@ export default function DocFormatPanel({ editor }: { editor: Editor }) {
   const currentHighlight = editor.getAttributes('highlight').color || '#fef08a';
 
   return (
-    <div className="shrink-0 w-44 border-l border-neutral-800 pl-3 space-y-2">
+    <div className="shrink-0 w-48 border-l border-neutral-800 pl-3 space-y-2">
       <button
         onClick={() => setExpanded(false)}
         className="flex items-center gap-1 text-[10px] text-neutral-500 hover:text-neutral-300 mb-1 cursor-pointer"
@@ -258,22 +287,55 @@ export default function DocFormatPanel({ editor }: { editor: Editor }) {
 
       <div className="space-y-1">
         <label className="text-[9px] uppercase tracking-wide text-neutral-500 block">Size</label>
-        <select
-          value={editor.getAttributes('textStyle').fontSize ?? ''}
-          onChange={(e) => {
-            const value = e.target.value;
-            if (!value) editor.chain().focus().unsetFontSize().run();
-            else editor.chain().focus().setFontSize(value).run();
-          }}
-          className="w-full bg-neutral-950 border border-neutral-700 rounded px-1.5 py-1 text-[11px] text-neutral-200 focus:outline-none focus:border-blue-500"
-        >
-          <option value="">Default</option>
-          {FONT_SIZES.map((size) => (
-            <option key={size} value={size}>
-              {size}
-            </option>
-          ))}
-        </select>
+        {(() => {
+          const raw = editor.getAttributes('textStyle').fontSize as string | undefined;
+          const parsed = raw ? parseInt(raw, 10) : null;
+          const displayValue = parsed && !Number.isNaN(parsed) ? String(parsed) : '';
+          const setSize = (n: number) => {
+            const clamped = Math.max(MIN_FONT_SIZE, Math.min(MAX_FONT_SIZE, n));
+            editor.chain().focus().setFontSize(`${clamped}px`).run();
+          };
+          const step = (delta: number) => setSize((parsed ?? DEFAULT_FONT_SIZE) + delta);
+          return (
+            <div className="flex items-center gap-1">
+              <button
+                type="button"
+                title="Decrease size"
+                onMouseDown={(e) => e.preventDefault()}
+                onClick={() => step(-1)}
+                className="w-6 h-7 rounded flex items-center justify-center cursor-pointer hover:bg-neutral-800 text-neutral-400 shrink-0"
+              >
+                <Minus size={12} />
+              </button>
+              <input
+                type="number"
+                min={MIN_FONT_SIZE}
+                max={MAX_FONT_SIZE}
+                value={displayValue}
+                placeholder="Default"
+                onChange={(e) => {
+                  const value = e.target.value;
+                  if (!value) {
+                    editor.chain().focus().unsetFontSize().run();
+                    return;
+                  }
+                  const n = parseInt(value, 10);
+                  if (!Number.isNaN(n)) setSize(n);
+                }}
+                className="w-full min-w-0 text-center bg-neutral-950 border border-neutral-700 rounded px-1 py-1 text-[11px] text-neutral-200 focus:outline-none focus:border-blue-500"
+              />
+              <button
+                type="button"
+                title="Increase size"
+                onMouseDown={(e) => e.preventDefault()}
+                onClick={() => step(1)}
+                className="w-6 h-7 rounded flex items-center justify-center cursor-pointer hover:bg-neutral-800 text-neutral-400 shrink-0"
+              >
+                <Plus size={12} />
+              </button>
+            </div>
+          );
+        })()}
       </div>
     </div>
   );

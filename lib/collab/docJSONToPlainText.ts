@@ -3,7 +3,7 @@ import { buildMentionToken, type MentionKind } from '../mentions';
 type ProseMirrorJSONNode = {
   type: string;
   text?: string;
-  attrs?: { kind?: MentionKind; id?: string; label?: string };
+  attrs?: { kind?: MentionKind; id?: string; label?: string; alt?: string; src?: string };
   content?: ProseMirrorJSONNode[];
 };
 
@@ -32,6 +32,9 @@ function blockToLines(node: ProseMirrorJSONNode): string[] {
   // silently contribute nothing at all rather than erroring, so give it an explicit placeholder.
   if (node.type === 'subpagesIndex') {
     return ['[Subpages]'];
+  }
+  if (node.type === 'image') {
+    return [`[Image${node.attrs?.alt ? `: ${node.attrs.alt}` : ''}]`];
   }
   if (node.type === 'bulletList' || node.type === 'orderedList') {
     const items = node.content ?? [];

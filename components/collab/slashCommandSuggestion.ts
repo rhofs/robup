@@ -10,7 +10,7 @@ import SlashCommandList, { type SlashCommandListRef } from './SlashCommandList';
 export type SlashCommandItem = {
   id: string;
   label: string;
-  icon: 'heading1' | 'heading2' | 'bulletList' | 'orderedList' | 'subpage' | 'subpagesIndex';
+  icon: 'heading1' | 'heading2' | 'bulletList' | 'orderedList' | 'subpage' | 'subpagesIndex' | 'image';
   run: (editor: Editor, range: Range) => void;
 };
 
@@ -93,9 +93,26 @@ function subpagesIndexCommand(docId: string): SlashCommandItem {
   };
 }
 
+// Unlike every other item, Image has no selection or content to build immediately — it just
+// clears the "/image" text and hands off to CollabDocEditor.tsx's own URL-prompt modal (no
+// natural anchor to float a BubbleMenu-style composer off, unlike Link which always has a text
+// selection to anchor to), which calls editor.chain().setImage({src}) itself once submitted, at
+// the cursor position this leaves behind.
+function imageCommand(onRequestImage: () => void): SlashCommandItem {
+  return {
+    id: 'image',
+    label: 'Image',
+    icon: 'image',
+    run: (editor, range) => {
+      editor.chain().focus().deleteRange(range).run();
+      onRequestImage();
+    },
+  };
+}
+
 // spaceId/docId come from the extension's own options (see slashCommandExtension.ts), not a
 // closure captured at module scope — this factory is called fresh per editor instance.
-export function createSlashCommandSuggestion(opts: { spaceId?: string; docId: string }): Partial<SuggestionOptions<SlashCommandItem>> {
+export function createSlashCommandSuggestion(opts: { spaceId?: string; docId: string; onRequestImage?: () => void }): Partial<SuggestionOptions<SlashCommandItem>> {
   const items = spaceIdAwareItems(opts);
 
   return {
@@ -141,8 +158,9 @@ export function createSlashCommandSuggestion(opts: { spaceId?: string; docId: st
   };
 }
 
-function spaceIdAwareItems(opts: { spaceId?: string; docId: string }): SlashCommandItem[] {
+function spaceIdAwareItems(opts: { spaceId?: string; docId: string; onRequestImage?: () => void }): SlashCommandItem[] {
   const items = baseCommands();
+  if (opts.onRequestImage) items.push(imageCommand(opts.onRequestImage));
   if (opts.spaceId) {
     items.push(newSubpageCommand(opts.spaceId, opts.docId));
     items.push(subpagesIndexCommand(opts.docId));

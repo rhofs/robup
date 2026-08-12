@@ -31,7 +31,12 @@ export default function MentionChip({ node, extension }: ReactNodeViewProps) {
   const onJump = (extension.options as MentionSuggestionExtensionOptions).onJump;
   const resolved = resolveMentionEntity(kind, id, label, { tasks, users, workspaces });
   const Icon = KIND_ICON[kind];
-  const color = kind === 'user' ? users.find((u) => u.id === id)?.color ?? KIND_COLOR.user : KIND_COLOR[kind];
+  const color =
+    kind === 'user'
+      ? users.find((u) => u.id === id)?.color ?? KIND_COLOR.user
+      : kind === 'doc'
+        ? resolved.color ?? KIND_COLOR.doc
+        : KIND_COLOR[kind];
 
   if (!resolved.found) {
     return (
