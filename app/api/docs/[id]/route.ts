@@ -22,6 +22,7 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
   if (body.order !== undefined) data.order = body.order;
   if (body.taskId !== undefined) data.taskId = body.taskId;
   if (body.folderId !== undefined) data.folderId = body.folderId;
+  if (body.boardFolderId !== undefined) data.boardFolderId = body.boardFolderId;
   if (body.spaceId !== undefined) data.spaceId = body.spaceId;
   if (body.parentId !== undefined) data.parentId = body.parentId;
   if (body.ownerId !== undefined) data.ownerId = body.ownerId;

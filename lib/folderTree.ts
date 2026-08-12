@@ -6,6 +6,13 @@ export const getChildFolders = (space: HierarchySpace, parentId: string | null) 
 export const getListsIn = (space: HierarchySpace, folderId: string | null) =>
   space.lists.filter((l) => l.folderId === folderId).sort((a, b) => a.order - b.order);
 
+// Docs filed under a real Folder in the Tasks-tab sidebar — a second, independent axis from
+// lib/docFolderTree.ts's getSpaceDocsIn (which reads folderId/DocFolder, the Docs tab's own
+// tree). Root-level only (parentId === null), same reasoning as getSpaceDocsIn: a subpage's own
+// boardFolderId is irrelevant, it's only ever reached through its parent doc.
+export const getBoardDocsIn = (space: HierarchySpace, folderId: string | null) =>
+  space.spaceDocs.filter((d) => d.boardFolderId === folderId && d.parentId === null).sort((a, b) => a.order - b.order);
+
 // All folder ids nested anywhere under `folderId` (not including `folderId` itself). Pass `null` for the whole space.
 export const collectFolderIdsUnder = (space: HierarchySpace, folderId: string | null): string[] => {
   const out: string[] = [];

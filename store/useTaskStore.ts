@@ -86,6 +86,9 @@ export type TaskDoc = {
   taskId: string | null;
   spaceId: string | null;
   folderId: string | null;
+  // Independent from folderId above — which real Folder (the same one Lists use) this doc sits
+  // under in the Tasks-tab sidebar. See lib/folderTree.ts's getBoardDocsIn.
+  boardFolderId: string | null;
   // Subpages — a doc nested under another doc, independent of folderId (see PLANNING.md). A
   // subpage's own folderId is always null; it's reached only through its parent's Subpages table
   // or the sidebar's own expand-in-place.
@@ -364,7 +367,7 @@ interface TaskStore {
   createSpaceDoc: (
     spaceId: string,
     folderId: string | null,
-    opts?: { id?: string; title?: string; content?: string; order?: number; parentId?: string | null }
+    opts?: { id?: string; title?: string; content?: string; order?: number; parentId?: string | null; boardFolderId?: string | null }
   ) => Promise<TaskDoc | null>;
   updateSpaceDoc: (
     docId: string,
@@ -372,6 +375,9 @@ interface TaskStore {
     patch: { title?: string; color?: string | null; ownerId?: string | null; contributorIds?: string[] }
   ) => void;
   moveSpaceDoc: (spaceId: string, docId: string, folderId: string | null, targetSpaceId?: string) => Promise<void>;
+  // Independent from moveSpaceDoc above (which moves between DocFolders) — moves a Doc between
+  // real Folders in the Tasks-tab sidebar, mirroring moveList's exact shape.
+  moveDocToBoardFolder: (spaceId: string, docId: string, boardFolderId: string | null, targetSpaceId?: string) => Promise<void>;
   // Reparents a doc under another doc (a "subpage"), or back to null (top-level) — folderId is
   // left untouched here; a doc created as a subpage already gets folderId: null server-side.
   moveDocParent: (spaceId: string, docId: string, parentId: string | null) => Promise<void>;
@@ -1955,6 +1961,7 @@ export const useTaskStore = create<TaskStore>((set, get) => {
           body: JSON.stringify({
             id: opts?.id,
             folderId,
+            boardFolderId: opts?.boardFolderId,
             parentId: opts?.parentId,
             title: opts?.title ?? 'Untitled',
             content: opts?.content ?? '',
@@ -1974,7 +1981,14 @@ export const useTaskStore = create<TaskStore>((set, get) => {
             label: 'Create document',
             undo: () => get().deleteSpaceDoc(doc.id, spaceId),
             redo: async () => {
-              await get().createSpaceDoc(spaceId, folderId, { id: doc.id, title: doc.title, content: doc.content, order: doc.order, parentId: doc.parentId });
+              await get().createSpaceDoc(spaceId, folderId, {
+                id: doc.id,
+                title: doc.title,
+                content: doc.content,
+                order: doc.order,
+                parentId: doc.parentId,
+                boardFolderId: doc.boardFolderId,
+              });
             },
           });
         }
@@ -2078,6 +2092,46 @@ export const useTaskStore = create<TaskStore>((set, get) => {
         label: 'Move document',
         undo: () => get().moveSpaceDoc(targetSpaceId ?? spaceId, docId, oldFolderId, spaceId),
         redo: () => get().moveSpaceDoc(spaceId, docId, folderId, targetSpaceId),
+      });
+    },
+
+    // Independent from moveSpaceDoc above (that one moves between DocFolders, the Docs tab's own
+    // tree) — this moves a Doc between real Folders in the Tasks-tab sidebar. Exact mirror of
+    // moveList's shape, just targeting Doc's boardFolderId instead of List's folderId.
+    moveDocToBoardFolder: async (spaceId, docId, boardFolderId, targetSpaceId) => {
+      const oldDoc = get()
+        .workspaces.flatMap((w) => w.spaces)
+        .find((s) => s.id === spaceId)
+        ?.spaceDocs.find((d) => d.id === docId);
+      const oldBoardFolderId = oldDoc?.boardFolderId ?? null;
+
+      if (targetSpaceId && targetSpaceId !== spaceId) {
+        await fetch(`/api/docs/${docId}`, {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ boardFolderId, spaceId: targetSpaceId }),
+        });
+        await get().refetchWorkspaces();
+      } else {
+        set((state) => ({
+          workspaces: state.workspaces.map((ws) => ({
+            ...ws,
+            spaces: ws.spaces.map((s) =>
+              s.id === spaceId ? { ...s, spaceDocs: s.spaceDocs.map((d) => (d.id === docId ? { ...d, boardFolderId } : d)) } : s
+            ),
+          })),
+        }));
+        await fetch(`/api/docs/${docId}`, {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ boardFolderId }),
+        });
+      }
+
+      useHistoryStore.getState().push({
+        label: 'Move document',
+        undo: () => get().moveDocToBoardFolder(targetSpaceId ?? spaceId, docId, oldBoardFolderId, spaceId),
+        redo: () => get().moveDocToBoardFolder(spaceId, docId, boardFolderId, targetSpaceId),
       });
     },
 

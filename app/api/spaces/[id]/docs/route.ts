@@ -14,23 +14,42 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
   // folder listing.
   let spaceId = id;
   let folderId = body.folderId ?? null;
+  let boardFolderId = body.boardFolderId ?? null;
   if (body.parentId) {
     const parent = await prisma.doc.findUniqueOrThrow({ where: { id: body.parentId }, select: { spaceId: true } });
     spaceId = parent.spaceId ?? id;
     folderId = null;
+    boardFolderId = null;
   }
 
-  const order = await prisma.doc.count({ where: { spaceId, folderId, parentId: body.parentId ?? null } });
+  // Board-tab creation (boardFolderId explicitly present) interleaves with Lists at that same
+  // Folder level (see lib/folderTree.ts's getBoardDocsIn + FolderTree.tsx's combined sort) — its
+  // default order has to count Lists there too, not just Docs, or a fresh doc's order could tie
+  // with an existing List's and land in a visually arbitrary spot instead of at the end.
+  let order = body.order;
+  if (order === undefined) {
+    if (body.boardFolderId !== undefined) {
+      const [listCount, docCount] = await Promise.all([
+        prisma.list.count({ where: { spaceId, folderId: boardFolderId } }),
+        prisma.doc.count({ where: { spaceId, boardFolderId, parentId: body.parentId ?? null } }),
+      ]);
+      order = listCount + docCount;
+    } else {
+      order = await prisma.doc.count({ where: { spaceId, folderId, parentId: body.parentId ?? null } });
+    }
+  }
+
   const doc = await prisma.doc.create({
     data: {
       ...(body.id ? { id: body.id } : {}),
       spaceId,
       folderId,
+      boardFolderId,
       parentId: body.parentId ?? null,
       ownerId: userId,
       title: body.title || 'Untitled',
       content: body.content || '',
-      order: body.order ?? order,
+      order,
     },
   });
   return NextResponse.json(doc);

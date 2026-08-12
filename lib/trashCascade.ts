@@ -36,10 +36,17 @@ async function collectDocFolderSubtreeIds(rootId: string): Promise<string[]> {
 
 export async function cascadeFolder(folderId: string, when: Date | null) {
   const folderIds = await collectFolderSubtreeIds(folderId);
+  // Docs filed under this Folder (via boardFolderId, the Tasks-tab sidebar axis — see
+  // lib/folderTree.ts's getBoardDocsIn) need the same sweep as Lists/Tasks — plus each such doc's
+  // own subpage subtree, same reasoning cascadeDocFolder below already uses for the DocFolder axis.
+  const boardDocs = await prisma.doc.findMany({ where: { boardFolderId: { in: folderIds } }, select: { id: true } });
+  const docSubtrees = await Promise.all(boardDocs.map((d) => collectDocSubtreeIds(d.id)));
+  const docIds = docSubtrees.flat();
   await prisma.$transaction([
     prisma.folder.updateMany({ where: { id: { in: folderIds } }, data: { deletedAt: when } }),
     prisma.list.updateMany({ where: { folderId: { in: folderIds } }, data: { deletedAt: when } }),
     prisma.task.updateMany({ where: { list: { folderId: { in: folderIds } } }, data: { deletedAt: when } }),
+    prisma.doc.updateMany({ where: { id: { in: docIds } }, data: { deletedAt: when } }),
   ]);
 }
 

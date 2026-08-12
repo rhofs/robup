@@ -90,8 +90,7 @@ import {
   type LucideIcon,
 } from 'lucide-react';
 import { useTaskStore, HierarchySpace, HierarchyFolder, HierarchyList, Task, TaskDoc } from '../store/useTaskStore';
-import { getChildFolders, getListsIn, collectListIdsUnder } from '../lib/folderTree';
-import { getSpaceDocsIn } from '../lib/docFolderTree';
+import { getChildFolders, getListsIn, getBoardDocsIn, collectListIdsUnder } from '../lib/folderTree';
 import { activeGlowStyle } from '../lib/activeGlowStyle';
 
 const COLLAPSED_FOLDERS_STORAGE_KEY = 'robup.collapsedFolders';
@@ -251,7 +250,7 @@ function FolderLevel(props: FolderTreeProps & { parentId: string | null; depth: 
 
   const folders = getChildFolders(space, parentId);
   const lists = getListsIn(space, parentId);
-  const docs = getSpaceDocsIn(space, parentId);
+  const docs = getBoardDocsIn(space, parentId);
 
   const commitAdd = async () => {
     const trimmed = draft.trim();
@@ -259,8 +258,10 @@ function FolderLevel(props: FolderTreeProps & { parentId: string | null; depth: 
       if (addMode === 'list') createList(space.id, trimmed, parentId);
       else if (addMode === 'folder') createFolder(space.id, trimmed, parentId);
       // Doesn't navigate into the new doc — matches ClickUp's own "keep stubbing out pages while
-      // staying put" behavior, same as the book panel's own "Add page" button.
-      else if (addMode === 'doc') await createSpaceDoc(space.id, parentId, { title: trimmed });
+      // staying put" behavior, same as the book panel's own "Add page" button. `parentId` here is
+      // a real Folder id (or null at a Space's own top level) — passed as boardFolderId, the axis
+      // this sidebar actually reads; folderId (the separate DocFolder/Docs-tab axis) stays null.
+      else if (addMode === 'doc') await createSpaceDoc(space.id, null, { title: trimmed, boardFolderId: parentId });
     }
     setDraft('');
     setAddMode(null);
@@ -364,6 +365,11 @@ function FolderLevel(props: FolderTreeProps & { parentId: string | null; depth: 
           >
             <Plus className="w-3 h-3" /> New list
           </button>
+          {/* Available at every depth — a Doc created here gets `boardFolderId: parentId` (see
+              commitAdd above), the Tasks-tab-sidebar folder axis, independent of the Docs tab's
+              own `folderId`/DocFolder tree. (An earlier pass gated this to the Space root only,
+              since a Doc's `folderId` — the wrong field — can't point at a real Folder; fixed
+              properly now via the dedicated boardFolderId field instead of hiding the button.) */}
           {activeView !== 'calendar' && (
             <button
               onClick={() => {

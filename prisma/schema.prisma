@@ -144,6 +144,7 @@ model Folder {
   parent     Folder?   @relation("FolderChildren", fields: [parentId], references: [id], onDelete: Cascade)
   children   Folder[]  @relation("FolderChildren")
   lists      List[]
+  docs       Doc[]
   order      Int       @default(0)
   // See Space.isPrivate/accessJson above — same shape, independent at this level.
   isPrivate  Boolean   @default(false) @map("is_private")
@@ -353,6 +354,15 @@ model Doc {
 
   folderId String?    @map("doc_folder_id")
   folder   DocFolder? @relation(fields: [folderId], references: [id], onDelete: Cascade)
+
+  // A second, independent folder axis — which real `Folder` (the same one that holds Lists) this
+  // Doc sits under in the Tasks-tab sidebar, completely separate from folderId/DocFolder above
+  // (the Docs tab's own tree). A Doc can be in both at once, either, or neither — same "task-scoped
+  // AND/OR Space-scoped" independence this model already has. Named after this app's own internal
+  // name for the Tasks tab (`activeView: 'board' | ...'`), not `taskFolderId`, which would read
+  // confusingly next to the unrelated `taskId` field above.
+  boardFolderId String? @map("board_folder_id")
+  boardFolder   Folder? @relation(fields: [boardFolderId], references: [id], onDelete: Cascade)
 
   // Subpages — a Doc nested under another Doc (independent of the folderId/DocFolder tree above).
   // A child doc's own folderId is left null; it's reached only through its parent's Subpages table

@@ -524,6 +524,7 @@ function PageContent() {
     createSpaceDoc,
     updateSpaceDoc,
     moveSpaceDoc,
+    moveDocToBoardFolder,
     reorderSpaceDoc,
     deleteSpaceDoc,
     setDocTaskLink,
@@ -1410,6 +1411,48 @@ function PageContent() {
   const [listDropIndicator, setListDropIndicator] = useState<{ targetId: string; position: 'above' | 'below' } | null>(null);
   const listOverRef = useRef<{ targetId: string; top: number; height: number } | null>(null);
 
+  // dnd-kit ships a built-in autoScroll, but it never actually kicks in for this sidebar (verified
+  // directly — holding the pointer at the scrollable container's own edge for several seconds
+  // produces zero scrollTop change, even though basic drag/hover detection works fine). Rather than
+  // chase why inside dnd-kit's internals, a small manual autoscroll: while any sidebar-tree item is
+  // being dragged, scroll the container itself when the pointer is near its top/bottom edge. Fixes
+  // the reported "can't drag a Doc into [some Space]" — that Space simply wasn't scrolled into view
+  // and nothing scrolled it there mid-drag, not a targeting bug in the drop logic itself.
+  const sidebarScrollRef = useRef<HTMLDivElement | null>(null);
+  useEffect(() => {
+    const kind = activeDragEntity?.kind;
+    if (kind !== 'space' && kind !== 'folder' && kind !== 'list' && kind !== 'docfolder' && kind !== 'spacedoc') return;
+    const EDGE = 60; // px from the container's own top/bottom edge that triggers scrolling
+    const MAX_SPEED = 14; // px per animation frame at the very edge
+    let raf = 0;
+    let pointerY = 0;
+    const onPointerMove = (e: PointerEvent) => {
+      pointerY = e.clientY;
+    };
+    const tick = () => {
+      const el = sidebarScrollRef.current;
+      if (el) {
+        const rect = el.getBoundingClientRect();
+        const distFromTop = pointerY - rect.top;
+        const distFromBottom = rect.bottom - pointerY;
+        if (pointerY >= rect.top && pointerY <= rect.bottom) {
+          if (distFromTop < EDGE && el.scrollTop > 0) {
+            el.scrollTop -= MAX_SPEED * (1 - distFromTop / EDGE);
+          } else if (distFromBottom < EDGE && el.scrollTop < el.scrollHeight - el.clientHeight) {
+            el.scrollTop += MAX_SPEED * (1 - distFromBottom / EDGE);
+          }
+        }
+      }
+      raf = requestAnimationFrame(tick);
+    };
+    window.addEventListener('pointermove', onPointerMove);
+    raf = requestAnimationFrame(tick);
+    return () => {
+      window.removeEventListener('pointermove', onPointerMove);
+      cancelAnimationFrame(raf);
+    };
+  }, [activeDragEntity?.kind]);
+
   const [toast, setToast] = useState<string | null>(null);
   const toastTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const showToast = (message: string) => {
@@ -1538,11 +1581,12 @@ function PageContent() {
   // covering both the top-level "Lists + Docs interleaved" case and the plain "Lists nested in a
   // Folder" case (where the Doc side is simply always empty).
   type SidebarSibling = { type: 'list' | 'doc'; id: string; order: number };
+  // Docs use boardFolderId here (the Tasks-tab sidebar's own folder axis — see
+  // lib/folderTree.ts's getBoardDocsIn), not folderId (the separate Docs-tab/DocFolder axis) —
+  // works at every Folder depth now, not just the Space root.
   const combinedSidebarSiblings = (space: HierarchySpace, folderId: string | null): SidebarSibling[] => [
     ...space.lists.filter((l) => l.folderId === folderId).map((l) => ({ type: 'list' as const, id: l.id, order: l.order })),
-    ...(folderId === null
-      ? space.spaceDocs.filter((d) => d.folderId === null && d.parentId === null).map((d) => ({ type: 'doc' as const, id: d.id, order: d.order }))
-      : []),
+    ...space.spaceDocs.filter((d) => d.boardFolderId === folderId && d.parentId === null).map((d) => ({ type: 'doc' as const, id: d.id, order: d.order })),
   ];
 
   const moveSidebarItemRelativeTo = (
@@ -1552,8 +1596,18 @@ function PageContent() {
     target: { type: 'list' | 'doc'; id: string },
     position: 'above' | 'below'
   ) => {
-    const targetFolderId = target.type === 'list' ? targetSpace.lists.find((l) => l.id === target.id)?.folderId ?? null : null;
-    const draggedFolderId = dragged.type === 'list' ? sourceSpace.lists.find((l) => l.id === dragged.id)?.folderId ?? null : null;
+    // Both branches now look up the right axis per type — Lists via folderId, Docs via
+    // boardFolderId — rather than hardcoding null for Docs (which used to mean "a Doc dropped near
+    // another Doc/List *inside* a Folder never actually adopted that Folder," only a drop directly
+    // on the Folder's own header row did).
+    const targetFolderId =
+      target.type === 'list'
+        ? targetSpace.lists.find((l) => l.id === target.id)?.folderId ?? null
+        : targetSpace.spaceDocs.find((d) => d.id === target.id)?.boardFolderId ?? null;
+    const draggedFolderId =
+      dragged.type === 'list'
+        ? sourceSpace.lists.find((l) => l.id === dragged.id)?.folderId ?? null
+        : sourceSpace.spaceDocs.find((d) => d.id === dragged.id)?.boardFolderId ?? null;
     const sameContext = sourceSpace.id === targetSpace.id && draggedFolderId === targetFolderId;
 
     const writeOrder = (space: HierarchySpace, items: SidebarSibling[]) =>
@@ -1580,7 +1634,7 @@ function PageContent() {
 
     useHistoryStore.getState().transaction(dragged.type === 'list' ? 'Move list' : 'Move document', async () => {
       if (dragged.type === 'list') await moveList(sourceSpace.id, dragged.id, targetFolderId, targetSpace.id);
-      else await moveSpaceDoc(sourceSpace.id, dragged.id, null, targetSpace.id);
+      else await moveDocToBoardFolder(sourceSpace.id, dragged.id, targetFolderId, targetSpace.id);
       const siblings = combinedSidebarSiblings(targetSpace, targetFolderId)
         .filter((s) => !(s.type === dragged.type && s.id === dragged.id))
         .sort((a, b) => a.order - b.order);
@@ -2089,6 +2143,15 @@ function PageContent() {
         } else {
           moveSpaceDoc(space.id, treeId, targetFolderId, targetSpace.id);
         }
+      } else if (overId.startsWith('folder-drop:') && !isDocFolder) {
+        // A Doc dropped onto a real Folder (`folder-drop:` target, the same droppable Lists use) —
+        // independent from the docfolder-drop: branch above (which moves between DocFolders, the
+        // Docs tab's own tree). Mirrors the list-drag/folder-drag branch's own folder-drop
+        // handling: search all Spaces for the target, not just the source, so a cross-Space move
+        // works too.
+        const targetFolderId = overId.slice('folder-drop:'.length);
+        const targetSpace = allSpaces.find((s) => s.folders.some((f) => f.id === targetFolderId));
+        if (targetSpace) moveDocToBoardFolder(space.id, treeId, targetFolderId, targetSpace.id);
       } else if (overId.startsWith('list:') && !isDocFolder) {
         // A Doc dropped onto a List (`list:` target) — only possible in the Tasks-tab sidebar,
         // where Lists and top-level Docs render interleaved. Goes through the same combined
@@ -2111,7 +2174,16 @@ function PageContent() {
         // can't distinguish "insert before" from "insert after" the target row.
         if (targetDocId !== treeId && targetSpace) {
           const position = droppedDocIndicator?.targetId === targetDocId ? droppedDocIndicator.position : 'below';
-          reorderSpaceDocRelativeTo(space, treeId, targetDocId, position, targetSpace);
+          // The `spacedoc:` id is shared by both DocFolderTree.tsx (Docs tab — folderId/DocFolder
+          // is the right axis) and FolderTree.tsx (Tasks tab — boardFolderId is) — `activeView`
+          // picks the one actually relevant here, since only one of those trees is ever mounted at
+          // once. Tasks-tab reuses moveSidebarItemRelativeTo (already boardFolderId-aware, same
+          // function the list: branch above already uses) rather than a parallel duplicate.
+          if (activeView === 'docs') {
+            reorderSpaceDocRelativeTo(space, treeId, targetDocId, position, targetSpace);
+          } else {
+            moveSidebarItemRelativeTo(space, { type: 'doc', id: treeId }, targetSpace, { type: 'doc', id: targetDocId }, position);
+          }
         }
       } else if (overId.startsWith('space:')) {
         const targetSpaceId = overId.slice('space:'.length);
@@ -2640,7 +2712,7 @@ function PageContent() {
               );
             })()}
           </div>
-          <div className="p-3 space-y-4 overflow-y-auto max-h-[calc(100vh-96px)]">
+          <div ref={sidebarScrollRef} className="p-3 space-y-4 overflow-y-auto max-h-[calc(100vh-96px)]">
             {activeView === 'board' && (
             <button
               onClick={() => {
