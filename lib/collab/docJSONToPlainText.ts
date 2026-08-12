@@ -36,6 +36,14 @@ function blockToLines(node: ProseMirrorJSONNode): string[] {
   if (node.type === 'image') {
     return [`[Image${node.attrs?.alt ? `: ${node.attrs.alt}` : ''}]`];
   }
+  // Unlike paragraphs, a codeBlock node's content is a single text node whose own `text` string
+  // already contains literal `\n` characters for each line — inlineToText's plain concatenation
+  // preserves that as-is, `.split('\n')` just breaks it back into one plain-text line per line so
+  // it reads as a real multi-line snippet instead of one giant line. Fenced with ``` markers, the
+  // universal plain-text convention for "this is code," same as every markdown-aware reader.
+  if (node.type === 'codeBlock') {
+    return ['```', ...inlineToText(node.content).split('\n'), '```'];
+  }
   if (node.type === 'bulletList' || node.type === 'orderedList') {
     const items = node.content ?? [];
     return items.flatMap((item, index) => {

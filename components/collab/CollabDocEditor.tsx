@@ -21,6 +21,7 @@ import Link from '@tiptap/extension-link';
 import { TextStyle, Color, FontFamily, FontSize } from '@tiptap/extension-text-style';
 import Highlight from '@tiptap/extension-highlight';
 import Image from '@tiptap/extension-image';
+import CodeBlock from '@tiptap/extension-code-block';
 import Collaboration from '@tiptap/extension-collaboration';
 import CollaborationCaret from '@tiptap/extension-collaboration-caret';
 import Placeholder from '@tiptap/extension-placeholder';
@@ -33,7 +34,7 @@ import { GapCursor } from './gapCursorExtension';
 import PresenceBar from './PresenceBar';
 import DocFormatPanel from './DocFormatPanel';
 import DocCommentsPanel from './DocCommentsPanel';
-import { useTaskStore } from '../../store/useTaskStore';
+import { useTaskStore, type TaskDoc } from '../../store/useTaskStore';
 import { useSessionStore } from '../../store/useSessionStore';
 import type { MentionKind } from '../../lib/mentions';
 
@@ -46,6 +47,10 @@ type CollabDocEditorProps = {
   className?: string;
   placeholder?: string;
   onJump: (kind: MentionKind, id: string) => void;
+  // Right-click menu for a subpage listed in an in-content Subpages table — same handler the
+  // sidebar's own Doc rows already use (rename/appearance/color/delete). Omitted at the task-modal
+  // Documents-panel call site (task-scoped docs have no Space to scope that menu to anyway).
+  onDocContextMenu?: (e: React.MouseEvent, doc: TaskDoc) => void;
   // Fired on this editor instance's own focus/blur — used to log one activity-feed entry per
   // edit session, same "one entry per session, not per keystroke" shape the old shared-textarea
   // blur handler had, just scoped to this browser tab's own connection instead of a shared field
@@ -64,6 +69,7 @@ export default function CollabDocEditor({
   className,
   placeholder,
   onJump,
+  onDocContextMenu,
   onEditorFocus,
   onEditorBlur,
 }: CollabDocEditorProps) {
@@ -120,9 +126,10 @@ export default function CollabDocEditor({
             FontSize,
             Highlight.configure({ multicolor: true }),
             Image,
+            CodeBlock,
             GapCursor,
             ClientMentionNode.configure({ onJump }),
-            ClientSubpagesIndexNode.configure({ onOpenDoc: (id: string) => onJump('doc', id) }),
+            ClientSubpagesIndexNode.configure({ onOpenDoc: (id: string) => onJump('doc', id), onContextMenu: onDocContextMenu }),
             ClientCommentMark.configure({
               onCommentClick: (commentId: string) => {
                 setActiveCommentId(commentId);

@@ -10,7 +10,7 @@ import SlashCommandList, { type SlashCommandListRef } from './SlashCommandList';
 export type SlashCommandItem = {
   id: string;
   label: string;
-  icon: 'heading1' | 'heading2' | 'bulletList' | 'orderedList' | 'subpage' | 'subpagesIndex' | 'image';
+  icon: 'heading1' | 'heading2' | 'bulletList' | 'orderedList' | 'subpage' | 'subpagesIndex' | 'image' | 'codeBlock';
   run: (editor: Editor, range: Range) => void;
 };
 
@@ -44,6 +44,12 @@ function baseCommands(): SlashCommandItem[] {
       label: 'Numbered list',
       icon: 'orderedList',
       run: (editor, range) => editor.chain().focus().deleteRange(range).toggleOrderedList().run(),
+    },
+    {
+      id: 'code-block',
+      label: 'Code block',
+      icon: 'codeBlock',
+      run: (editor, range) => editor.chain().focus().deleteRange(range).toggleCodeBlock().run(),
     },
   ];
 }

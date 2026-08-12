@@ -22,6 +22,7 @@ export default function SubpagesIndexBlock({ node, extension }: ReactNodeViewPro
   const { workspaces, createSpaceDoc } = useTaskStore();
   const { docId } = node.attrs as { docId: string };
   const onOpenDoc = (extension.options as SubpagesIndexExtensionOptions).onOpenDoc;
+  const onContextMenu = (extension.options as SubpagesIndexExtensionOptions).onContextMenu;
 
   let space, doc;
   outer: for (const ws of workspaces) {
@@ -68,6 +69,7 @@ export default function SubpagesIndexBlock({ node, extension }: ReactNodeViewPro
               <div
                 key={child.id}
                 onClick={() => onOpenDoc?.(child.id)}
+                onContextMenu={(e) => onContextMenu?.(e, child)}
                 className="grid gap-2 items-center py-1.5 text-xs text-neutral-300 hover:bg-neutral-800/30 -mx-1 px-1 rounded cursor-pointer transition"
                 style={{ gridTemplateColumns: GRID_TEMPLATE }}
               >

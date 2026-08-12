@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
+import { useDraggable, useDroppable } from '@dnd-kit/core';
 import { ChevronRight, ChevronDown, FileText, Plus } from 'lucide-react';
 import { useTaskStore, type AppUser, type HierarchySpace, type TaskDoc } from '../store/useTaskStore';
 import { getChildDocs } from '../lib/docFolderTree';
@@ -23,6 +24,7 @@ type DocSubpagesPanelProps = {
   onDocContextMenu: (e: React.MouseEvent, doc: TaskDoc) => void;
   renameDocId: string | null;
   onRenameDocHandled: () => void;
+  docDropIndicator: { targetId: string; position: 'above' | 'below' } | null;
 };
 
 export default function DocSubpagesPanel({
@@ -35,6 +37,7 @@ export default function DocSubpagesPanel({
   onDocContextMenu,
   renameDocId,
   onRenameDocHandled,
+  docDropIndicator,
 }: DocSubpagesPanelProps) {
   const membersById = new Map(members.map((m) => [m.id, m]));
 
@@ -63,6 +66,7 @@ export default function DocSubpagesPanel({
           onContextMenu={onDocContextMenu}
           renameDocId={renameDocId}
           onRenameDocHandled={onRenameDocHandled}
+          docDropIndicator={docDropIndicator}
         />
       </div>
     </aside>
@@ -79,6 +83,7 @@ function PageRow({
   onContextMenu,
   renameDocId,
   onRenameDocHandled,
+  docDropIndicator,
 }: {
   space: HierarchySpace;
   doc: TaskDoc;
@@ -89,9 +94,30 @@ function PageRow({
   onContextMenu: (e: React.MouseEvent, doc: TaskDoc) => void;
   renameDocId: string | null;
   onRenameDocHandled: () => void;
+  docDropIndicator: { targetId: string; position: 'above' | 'below' } | null;
 }) {
   const { updateSpaceDoc } = useTaskStore();
   const children = getChildDocs(space, doc.id);
+
+  // Same `spacedoc-drag:`/`spacedoc:` id prefixes the main sidebar's DocRow (DocFolderTree.tsx)
+  // already uses — app/page.tsx's shared onDragEnd dispatch handles these generically by id
+  // prefix, so reusing them here needs zero new dispatch logic. This panel previously had no
+  // drag-and-drop at all (reported as "can't move Docs around" — this is that gap, not a
+  // regression: the main sidebar's own drag-and-drop was already intact).
+  //
+  // Distinct `subpage-drag:`/`subpage:` ids, NOT the sidebar's own `spacedoc-drag:`/`spacedoc:` —
+  // this panel and the main sidebar (DocFolderTree.tsx) render the *same* doc's row
+  // simultaneously whenever its book is open (this panel next to the open doc, the sidebar still
+  // showing the tree), so reusing the sidebar's ids registered two elements under the identical
+  // draggable/droppable id at once — dnd-kit has no defined behavior for that (last-registered
+  // wins, or neither works reliably), which broke dragging silently. app/page.tsx's dispatch
+  // handles this prefix as an equivalent alias of spacedoc-drag:/spacedoc: throughout.
+  const { attributes, listeners, setNodeRef: setDragRef, isDragging } = useDraggable({ id: `subpage-drag:${doc.id}` });
+  const { setNodeRef: setDropRef, isOver } = useDroppable({ id: `subpage:${doc.id}` });
+  const setNodeRef = (node: HTMLElement | null) => {
+    setDragRef(node);
+    setDropRef(node);
+  };
   const containsActive = (d: TaskDoc): boolean =>
     d.id === activeDocId || getChildDocs(space, d.id).some(containsActive);
   const [expanded, setExpanded] = useState(() => children.some(containsActive));
@@ -139,12 +165,18 @@ function PageRow({
 
   return (
     <div>
+      {docDropIndicator?.targetId === doc.id && docDropIndicator.position === 'above' && (
+        <div className="h-0.5 bg-blue-500 rounded-full mx-2" style={{ marginLeft: 6 + depth * 14 }} />
+      )}
       <div
+        ref={setNodeRef}
+        {...attributes}
+        {...listeners}
         onClick={() => onOpenDoc(doc.id)}
         onContextMenu={(e) => onContextMenu(e, doc)}
         className={`group w-full flex items-center gap-1 px-1.5 py-1 rounded text-[11px] cursor-pointer transition ${
           isActive ? 'bg-neutral-800 font-medium' : 'text-neutral-300 hover:text-neutral-200 hover:bg-neutral-800/40'
-        }`}
+        } ${isOver ? 'ring-1 ring-inset ring-neutral-500 bg-neutral-700/40' : ''} ${isDragging ? 'opacity-40' : ''}`}
         style={{ paddingLeft: 6 + depth * 14 }}
       >
         {children.length > 0 ? (
@@ -174,6 +206,9 @@ function PageRow({
           </span>
         )}
       </div>
+      {docDropIndicator?.targetId === doc.id && docDropIndicator.position === 'below' && (
+        <div className="h-0.5 bg-blue-500 rounded-full mx-2" style={{ marginLeft: 6 + depth * 14 }} />
+      )}
       {expanded && children.length > 0 && (
         <div>
           {children.map((child) => (
@@ -188,6 +223,7 @@ function PageRow({
               onContextMenu={onContextMenu}
               renameDocId={renameDocId}
               onRenameDocHandled={onRenameDocHandled}
+              docDropIndicator={docDropIndicator}
             />
           ))}
         </div>

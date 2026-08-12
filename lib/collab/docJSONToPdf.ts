@@ -159,6 +159,26 @@ function renderBlock(doc: PDFKit.PDFDocument, node: PMNode, depth: number) {
     doc.moveDown(0.4);
     return;
   }
+  if (node.type === 'codeBlock') {
+    // Tiptap's default codeBlock schema disables marks entirely, so this is always one plain
+    // text node whose own `.text` already contains literal `\n`s for each line — no rich runs to
+    // walk, unlike every other block type here. Courier + a light background band is the
+    // simplest faithful rendering pdfkit can do without a real syntax highlighter.
+    const raw = (node.content ?? []).map((c) => c.text ?? '').join('');
+    const lines = raw.split('\n');
+    const indent = depth * LIST_INDENT;
+    const boxLeft = doc.page.margins.left + indent;
+    const boxWidth = doc.page.width - doc.page.margins.left - doc.page.margins.right - indent;
+    const lineHeight = BODY_SIZE * 1.3;
+    const boxHeight = lines.length * lineHeight + 12;
+    doc.rect(boxLeft, doc.y, boxWidth, boxHeight).fill('#f2f2f2');
+    doc.fillColor('#1a1a1a').font('Courier').fontSize(BODY_SIZE);
+    doc.text(raw, boxLeft + 8, doc.y + 6, { width: boxWidth - 16, lineGap: lineHeight - BODY_SIZE });
+    doc.y += 6;
+    doc.fillColor('black').font('Helvetica').fontSize(BODY_SIZE);
+    doc.moveDown(0.4);
+    return;
+  }
   if (node.type === 'image') {
     // Placeholder text only, deliberately — pdfkit's doc.image() needs a local Buffer/path, not a
     // remote URL, so embedding the real image would need async URL-fetching threaded through this

@@ -236,6 +236,7 @@ type FolderTreeProps = {
   onDocContextMenu: (e: React.MouseEvent, doc: TaskDoc) => void;
   renameDocId: string | null;
   onRenameDocHandled: () => void;
+  listDropIndicator: { targetId: string; position: 'above' | 'below' } | null;
 };
 
 export default function FolderTree(props: FolderTreeProps) {
@@ -276,44 +277,64 @@ function FolderLevel(props: FolderTreeProps & { parentId: string | null; depth: 
         <FolderRow key={folder.id} {...props} folder={folder} />
       ))}
 
-      {lists.map((list) => {
-        const isActive = activeView === 'board' && activeListIds.has(list.id);
-        const count = tasks.filter((t) => t.listId === list.id && t.parentId === null && !t.archived).length;
-        return (
-          <ListRow
-            key={list.id}
-            list={list}
-            isActive={isActive}
-            count={count}
-            filterMode={activeView === 'calendar'}
-            checked={calendarVisibleListIds.has(list.id)}
-            onNavigate={(e) => onNavigateList(e, list.id)}
-            onToggle={() => toggleCalendarList(list.id)}
-            onRename={(name) => renameList(space.id, list.id, name)}
-            onContextMenu={(e) => props.onListContextMenu(e, list)}
-            onDeleteRequest={() => props.onDeleteListRequest(list)}
-            renameListId={props.renameListId}
-            onRenameListHandled={props.onRenameListHandled}
-          />
-        );
-      })}
-
-      {/* Planner's sidebar is a Lists/Folders filter, not a navigation tree — Docs have no
-          calendar-filter meaning there (clicking one did nothing), so they're only shown in the
-          Tasks-tab (board) rendering of this same shared component. */}
-      {activeView !== 'calendar' &&
-        docs.map((doc) => (
-          <DocRow
-            key={doc.id}
-            doc={doc}
-            isActive={props.activeStandaloneDocId === doc.id}
-            onOpen={() => props.onOpenDoc(doc.id)}
-            onDeleteRequest={() => props.onDeleteDocRequest(doc)}
-            onContextMenu={(e) => props.onDocContextMenu(e, doc)}
-            renameDocId={props.renameDocId}
-            onRenameDocHandled={props.onRenameDocHandled}
-          />
-        ))}
+      {/* Lists and top-level Docs (parentId/folderId both null) render as one combined,
+          order-sorted sequence rather than two separate blocks — otherwise a Doc could never
+          land anywhere but after every List, no matter what order.field it actually had.
+          Planner's sidebar is a Lists/Folders filter, not a navigation tree — Docs have no
+          calendar-filter meaning there (clicking one did nothing), so they're excluded from the
+          merge entirely in that mode, same as before. */}
+      {(() => {
+        type SidebarItem = { key: string; order: number; render: () => React.ReactNode };
+        const listItems: SidebarItem[] = lists.map((list) => {
+          const isActive = activeView === 'board' && activeListIds.has(list.id);
+          const count = tasks.filter((t) => t.listId === list.id && t.parentId === null && !t.archived).length;
+          return {
+            key: list.id,
+            order: list.order,
+            render: () => (
+              <ListRow
+                key={list.id}
+                list={list}
+                isActive={isActive}
+                count={count}
+                filterMode={activeView === 'calendar'}
+                checked={calendarVisibleListIds.has(list.id)}
+                onNavigate={(e) => onNavigateList(e, list.id)}
+                onToggle={() => toggleCalendarList(list.id)}
+                onRename={(name) => renameList(space.id, list.id, name)}
+                onContextMenu={(e) => props.onListContextMenu(e, list)}
+                onDeleteRequest={() => props.onDeleteListRequest(list)}
+                renameListId={props.renameListId}
+                onRenameListHandled={props.onRenameListHandled}
+                listDropIndicator={props.listDropIndicator}
+              />
+            ),
+          };
+        });
+        const docItems: SidebarItem[] =
+          activeView === 'calendar'
+            ? []
+            : docs.map((doc) => ({
+                key: doc.id,
+                order: doc.order,
+                render: () => (
+                  <DocRow
+                    key={doc.id}
+                    doc={doc}
+                    isActive={props.activeStandaloneDocId === doc.id}
+                    onOpen={() => props.onOpenDoc(doc.id)}
+                    onDeleteRequest={() => props.onDeleteDocRequest(doc)}
+                    onContextMenu={(e) => props.onDocContextMenu(e, doc)}
+                    renameDocId={props.renameDocId}
+                    onRenameDocHandled={props.onRenameDocHandled}
+                    listDropIndicator={props.listDropIndicator}
+                  />
+                ),
+              }));
+        return [...listItems, ...docItems]
+          .sort((a, b) => a.order - b.order)
+          .map((item) => item.render());
+      })()}
 
       {addMode ? (
         <input
@@ -379,6 +400,7 @@ function DocRow({
   onContextMenu,
   renameDocId,
   onRenameDocHandled,
+  listDropIndicator,
 }: {
   doc: TaskDoc;
   isActive: boolean;
@@ -387,10 +409,26 @@ function DocRow({
   onContextMenu: (e: React.MouseEvent) => void;
   renameDocId: string | null;
   onRenameDocHandled: () => void;
+  listDropIndicator: { targetId: string; position: 'above' | 'below' } | null;
 }) {
   const { updateSpaceDoc } = useTaskStore();
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState(doc.title);
+
+  // This DocRow (Tasks-tab sidebar, Docs shown alongside Lists) never had any drag-and-drop at
+  // all — genuinely missing, not a regression (unlike DocFolderTree.tsx's own DocRow and
+  // DocSubpagesPanel.tsx's PageRow, both of which already had or since gained it). Confirmed
+  // directly: dragging a List here already worked, dragging a Doc did nothing, no console error —
+  // consistent with a draggable that was simply never wired up, not a broken one. Same
+  // `spacedoc-drag:`/`spacedoc:` ids DocFolderTree.tsx's DocRow uses — safe to reuse here since
+  // this component and that one are mutually exclusive (`activeView === 'docs' ? DocFolderTree :
+  // FolderTree`), never mounted at the same time.
+  const { attributes, listeners, setNodeRef: setDragRef, isDragging } = useDraggable({ id: `spacedoc-drag:${doc.id}` });
+  const { setNodeRef: setDropRef, isOver } = useDroppable({ id: `spacedoc:${doc.id}` });
+  const setNodeRef = (node: HTMLElement | null) => {
+    setDragRef(node);
+    setDropRef(node);
+  };
 
   // Triggered by the "Rename" item in the doc's right-click context menu (page.tsx), same
   // pattern as ListRow's equivalent effect.
@@ -430,29 +468,40 @@ function DocRow({
   }
 
   return (
-    <div
-      onClick={onOpen}
-      onContextMenu={onContextMenu}
-      className={`group w-full text-left px-2 py-1 rounded text-[11px] transition flex items-center justify-between cursor-pointer ${
-        isActive ? 'bg-neutral-800 font-medium' : 'text-neutral-400 hover:text-neutral-200 hover:bg-neutral-800/30'
-      }`}
-    >
-      <span className="truncate flex items-center gap-1.5 min-w-0">
-        <FileText className="w-3 h-3 shrink-0" style={{ color: doc.color || undefined }} />
-        <span className="truncate" style={isActive ? activeGlowStyle(doc.color) : { color: doc.color || undefined }}>
-          {doc.title || 'Untitled'}
-        </span>
-      </span>
-      <button
-        onClick={(e) => {
-          e.stopPropagation();
-          onDeleteRequest();
-        }}
-        title="Delete"
-        className="opacity-0 group-hover:opacity-100 text-neutral-500 hover:text-red-400 cursor-pointer shrink-0"
+    <div className="space-y-0.5">
+      {listDropIndicator?.targetId === doc.id && listDropIndicator.position === 'above' && (
+        <div className="h-0.5 bg-blue-500 rounded-full mx-2" />
+      )}
+      <div
+        ref={setNodeRef}
+        {...attributes}
+        {...listeners}
+        onClick={onOpen}
+        onContextMenu={onContextMenu}
+        className={`group w-full text-left px-2 py-1 rounded text-[11px] transition flex items-center justify-between cursor-pointer ${
+          isActive ? 'bg-neutral-800 font-medium' : 'text-neutral-400 hover:text-neutral-200 hover:bg-neutral-800/30'
+        } ${isOver ? 'ring-1 ring-inset ring-neutral-500 bg-neutral-700/40' : ''} ${isDragging ? 'opacity-40' : ''}`}
       >
-        <Trash2 className="w-2.5 h-2.5" />
-      </button>
+        <span className="truncate flex items-center gap-1.5 min-w-0">
+          <FileText className="w-3 h-3 shrink-0" style={{ color: doc.color || undefined }} />
+          <span className="truncate" style={isActive ? activeGlowStyle(doc.color) : { color: doc.color || undefined }}>
+            {doc.title || 'Untitled'}
+          </span>
+        </span>
+        <button
+          onClick={(e) => {
+            e.stopPropagation();
+            onDeleteRequest();
+          }}
+          title="Delete"
+          className="opacity-0 group-hover:opacity-100 text-neutral-500 hover:text-red-400 cursor-pointer shrink-0"
+        >
+          <Trash2 className="w-2.5 h-2.5" />
+        </button>
+      </div>
+      {listDropIndicator?.targetId === doc.id && listDropIndicator.position === 'below' && (
+        <div className="h-0.5 bg-blue-500 rounded-full mx-2" />
+      )}
     </div>
   );
 }
@@ -644,6 +693,7 @@ function ListRow({
   onDeleteRequest,
   renameListId,
   onRenameListHandled,
+  listDropIndicator,
 }: {
   list: HierarchyList;
   isActive: boolean;
@@ -657,6 +707,7 @@ function ListRow({
   onDeleteRequest: () => void;
   renameListId: string | null;
   onRenameListHandled: () => void;
+  listDropIndicator: { targetId: string; position: 'above' | 'below' } | null;
 }) {
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState(list.name);
@@ -711,7 +762,11 @@ function ListRow({
   }
 
   return (
-    <div
+    <>
+      {listDropIndicator?.targetId === list.id && listDropIndicator.position === 'above' && (
+        <div className="h-0.5 bg-blue-500 rounded-full mx-2" />
+      )}
+      <div
       ref={setNodeRef}
       {...attributes}
       {...listeners}
@@ -774,6 +829,10 @@ function ListRow({
           </button>
         )}
       </span>
-    </div>
+      </div>
+      {listDropIndicator?.targetId === list.id && listDropIndicator.position === 'below' && (
+        <div className="h-0.5 bg-blue-500 rounded-full mx-2" />
+      )}
+    </>
   );
 }

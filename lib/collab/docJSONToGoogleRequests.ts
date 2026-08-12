@@ -96,6 +96,16 @@ function flattenLines(node: PMNode, out: Line[]) {
     out.push({ runs: [{ text: '[Subpages]', bold: true, italic: false, underline: false, strike: false }] });
     return;
   }
+  if (node.type === 'codeBlock') {
+    // Tiptap's default codeBlock schema disables marks, so this is always one plain text node
+    // whose own `.text` already contains literal `\n`s for each line — pushed as a single run
+    // with a forced monospace family; Google Docs treats `\n` inside inserted text as real
+    // paragraph breaks the same way this file's own line-joining already relies on, so the
+    // embedded newlines still render as separate lines even though this is only one Line/run.
+    const raw = (node.content ?? []).map((c) => c.text ?? '').join('');
+    out.push({ runs: [{ text: raw, bold: false, italic: false, underline: false, strike: false, fontFamily: 'Courier New' }] });
+    return;
+  }
   if (node.type === 'image' && node.attrs?.src) {
     // Real image insert, not a placeholder — unlike PDF export, the Google Docs API's own
     // insertInlineImage request just needs a `uri` and fetches it server-side, so this round-trips

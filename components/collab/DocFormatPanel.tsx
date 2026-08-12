@@ -1,7 +1,7 @@
 'use client';
 
 import { useState } from 'react';
-import type { Editor } from '@tiptap/react';
+import { useEditorState, type Editor } from '@tiptap/react';
 import {
   Bold,
   Italic,
@@ -20,8 +20,10 @@ import {
   Palette,
   Highlighter,
   ChevronRight,
+  ChevronDown,
   Minus,
   Plus,
+  Code2,
 } from 'lucide-react';
 import FloatingPopover from '../FloatingPopover';
 import ColorSwatchPicker from '../ColorSwatchPicker';
@@ -94,6 +96,13 @@ const MARK_BUTTONS: { key: string; label: string; icon: typeof Bold; isActive: (
     isActive: (editor) => editor.isActive('orderedList'),
     run: (editor) => editor.chain().focus().toggleOrderedList().run(),
   },
+  {
+    key: 'codeBlock',
+    label: 'Code block',
+    icon: Code2,
+    isActive: (editor) => editor.isActive('codeBlock'),
+    run: (editor) => editor.chain().focus().toggleCodeBlock().run(),
+  },
 ];
 
 const ALIGN_BUTTONS: { key: 'left' | 'center' | 'right' | 'justify'; label: string; icon: typeof AlignLeft }[] = [
@@ -130,6 +139,7 @@ const FONT_FAMILIES: { label: string; value: string }[] = [
 const DEFAULT_FONT_SIZE = 16;
 const MIN_FONT_SIZE = 6;
 const MAX_FONT_SIZE = 120;
+const FONT_SIZE_CHOICES = [10, 12, 14, 16, 18, 20, 24, 28, 32, 36, 48, 64, 96];
 
 // Includes black/dark gray even though the editor's own UI is dark — these matter most for
 // exported documents (PDF, Google Docs), which always render on a white page regardless of the
@@ -141,6 +151,18 @@ export default function DocFormatPanel({ editor }: { editor: Editor }) {
   const [expanded, setExpanded] = useState(false);
   const [colorOpen, setColorOpen] = useState(false);
   const [highlightOpen, setHighlightOpen] = useState(false);
+  const [sizeMenuOpen, setSizeMenuOpen] = useState(false);
+
+  // `editor` is one stable object for the whole editing session — every control below reads its
+  // live state directly (`editor.isActive()`/`getAttributes()`), which only reflects reality if
+  // *something* re-renders this component on each transaction. Nothing did: this panel only ever
+  // re-rendered as a side effect of some unrelated parent update, so a control could show a stale
+  // value (most visibly font size, since it's the one most often checked immediately after
+  // clicking) until the next incidental re-render happened to catch up — reported as "always shows
+  // default." `useEditorState`, subscribed to `transactionNumber` (bumped on every transaction:
+  // selection move, mark toggle, a remote Yjs edit), is Tiptap's own documented fix — it forces a
+  // re-render on every one, so every plain read below is now live rather than mount-time-stale.
+  useEditorState({ editor, selector: ({ transactionNumber }) => transactionNumber });
 
   if (!expanded) {
     return (
@@ -291,11 +313,20 @@ export default function DocFormatPanel({ editor }: { editor: Editor }) {
           const raw = editor.getAttributes('textStyle').fontSize as string | undefined;
           const parsed = raw ? parseInt(raw, 10) : null;
           const displayValue = parsed && !Number.isNaN(parsed) ? String(parsed) : '';
-          const setSize = (n: number) => {
+          // `focusEditor` defaults to false: the +/- buttons already keep the editor focused on
+          // their own (onMouseDown preventDefault below stops the click from ever moving focus
+          // away from it), so they opt in explicitly. The text input is the opposite case — it
+          // genuinely needs real browser focus to be typed into at all, so every keystroke's
+          // onChange must NOT call it, or the editor steals focus back after every character,
+          // which is exactly what made typing feel "like choosing a new place to write" each time
+          // (reported directly) — the text selection this is supposed to be resizing was getting
+          // clobbered by the input fighting the editor for focus on every single digit.
+          const applySize = (n: number, opts?: { focusEditor?: boolean }) => {
             const clamped = Math.max(MIN_FONT_SIZE, Math.min(MAX_FONT_SIZE, n));
-            editor.chain().focus().setFontSize(`${clamped}px`).run();
+            const chain = opts?.focusEditor ? editor.chain().focus() : editor.chain();
+            chain.setFontSize(`${clamped}px`).run();
           };
-          const step = (delta: number) => setSize((parsed ?? DEFAULT_FONT_SIZE) + delta);
+          const step = (delta: number) => applySize((parsed ?? DEFAULT_FONT_SIZE) + delta, { focusEditor: true });
           return (
             <div className="flex items-center gap-1">
               <button
@@ -308,22 +339,60 @@ export default function DocFormatPanel({ editor }: { editor: Editor }) {
                 <Minus size={12} />
               </button>
               <input
-                type="number"
-                min={MIN_FONT_SIZE}
-                max={MAX_FONT_SIZE}
+                type="text"
+                inputMode="numeric"
                 value={displayValue}
                 placeholder="Default"
                 onChange={(e) => {
-                  const value = e.target.value;
+                  const value = e.target.value.trim();
                   if (!value) {
-                    editor.chain().focus().unsetFontSize().run();
+                    editor.chain().unsetFontSize().run();
                     return;
                   }
                   const n = parseInt(value, 10);
-                  if (!Number.isNaN(n)) setSize(n);
+                  if (!Number.isNaN(n)) applySize(n);
                 }}
                 className="w-full min-w-0 text-center bg-neutral-950 border border-neutral-700 rounded px-1 py-1 text-[11px] text-neutral-200 focus:outline-none focus:border-blue-500"
               />
+              {/* A native <datalist>-backed input was tried first — cheap, but the actual
+                  dropdown never reliably showed up (reported directly), and native datalist
+                  rendering is genuinely inconsistent across browsers with no way to fix from the
+                  code side. Replaced with the same FloatingPopover pattern the color/highlight
+                  pickers just above already use, which this app fully controls. */}
+              <FloatingPopover
+                open={sizeMenuOpen}
+                onClose={() => setSizeMenuOpen(false)}
+                align="right"
+                panelClassName="w-16 max-h-56 overflow-y-auto bg-neutral-900 border border-neutral-800 rounded shadow-xl py-1"
+                anchor={
+                  <button
+                    type="button"
+                    title="Common sizes"
+                    onMouseDown={(e) => e.preventDefault()}
+                    onClick={() => setSizeMenuOpen((o) => !o)}
+                    className="w-5 h-7 rounded flex items-center justify-center cursor-pointer hover:bg-neutral-800 text-neutral-400 shrink-0"
+                  >
+                    <ChevronDown size={11} />
+                  </button>
+                }
+              >
+                {FONT_SIZE_CHOICES.map((n) => (
+                  <button
+                    key={n}
+                    type="button"
+                    onMouseDown={(e) => e.preventDefault()}
+                    onClick={() => {
+                      applySize(n, { focusEditor: true });
+                      setSizeMenuOpen(false);
+                    }}
+                    className={`w-full text-center px-2 py-1 text-[11px] cursor-pointer hover:bg-neutral-800 ${
+                      parsed === n ? 'text-blue-400' : 'text-neutral-300'
+                    }`}
+                  >
+                    {n}
+                  </button>
+                ))}
+              </FloatingPopover>
               <button
                 type="button"
                 title="Increase size"

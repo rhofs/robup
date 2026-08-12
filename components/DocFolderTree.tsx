@@ -21,6 +21,7 @@ type DocFolderTreeProps = {
   onDocContextMenu: (e: React.MouseEvent, doc: TaskDoc) => void;
   renameDocId: string | null;
   onRenameDocHandled: () => void;
+  docDropIndicator: { targetId: string; position: 'above' | 'below' } | null;
 };
 
 export default function DocFolderTree(props: DocFolderTreeProps) {
@@ -68,6 +69,7 @@ function DocFolderLevel(props: DocFolderTreeProps & { parentId: string | null; d
           onContextMenu={props.onDocContextMenu}
           renameDocId={props.renameDocId}
           onRenameDocHandled={props.onRenameDocHandled}
+          docDropIndicator={props.docDropIndicator}
         />
       ))}
 
@@ -235,6 +237,7 @@ function DocRow({
   onContextMenu,
   renameDocId,
   onRenameDocHandled,
+  docDropIndicator,
 }: {
   space: HierarchySpace;
   doc: TaskDoc;
@@ -246,6 +249,7 @@ function DocRow({
   onContextMenu: (e: React.MouseEvent, doc: TaskDoc) => void;
   renameDocId: string | null;
   onRenameDocHandled: () => void;
+  docDropIndicator: { targetId: string; position: 'above' | 'below' } | null;
 }) {
   const { updateSpaceDoc } = useTaskStore();
   const isActive = activeStandaloneDocId === doc.id;
@@ -300,6 +304,9 @@ function DocRow({
 
   return (
     <div className="space-y-0.5">
+      {docDropIndicator?.targetId === doc.id && docDropIndicator.position === 'above' && (
+        <div className="h-0.5 bg-blue-500 rounded-full mx-2" />
+      )}
       <div
         ref={setNodeRef}
         {...attributes}
@@ -340,6 +347,9 @@ function DocRow({
           <Trash2 className="w-2.5 h-2.5" />
         </button>
       </div>
+      {docDropIndicator?.targetId === doc.id && docDropIndicator.position === 'below' && (
+        <div className="h-0.5 bg-blue-500 rounded-full mx-2" />
+      )}
       {expanded && children.length > 0 && (
         <div className="ml-4 pl-2 border-l border-neutral-800 space-y-0.5">
           {children.map((child) => (
@@ -355,6 +365,7 @@ function DocRow({
               onContextMenu={onContextMenu}
               renameDocId={renameDocId}
               onRenameDocHandled={onRenameDocHandled}
+              docDropIndicator={docDropIndicator}
             />
           ))}
         </div>

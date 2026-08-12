@@ -16,6 +16,7 @@ import Link from '@tiptap/extension-link';
 import { TextStyle, Color, FontFamily, FontSize } from '@tiptap/extension-text-style';
 import Highlight from '@tiptap/extension-highlight';
 import Image from '@tiptap/extension-image';
+import CodeBlock from '@tiptap/extension-code-block';
 import { MentionNode } from './mentionNode';
 import { SubpagesIndexNode } from './subpagesIndexNode';
 import { CommentMark } from './commentMark';
@@ -48,6 +49,7 @@ export const collabExtensions = [
   FontSize,
   Highlight.configure({ multicolor: true }),
   Image,
+  CodeBlock,
   MentionNode,
   SubpagesIndexNode,
   CommentMark,

@@ -1395,6 +1395,21 @@ function PageContent() {
     { mode: 'header'; targetId: string; top: number; height: number } | { mode: 'nested'; targetId: string } | null
   >(null);
 
+  // Same insertion-line pattern as Space reordering above, scoped to standalone-Doc rows
+  // (`spacedoc-drag:`/`spacedoc:` — shared by both DocFolderTree.tsx's sidebar rows and
+  // DocSubpagesPanel.tsx's subpage rows, since they use the identical id prefixes) — no "nested"
+  // mode needed here, unlike Space, since a Doc row's own droppable already covers its full
+  // clickable height with nothing else layered underneath it.
+  const [docDropIndicator, setDocDropIndicator] = useState<{ targetId: string; position: 'above' | 'below' } | null>(null);
+  const docOverRef = useRef<{ targetId: string; top: number; height: number } | null>(null);
+
+  // Same pattern again, scoped to List rows (`list-drag:`/`list:`) — the `list:${id}` droppable
+  // is dual-purpose (also a task-drop target), so this only engages while the *dragged* item is
+  // itself a List, never for a plain task drag over the same target. Lets a List be dropped at an
+  // exact position among a *different* Space's Lists, not just appended via that Space's header.
+  const [listDropIndicator, setListDropIndicator] = useState<{ targetId: string; position: 'above' | 'below' } | null>(null);
+  const listOverRef = useRef<{ targetId: string; top: number; height: number } | null>(null);
+
   const [toast, setToast] = useState<string | null>(null);
   const toastTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const showToast = (message: string) => {
@@ -1443,7 +1458,19 @@ function PageContent() {
     const handler = (e: KeyboardEvent) => {
       if (!(e.ctrlKey || e.metaKey) || e.key.toLowerCase() !== 'z') return;
       const el = document.activeElement;
-      const isEditable = el instanceof HTMLElement && (el.tagName === 'INPUT' || el.tagName === 'TEXTAREA' || el.isContentEditable);
+      // Most browsers don't blur the focused element just because the tab lost visibility —
+      // switching away and back can leave `document.activeElement` pointing at a text field/doc
+      // editor the user no longer thinks of as "in," silently tripping this guard and making
+      // global undo look broken (reported as "Ctrl+Z stops working after switching tabs"). A
+      // stale reference from an already-closed modal/unmounted editor is also possible. Only
+      // treat it as "genuinely editable right now" if it's still connected AND actually laid out
+      // (`offsetParent` is null for anything `display:none`/detached) — a real, currently-visible
+      // field the user could still be typing into still correctly defers to native undo.
+      const isEditable =
+        el instanceof HTMLElement &&
+        (el.tagName === 'INPUT' || el.tagName === 'TEXTAREA' || el.isContentEditable) &&
+        el.isConnected &&
+        el.offsetParent !== null;
       if (isEditable) return;
       e.preventDefault();
       if (e.shiftKey) {
@@ -1497,17 +1524,71 @@ function PageContent() {
     });
   };
 
-  const reorderListSiblings = (space: HierarchySpace, draggedId: string, targetId: string) => {
-    const dragged = space.lists.find((l) => l.id === draggedId);
-    if (!dragged) return;
-    const siblings = space.lists.filter((l) => l.folderId === dragged.folderId).sort((a, b) => a.order - b.order);
-    const oldIndex = siblings.findIndex((l) => l.id === draggedId);
-    const newIndex = siblings.findIndex((l) => l.id === targetId);
-    if (oldIndex === -1 || newIndex === -1) return;
-    useHistoryStore.getState().transaction('Reorder lists', async () => {
-      await Promise.all(
-        arrayMove(siblings, oldIndex, newIndex).map((l, index) => (l.order !== index ? reorderList(space.id, l.id, index) : null))
+
+  // Lets a List and a Doc be dragged into position relative to *each other* in the Tasks-tab
+  // sidebar (FolderTree.tsx renders them as sibling-native rows there, but this repo's schema
+  // keeps List.folderId and Doc.folderId as two genuinely different foreign keys — List.folderId
+  // -> Folder, Doc.folderId -> DocFolder, a completely separate model/table, see prisma/schema.prisma
+  // — so a Doc can never actually nest inside a real Folder the way a List can; every sidebar-
+  // native Doc is structurally top-level (folderId: null) no matter how it's dragged). Rather than
+  // trying to reconcile two incompatible foreign-key spaces, this only ever combines them at the
+  // top level (folderId === null): a List target keeps its own real folderId for other List
+  // siblings; a Doc target (or a dragged Doc) is always treated as folderId: null, which is the
+  // only value it can ever structurally have. One combined, order-sorted sibling array either way,
+  // covering both the top-level "Lists + Docs interleaved" case and the plain "Lists nested in a
+  // Folder" case (where the Doc side is simply always empty).
+  type SidebarSibling = { type: 'list' | 'doc'; id: string; order: number };
+  const combinedSidebarSiblings = (space: HierarchySpace, folderId: string | null): SidebarSibling[] => [
+    ...space.lists.filter((l) => l.folderId === folderId).map((l) => ({ type: 'list' as const, id: l.id, order: l.order })),
+    ...(folderId === null
+      ? space.spaceDocs.filter((d) => d.folderId === null && d.parentId === null).map((d) => ({ type: 'doc' as const, id: d.id, order: d.order }))
+      : []),
+  ];
+
+  const moveSidebarItemRelativeTo = (
+    sourceSpace: HierarchySpace,
+    dragged: { type: 'list' | 'doc'; id: string },
+    targetSpace: HierarchySpace,
+    target: { type: 'list' | 'doc'; id: string },
+    position: 'above' | 'below'
+  ) => {
+    const targetFolderId = target.type === 'list' ? targetSpace.lists.find((l) => l.id === target.id)?.folderId ?? null : null;
+    const draggedFolderId = dragged.type === 'list' ? sourceSpace.lists.find((l) => l.id === dragged.id)?.folderId ?? null : null;
+    const sameContext = sourceSpace.id === targetSpace.id && draggedFolderId === targetFolderId;
+
+    const writeOrder = (space: HierarchySpace, items: SidebarSibling[]) =>
+      Promise.all(
+        items.map((item, index) =>
+          item.type === 'list' ? reorderList(space.id, item.id, index) : reorderSpaceDoc(space.id, item.id, index)
+        )
       );
+
+    if (sameContext) {
+      const siblings = combinedSidebarSiblings(sourceSpace, targetFolderId).sort((a, b) => a.order - b.order);
+      const withoutDragged = siblings.filter((s) => !(s.type === dragged.type && s.id === dragged.id));
+      const targetIndex = withoutDragged.findIndex((s) => s.type === target.type && s.id === target.id);
+      if (targetIndex === -1) return;
+      const insertAt = position === 'below' ? targetIndex + 1 : targetIndex;
+      const draggedEntry = siblings.find((s) => s.type === dragged.type && s.id === dragged.id);
+      if (!draggedEntry) return;
+      const next = [...withoutDragged.slice(0, insertAt), draggedEntry, ...withoutDragged.slice(insertAt)];
+      useHistoryStore.getState().transaction(dragged.type === 'list' ? 'Reorder lists' : 'Reorder documents', async () => {
+        await writeOrder(sourceSpace, next);
+      });
+      return;
+    }
+
+    useHistoryStore.getState().transaction(dragged.type === 'list' ? 'Move list' : 'Move document', async () => {
+      if (dragged.type === 'list') await moveList(sourceSpace.id, dragged.id, targetFolderId, targetSpace.id);
+      else await moveSpaceDoc(sourceSpace.id, dragged.id, null, targetSpace.id);
+      const siblings = combinedSidebarSiblings(targetSpace, targetFolderId)
+        .filter((s) => !(s.type === dragged.type && s.id === dragged.id))
+        .sort((a, b) => a.order - b.order);
+      const targetIndex = siblings.findIndex((s) => s.type === target.type && s.id === target.id);
+      if (targetIndex === -1) return;
+      const insertAt = position === 'below' ? targetIndex + 1 : targetIndex;
+      const next = [...siblings.slice(0, insertAt), { ...dragged, order: 0 }, ...siblings.slice(insertAt)];
+      await writeOrder(targetSpace, next);
     });
   };
 
@@ -1538,17 +1619,54 @@ function PageContent() {
     });
   };
 
-  const reorderSpaceDocSiblings = (space: HierarchySpace, draggedId: string, targetId: string) => {
-    const dragged = space.spaceDocs.find((d) => d.id === draggedId);
-    if (!dragged) return;
-    const siblings = space.spaceDocs.filter((d) => d.folderId === dragged.folderId).sort((a, b) => a.order - b.order);
-    const oldIndex = siblings.findIndex((d) => d.id === draggedId);
-    const newIndex = siblings.findIndex((d) => d.id === targetId);
-    if (oldIndex === -1 || newIndex === -1) return;
-    useHistoryStore.getState().transaction('Reorder documents', async () => {
-      await Promise.all(
-        arrayMove(siblings, oldIndex, newIndex).map((d, index) => (d.order !== index ? reorderSpaceDoc(space.id, d.id, index) : null))
-      );
+  // Explicit above/below position, mirroring reorderSpaceRelativeTo — driven by the insertion-line
+  // indicator (docDropIndicator) rather than arrayMove's implicit "lands at the target's index"
+  // behavior, so a drop always matches whichever side of the target row the indicator last showed.
+  // `targetSpace` defaults to `sourceSpace` for the common same-Space case; passed explicitly for
+  // a cross-Space drop (previously unsupported here — a Doc dropped onto another Doc in a
+  // *different* Space silently did nothing, since this always looked up both the dragged doc and
+  // the sibling group in the same single `space` param).
+  const reorderSpaceDocRelativeTo = (
+    sourceSpace: HierarchySpace,
+    draggedId: string,
+    targetId: string,
+    position: 'above' | 'below',
+    targetSpace: HierarchySpace = sourceSpace
+  ) => {
+    const dragged = sourceSpace.spaceDocs.find((d) => d.id === draggedId);
+    const target = targetSpace.spaceDocs.find((d) => d.id === targetId);
+    if (!dragged || !target) return;
+    // Every subpage has folderId: null (same as every top-level, non-foldered doc — see
+    // TaskDoc.parentId's own comment), so folderId alone isn't enough to tell true siblings
+    // apart from two subpages that just happen to sit under different parents. Matching parentId
+    // too is what actually scopes this to "docs shown together in the same row/panel" — without
+    // it, dragging one subpage onto another would silently reorder against every null-folderId
+    // doc in the whole Space, not just its real siblings.
+    if (sourceSpace.id === targetSpace.id && dragged.folderId === target.folderId && dragged.parentId === target.parentId) {
+      const siblings = sourceSpace.spaceDocs
+        .filter((d) => d.folderId === dragged.folderId && d.parentId === dragged.parentId)
+        .sort((a, b) => a.order - b.order);
+      const withoutDragged = siblings.filter((d) => d.id !== draggedId);
+      const targetIndex = withoutDragged.findIndex((d) => d.id === targetId);
+      if (targetIndex === -1) return;
+      const insertAt = position === 'below' ? targetIndex + 1 : targetIndex;
+      const next = [...withoutDragged.slice(0, insertAt), dragged, ...withoutDragged.slice(insertAt)];
+      useHistoryStore.getState().transaction('Reorder documents', async () => {
+        await Promise.all(next.map((d, index) => (d.order !== index ? reorderSpaceDoc(sourceSpace.id, d.id, index) : null)));
+      });
+      return;
+    }
+
+    useHistoryStore.getState().transaction('Move document', async () => {
+      await moveSpaceDoc(sourceSpace.id, draggedId, target.folderId, targetSpace.id);
+      const siblings = targetSpace.spaceDocs
+        .filter((d) => d.id !== draggedId && d.folderId === target.folderId && d.parentId === target.parentId)
+        .sort((a, b) => a.order - b.order);
+      const targetIndex = siblings.findIndex((d) => d.id === targetId);
+      if (targetIndex === -1) return;
+      const insertAt = position === 'below' ? targetIndex + 1 : targetIndex;
+      const next = [...siblings.slice(0, insertAt), dragged, ...siblings.slice(insertAt)];
+      await Promise.all(next.map((d, index) => reorderSpaceDoc(targetSpace.id, d.id, index)));
     });
   };
 
@@ -1609,9 +1727,14 @@ function PageContent() {
       return;
     }
 
-    if (draggedId.startsWith('docfolder-drag:') || draggedId.startsWith('spacedoc-drag:')) {
+    if (draggedId.startsWith('docfolder-drag:') || draggedId.startsWith('spacedoc-drag:') || draggedId.startsWith('subpage-drag:')) {
       const isDocFolder = draggedId.startsWith('docfolder-drag:');
-      const treeId = isDocFolder ? draggedId.slice('docfolder-drag:'.length) : draggedId.slice('spacedoc-drag:'.length);
+      // `subpage-drag:` (DocSubpagesPanel.tsx) is the identical concept as `spacedoc-drag:` (the
+      // sidebar) under a different id prefix — the two panels can render the same doc's row at
+      // once, so they can't share an id (see DocSubpagesPanel.tsx's own comment on this).
+      const treeId = isDocFolder
+        ? draggedId.slice('docfolder-drag:'.length)
+        : draggedId.slice((draggedId.startsWith('subpage-drag:') ? 'subpage-drag:' : 'spacedoc-drag:').length);
       const allSpaces = workspaces.flatMap((w) => w.spaces);
       if (isDocFolder) {
         const folder = allSpaces.flatMap((s) => s.docFolders).find((f) => f.id === treeId);
@@ -1647,15 +1770,84 @@ function PageContent() {
     if (!active || !over) {
       spaceOverRef.current = null;
       setSpaceDropIndicator(null);
+      docOverRef.current = null;
+      setDocDropIndicator(null);
+      listOverRef.current = null;
+      setListDropIndicator(null);
       return;
     }
     const draggedId = active.id as string;
     const overId = over.id as string;
+
+    if (draggedId.startsWith('list-drag:')) {
+      spaceOverRef.current = null;
+      setSpaceDropIndicator(null);
+      docOverRef.current = null;
+      setDocDropIndicator(null);
+      const draggedListId = draggedId.slice('list-drag:'.length);
+      // `list:${id}` is dual-purpose (also a task-drop target) — only meaningful as a reorder
+      // target here since the dragged item is itself a List. Also tracks hovering a `spacedoc:`
+      // target (a Doc row) — Lists and top-level Docs render interleaved in this sidebar
+      // (FolderTree.tsx), so dropping a List next to a Doc needs the same live indicator.
+      if ((overId.startsWith('list:') || overId.startsWith('spacedoc:')) && over.rect) {
+        const targetId = overId.startsWith('spacedoc:') ? overId.slice('spacedoc:'.length) : overId.slice('list:'.length);
+        listOverRef.current = targetId === draggedListId ? null : { targetId, top: over.rect.top, height: over.rect.height };
+      } else {
+        listOverRef.current = null;
+      }
+      return;
+    }
+
+    if (draggedId.startsWith('subpage-drag:')) {
+      spaceOverRef.current = null;
+      setSpaceDropIndicator(null);
+      listOverRef.current = null;
+      setListDropIndicator(null);
+      // Subpages panel only ever reorders against its own `subpage:` rows — no Lists there.
+      const draggedDocId = draggedId.slice('subpage-drag:'.length);
+      if (overId.startsWith('subpage:') && over.rect) {
+        const targetId = overId.slice('subpage:'.length);
+        docOverRef.current = targetId === draggedDocId ? null : { targetId, top: over.rect.top, height: over.rect.height };
+      } else {
+        docOverRef.current = null;
+      }
+      return;
+    }
+
+    if (draggedId.startsWith('spacedoc-drag:')) {
+      spaceOverRef.current = null;
+      setSpaceDropIndicator(null);
+      // A Doc dragged from the sidebar can be hovering either another Doc (`spacedoc:`, either
+      // tab) or a List (`list:`, only possible in the Tasks tab, where Lists and top-level Docs
+      // render interleaved) — feed both refs identically; whichever component is actually
+      // mounted (DocFolderTree.tsx reads docDropIndicator, FolderTree.tsx reads
+      // listDropIndicator) picks up the one relevant to it, the other is simply unused.
+      const draggedDocId = draggedId.slice('spacedoc-drag:'.length);
+      if ((overId.startsWith('spacedoc:') || overId.startsWith('list:')) && over.rect) {
+        const targetId = overId.startsWith('spacedoc:') ? overId.slice('spacedoc:'.length) : overId.slice('list:'.length);
+        const next = targetId === draggedDocId ? null : { targetId, top: over.rect.top, height: over.rect.height };
+        docOverRef.current = next;
+        listOverRef.current = next;
+      } else {
+        docOverRef.current = null;
+        listOverRef.current = null;
+      }
+      return;
+    }
+
     if (!draggedId.startsWith('space-drag:')) {
       spaceOverRef.current = null;
       setSpaceDropIndicator(null);
+      docOverRef.current = null;
+      setDocDropIndicator(null);
+      listOverRef.current = null;
+      setListDropIndicator(null);
       return;
     }
+    docOverRef.current = null;
+    setDocDropIndicator(null);
+    listOverRef.current = null;
+    setListDropIndicator(null);
     const spaceId = draggedId.slice('space-drag:'.length);
 
     if (overId.startsWith('space:')) {
@@ -1708,12 +1900,53 @@ function PageContent() {
     return () => window.removeEventListener('pointermove', onPointerMove);
   }, [activeDragEntity?.kind]);
 
+  // Same continuous pointer tracking, scoped to standalone-Doc drags.
+  useEffect(() => {
+    if (activeDragEntity?.kind !== 'spacedoc') return;
+    const onPointerMove = (e: PointerEvent) => {
+      const over = docOverRef.current;
+      if (!over) {
+        setDocDropIndicator(null);
+        return;
+      }
+      const overCenterY = over.top + over.height / 2;
+      setDocDropIndicator({ targetId: over.targetId, position: e.clientY < overCenterY ? 'above' : 'below' });
+    };
+    window.addEventListener('pointermove', onPointerMove);
+    return () => window.removeEventListener('pointermove', onPointerMove);
+  }, [activeDragEntity?.kind]);
+
+  // Same continuous pointer tracking, scoped to List drags — also runs during a Doc drag
+  // (`spacedoc`), since Lists and top-level Docs render interleaved in this sidebar and a Doc
+  // drag needs this same indicator when hovering a List row (handleTaskDragOver feeds
+  // listOverRef for both cases — see its spacedoc-drag branch).
+  useEffect(() => {
+    if (activeDragEntity?.kind !== 'list' && activeDragEntity?.kind !== 'spacedoc') return;
+    const onPointerMove = (e: PointerEvent) => {
+      const over = listOverRef.current;
+      if (!over) {
+        setListDropIndicator(null);
+        return;
+      }
+      const overCenterY = over.top + over.height / 2;
+      setListDropIndicator({ targetId: over.targetId, position: e.clientY < overCenterY ? 'above' : 'below' });
+    };
+    window.addEventListener('pointermove', onPointerMove);
+    return () => window.removeEventListener('pointermove', onPointerMove);
+  }, [activeDragEntity?.kind]);
+
   const handleTaskDragEnd = (event: DragEndEvent) => {
     const droppedSpaceIndicator = spaceDropIndicator;
+    const droppedDocIndicator = docDropIndicator;
+    const droppedListIndicator = listDropIndicator;
     setActiveDragTask(null);
     setActiveDragEntity(null);
     setSpaceDropIndicator(null);
     spaceOverRef.current = null;
+    setDocDropIndicator(null);
+    docOverRef.current = null;
+    setListDropIndicator(null);
+    listOverRef.current = null;
     const { active, over } = event;
     if (!over) return;
     const draggedId = active.id as string;
@@ -1790,16 +2023,20 @@ function PageContent() {
         } else {
           moveList(space.id, treeId, targetFolderId, targetSpace.id);
         }
-      } else if (overId.startsWith('list:') && !isFolder) {
+      } else if ((overId.startsWith('list:') || overId.startsWith('spacedoc:')) && !isFolder) {
         // Lists can't "contain" anything, so a List dragged onto another List's `list:` target
         // (already registered for task-drops) has no competing meaning the way folder-onto-
-        // folder does — for a list-drag specifically, it always means reorder. Scoped to same-
-        // Space siblings only; moving a list to sit at a precise position in a *different*
-        // Space's list is a rarer case left to the Space-header drop below (append, not exact
-        // position) rather than adding cross-Space position math here.
-        const targetListId = overId.slice('list:'.length);
-        if (targetListId !== treeId && space.lists.some((l) => l.id === targetListId)) {
-          reorderListSiblings(space, treeId, targetListId);
+        // folder does — for a list-drag specifically, it always means reorder/move. Also accepts
+        // a `spacedoc:` target (a Doc row) — Lists and top-level Docs render interleaved in this
+        // sidebar, so a List needs to be droppable relative to a Doc too, not just other Lists.
+        // Works across Spaces too, landing exactly where listDropIndicator last showed — search
+        // all Spaces for the target (same reasoning as the folder-drop branch above).
+        const isDocTarget = overId.startsWith('spacedoc:');
+        const targetId = isDocTarget ? overId.slice('spacedoc:'.length) : overId.slice('list:'.length);
+        const targetSpace = allSpaces.find((s) => (isDocTarget ? s.spaceDocs.some((d) => d.id === targetId) : s.lists.some((l) => l.id === targetId)));
+        if (targetId !== treeId && targetSpace) {
+          const position = droppedListIndicator?.targetId === targetId ? droppedListIndicator.position : 'below';
+          moveSidebarItemRelativeTo(space, { type: 'list', id: treeId }, targetSpace, { type: isDocTarget ? 'doc' : 'list', id: targetId }, position);
         }
       } else if (overId.startsWith('space:')) {
         const targetSpaceId = overId.slice('space:'.length);
@@ -1807,6 +2044,21 @@ function PageContent() {
         if (!targetSpace) return;
         if (isFolder) moveFolder(space.id, treeId, null, targetSpace.id);
         else moveList(space.id, treeId, null, targetSpace.id);
+      }
+      return;
+    }
+
+    // Same reorder concept from the DocSubpagesPanel side panel, under its own distinct id prefix
+    // (see that component's own comment on why it can't share the sidebar's ids) — only supports
+    // sibling reorder via `subpage:`, since that panel never renders a docfolder-drop/Space target.
+    if (draggedId.startsWith('subpage-drag:')) {
+      const treeId = draggedId.slice('subpage-drag:'.length);
+      const space = workspaces.flatMap((w) => w.spaces).find((s) => s.spaceDocs.some((d) => d.id === treeId));
+      if (!space || !overId.startsWith('subpage:')) return;
+      const targetDocId = overId.slice('subpage:'.length);
+      if (targetDocId !== treeId && space.spaceDocs.some((d) => d.id === targetDocId)) {
+        const position = droppedDocIndicator?.targetId === targetDocId ? droppedDocIndicator.position : 'below';
+        reorderSpaceDocRelativeTo(space, treeId, targetDocId, position);
       }
       return;
     }
@@ -1837,10 +2089,29 @@ function PageContent() {
         } else {
           moveSpaceDoc(space.id, treeId, targetFolderId, targetSpace.id);
         }
+      } else if (overId.startsWith('list:') && !isDocFolder) {
+        // A Doc dropped onto a List (`list:` target) — only possible in the Tasks-tab sidebar,
+        // where Lists and top-level Docs render interleaved. Goes through the same combined
+        // List+Doc ordering as a List-onto-Doc drop (see the list-drag branch above), rather than
+        // reorderSpaceDocRelativeTo (which only knows about Docs, not the Lists interleaved
+        // between them).
+        const targetListId = overId.slice('list:'.length);
+        const targetSpace = allSpaces.find((s) => s.lists.some((l) => l.id === targetListId));
+        if (targetSpace) {
+          const position = droppedListIndicator?.targetId === targetListId ? droppedListIndicator.position : 'below';
+          moveSidebarItemRelativeTo(space, { type: 'doc', id: treeId }, targetSpace, { type: 'list', id: targetListId }, position);
+        }
       } else if (overId.startsWith('spacedoc:') && !isDocFolder) {
         const targetDocId = overId.slice('spacedoc:'.length);
-        if (targetDocId !== treeId && space.spaceDocs.some((d) => d.id === targetDocId)) {
-          reorderSpaceDocSiblings(space, treeId, targetDocId);
+        // Search all Spaces for the target, not just the source one — same reasoning as every
+        // other cross-Space drop in this file; previously scoped to `space.spaceDocs` only, so a
+        // Doc dropped onto another Doc in a *different* Space silently did nothing.
+        const targetSpace = allSpaces.find((s) => s.spaceDocs.some((d) => d.id === targetDocId));
+        // Drop exactly where the indicator last showed, same as Space reordering — `over` alone
+        // can't distinguish "insert before" from "insert after" the target row.
+        if (targetDocId !== treeId && targetSpace) {
+          const position = droppedDocIndicator?.targetId === targetDocId ? droppedDocIndicator.position : 'below';
+          reorderSpaceDocRelativeTo(space, treeId, targetDocId, position, targetSpace);
         }
       } else if (overId.startsWith('space:')) {
         const targetSpaceId = overId.slice('space:'.length);
@@ -2607,6 +2878,7 @@ function PageContent() {
                           onDocContextMenu={(e, doc) => openDocMenu(e, doc, space.id)}
                           renameDocId={renameDocId}
                           onRenameDocHandled={() => setRenameDocId(null)}
+                          docDropIndicator={docDropIndicator}
                         />
                       ) : (
                         <FolderTree
@@ -2638,6 +2910,7 @@ function PageContent() {
                           onDocContextMenu={(e, doc) => openDocMenu(e, doc, space.id)}
                           renameDocId={renameDocId}
                           onRenameDocHandled={() => setRenameDocId(null)}
+                          listDropIndicator={listDropIndicator}
                         />
                       ))}
                     {spaceDropIndicator?.targetId === space.id && spaceDropIndicator.position === 'below' && (
@@ -2670,6 +2943,7 @@ function PageContent() {
           onDocContextMenu={(e, doc) => openDocMenu(e, doc, currentSpace.id)}
           renameDocId={renameDocId}
           onRenameDocHandled={() => setRenameDocId(null)}
+          docDropIndicator={docDropIndicator}
         />
       )}
 
@@ -3098,6 +3372,7 @@ function PageContent() {
                     docId={activeStandaloneDoc.id}
                     spaceId={currentSpace.id}
                     onJump={jumpToMention}
+                    onDocContextMenu={(e, doc) => openDocMenu(e, doc, currentSpace.id)}
                     placeholder="Write anything..."
                     className="min-h-[24em] text-sm text-neutral-300"
                   />
