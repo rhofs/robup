@@ -13,7 +13,7 @@ import {
   startOfWeek,
 } from '../../lib/calendarDates';
 import { assignLanes, clipRangeToWeek, type ClippedSegment, type DragMode, type DragState, type TaskRange } from '../../lib/ganttLayout';
-import { useTaskStore, StatusDef, Task, HierarchyWorkspace } from '../../store/useTaskStore';
+import { useTaskStore, StatusDef, Task, Event, HierarchyWorkspace } from '../../store/useTaskStore';
 import WeekRow, { BAR_GAP, BAR_H, DAY_NUM_H, GUTTER_WIDTH } from './WeekRow';
 import DayTimeline from './DayTimeline';
 
@@ -32,15 +32,23 @@ const WEEK_MAX_LANES = 12;
 // nothing left to absorb it).
 const OVERFLOW_H = 26;
 
+// Falls back to this when an Event has neither its own `color` set nor a linked Space — a fixed
+// violet, distinct from every default Task-status color so an Event bar reads as "not a task"
+// even with nothing else customized. Same hex already in this app's own FIELD_COLOR_CHOICES
+// palette, so it's not a new color being introduced.
+const DEFAULT_EVENT_COLOR = '#9a61d1';
+
 type CalendarViewProps = {
   tasks: Task[];
+  events: Event[];
   statuses: StatusDef[];
   workspaces: HierarchyWorkspace[];
   onOpenTask: (id: string) => void;
+  onOpenEvent: (id: string) => void;
   onRequestCreateTask: (date: Date) => void;
 };
 
-export default function CalendarView({ tasks, statuses, workspaces, onOpenTask, onRequestCreateTask }: CalendarViewProps) {
+export default function CalendarView({ tasks, events, statuses, workspaces, onOpenTask, onOpenEvent, onRequestCreateTask }: CalendarViewProps) {
   const {
     optimisticSetDates,
     optimisticSetCalendarLane,
@@ -94,6 +102,19 @@ export default function CalendarView({ tasks, statuses, workspaces, onOpenTask, 
     return statusColorOf(task.status);
   };
 
+  // An Event's own linked Space cascades color the same way a Task's List does — falls back to
+  // the Event's own `color` field, then the fixed default, never to Status (Events have no
+  // status concept at all).
+  const eventColorOf = (event: Event): string => {
+    if (event.spaceId) {
+      for (const ws of workspaces) {
+        const space = ws.spaces.find((s) => s.id === event.spaceId);
+        if (space) return space.color;
+      }
+    }
+    return event.color ?? DEFAULT_EVENT_COLOR;
+  };
+
   const ranges = useMemo(() => {
     const out: TaskRange[] = [];
     for (const task of tasks) {
@@ -105,10 +126,19 @@ export default function CalendarView({ tasks, statuses, workspaces, onOpenTask, 
       if (end < start) end = start;
       out.push({ id: task.id, start, end });
     }
+    // Events merge into the exact same range list Tasks use — assignLanes/clipRangeToWeek are
+    // already generic over {id, start, end} and need no changes to accommodate a second source.
+    for (const event of events) {
+      const start = startOfDay(new Date(event.startDate));
+      let end = startOfDay(new Date(event.endDate));
+      if (end < start) end = start;
+      out.push({ id: event.id, start, end });
+    }
     return out;
-  }, [tasks]);
+  }, [tasks, events]);
 
   const tasksById = useMemo(() => new Map(tasks.map((t) => [t.id, t])), [tasks]);
+  const eventsById = useMemo(() => new Map(events.map((e) => [e.id, e])), [events]);
   const rangesById = useMemo(() => new Map(ranges.map((r) => [r.id, r])), [ranges]);
 
   // Manually-pinned Planner lanes (dragged vertically — see assignLanes in lib/ganttLayout.ts).
@@ -354,6 +384,15 @@ export default function CalendarView({ tasks, statuses, workspaces, onOpenTask, 
     });
   }, [granularity, tasks, rangesById, focusDate]);
 
+  const dayEvents = useMemo(() => {
+    if (granularity !== 'day') return [];
+    return events.filter((e) => {
+      const r = rangesById.get(e.id);
+      if (!r) return false;
+      return focusDate >= r.start && focusDate <= r.end;
+    });
+  }, [granularity, events, rangesById, focusDate]);
+
   return (
     <div className="flex flex-col h-full">
       <div className="flex items-center justify-between px-1 pb-3 shrink-0">
@@ -404,6 +443,9 @@ export default function CalendarView({ tasks, statuses, workspaces, onOpenTask, 
             taskColorOf={taskColorOf}
             onOpenTask={onOpenTask}
             onCommitDates={(taskId, startISO, dueISO) => optimisticSetDates(taskId, startISO, dueISO)}
+            events={dayEvents}
+            eventColorOf={eventColorOf}
+            onOpenEvent={onOpenEvent}
           />
         ) : (
           <div ref={gridContainerRef} className="relative h-full overflow-y-auto">
@@ -414,6 +456,9 @@ export default function CalendarView({ tasks, statuses, workspaces, onOpenTask, 
                 segments={segmentsByWeek[i]}
                 tasksById={tasksById}
                 taskColorOf={taskColorOf}
+                eventsById={eventsById}
+                eventColorOf={eventColorOf}
+                onOpenEvent={onOpenEvent}
                 today={today}
                 monthAnchor={granularity === 'month' ? focusDate : undefined}
                 maxVisibleLanes={maxVisibleLanes}

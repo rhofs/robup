@@ -21,8 +21,9 @@ type PersonalTasksPageProps = {
 // The private personal quick-list — "My tasks" in the new sidebar zone, only ever visible to the
 // current identity (its Space/List live inside that person's own single-member "personal"
 // workspace, resolved lazily here rather than at app startup). Deliberately bypasses
-// CreateTaskModal.tsx entirely (it always requires an explicit Space+List picker with no prop to
-// hide them) — a personal task is still a completely normal Task row under the hood, just created
+// components/calendar/QuickCreatePopover.tsx entirely (it always requires an explicit Space+List
+// picker with no prop to hide them) — a personal task is still a completely normal Task row under
+// the hood, just created
 // with a fixed listId, so clicking one opens the same universal task modal with every existing
 // capability (comments, docs, status, dates) working for free.
 export default function PersonalTasksPage({ currentUser, tasks, statuses, ensurePersonalWorkspace, onCreateTask, onOpenTask, onSetStatus }: PersonalTasksPageProps) {

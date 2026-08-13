@@ -3,7 +3,7 @@
 import { useRef, useState } from 'react';
 import { isSameDay } from '../../lib/calendarDates';
 import { layoutDayColumns } from '../../lib/ganttLayout';
-import type { Task } from '../../store/useTaskStore';
+import type { Task, Event } from '../../store/useTaskStore';
 
 const HOUR_H = 48;
 const SNAP_MIN = 15;
@@ -21,9 +21,14 @@ type DayTimelineProps = {
   taskColorOf: (task: Task) => string;
   onOpenTask: (id: string) => void;
   onCommitDates: (taskId: string, startISO: string | null, dueISO: string | null) => void;
+  // Events never drag here either (see WeekRow.tsx's own comment) — rendered read-only, click to
+  // open EventDetailModal.
+  events: Event[];
+  eventColorOf: (event: Event) => string;
+  onOpenEvent: (id: string) => void;
 };
 
-export default function DayTimeline({ day, tasks, taskColorOf, onOpenTask, onCommitDates }: DayTimelineProps) {
+export default function DayTimeline({ day, tasks, taskColorOf, onOpenTask, onCommitDates, events, eventColorOf, onOpenEvent }: DayTimelineProps) {
   const [drag, setDrag] = useState<DayDragState | null>(null);
   const draggedRef = useRef(false);
   const today = new Date();
@@ -39,6 +44,18 @@ export default function DayTimeline({ day, tasks, taskColorOf, onOpenTask, onCom
       allDayTasks.push(task);
     } else {
       timedTasks.push({ task, start, end });
+    }
+  }
+
+  // Event.allDay is an explicit field (unlike Task, which infers it from whether a time-of-day
+  // component is present) — no inference needed.
+  const allDayEvents: Event[] = [];
+  const timedEvents: { event: Event; start: Date; end: Date }[] = [];
+  for (const event of events) {
+    if (event.allDay) {
+      allDayEvents.push(event);
+    } else {
+      timedEvents.push({ event, start: new Date(event.startDate), end: new Date(event.endDate) });
     }
   }
 
@@ -88,7 +105,7 @@ export default function DayTimeline({ day, tasks, taskColorOf, onOpenTask, onCom
 
   return (
     <div className="flex flex-col h-full overflow-y-auto">
-      {allDayTasks.length > 0 && (
+      {(allDayTasks.length > 0 || allDayEvents.length > 0) && (
         <div className="shrink-0 border-b border-neutral-800 px-3 py-2 space-y-1">
           <div className="text-[9px] uppercase tracking-wider text-neutral-500 mb-1">All day</div>
           {allDayTasks.map((task) => (
@@ -100,6 +117,17 @@ export default function DayTimeline({ day, tasks, taskColorOf, onOpenTask, onCom
               style={{ backgroundColor: taskColorOf(task) }}
             >
               {task.title}
+            </button>
+          ))}
+          {allDayEvents.map((event) => (
+            <button
+              key={event.id}
+              onClick={() => onOpenEvent(event.id)}
+              title={event.title}
+              className="w-full text-left truncate text-[11px] text-white font-medium px-2 py-1 rounded cursor-pointer"
+              style={{ backgroundColor: eventColorOf(event) }}
+            >
+              {event.title}
             </button>
           ))}
         </div>
@@ -127,13 +155,43 @@ export default function DayTimeline({ day, tasks, taskColorOf, onOpenTask, onCom
 
         <div className="absolute left-12 right-2 top-0 bottom-0">
           {(() => {
-            const columns = layoutDayColumns(
-              timedTasks.map(({ task, start, end }) => {
+            // Tasks and Events share one column layout so a task and an event at the same time
+            // never visually overlap — same reasoning the month/week grid merges them into one
+            // range list for lane assignment (see CalendarView.tsx).
+            const columns = layoutDayColumns([
+              ...timedTasks.map(({ task, start, end }) => {
                 const startMin = minutesOfDay(start);
                 return { id: task.id, startMin, endMin: Math.max(minutesOfDay(end), startMin + 30) };
-              })
-            );
-            return timedTasks.map(({ task, start, end }) => {
+              }),
+              ...timedEvents.map(({ event, start, end }) => {
+                const startMin = minutesOfDay(start);
+                return { id: event.id, startMin, endMin: Math.max(minutesOfDay(end), startMin + 30) };
+              }),
+            ]);
+            const eventBlocks = timedEvents.map(({ event, start, end }) => {
+              const startMin = minutesOfDay(start);
+              const endMin = Math.max(minutesOfDay(end), startMin + 30);
+              const top = (startMin / 60) * HOUR_H;
+              const height = Math.max(20, ((endMin - startMin) / 60) * HOUR_H);
+              const { col, cols } = columns.get(event.id) ?? { col: 0, cols: 1 };
+              return (
+                <div
+                  key={event.id}
+                  className="absolute"
+                  style={{ top, height, left: `${(col / cols) * 100}%`, width: `${(1 / cols) * 100}%`, paddingRight: cols > 1 ? 2 : 0 }}
+                >
+                  <button
+                    onClick={() => onOpenEvent(event.id)}
+                    title={event.title}
+                    className="relative w-full h-full rounded px-2 py-1 text-[10px] text-white font-medium truncate cursor-pointer text-left"
+                    style={{ backgroundColor: eventColorOf(event) }}
+                  >
+                    {event.title}
+                  </button>
+                </div>
+              );
+            });
+            const taskBlocks = timedTasks.map(({ task, start, end }) => {
             const isDraggingThis = drag?.taskId === task.id;
             let startMin = minutesOfDay(start);
             let endMin = Math.max(minutesOfDay(end), startMin + 30);
@@ -191,6 +249,7 @@ export default function DayTimeline({ day, tasks, taskColorOf, onOpenTask, onCom
               </div>
             );
             });
+            return [...eventBlocks, ...taskBlocks];
           })()}
         </div>
       </div>

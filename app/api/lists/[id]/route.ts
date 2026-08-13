@@ -1,10 +1,23 @@
 import { NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { cascadeList } from '@/lib/trashCascade';
+import { archiveList } from '@/lib/archiveCascade';
 import { getCurrentUserId } from '@/lib/auth/session';
 import { getWorkspaceRole, canManageWorkspace } from '@/lib/auth/access';
 
-const LIST_SELECT = { id: true, name: true, color: true, icon: true, spaceId: true, folderId: true, order: true, isPrivate: true, accessJson: true } as const;
+const LIST_SELECT = {
+  id: true,
+  name: true,
+  color: true,
+  textColor: true,
+  icon: true,
+  spaceId: true,
+  folderId: true,
+  order: true,
+  archived: true,
+  isPrivate: true,
+  accessJson: true,
+} as const;
 
 export async function PATCH(req: Request, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
@@ -16,9 +29,19 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
     return NextResponse.json(list);
   }
 
+  // Archiving/restoring cascades to every Task inside (lib/archiveCascade.ts) — a plain field
+  // set on the generic `data` object below wouldn't touch those, so this is handled separately,
+  // same pattern as the `restore` branch just above.
+  if (body.archived !== undefined) {
+    await archiveList(id, body.archived);
+    const list = await prisma.list.findUniqueOrThrow({ where: { id }, select: LIST_SELECT });
+    return NextResponse.json(list);
+  }
+
   const data: any = {};
   if (body.name !== undefined) data.name = body.name;
   if (body.color !== undefined) data.color = body.color;
+  if (body.textColor !== undefined) data.textColor = body.textColor;
   if (body.icon !== undefined) data.icon = body.icon;
   if (body.folderId !== undefined) data.folderId = body.folderId;
   if (body.order !== undefined) data.order = body.order;

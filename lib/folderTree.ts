@@ -3,15 +3,20 @@ import type { HierarchySpace } from '../store/useTaskStore';
 export const getChildFolders = (space: HierarchySpace, parentId: string | null) =>
   space.folders.filter((f) => f.parentId === parentId).sort((a, b) => a.order - b.order);
 
-export const getListsIn = (space: HierarchySpace, folderId: string | null) =>
-  space.lists.filter((l) => l.folderId === folderId).sort((a, b) => a.order - b.order);
+// `archived` defaults to false (the normal sidebar view) — the "Archive"/"Viewing archive"
+// toggle (app/page.tsx's showArchived) passes true to show only the archived ones instead,
+// mirroring how the task table already flips between the two sets.
+export const getListsIn = (space: HierarchySpace, folderId: string | null, archived = false) =>
+  space.lists.filter((l) => l.folderId === folderId && l.archived === archived).sort((a, b) => a.order - b.order);
 
 // Docs filed under a real Folder in the Tasks-tab sidebar — a second, independent axis from
 // lib/docFolderTree.ts's getSpaceDocsIn (which reads folderId/DocFolder, the Docs tab's own
 // tree). Root-level only (parentId === null), same reasoning as getSpaceDocsIn: a subpage's own
 // boardFolderId is irrelevant, it's only ever reached through its parent doc.
-export const getBoardDocsIn = (space: HierarchySpace, folderId: string | null) =>
-  space.spaceDocs.filter((d) => d.boardFolderId === folderId && d.parentId === null).sort((a, b) => a.order - b.order);
+export const getBoardDocsIn = (space: HierarchySpace, folderId: string | null, archived = false) =>
+  space.spaceDocs
+    .filter((d) => d.boardFolderId === folderId && d.parentId === null && d.archived === archived)
+    .sort((a, b) => a.order - b.order);
 
 // All folder ids nested anywhere under `folderId` (not including `folderId` itself). Pass `null` for the whole space.
 export const collectFolderIdsUnder = (space: HierarchySpace, folderId: string | null): string[] => {

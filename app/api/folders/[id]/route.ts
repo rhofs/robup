@@ -28,7 +28,7 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
     await cascadeFolder(id, null);
     const folder = await prisma.folder.findUniqueOrThrow({
       where: { id },
-      select: { id: true, name: true, color: true, icon: true, spaceId: true, parentId: true, order: true, isPrivate: true, accessJson: true },
+      select: { id: true, name: true, color: true, textColor: true, icon: true, spaceId: true, parentId: true, order: true, isPrivate: true, accessJson: true },
     });
     return NextResponse.json(folder);
   }
@@ -36,6 +36,7 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
   const data: any = {};
   if (body.name !== undefined) data.name = body.name;
   if (body.color !== undefined) data.color = body.color;
+  if (body.textColor !== undefined) data.textColor = body.textColor;
   if (body.icon !== undefined) data.icon = body.icon;
   if (body.parentId !== undefined) data.parentId = body.parentId;
   if (body.order !== undefined) data.order = body.order;
@@ -70,7 +71,7 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
 
   const folder = await prisma.folder.findUniqueOrThrow({
     where: { id },
-    select: { id: true, name: true, color: true, icon: true, spaceId: true, parentId: true, order: true },
+    select: { id: true, name: true, color: true, textColor: true, icon: true, spaceId: true, parentId: true, order: true },
   });
   return NextResponse.json(folder);
 }

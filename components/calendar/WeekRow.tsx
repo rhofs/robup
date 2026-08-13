@@ -4,7 +4,7 @@ import { useRef } from 'react';
 import { Plus, Pin } from 'lucide-react';
 import { getISOWeek, isSameDay } from '../../lib/calendarDates';
 import type { ClippedSegment, DragMode, DragState } from '../../lib/ganttLayout';
-import type { Task } from '../../store/useTaskStore';
+import type { Task, Event } from '../../store/useTaskStore';
 
 export const BAR_H = 13;
 export const BAR_GAP = 3;
@@ -17,6 +17,12 @@ type WeekRowProps = {
   segments: ClippedSegment[];
   tasksById: Map<string, Task>;
   taskColorOf: (task: Task) => string;
+  // Events share the exact same segment list/lane packing as Tasks (see CalendarView.tsx's
+  // merged `ranges`) but never drag — a segment whose id isn't in tasksById is looked up here
+  // instead and rendered as a plain clickable bar, no pointer handlers wired up at all.
+  eventsById: Map<string, Event>;
+  eventColorOf: (event: Event) => string;
+  onOpenEvent: (id: string) => void;
   today: Date;
   monthAnchor?: Date;
   maxVisibleLanes: number;
@@ -36,6 +42,9 @@ export default function WeekRow({
   segments,
   tasksById,
   taskColorOf,
+  eventsById,
+  eventColorOf,
+  onOpenEvent,
   today,
   monthAnchor,
   maxVisibleLanes,
@@ -163,49 +172,71 @@ export default function WeekRow({
         <div className="absolute inset-x-0 pointer-events-none" style={{ top: DAY_NUM_H, bottom: 0 }}>
           {visibleSegments.map((seg) => {
             const task = tasksById.get(seg.taskId);
-            if (!task) return null;
+            const event = task ? undefined : eventsById.get(seg.taskId);
+            if (!task && !event) return null;
+
+            const barStyle = {
+              left: `${(seg.colStart / 7) * 100}%`,
+              width: `${(seg.colSpan / 7) * 100}%`,
+              top: seg.lane * (BAR_H + BAR_GAP),
+              height: BAR_H,
+              paddingLeft: 2,
+              paddingRight: 2,
+            };
+
+            // Events never drag (see WeekRowProps' own comment) — a plain clickable bar, same
+            // shape/color-cascade convention as Task bars, no pointer handlers at all.
+            if (event) {
+              return (
+                <div key={seg.taskId} className="absolute pointer-events-auto" style={barStyle}>
+                  <button
+                    onClick={() => onOpenEvent(event.id)}
+                    title={event.title}
+                    className={`relative w-full h-full flex items-center text-[9px] leading-none text-white font-medium truncate cursor-pointer select-none ${
+                      seg.isStartEdge ? 'rounded-l pl-1.5' : 'pl-1'
+                    } ${seg.isEndEdge ? 'rounded-r pr-1.5' : 'pr-1'}`}
+                    style={{ backgroundColor: eventColorOf(event) }}
+                  >
+                    <span className="truncate">{event.title}</span>
+                  </button>
+                </div>
+              );
+            }
+
             const isDraggingThis = activeDrag?.taskId === seg.taskId;
-            const color = taskColorOf(task);
+            const color = taskColorOf(task!);
 
             return (
               <div
                 key={seg.taskId}
                 className="absolute pointer-events-auto group/bar"
-                style={{
-                  left: `${(seg.colStart / 7) * 100}%`,
-                  width: `${(seg.colSpan / 7) * 100}%`,
-                  top: seg.lane * (BAR_H + BAR_GAP),
-                  height: BAR_H,
-                  paddingLeft: 2,
-                  paddingRight: 2,
-                  opacity: isDraggingThis ? 0.35 : 1,
-                }}
+                style={{ ...barStyle, opacity: isDraggingThis ? 0.35 : 1 }}
               >
                 <div
-                  onPointerDown={(e) => startInteraction(e, task, 'move')}
-                  onPointerMove={(e) => moveInteraction(e, task)}
-                  onPointerUp={(e) => endInteraction(e, task, 'move')}
-                  title={task.title}
+                  onPointerDown={(e) => startInteraction(e, task!, 'move')}
+                  onPointerMove={(e) => moveInteraction(e, task!)}
+                  onPointerUp={(e) => endInteraction(e, task!, 'move')}
+                  title={task!.title}
                   className={`relative h-full flex items-center text-[9px] leading-none text-white font-medium truncate cursor-grab active:cursor-grabbing select-none ${
                     seg.isStartEdge ? 'rounded-l pl-1.5' : 'pl-1'
                   } ${seg.isEndEdge ? 'rounded-r pr-1.5' : 'pr-1'}`}
                   style={{ backgroundColor: color }}
                 >
-                  <span className="truncate">{task.title}</span>
+                  <span className="truncate">{task!.title}</span>
 
                   {seg.isStartEdge && (
                     <div
-                      onPointerDown={(e) => startInteraction(e, task, 'resize-start')}
-                      onPointerMove={(e) => moveInteraction(e, task)}
-                      onPointerUp={(e) => endInteraction(e, task, 'resize-start')}
+                      onPointerDown={(e) => startInteraction(e, task!, 'resize-start')}
+                      onPointerMove={(e) => moveInteraction(e, task!)}
+                      onPointerUp={(e) => endInteraction(e, task!, 'resize-start')}
                       className="absolute left-0 top-0 h-full w-2 cursor-ew-resize"
                     />
                   )}
                   {seg.isEndEdge && (
                     <div
-                      onPointerDown={(e) => startInteraction(e, task, 'resize-end')}
-                      onPointerMove={(e) => moveInteraction(e, task)}
-                      onPointerUp={(e) => endInteraction(e, task, 'resize-end')}
+                      onPointerDown={(e) => startInteraction(e, task!, 'resize-end')}
+                      onPointerMove={(e) => moveInteraction(e, task!)}
+                      onPointerUp={(e) => endInteraction(e, task!, 'resize-end')}
                       className="absolute right-0 top-0 h-full w-2 cursor-ew-resize"
                     />
                   )}
@@ -215,11 +246,11 @@ export default function WeekRow({
                     sibling of the draggable inner div, not nested inside it, so its own click
                     never triggers the drag handlers above. Only shown on hover, same corner-badge
                     convention as PersonAvatar's DND dot elsewhere in this app. */}
-                {task.calendarLane !== null && task.calendarLane !== undefined && (
+                {task!.calendarLane !== null && task!.calendarLane !== undefined && (
                   <button
                     onClick={(e) => {
                       e.stopPropagation();
-                      onUnpinLane(task.id);
+                      onUnpinLane(task!.id);
                     }}
                     title="Manually pinned to this lane — click to let it auto-arrange again"
                     className="absolute -top-1 -right-1 z-10 w-3 h-3 rounded-full bg-neutral-900 border border-neutral-600 text-neutral-300 hover:text-white hover:border-white flex items-center justify-center opacity-0 group-hover/bar:opacity-100 transition cursor-pointer"

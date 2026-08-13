@@ -243,7 +243,11 @@ function RoomBox({ room, members, workspace, currentUserId, canManage, taskCount
               className="bg-neutral-950 border border-blue-500 rounded px-1.5 py-0.5 text-xs text-white focus:outline-none min-w-0"
             />
           ) : (
-            <button onClick={() => setEditingName(true)} className="text-xs font-semibold text-neutral-200 truncate cursor-text text-left">
+            <button
+              onClick={() => setEditingName(true)}
+              className="text-xs font-semibold text-neutral-200 truncate cursor-text text-left"
+              style={{ color: room.textColor || undefined }}
+            >
               {room.name}
             </button>
           )}

@@ -236,6 +236,10 @@ type FolderTreeProps = {
   renameDocId: string | null;
   onRenameDocHandled: () => void;
   listDropIndicator: { targetId: string; position: 'above' | 'below' } | null;
+  // The existing per-Space "Archive"/"Viewing archive" toggle (previously task-table-only) now
+  // also drives which Lists/Docs this tree shows — false (normal) hides archived ones, true shows
+  // only the archived ones, mirroring how the task table already flips between the two sets.
+  showArchived: boolean;
 };
 
 export default function FolderTree(props: FolderTreeProps) {
@@ -243,14 +247,14 @@ export default function FolderTree(props: FolderTreeProps) {
 }
 
 function FolderLevel(props: FolderTreeProps & { parentId: string | null; depth: number }) {
-  const { space, tasks, activeView, activeListIds, calendarVisibleListIds, onNavigateList, toggleCalendarList, parentId, depth } = props;
+  const { space, tasks, activeView, activeListIds, calendarVisibleListIds, onNavigateList, toggleCalendarList, parentId, depth, showArchived } = props;
   const { createList, createFolder, createSpaceDoc, renameList } = useTaskStore();
   const [addMode, setAddMode] = useState<'list' | 'folder' | 'doc' | null>(null);
   const [draft, setDraft] = useState('');
 
   const folders = getChildFolders(space, parentId);
-  const lists = getListsIn(space, parentId);
-  const docs = getBoardDocsIn(space, parentId);
+  const lists = getListsIn(space, parentId, showArchived);
+  const docs = getBoardDocsIn(space, parentId, showArchived);
 
   const commitAdd = async () => {
     const trimmed = draft.trim();
@@ -486,11 +490,13 @@ function DocRow({
         onContextMenu={onContextMenu}
         className={`group w-full text-left px-2 py-1 rounded text-[11px] transition flex items-center justify-between cursor-pointer ${
           isActive ? 'bg-neutral-800 font-medium' : 'text-neutral-400 hover:text-neutral-200 hover:bg-neutral-800/30'
-        } ${isOver ? 'ring-1 ring-inset ring-neutral-500 bg-neutral-700/40' : ''} ${isDragging ? 'opacity-40' : ''}`}
+        } ${isOver ? 'ring-1 ring-inset ring-neutral-500 bg-neutral-700/40' : ''} ${isDragging ? 'opacity-40' : ''} ${
+          doc.archived ? 'opacity-50' : ''
+        }`}
       >
         <span className="truncate flex items-center gap-1.5 min-w-0">
           <FileText className="w-3 h-3 shrink-0" style={{ color: doc.color || undefined }} />
-          <span className="truncate" style={isActive ? activeGlowStyle(doc.color) : { color: doc.color || undefined }}>
+          <span className="truncate" style={isActive ? activeGlowStyle(doc.textColor || doc.color) : { color: doc.textColor || doc.color || undefined }}>
             {doc.title || 'Untitled'}
           </span>
         </span>
@@ -653,7 +659,7 @@ function FolderRow(props: FolderTreeProps & { folder: HierarchyFolder; parentId:
               already use (only the checkbox itself indicates "checked"). This span had no color
               override before, so it silently inherited the row wrapper's text-blue-400 whenever
               checked, unlike List/Space which already got an explicit style here. */}
-          <span className="truncate" style={{ color: folder.color || undefined }}>{folder.name}</span>
+          <span className="truncate" style={{ color: folder.textColor || folder.color || undefined }}>{folder.name}</span>
           {folder.isPrivate && <Lock className="w-2.5 h-2.5 text-neutral-500 shrink-0" />}
         </span>
         <span className="flex items-center gap-1 shrink-0">
@@ -784,7 +790,9 @@ function ListRow({
       }}
       className={`group w-full text-left px-2 py-1 rounded text-[11px] transition flex items-center justify-between cursor-pointer ${
         isActive ? 'bg-neutral-800 font-medium' : 'text-neutral-400 hover:text-neutral-200 hover:bg-neutral-800/30'
-      } ${isOver ? 'ring-1 ring-inset ring-neutral-500 bg-neutral-700/40' : ''} ${isDragging ? 'opacity-40' : ''}`}
+      } ${isOver ? 'ring-1 ring-inset ring-neutral-500 bg-neutral-700/40' : ''} ${isDragging ? 'opacity-40' : ''} ${
+        list.archived ? 'opacity-50' : ''
+      }`}
     >
       <span className="truncate flex items-center gap-1.5 min-w-0">
         {filterMode && (
@@ -804,7 +812,7 @@ function ListRow({
         {/* Own color always — only the checkbox indicates "checked" (Google Calendar's sidebar
             convention); when active/open, the name glows a bright version of that same color
             instead of switching to blue. */}
-        <span className="truncate" style={isActive ? activeGlowStyle(list.color) : { color: list.color || undefined }}>
+        <span className="truncate" style={isActive ? activeGlowStyle(list.textColor || list.color) : { color: list.textColor || list.color || undefined }}>
           {list.name}
         </span>
         {list.isPrivate && <Lock className="w-2.5 h-2.5 text-neutral-500 shrink-0" />}

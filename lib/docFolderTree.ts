@@ -10,8 +10,11 @@ export const getChildDocFolders = (space: HierarchySpace, parentId: string | nul
 // Root-level docs only (parentId === null) — a subpage (nested under another Doc) always has
 // folderId: null too, so without the parentId check it would wrongly show up at the space root
 // alongside real root-level docs. Reached only via getChildDocs below, from its parent doc.
+// Archived docs never show here — the Docs tab has no Archive-browsing concept of its own; the
+// only place to see/restore one is the Tasks-tab sidebar's existing Archive toggle (see
+// lib/folderTree.ts's getBoardDocsIn, which does take an `archived` param for that).
 export const getSpaceDocsIn = (space: HierarchySpace, folderId: string | null) =>
-  space.spaceDocs.filter((d) => d.folderId === folderId && d.parentId === null).sort((a, b) => a.order - b.order);
+  space.spaceDocs.filter((d) => d.folderId === folderId && d.parentId === null && !d.archived).sort((a, b) => a.order - b.order);
 
 // Direct subpages of a given Doc, for the sidebar's expand-in-place and the book panel's tree.
 export const getChildDocs = (space: HierarchySpace, parentDocId: string) =>

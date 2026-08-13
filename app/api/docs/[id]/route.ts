@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { cascadeDoc } from '@/lib/trashCascade';
+import { archiveDoc } from '@/lib/archiveCascade';
 
 export async function PATCH(req: Request, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
@@ -12,6 +13,15 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
     return NextResponse.json(doc);
   }
 
+  // Archiving/restoring cascades to every subpage in this doc's own subtree
+  // (lib/archiveCascade.ts) — handled separately from the generic `data` update below, same
+  // pattern as the `restore` branch just above.
+  if (body.archived !== undefined) {
+    await archiveDoc(id, body.archived);
+    const doc = await prisma.doc.findUniqueOrThrow({ where: { id } });
+    return NextResponse.json(doc);
+  }
+
   // `content` is deliberately not accepted here — once a doc has ever been opened in the
   // collaborative editor, its content is owned by server/collabServer.ts (the live Yjs doc plus
   // the plain-text mirror it writes on every persist). A raw PATCH here would race the sidecar's
@@ -19,6 +29,7 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
   const data: any = {};
   if (body.title !== undefined) data.title = body.title;
   if (body.color !== undefined) data.color = body.color;
+  if (body.textColor !== undefined) data.textColor = body.textColor;
   if (body.order !== undefined) data.order = body.order;
   if (body.taskId !== undefined) data.taskId = body.taskId;
   if (body.folderId !== undefined) data.folderId = body.folderId;

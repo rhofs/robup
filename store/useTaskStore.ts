@@ -1,5 +1,5 @@
 import { create } from 'zustand';
-import { Task as PrismaTask } from '@prisma/client';
+import { Task as PrismaTask, Event as PrismaEvent } from '@prisma/client';
 import { collectFolderIdsUnder } from '../lib/folderTree';
 import { collectDocFolderIdsUnder } from '../lib/docFolderTree';
 import { startOfDay } from '../lib/calendarDates';
@@ -18,6 +18,9 @@ export type CustomFieldDef = {
   name: string;
   type: 'text' | 'number' | 'date' | 'dropdown';
   options: { id?: string; label: string; color: string }[];
+  // Null = Space-wide (every field created before this existed, and any created with no single
+  // List active). Set = only that List's own task table shows this column.
+  listId: string | null;
 };
 
 export type AppUser = {
@@ -46,6 +49,13 @@ export type AppUser = {
 export type Task = PrismaTask & {
   assignees: AppUser[];
   _localId?: string;
+};
+
+// A Planner Event — happens on a given day, clickable for details, but deliberately never
+// creates a Task row (no required Space/Folder/List). See prisma/schema.prisma's own comment on
+// why this is a standalone model rather than a Task variant.
+export type Event = PrismaEvent & {
+  assignees: AppUser[];
 };
 
 export type TaskComment = {
@@ -82,7 +92,13 @@ export type TaskDoc = {
   title: string;
   content: string;
   color: string | null;
+  // Independent from `color` — colors the sidebar/name text specifically; falls back to `color`
+  // when null.
+  textColor: string | null;
   order: number;
+  // Non-destructive "get this out of the way," independent of Trash — cascades to every subpage
+  // in this doc's own subtree. See lib/archiveCascade.ts.
+  archived: boolean;
   taskId: string | null;
   spaceId: string | null;
   folderId: string | null;
@@ -103,6 +119,7 @@ export type HierarchyFolder = {
   id: string;
   name: string;
   color: string | null;
+  textColor: string | null;
   icon: string | null;
   spaceId: string;
   parentId: string | null;
@@ -125,9 +142,11 @@ export type HierarchyList = {
   id: string;
   name: string;
   color: string | null;
+  textColor: string | null;
   icon: string | null;
   folderId: string | null;
   order: number;
+  archived: boolean;
   isPrivate: boolean;
   accessJson: string;
 };
@@ -136,6 +155,7 @@ export type HierarchySpace = {
   id: string;
   name: string;
   color: string;
+  textColor: string | null;
   icon: string | null;
   order: number;
   description: string | null;
@@ -164,6 +184,7 @@ export type HierarchyRoom = {
   name: string;
   icon: string | null;
   color: string | null;
+  textColor: string | null;
   order: number;
   isDnd: boolean;
   workspaceId: string;
@@ -191,6 +212,7 @@ export type HierarchyWorkspace = {
 // inside the store body.
 interface TaskStore {
   tasks: Task[];
+  events: Event[];
   users: AppUser[];
   workspaces: HierarchyWorkspace[];
   comments: Record<string, TaskComment[]>;
@@ -222,6 +244,7 @@ interface TaskStore {
   fetchInitialData: () => Promise<void>;
   refetchWorkspaces: () => Promise<void>;
   refetchTasks: () => Promise<void>;
+  refetchEvents: () => Promise<void>;
   setActiveView: (view: 'board' | 'calendar' | 'docs' | 'office' | 'mytasks' | 'mypersonal' | 'profile') => void;
   setActiveWorkspaceId: (id: string) => void;
   setNavigation: (spaceId: string, listIds?: string[]) => void;
@@ -231,6 +254,34 @@ interface TaskStore {
   setActiveOfficeUserId: (userId: string | null) => void;
   setActiveOfficeRoomId: (roomId: string | null) => void;
   setShowArchived: (v: boolean) => void;
+
+  // Same optimistic-update-then-fetch + undo/redo shape every other action in this store already
+  // uses — no new pattern invented for Events.
+  optimisticCreateEvent: (params: {
+    title: string;
+    startDate: string;
+    endDate: string;
+    allDay?: boolean;
+    spaceId?: string | null;
+    color?: string | null;
+    workspaceId: string;
+    assigneeIds?: string[];
+    id?: string;
+  }) => Promise<Event | null>;
+  updateEvent: (
+    eventId: string,
+    patch: {
+      title?: string;
+      description?: string | null;
+      startDate?: string;
+      endDate?: string;
+      allDay?: boolean;
+      color?: string | null;
+      spaceId?: string | null;
+    }
+  ) => Promise<void>;
+  optimisticSetEventAssignees: (eventId: string, assigneeIds: string[]) => Promise<void>;
+  deleteEvent: (eventId: string) => Promise<void>;
 
   optimisticMoveTask: (taskId: string, newStatus: string) => void;
   optimisticCreateTask: (
@@ -262,7 +313,8 @@ interface TaskStore {
     name: string,
     type: CustomFieldDef['type'],
     options?: { label: string; color: string }[],
-    id?: string
+    id?: string,
+    listId?: string | null
   ) => Promise<void>;
   updateCustomField: (
     spaceId: string,
@@ -296,7 +348,7 @@ interface TaskStore {
   createRoom: (workspaceId: string, name: string, id?: string) => Promise<void>;
   updateRoom: (
     roomId: string,
-    patch: { name?: string; icon?: string | null; color?: string | null; order?: number; isDnd?: boolean }
+    patch: { name?: string; icon?: string | null; color?: string | null; textColor?: string | null; order?: number; isDnd?: boolean }
   ) => Promise<void>;
   deleteRoom: (roomId: string) => Promise<void>;
   assignUserToRoom: (userId: string, roomId: string | null) => Promise<void>;
@@ -324,6 +376,7 @@ interface TaskStore {
     patch: {
       name?: string;
       color?: string;
+      textColor?: string | null;
       icon?: string | null;
       description?: string | null;
       coverImageUrl?: string | null;
@@ -340,7 +393,7 @@ interface TaskStore {
   updateList: (
     spaceId: string,
     listId: string,
-    patch: { name?: string; color?: string | null; icon?: string | null; isPrivate?: boolean; accessJson?: string }
+    patch: { name?: string; color?: string | null; textColor?: string | null; icon?: string | null; isPrivate?: boolean; accessJson?: string }
   ) => Promise<void>;
   // `targetSpaceId`, when given and different from `spaceId`, moves the list to a different
   // Space entirely (not just a different folder within the same one) — see the comment above
@@ -348,13 +401,24 @@ interface TaskStore {
   moveList: (spaceId: string, listId: string, folderId: string | null, targetSpaceId?: string) => Promise<void>;
   reorderList: (spaceId: string, listId: string, order: number) => Promise<void>;
   deleteList: (spaceId: string, listId: string) => Promise<void>;
+  // Non-destructive, independent of deleteList/Trash — cascades to every Task inside (see
+  // lib/archiveCascade.ts). `archived: false` restores.
+  archiveList: (spaceId: string, listId: string, archived: boolean) => Promise<void>;
 
   createFolder: (spaceId: string, name: string, parentId?: string | null, id?: string) => Promise<void>;
   renameFolder: (spaceId: string, folderId: string, name: string) => Promise<void>;
   updateFolder: (
     spaceId: string,
     folderId: string,
-    patch: { name?: string; color?: string | null; icon?: string | null; order?: number; isPrivate?: boolean; accessJson?: string }
+    patch: {
+      name?: string;
+      color?: string | null;
+      textColor?: string | null;
+      icon?: string | null;
+      order?: number;
+      isPrivate?: boolean;
+      accessJson?: string;
+    }
   ) => Promise<void>;
   moveFolder: (spaceId: string, folderId: string, parentId: string | null, targetSpaceId?: string) => Promise<void>;
   deleteFolder: (spaceId: string, folderId: string) => Promise<void>;
@@ -372,9 +436,12 @@ interface TaskStore {
   updateSpaceDoc: (
     docId: string,
     spaceId: string,
-    patch: { title?: string; color?: string | null; ownerId?: string | null; contributorIds?: string[] }
+    patch: { title?: string; color?: string | null; textColor?: string | null; ownerId?: string | null; contributorIds?: string[] }
   ) => void;
   moveSpaceDoc: (spaceId: string, docId: string, folderId: string | null, targetSpaceId?: string) => Promise<void>;
+  // Non-destructive, independent of deleteSpaceDoc/Trash — cascades to every subpage in this
+  // doc's own subtree (see lib/archiveCascade.ts). `archived: false` restores.
+  archiveSpaceDoc: (spaceId: string, docId: string, archived: boolean) => Promise<void>;
   // Independent from moveSpaceDoc above (which moves between DocFolders) — moves a Doc between
   // real Folders in the Tasks-tab sidebar, mirroring moveList's exact shape.
   moveDocToBoardFolder: (spaceId: string, docId: string, boardFolderId: string | null, targetSpaceId?: string) => Promise<void>;
@@ -405,8 +472,8 @@ interface TaskStore {
 
   // Trash panel: restore or permanently purge a soft-deleted item of any kind by its API path
   // segment (mirrors the route names, not the display label — 'doc-folders', not 'docFolder').
-  restoreFromTrash: (kind: 'spaces' | 'folders' | 'lists' | 'tasks' | 'doc-folders' | 'docs', id: string) => Promise<void>;
-  permanentlyDeleteFromTrash: (kind: 'spaces' | 'folders' | 'lists' | 'tasks' | 'doc-folders' | 'docs', id: string) => Promise<void>;
+  restoreFromTrash: (kind: 'spaces' | 'folders' | 'lists' | 'tasks' | 'doc-folders' | 'docs' | 'events', id: string) => Promise<void>;
+  permanentlyDeleteFromTrash: (kind: 'spaces' | 'folders' | 'lists' | 'tasks' | 'doc-folders' | 'docs' | 'events', id: string) => Promise<void>;
 }
 
 export const useTaskStore = create<TaskStore>((set, get) => {
@@ -416,17 +483,18 @@ export const useTaskStore = create<TaskStore>((set, get) => {
   // (clearing deletedAt back down the same subtree it was stamped on), not a client-side
   // snapshot-and-recreate: the row never actually left the database, so recreating it with the
   // same id would hit a unique-constraint conflict instead of bringing it back.
-  const restoreEntity = async (kind: 'spaces' | 'folders' | 'lists' | 'tasks' | 'doc-folders' | 'docs', id: string) => {
+  const restoreEntity = async (kind: 'spaces' | 'folders' | 'lists' | 'tasks' | 'doc-folders' | 'docs' | 'events', id: string) => {
     await fetch(`/api/${kind}/${id}`, {
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ restore: true }),
     });
-    await Promise.all([get().refetchWorkspaces(), get().refetchTasks()]);
+    await Promise.all([get().refetchWorkspaces(), get().refetchTasks(), get().refetchEvents()]);
   };
 
   return {
     tasks: [],
+    events: [],
     users: [],
     workspaces: [],
     comments: {},
@@ -451,16 +519,18 @@ export const useTaskStore = create<TaskStore>((set, get) => {
         // Workspace-scoped endpoints need to know who's asking — "You are: (none)" deliberately
         // sees zero workspaces (see PLANNING.md), so this can genuinely come back empty.
         const userId = useSessionStore.getState().currentUserId ?? '';
-        const [workspacesRes, tasksRes, usersRes, taskDocsRes] = await Promise.all([
+        const [workspacesRes, tasksRes, usersRes, taskDocsRes, eventsRes] = await Promise.all([
           fetch(`/api/workspaces?userId=${userId}`),
           fetch(`/api/tasks?userId=${userId}`),
           fetch('/api/users'),
           fetch(`/api/task-docs?userId=${userId}`),
+          fetch(`/api/events?userId=${userId}`),
         ]);
         const workspaces = await workspacesRes.json();
         const tasks = await tasksRes.json();
         const users = await usersRes.json();
         const taskDocs = await taskDocsRes.json();
+        const events = await eventsRes.json();
 
         // Keep the current workspace selection if the newly-fetched list still contains it
         // (e.g. a plain refetch, or an identity switch to someone who's also a member of the
@@ -488,6 +558,7 @@ export const useTaskStore = create<TaskStore>((set, get) => {
           tasks,
           users,
           docs: docsByTask,
+          events,
           activeWorkspaceId,
           activeSpaceId: firstSpaceId,
           isLoading: false,
@@ -525,6 +596,17 @@ export const useTaskStore = create<TaskStore>((set, get) => {
         set({ tasks });
       } catch (error) {
         console.error('Error refetching tasks:', error);
+      }
+    },
+
+    refetchEvents: async () => {
+      try {
+        const userId = useSessionStore.getState().currentUserId ?? '';
+        const res = await fetch(`/api/events?userId=${userId}`);
+        const events = await res.json();
+        set({ events });
+      } catch (error) {
+        console.error('Error refetching events:', error);
       }
     },
 
@@ -575,6 +657,101 @@ export const useTaskStore = create<TaskStore>((set, get) => {
     setActiveOfficeRoomId: (activeOfficeRoomId) => set({ activeOfficeRoomId }),
 
     setShowArchived: (showArchived) => set({ showArchived }),
+
+    optimisticCreateEvent: async (params) => {
+      const res = await fetch('/api/events', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(params),
+      });
+      if (!res.ok) return null;
+      const event: Event = await res.json();
+      set((state) => ({ events: [...state.events, event] }));
+      if (!params.id) {
+        useHistoryStore.getState().push({
+          label: 'Create event',
+          undo: () => get().deleteEvent(event.id),
+          redo: async () => {
+            await get().optimisticCreateEvent({ ...params, id: event.id });
+          },
+        });
+      }
+      return event;
+    },
+
+    updateEvent: async (eventId, patch) => {
+      const oldEvent = get().events.find((e) => e.id === eventId);
+      set((state) => ({
+        events: state.events.map((e) =>
+          e.id === eventId
+            ? {
+                ...e,
+                ...patch,
+                startDate: patch.startDate ? new Date(patch.startDate) : e.startDate,
+                endDate: patch.endDate ? new Date(patch.endDate) : e.endDate,
+              }
+            : e
+        ),
+      }));
+      await fetch(`/api/events/${eventId}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(patch),
+      });
+      if (oldEvent) {
+        const oldPatch: typeof patch = {};
+        if (patch.title !== undefined) oldPatch.title = oldEvent.title;
+        if (patch.description !== undefined) oldPatch.description = oldEvent.description;
+        if (patch.startDate !== undefined) oldPatch.startDate = new Date(oldEvent.startDate).toISOString();
+        if (patch.endDate !== undefined) oldPatch.endDate = new Date(oldEvent.endDate).toISOString();
+        if (patch.allDay !== undefined) oldPatch.allDay = oldEvent.allDay;
+        if (patch.color !== undefined) oldPatch.color = oldEvent.color;
+        if (patch.spaceId !== undefined) oldPatch.spaceId = oldEvent.spaceId;
+        useHistoryStore.getState().pushCoalesced(`event-${eventId}`, {
+          label: 'Edit event',
+          undo: () => get().updateEvent(eventId, oldPatch),
+          redo: () => get().updateEvent(eventId, patch),
+        });
+      }
+    },
+
+    optimisticSetEventAssignees: async (eventId, assigneeIds) => {
+      const oldIds = get().events.find((e) => e.id === eventId)?.assignees.map((a) => a.id) ?? [];
+      const assignees = get().users.filter((u) => assigneeIds.includes(u.id));
+      set((state) => ({
+        events: state.events.map((e) => (e.id === eventId ? { ...e, assignees } : e)),
+      }));
+      await fetch(`/api/events/${eventId}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ assigneeIds }),
+      });
+      useHistoryStore.getState().push({
+        label: 'Change event attendees',
+        undo: () => get().optimisticSetEventAssignees(eventId, oldIds),
+        redo: () => get().optimisticSetEventAssignees(eventId, assigneeIds),
+      });
+    },
+
+    deleteEvent: async (eventId) => {
+      const event = get().events.find((e) => e.id === eventId);
+      set((state) => ({ events: state.events.filter((e) => e.id !== eventId) }));
+      const res = await fetch(`/api/events/${eventId}`, { method: 'DELETE' }).catch(() => null);
+      if (!res || !res.ok) {
+        // Same "don't silently lose data on a failed optimistic mutation" rule every delete
+        // action in this store already follows — resync from the server and surface it.
+        await get().refetchEvents();
+        alert('Failed to delete event. Please try again.');
+        return;
+      }
+      if (event) {
+        useHistoryStore.getState().push({
+          label: 'Delete event',
+          undo: () => restoreEntity('events', eventId),
+          redo: () => get().deleteEvent(eventId),
+        });
+      }
+    },
 
     optimisticMoveTask: (taskId, newStatus) => {
       const oldStatus = get().tasks.find((t) => t.id === taskId)?.status;
@@ -980,11 +1157,11 @@ export const useTaskStore = create<TaskStore>((set, get) => {
       }
     },
 
-    createCustomField: async (spaceId, name, type, options = [], id) => {
+    createCustomField: async (spaceId, name, type, options = [], id, listId = null) => {
       const res = await fetch('/api/custom-fields', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ id, spaceId, name, type, options }),
+        body: JSON.stringify({ id, spaceId, name, type, options, listId }),
       });
       const newField = await res.json();
       set((state) => ({
@@ -996,7 +1173,7 @@ export const useTaskStore = create<TaskStore>((set, get) => {
       useHistoryStore.getState().push({
         label: `Create field "${name}"`,
         undo: () => get().deleteCustomField(spaceId, newField.id),
-        redo: () => get().createCustomField(spaceId, name, type, options, newField.id),
+        redo: () => get().createCustomField(spaceId, name, type, options, newField.id, listId),
       });
     },
 
@@ -1184,6 +1361,7 @@ export const useTaskStore = create<TaskStore>((set, get) => {
         if (patch.name !== undefined) oldPatch.name = oldRoom.name;
         if (patch.icon !== undefined) oldPatch.icon = oldRoom.icon;
         if (patch.color !== undefined) oldPatch.color = oldRoom.color;
+        if (patch.textColor !== undefined) oldPatch.textColor = oldRoom.textColor;
         if (patch.order !== undefined) oldPatch.order = oldRoom.order;
         if (patch.isDnd !== undefined) oldPatch.isDnd = oldRoom.isDnd;
         useHistoryStore.getState().push({
@@ -1434,6 +1612,7 @@ export const useTaskStore = create<TaskStore>((set, get) => {
         const oldPatch: typeof patch = {};
         if (patch.name !== undefined) oldPatch.name = oldSpace.name;
         if (patch.color !== undefined) oldPatch.color = oldSpace.color;
+        if (patch.textColor !== undefined) oldPatch.textColor = oldSpace.textColor;
         if (patch.icon !== undefined) oldPatch.icon = oldSpace.icon;
         if (patch.description !== undefined) oldPatch.description = oldSpace.description;
         if (patch.coverImageUrl !== undefined) oldPatch.coverImageUrl = oldSpace.coverImageUrl;
@@ -1581,6 +1760,7 @@ export const useTaskStore = create<TaskStore>((set, get) => {
         const oldPatch: typeof patch = {};
         if (patch.name !== undefined) oldPatch.name = oldList.name;
         if (patch.color !== undefined) oldPatch.color = oldList.color;
+        if (patch.textColor !== undefined) oldPatch.textColor = oldList.textColor;
         if (patch.icon !== undefined) oldPatch.icon = oldList.icon;
         if (patch.isPrivate !== undefined) oldPatch.isPrivate = oldList.isPrivate;
         if (patch.accessJson !== undefined) oldPatch.accessJson = oldList.accessJson;
@@ -1590,6 +1770,30 @@ export const useTaskStore = create<TaskStore>((set, get) => {
           redo: () => get().updateList(spaceId, listId, patch),
         });
       }
+    },
+
+    archiveList: async (spaceId, listId, archived) => {
+      // Optimistically flips both the List's own flag and every Task inside it, so the sidebar
+      // tree and task table both reflect the cascade immediately without waiting on a refetch.
+      set((state) => ({
+        workspaces: state.workspaces.map((ws) => ({
+          ...ws,
+          spaces: ws.spaces.map((s) =>
+            s.id === spaceId ? { ...s, lists: s.lists.map((l) => (l.id === listId ? { ...l, archived } : l)) } : s
+          ),
+        })),
+        tasks: state.tasks.map((t) => (t.listId === listId ? { ...t, archived } : t)),
+      }));
+      await fetch(`/api/lists/${listId}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ archived }),
+      });
+      useHistoryStore.getState().push({
+        label: archived ? 'Archive list' : 'Restore list',
+        undo: () => get().archiveList(spaceId, listId, !archived),
+        redo: () => get().archiveList(spaceId, listId, archived),
+      });
     },
 
     moveList: async (spaceId, listId, folderId, targetSpaceId) => {
@@ -1751,6 +1955,7 @@ export const useTaskStore = create<TaskStore>((set, get) => {
         const oldPatch: typeof patch = {};
         if (patch.name !== undefined) oldPatch.name = oldFolder.name;
         if (patch.color !== undefined) oldPatch.color = oldFolder.color;
+        if (patch.textColor !== undefined) oldPatch.textColor = oldFolder.textColor;
         if (patch.icon !== undefined) oldPatch.icon = oldFolder.icon;
         if (patch.order !== undefined) oldPatch.order = oldFolder.order;
         if (patch.isPrivate !== undefined) oldPatch.isPrivate = oldFolder.isPrivate;
@@ -2048,6 +2253,7 @@ export const useTaskStore = create<TaskStore>((set, get) => {
         const oldPatch: typeof patch = {};
         if (patch.title !== undefined) oldPatch.title = oldDoc.title;
         if (patch.color !== undefined) oldPatch.color = oldDoc.color;
+        if (patch.textColor !== undefined) oldPatch.textColor = oldDoc.textColor;
         if (patch.ownerId !== undefined) oldPatch.ownerId = oldDoc.ownerId;
         if (patch.contributorIds !== undefined) oldPatch.contributorIds = oldDoc.contributorIds;
         useHistoryStore.getState().pushCoalesced(`doc-${docId}`, {
@@ -2056,6 +2262,24 @@ export const useTaskStore = create<TaskStore>((set, get) => {
           redo: () => get().updateSpaceDoc(docId, spaceId, patch),
         });
       }
+    },
+
+    // Cascades to the doc's own subpage subtree server-side (lib/archiveCascade.ts) — a plain
+    // local patch can't express that recursion, so this refetches afterward rather than trying to
+    // hand-walk the subtree client-side too (mirrors how cross-Space moves elsewhere already
+    // prefer a refetch over an elaborate local patch for the same reason).
+    archiveSpaceDoc: async (spaceId, docId, archived) => {
+      await fetch(`/api/docs/${docId}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ archived }),
+      });
+      await get().refetchWorkspaces();
+      useHistoryStore.getState().push({
+        label: archived ? 'Archive document' : 'Restore document',
+        undo: () => get().archiveSpaceDoc(spaceId, docId, !archived),
+        redo: () => get().archiveSpaceDoc(spaceId, docId, archived),
+      });
     },
 
     moveSpaceDoc: async (spaceId, docId, folderId, targetSpaceId) => {

@@ -8,13 +8,14 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
   if (body.name !== undefined) data.name = body.name;
   if (body.icon !== undefined) data.icon = body.icon;
   if (body.color !== undefined) data.color = body.color;
+  if (body.textColor !== undefined) data.textColor = body.textColor;
   if (body.order !== undefined) data.order = body.order;
   if (body.isDnd !== undefined) data.isDnd = body.isDnd;
 
   const room = await prisma.room.update({
     where: { id },
     data,
-    select: { id: true, name: true, icon: true, color: true, order: true, isDnd: true, workspaceId: true },
+    select: { id: true, name: true, icon: true, color: true, textColor: true, order: true, isDnd: true, workspaceId: true },
   });
   return NextResponse.json(room);
 }

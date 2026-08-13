@@ -7,7 +7,7 @@ import { prisma } from '@/lib/prisma';
 // own immediate parent is NOT also trashed. If the parent is trashed too, this item is already
 // covered by the parent's own Trash entry (and will come back together when that's restored).
 export async function GET() {
-  const [spaces, folders, lists, tasks, docFolders, docs] = await Promise.all([
+  const [spaces, folders, lists, tasks, docFolders, docs, events] = await Promise.all([
     prisma.space.findMany({ where: { deletedAt: { not: null } }, select: { id: true, name: true, deletedAt: true } }),
     prisma.folder.findMany({
       where: { deletedAt: { not: null } },
@@ -59,6 +59,12 @@ export async function GET() {
         task: { select: { title: true, deletedAt: true } },
         space: { select: { name: true, deletedAt: true } },
       },
+    }),
+    // No parent-trashed check needed — an Event's spaceId is SetNull on Space delete, never
+    // cascade-deleted, so it can never inherit a trashed ancestor the way List/Doc/Task can.
+    prisma.event.findMany({
+      where: { deletedAt: { not: null } },
+      select: { id: true, title: true, deletedAt: true, space: { select: { name: true } } },
     }),
   ]);
 
@@ -126,6 +132,16 @@ export async function GET() {
       name: d.title,
       deletedAt: d.deletedAt!.toISOString(),
       context: d.task ? `Doc on task «${d.task.title}»` : `Doc in ${d.space?.name ?? 'a Space'}`,
+    });
+  }
+
+  for (const e of events) {
+    items.push({
+      type: 'event',
+      id: e.id,
+      name: e.title,
+      deletedAt: e.deletedAt!.toISOString(),
+      context: e.space ? `Event in ${e.space.name}` : 'Event',
     });
   }
 

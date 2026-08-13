@@ -193,7 +193,7 @@ function PageRow({
           <span className="w-3 shrink-0" />
         )}
         <FileText className="w-3 h-3 shrink-0" style={{ color: doc.color || undefined }} />
-        <span className="truncate flex-1" style={isActive ? activeGlowStyle(doc.color) : { color: doc.color || undefined }}>
+        <span className="truncate flex-1" style={isActive ? activeGlowStyle(doc.textColor || doc.color) : { color: doc.textColor || doc.color || undefined }}>
           {doc.title || 'Untitled'}
         </span>
         {owner && (

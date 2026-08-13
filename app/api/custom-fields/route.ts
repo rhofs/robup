@@ -7,6 +7,7 @@ export async function POST(req: Request) {
     data: {
       ...(body.id ? { id: body.id } : {}),
       spaceId: body.spaceId,
+      listId: body.listId ?? null,
       name: body.name,
       type: body.type,
       options: JSON.stringify(body.options ?? []),

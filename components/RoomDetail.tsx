@@ -72,7 +72,11 @@ export default function RoomDetail({ room, members, workspace, currentUserId, ca
                 className="bg-neutral-950 border border-blue-500 rounded px-2 py-1 text-lg font-semibold text-white focus:outline-none w-full"
               />
             ) : (
-              <button onClick={() => setEditingName(true)} className="text-lg font-semibold text-white cursor-text text-left">
+              <button
+                onClick={() => setEditingName(true)}
+                className="text-lg font-semibold text-white cursor-text text-left"
+                style={{ color: room.textColor || undefined }}
+              >
                 {room.name}
               </button>
             )}
@@ -109,6 +113,8 @@ export default function RoomDetail({ room, members, workspace, currentUserId, ca
             ))}
           </div>
           <ColorSwatchPicker value={room.color} onChange={(color) => updateRoom(room.id, { color })} choices={ROOM_COLOR_CHOICES} />
+          <h3 className="text-[10px] font-bold text-neutral-500 uppercase tracking-wider pt-1">Name text color</h3>
+          <ColorSwatchPicker value={room.textColor} onChange={(textColor) => updateRoom(room.id, { textColor })} choices={ROOM_COLOR_CHOICES} />
         </div>
       </div>
 

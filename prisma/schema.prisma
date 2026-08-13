@@ -14,6 +14,7 @@ model Workspace {
   messageOfTheDay String?  @map("message_of_the_day")
   spaces          Space[]
   rooms           Room[]
+  events          Event[]
   // Explicit join model, not a plain implicit M2M like Task.assignees/User.tasks below — this one
   // needs to carry a role tier (owner/admin/member) per membership row, which an implicit M2M
   // can't do. A workspace with exactly one member is still what "private" means in this app:
@@ -88,6 +89,10 @@ model Room {
   name        String
   icon        String?
   color       String?
+  // Independent from `color` above — colors the name text specifically. Room has no real "icon"
+  // (a plain emoji), so `color` today only tints the floor's border; this is the closest honest
+  // equivalent to icon/text independence for this model. Null falls back to `color`.
+  textColor   String?   @map("text_color")
   order       Int       @default(0)
   isDnd       Boolean   @default(false) @map("is_dnd")
   workspaceId String    @map("workspace_id")
@@ -101,6 +106,9 @@ model Space {
   id            String        @id @default(uuid())
   name          String
   color         String        @default("#3B82F6")
+  // Independent from `color` above — colors the sidebar name text specifically; the icon/dot
+  // keeps using `color` alone. Null falls back to `color`.
+  textColor     String?       @map("text_color")
   // Same nullable lucide-icon-name shape as Folder.icon/List.icon below (FOLDER_ICON_MAP in
   // components/FolderTree.tsx maps the string to a component) — null means "no icon chosen yet,"
   // rendered as today's plain color dot instead. Personalizing a Space before this was just typing
@@ -118,6 +126,10 @@ model Space {
   customFields  CustomField[]
   docFolders    DocFolder[]
   docs          Doc[]
+  // A Planner Event optionally links here for color-coding only — never required, unlike List/Doc
+  // which genuinely live inside a Space. Deleting a Space un-links its Events (SetNull on the
+  // Event side) rather than deleting them.
+  events        Event[]
   // Independent per-level private access (Space/Folder/List/Task each have this same pair) — a
   // private item is visible only to the workspace's Owner/Admins plus whoever accessJson grants.
   // Defaults keep every existing row (and every new one until someone opts in) fully open, same
@@ -136,6 +148,9 @@ model Folder {
   id         String    @id @default(uuid())
   name       String
   color      String?
+  // Independent from `color` above — colors the sidebar name text specifically; the icon keeps
+  // using `color` alone. Null falls back to `color`.
+  textColor  String?   @map("text_color")
   icon       String?
   deletedAt  DateTime? @map("deleted_at")
   spaceId    String    @map("space_id")
@@ -154,21 +169,28 @@ model Folder {
 
 // 4. Endestasjon for oppgaver (Lister)
 model List {
-  id         String    @id @default(uuid())
-  name       String
-  color      String?
-  icon       String?
-  deletedAt  DateTime? @map("deleted_at")
-  spaceId    String    @map("space_id")
-  space      Space     @relation(fields: [spaceId], references: [id], onDelete: Cascade)
-  folderId   String?   @map("folder_id")
-  folder     Folder?   @relation(fields: [folderId], references: [id], onDelete: Cascade)
-  order      Int       @default(0)
-  tasks      Task[]
+  id           String        @id @default(uuid())
+  name         String
+  color        String?
+  // Independent from `color` above — colors the sidebar name text specifically; the icon/dot
+  // keeps using `color` alone. Null falls back to `color`, so nothing changes for existing rows.
+  textColor    String?       @map("text_color")
+  icon         String?
+  deletedAt    DateTime?     @map("deleted_at")
+  // Non-destructive "get this out of the way without deleting it" — independent of deletedAt
+  // (Trash). Cascades to every Task/subtask inside on archive/restore (lib/archiveCascade.ts).
+  archived     Boolean       @default(false)
+  spaceId      String        @map("space_id")
+  space        Space         @relation(fields: [spaceId], references: [id], onDelete: Cascade)
+  folderId     String?       @map("folder_id")
+  folder       Folder?       @relation(fields: [folderId], references: [id], onDelete: Cascade)
+  order        Int           @default(0)
+  tasks        Task[]
+  customFields CustomField[]
   // See Space.isPrivate/accessJson above — same shape, independent at this level.
-  isPrivate  Boolean   @default(false) @map("is_private")
-  accessJson String    @default("[]") @map("access_json")
-  createdAt  DateTime  @default(now()) @map("created_at")
+  isPrivate    Boolean       @default(false) @map("is_private")
+  accessJson   String        @default("[]") @map("access_json")
+  createdAt    DateTime      @default(now()) @map("created_at")
 }
 
 // 5. Egendefinerte statuser per Space
@@ -190,6 +212,11 @@ model CustomField {
   options   String   @default("[]")
   spaceId   String   @map("space_id")
   space     Space    @relation(fields: [spaceId], references: [id], onDelete: Cascade)
+  // Null = Space-wide (every existing field, and any created with no single List selected).
+  // Set = only that List's own task table shows this column — a field created while exactly one
+  // List is active from now on. Deliberately not a backfill/migration of existing rows.
+  listId    String?  @map("list_id")
+  list      List?    @relation(fields: [listId], references: [id], onDelete: Cascade)
   createdAt DateTime @default(now()) @map("created_at")
 }
 
@@ -245,6 +272,7 @@ model User {
   roomId        String?   @map("room_id")
   room          Room?     @relation(fields: [roomId], references: [id], onDelete: SetNull)
   tasks         Task[]    @relation("TaskAssignees")
+  events        Event[]   @relation("EventAssignees")
   workspaceMemberships WorkspaceMembership[]
   roles         Role[]    @relation("RoleMembers")
   invitesCreated WorkspaceInvite[]
@@ -318,6 +346,32 @@ model Task {
   updatedAt DateTime @updatedAt @map("updated_at")
 }
 
+// Planner "Event" — happens on a given day, clickable for details like Google Calendar, but
+// deliberately never creates a Task row (no required Space/Folder/List, unlike Task.listId which
+// is required). Kept as its own clean standalone model rather than a Task variant specifically so
+// a future real Google Calendar sync (flagged by the user as wanted eventually, not built here)
+// has a natural, un-overloaded table to sync against — any sync-specific fields get added
+// additively then, nothing speculative is reserved here now.
+model Event {
+  id          String    @id @default(uuid())
+  title       String
+  description String?
+  startDate   DateTime  @map("start_date")
+  endDate     DateTime  @map("end_date")
+  allDay      Boolean   @default(true) @map("all_day")
+  // Used only when spaceId is null — an Event linked to a Space instead cascades that Space's own
+  // color, same precedent CalendarView.tsx's taskColorOf already uses for Task bars.
+  color       String?
+  spaceId     String?   @map("space_id")
+  space       Space?    @relation(fields: [spaceId], references: [id], onDelete: SetNull)
+  workspaceId String    @map("workspace_id")
+  workspace   Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  assignees   User[]    @relation("EventAssignees")
+  deletedAt   DateTime? @map("deleted_at")
+  createdAt   DateTime  @default(now()) @map("created_at")
+  updatedAt   DateTime  @updatedAt @map("updated_at")
+}
+
 // 9. Kommentarer OG aktivitetslogg på en task (skilt med "type")
 model Comment {
   id           String  @id @default(uuid())
@@ -342,9 +396,15 @@ model Doc {
   title     String    @default("Untitled")
   content   String    @default("")
   color     String?
+  // Independent from `color` above — colors the sidebar/name text specifically, icon stays on
+  // `color` alone. Null falls back to `color`.
+  textColor String?   @map("text_color")
   ydoc      Bytes?
   order     Int       @default(0)
   deletedAt DateTime? @map("deleted_at")
+  // Non-destructive, independent of deletedAt (Trash) — see List.archived's comment, same idea.
+  // Cascades to every subpage in this doc's own subtree on archive/restore.
+  archived  Boolean   @default(false)
 
   taskId String? @map("task_id")
   task   Task?   @relation(fields: [taskId], references: [id], onDelete: Cascade)

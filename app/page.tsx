@@ -79,7 +79,8 @@ import DocExportMenu from '../components/collab/DocExportMenu';
 import TaskRow, { ColumnDef } from '../components/TaskRow';
 import FolderTree, { FOLDER_ICON_CHOICES, FOLDER_ICON_MAP } from '../components/FolderTree';
 import CalendarView from '../components/calendar/CalendarView';
-import CreateTaskModal from '../components/CreateTaskModal';
+import QuickCreatePopover from '../components/calendar/QuickCreatePopover';
+import EventDetailModal from '../components/calendar/EventDetailModal';
 import SpaceHome from '../components/SpaceHome';
 import DocFolderTree from '../components/DocFolderTree';
 import DocsBrowser from '../components/DocsBrowser';
@@ -454,6 +455,7 @@ export default function Home() {
 function PageContent() {
   const {
     tasks,
+    events,
     workspaces,
     users,
     comments,
@@ -482,6 +484,10 @@ function PageContent() {
     setShowArchived,
     optimisticMoveTask,
     optimisticCreateTask,
+    optimisticCreateEvent,
+    updateEvent,
+    optimisticSetEventAssignees,
+    deleteEvent,
     optimisticDeleteTask,
     optimisticArchiveTask,
     optimisticSetAssignees,
@@ -515,6 +521,7 @@ function PageContent() {
     reorderList,
     updateList,
     deleteList,
+    archiveList,
     moveFolder,
     updateFolder,
     deleteFolder,
@@ -527,6 +534,7 @@ function PageContent() {
     moveDocToBoardFolder,
     reorderSpaceDoc,
     deleteSpaceDoc,
+    archiveSpaceDoc,
     setDocTaskLink,
     fetchComments,
     addComment,
@@ -556,6 +564,7 @@ function PageContent() {
 
   const [createTaskOpen, setCreateTaskOpen] = useState(false);
   const [createTaskDefaultDate, setCreateTaskDefaultDate] = useState<string | null>(null);
+  const [eventDetailId, setEventDetailId] = useState<string | null>(null);
 
   const [calendarVisibleListIds, setCalendarVisibleListIds] = useState<Set<string>>(new Set());
   const calendarFilterInitRef = useRef(false);
@@ -597,6 +606,7 @@ function PageContent() {
   const [spaceEditTarget, setSpaceEditTarget] = useState<HierarchySpace | null>(null);
   const [editSpaceName, setEditSpaceName] = useState('');
   const [editSpaceColor, setEditSpaceColor] = useState(FIELD_COLOR_CHOICES[0]);
+  const [editSpaceTextColor, setEditSpaceTextColor] = useState<string | null>(null);
   const [editSpaceIcon, setEditSpaceIcon] = useState<string | null>(null);
   const [spaceToDelete, setSpaceToDelete] = useState<HierarchySpace | null>(null);
   const [creatingSpace, setCreatingSpace] = useState(false);
@@ -639,6 +649,7 @@ function PageContent() {
   const [folderEditTarget, setFolderEditTarget] = useState<HierarchyFolder | null>(null);
   const [editFolderName, setEditFolderName] = useState('');
   const [editFolderColor, setEditFolderColor] = useState<string | null>(null);
+  const [editFolderTextColor, setEditFolderTextColor] = useState<string | null>(null);
   const [editFolderIcon, setEditFolderIcon] = useState<string | null>(null);
   const [renameFolderId, setRenameFolderId] = useState<string | null>(null);
 
@@ -646,6 +657,7 @@ function PageContent() {
   const [listEditTarget, setListEditTarget] = useState<{ list: HierarchyList; spaceId: string } | null>(null);
   const [editListName, setEditListName] = useState('');
   const [editListColor, setEditListColor] = useState<string | null>(null);
+  const [editListTextColor, setEditListTextColor] = useState<string | null>(null);
   const [editListIcon, setEditListIcon] = useState<string | null>(null);
   const [renameListId, setRenameListId] = useState<string | null>(null);
   const [listToDelete, setListToDelete] = useState<{ list: HierarchyList; spaceId: string } | null>(null);
@@ -653,6 +665,7 @@ function PageContent() {
   const [docMenu, setDocMenu] = useState<{ x: number; y: number; doc: TaskDoc; spaceId: string } | null>(null);
   const [docEditTarget, setDocEditTarget] = useState<{ doc: TaskDoc; spaceId: string } | null>(null);
   const [editDocColor, setEditDocColor] = useState<string | null>(null);
+  const [editDocTextColor, setEditDocTextColor] = useState<string | null>(null);
   const [renameDocId, setRenameDocId] = useState<string | null>(null);
   const [docOwnerPickerOpen, setDocOwnerPickerOpen] = useState(false);
   const [docContributorsPickerOpen, setDocContributorsPickerOpen] = useState(false);
@@ -661,6 +674,47 @@ function PageContent() {
   const [taskListPicker, setTaskListPicker] = useState<{ x: number; y: number; taskId: string; options: { id: string; label: string }[] } | null>(null);
   const [fieldEditTarget, setFieldEditTarget] = useState<CustomFieldDef | null>(null);
   const [fieldToDelete, setFieldToDelete] = useState<{ id: string; name: string } | null>(null);
+  const [fieldConflictPrompt, setFieldConflictPrompt] = useState<{
+    taskId: string;
+    targetListId: string;
+    spaceId: string;
+    conflictingFields: CustomFieldDef[];
+  } | null>(null);
+
+  // Moving a task to a different List needs to check whether it's carrying a value for a
+  // List-scoped custom field that only exists on its *current* List — silently moving would either
+  // drop the field from view (if the destination has no matching column) or, worse, misattribute
+  // the value to an unrelated same-named field there. Only single-task moves go through this
+  // wrapper (drag onto a List, the folder/space auto-pick, the multi-list picker) — bulk multi-
+  // select move (bulkArchive's sibling) still calls optimisticSetList directly, since prompting
+  // per-task there would need a real batched UI this wasn't asked to build.
+  const moveTaskToList = (taskId: string, targetListId: string) => {
+    const task = tasks.find((t) => t.id === taskId);
+    const space = workspaces.flatMap((w) => w.spaces).find((s) => s.lists.some((l) => l.id === targetListId));
+    if (!task || !space) {
+      optimisticSetList(taskId, targetListId);
+      return;
+    }
+    const values = JSON.parse(task.customFieldValues || '{}');
+    const conflicting = space.customFields.filter(
+      (f) => f.listId !== null && f.listId !== targetListId && values[f.id] !== undefined && values[f.id] !== ''
+    );
+    if (conflicting.length > 0) {
+      setFieldConflictPrompt({ taskId, targetListId, spaceId: space.id, conflictingFields: conflicting });
+    } else {
+      optimisticSetList(taskId, targetListId);
+    }
+  };
+
+  const resolveFieldConflictByCreating = async () => {
+    if (!fieldConflictPrompt) return;
+    const { taskId, targetListId, spaceId, conflictingFields } = fieldConflictPrompt;
+    for (const f of conflictingFields) {
+      await createCustomField(spaceId, f.name, f.type, f.options, undefined, targetListId);
+    }
+    optimisticSetList(taskId, targetListId);
+    setFieldConflictPrompt(null);
+  };
   const [statusToDelete, setStatusToDelete] = useState<{ id: string; name: string } | null>(null);
   const [fieldNameDraft, setFieldNameDraft] = useState('');
   const [fieldOptionsDraft, setFieldOptionsDraft] = useState<{ id: string; label: string; color: string }[]>([]);
@@ -988,7 +1042,11 @@ function PageContent() {
   const showingSpaceHome = activeView === 'board' && !!currentSpace && activeListIds.size === 0 && !showArchived;
 
   const statuses: StatusDef[] = currentSpace?.statuses?.length ? currentSpace.statuses : DEFAULT_STATUSES;
-  const customFields: CustomFieldDef[] = currentSpace?.customFields || [];
+  // Space-wide fields (listId: null — every field created before per-List scoping existed) always
+  // show; a List-scoped field only shows on the List(s) it was actually created on.
+  const customFields: CustomFieldDef[] = (currentSpace?.customFields || []).filter(
+    (f) => f.listId === null || activeListIds.has(f.listId)
+  );
 
   const availableColumns: ColumnDef[] = useMemo(
     () => [
@@ -1156,11 +1214,17 @@ function PageContent() {
 
   const handleAddField = () => {
     if (!newFieldName.trim() || !currentSpace) return;
+    // Scoped to the single active List; with multi-select or no List selected (Everything/Space
+    // home), there's no one List to own it, so it lands Space-wide — same as every field created
+    // before per-List scoping existed.
+    const listId = activeListIds.size === 1 ? [...activeListIds][0] : null;
     createCustomField(
       currentSpace.id,
       newFieldName,
       newFieldType,
-      newFieldType === 'dropdown' ? [{ label: 'Option 1', color: FIELD_COLOR_CHOICES[0] }] : []
+      newFieldType === 'dropdown' ? [{ label: 'Option 1', color: FIELD_COLOR_CHOICES[0] }] : [],
+      undefined,
+      listId
     );
     setNewFieldName('');
     setNewFieldOpen(false);
@@ -1268,13 +1332,19 @@ function PageContent() {
     setSpaceEditTarget(space);
     setEditSpaceName(space.name);
     setEditSpaceColor(space.color);
+    setEditSpaceTextColor(space.textColor);
     setEditSpaceIcon(space.icon);
     setSpaceMenu(null);
   };
 
   const saveSpaceEdit = () => {
     if (!spaceEditTarget) return;
-    updateSpace(spaceEditTarget.id, { name: editSpaceName.trim() || spaceEditTarget.name, color: editSpaceColor, icon: editSpaceIcon });
+    updateSpace(spaceEditTarget.id, {
+      name: editSpaceName.trim() || spaceEditTarget.name,
+      color: editSpaceColor,
+      textColor: editSpaceTextColor,
+      icon: editSpaceIcon,
+    });
     setSpaceEditTarget(null);
   };
 
@@ -1297,6 +1367,7 @@ function PageContent() {
     setFolderEditTarget(folder);
     setEditFolderName(folder.name);
     setEditFolderColor(folder.color);
+    setEditFolderTextColor(folder.textColor);
     setEditFolderIcon(folder.icon);
     setFolderMenu(null);
   };
@@ -1306,6 +1377,7 @@ function PageContent() {
     updateFolder(folderEditTarget.spaceId, folderEditTarget.id, {
       name: editFolderName.trim() || folderEditTarget.name,
       color: editFolderColor,
+      textColor: editFolderTextColor,
       icon: editFolderIcon,
     });
     setFolderEditTarget(null);
@@ -1315,6 +1387,7 @@ function PageContent() {
     setListEditTarget({ list, spaceId });
     setEditListName(list.name);
     setEditListColor(list.color);
+    setEditListTextColor(list.textColor);
     setEditListIcon(list.icon);
     setListMenu(null);
   };
@@ -1324,6 +1397,7 @@ function PageContent() {
     updateList(listEditTarget.spaceId, listEditTarget.list.id, {
       name: editListName.trim() || listEditTarget.list.name,
       color: editListColor,
+      textColor: editListTextColor,
       icon: editListIcon,
     });
     setListEditTarget(null);
@@ -1338,12 +1412,13 @@ function PageContent() {
   const startEditDoc = (doc: TaskDoc, spaceId: string) => {
     setDocEditTarget({ doc, spaceId });
     setEditDocColor(doc.color);
+    setEditDocTextColor(doc.textColor);
     setDocMenu(null);
   };
 
   const saveDocEdit = () => {
     if (!docEditTarget) return;
-    updateSpaceDoc(docEditTarget.doc.id, docEditTarget.spaceId, { color: editDocColor });
+    updateSpaceDoc(docEditTarget.doc.id, docEditTarget.spaceId, { color: editDocColor, textColor: editDocTextColor });
     setDocEditTarget(null);
   };
 
@@ -2199,7 +2274,7 @@ function PageContent() {
       const targetId = overId.slice('task:'.length);
       if (targetId !== draggedId) optimisticSetParent(draggedId, targetId);
     } else if (overId.startsWith('list:')) {
-      optimisticSetList(draggedId, overId.slice('list:'.length));
+      moveTaskToList(draggedId, overId.slice('list:'.length));
     } else if (overId.startsWith('folder-drop:') || overId.startsWith('space:')) {
       // Dropping a task onto a Folder/Space (rather than a specific List) has no single obvious
       // destination when there's more than one List recursively inside — rather than silently
@@ -2218,7 +2293,7 @@ function PageContent() {
       if (listIds.length === 0) {
         showToast(`"${targetName ?? (isFolder ? 'This folder' : 'This space')}" has no list yet — add one before moving tasks in here.`);
       } else if (listIds.length === 1) {
-        optimisticSetList(draggedId, listIds[0]);
+        moveTaskToList(draggedId, listIds[0]);
       } else if (space) {
         const rect = active.rect.current.translated;
         setTaskListPicker({
@@ -2921,7 +2996,7 @@ function PageContent() {
                             {/* Own color always — only the checkbox indicates "checked" (Google
                                 Calendar's sidebar convention); when active, the name glows a
                                 bright version of that same color instead of switching to blue. */}
-                            <span className="truncate" style={isSpaceActive ? activeGlowStyle(space.color) : { color: space.color || undefined }}>
+                            <span className="truncate" style={isSpaceActive ? activeGlowStyle(space.textColor || space.color) : { color: space.textColor || space.color || undefined }}>
                               {space.name}
                             </span>
                             {space.isPrivate && <Lock className="w-2.5 h-2.5 text-neutral-500 shrink-0" />}
@@ -2983,6 +3058,7 @@ function PageContent() {
                           renameDocId={renameDocId}
                           onRenameDocHandled={() => setRenameDocId(null)}
                           listDropIndicator={listDropIndicator}
+                          showArchived={showArchived}
                         />
                       ))}
                     {spaceDropIndicator?.targetId === space.id && spaceDropIndicator.position === 'below' && (
@@ -3520,9 +3596,11 @@ function PageContent() {
               <div className="h-[75vh]">
                 <CalendarView
                   tasks={calendarFilteredTasks}
+                  events={events}
                   statuses={statuses}
                   workspaces={workspaces}
                   onOpenTask={(id) => setModalTaskStack([id])}
+                  onOpenEvent={(id) => setEventDetailId(id)}
                   onRequestCreateTask={(date) => {
                     setCreateTaskDefaultDate(date.toISOString());
                     setCreateTaskOpen(true);
@@ -3840,6 +3918,23 @@ function PageContent() {
             )}
             <button
               onClick={() => {
+                archiveList(listMenu.spaceId, listMenu.list.id, !listMenu.list.archived);
+                setListMenu(null);
+              }}
+              className="w-full text-left px-3 py-1.5 text-xs text-neutral-300 hover:bg-neutral-800/60 cursor-pointer flex items-center gap-2"
+            >
+              {listMenu.list.archived ? (
+                <>
+                  <Undo2 className="w-3.5 h-3.5" /> Restore from archive
+                </>
+              ) : (
+                <>
+                  <Archive className="w-3.5 h-3.5" /> Archive list
+                </>
+              )}
+            </button>
+            <button
+              onClick={() => {
                 setListToDelete({ list: listMenu.list, spaceId: listMenu.spaceId });
                 setListMenu(null);
               }}
@@ -3870,6 +3965,23 @@ function PageContent() {
               className="w-full text-left px-3 py-1.5 text-xs text-neutral-300 hover:bg-neutral-800/60 cursor-pointer flex items-center gap-2"
             >
               <Pencil className="w-3.5 h-3.5" /> Rename
+            </button>
+            <button
+              onClick={() => {
+                archiveSpaceDoc(docMenu.spaceId, docMenu.doc.id, !docMenu.doc.archived);
+                setDocMenu(null);
+              }}
+              className="w-full text-left px-3 py-1.5 text-xs text-neutral-300 hover:bg-neutral-800/60 cursor-pointer flex items-center gap-2"
+            >
+              {docMenu.doc.archived ? (
+                <>
+                  <Undo2 className="w-3.5 h-3.5" /> Restore from archive
+                </>
+              ) : (
+                <>
+                  <Archive className="w-3.5 h-3.5" /> Archive doc
+                </>
+              )}
             </button>
             <button
               onClick={() => {
@@ -3949,7 +4061,7 @@ function PageContent() {
               <button
                 key={opt.id}
                 onClick={() => {
-                  optimisticSetList(taskListPicker.taskId, opt.id);
+                  moveTaskToList(taskListPicker.taskId, opt.id);
                   setTaskListPicker(null);
                 }}
                 className="w-full text-left px-3 py-1.5 text-xs text-neutral-300 hover:bg-neutral-800/60 cursor-pointer truncate"
@@ -3985,6 +4097,10 @@ function PageContent() {
               <div>
                 <label className="text-[11px] text-neutral-400 mb-1 block">Color</label>
                 <ColorSwatchPicker value={editSpaceColor} onChange={setEditSpaceColor} choices={FIELD_COLOR_CHOICES} />
+              </div>
+              <div>
+                <label className="text-[11px] text-neutral-400 mb-1 block">Text color (defaults to Color above)</label>
+                <ColorSwatchPicker value={editSpaceTextColor} onChange={setEditSpaceTextColor} choices={FIELD_COLOR_CHOICES} />
               </div>
               <div>
                 <label className="text-[11px] text-neutral-400 mb-1 block">Icon</label>
@@ -4069,6 +4185,21 @@ function PageContent() {
                 </div>
               </div>
               <div>
+                <label className="text-[11px] text-neutral-400 mb-1 block">Text color (defaults to Color above)</label>
+                <div className="flex flex-wrap items-center gap-1.5">
+                  <button
+                    onClick={() => setEditFolderTextColor(null)}
+                    title="Default"
+                    className={`w-6 h-6 rounded-full cursor-pointer bg-neutral-700 flex items-center justify-center shrink-0 ${
+                      editFolderTextColor === null ? 'ring-2 ring-white' : ''
+                    }`}
+                  >
+                    {editFolderTextColor === null && <Check className="w-3 h-3 text-white" />}
+                  </button>
+                  <ColorSwatchPicker value={editFolderTextColor} onChange={setEditFolderTextColor} choices={FIELD_COLOR_CHOICES} />
+                </div>
+              </div>
+              <div>
                 <label className="text-[11px] text-neutral-400 mb-1 block">Icon</label>
                 <div className="flex flex-wrap gap-1.5">
                   <button
@@ -4147,6 +4278,21 @@ function PageContent() {
                 </div>
               </div>
               <div>
+                <label className="text-[11px] text-neutral-400 mb-1 block">Text color (defaults to Color above)</label>
+                <div className="flex flex-wrap items-center gap-1.5">
+                  <button
+                    onClick={() => setEditListTextColor(null)}
+                    title="Default"
+                    className={`w-6 h-6 rounded-full cursor-pointer bg-neutral-700 flex items-center justify-center shrink-0 ${
+                      editListTextColor === null ? 'ring-2 ring-white' : ''
+                    }`}
+                  >
+                    {editListTextColor === null && <Check className="w-3 h-3 text-white" />}
+                  </button>
+                  <ColorSwatchPicker value={editListTextColor} onChange={setEditListTextColor} choices={FIELD_COLOR_CHOICES} />
+                </div>
+              </div>
+              <div>
                 <label className="text-[11px] text-neutral-400 mb-1 block">Icon</label>
                 <div className="flex flex-wrap gap-1.5">
                   <button
@@ -4215,9 +4361,26 @@ function PageContent() {
                   <ColorSwatchPicker value={editDocColor} onChange={setEditDocColor} choices={FIELD_COLOR_CHOICES} />
                 </div>
               </div>
+              <div>
+                <label className="text-[11px] text-neutral-400 mb-1 block">Text color (defaults to Color above)</label>
+                <div className="flex flex-wrap items-center gap-1.5">
+                  <button
+                    onClick={() => setEditDocTextColor(null)}
+                    title="Default"
+                    className={`w-6 h-6 rounded-full cursor-pointer bg-neutral-700 flex items-center justify-center shrink-0 ${
+                      editDocTextColor === null ? 'ring-2 ring-white' : ''
+                    }`}
+                  >
+                    {editDocTextColor === null && <Check className="w-3 h-3 text-white" />}
+                  </button>
+                  <ColorSwatchPicker value={editDocTextColor} onChange={setEditDocTextColor} choices={FIELD_COLOR_CHOICES} />
+                </div>
+              </div>
               <div className="flex items-center gap-2 bg-neutral-950/60 border border-neutral-800 rounded px-3 py-2">
                 <FileText className="w-3.5 h-3.5" style={{ color: editDocColor || undefined }} />
-                <span className="text-xs text-neutral-300">{docEditTarget.doc.title || 'Untitled'}</span>
+                <span className="text-xs text-neutral-300" style={{ color: editDocTextColor || editDocColor || undefined }}>
+                  {docEditTarget.doc.title || 'Untitled'}
+                </span>
               </div>
               <button onClick={saveDocEdit} className="w-full bg-blue-600 hover:bg-blue-500 text-white text-xs py-2 rounded font-medium cursor-pointer">
                 Save
@@ -4863,15 +5026,29 @@ function PageContent() {
       )}
       </AnimatePresence>
 
-      <CreateTaskModal
+      <QuickCreatePopover
         open={createTaskOpen}
         workspaces={workspaces}
+        users={users}
         defaultStartDate={createTaskDefaultDate}
+        activeWorkspaceId={activeWorkspaceId}
         onClose={() => setCreateTaskOpen(false)}
-        onCreate={({ title, spaceId, listId, startDate, dueDate }) => {
+        onCreateTask={({ title, spaceId, listId, startDate, dueDate }) => {
           optimisticCreateTask(title, listId, spaceId, null, startDate, dueDate);
-          setCreateTaskOpen(false);
         }}
+        onCreateEvent={({ title, startDate, endDate, allDay, spaceId, workspaceId, assigneeIds }) => {
+          optimisticCreateEvent({ title, startDate, endDate, allDay, spaceId, workspaceId, assigneeIds });
+        }}
+      />
+
+      <EventDetailModal
+        event={events.find((e) => e.id === eventDetailId) ?? null}
+        workspaces={workspaces}
+        users={users}
+        onClose={() => setEventDetailId(null)}
+        onUpdate={(patch) => eventDetailId && updateEvent(eventDetailId, patch)}
+        onSetAssignees={(assigneeIds) => eventDetailId && optimisticSetEventAssignees(eventDetailId, assigneeIds)}
+        onDelete={() => eventDetailId && deleteEvent(eventDetailId)}
       />
 
       {/* Team membership management (promote/demote, Roles, remove) moved into Office's
@@ -5015,6 +5192,25 @@ function PageContent() {
           }
           setSpaceDocToDelete(null);
         }}
+      />
+
+      <ConfirmDialog
+        open={!!fieldConflictPrompt}
+        title="Custom field not on the destination list"
+        message={
+          fieldConflictPrompt
+            ? `This task's "${fieldConflictPrompt.conflictingFields.map((f) => f.name).join('", "')}" ${
+                fieldConflictPrompt.conflictingFields.length > 1 ? "fields aren't" : "field isn't"
+              } on the destination list — create ${
+                fieldConflictPrompt.conflictingFields.length > 1 ? 'them' : 'it'
+              } there to keep the value, or cancel the move.`
+            : ''
+        }
+        confirmLabel="Create field there"
+        cancelLabel="Cancel"
+        danger={false}
+        onCancel={() => setFieldConflictPrompt(null)}
+        onConfirm={resolveFieldConflictByCreating}
       />
 
       <ConfirmDialog

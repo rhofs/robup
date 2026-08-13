@@ -1,12 +1,12 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { X, Layers, Folder as FolderIcon, List as ListIcon, CheckSquare, FolderOpen, FileText, Undo2, Trash2 } from 'lucide-react';
+import { X, Layers, Folder as FolderIcon, List as ListIcon, CheckSquare, FolderOpen, FileText, CalendarDays, Undo2, Trash2 } from 'lucide-react';
 import { useTaskStore } from '../store/useTaskStore';
 import ConfirmDialog from './ConfirmDialog';
 
 type TrashItem = {
-  type: 'space' | 'folder' | 'list' | 'task' | 'docFolder' | 'doc';
+  type: 'space' | 'folder' | 'list' | 'task' | 'docFolder' | 'doc' | 'event';
   id: string;
   name: string;
   deletedAt: string;
@@ -20,16 +20,18 @@ const TYPE_ICON: Record<TrashItem['type'], typeof Layers> = {
   task: CheckSquare,
   docFolder: FolderOpen,
   doc: FileText,
+  event: CalendarDays,
 };
 
 // Matches the API's route path segments, not the display type names above.
-const TYPE_TO_KIND: Record<TrashItem['type'], 'spaces' | 'folders' | 'lists' | 'tasks' | 'doc-folders' | 'docs'> = {
+const TYPE_TO_KIND: Record<TrashItem['type'], 'spaces' | 'folders' | 'lists' | 'tasks' | 'doc-folders' | 'docs' | 'events'> = {
   space: 'spaces',
   folder: 'folders',
   list: 'lists',
   task: 'tasks',
   docFolder: 'doc-folders',
   doc: 'docs',
+  event: 'events',
 };
 
 const timeAgo = (dateStr: string) => {

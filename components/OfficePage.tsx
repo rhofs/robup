@@ -48,7 +48,7 @@ export default function OfficePage({
   onRequestRemoveMember,
 }: OfficePageProps) {
   // taskId's List/Space aren't embedded on Task itself — build the lookup once from the tree,
-  // same shape as the cross-Space breadcrumbs elsewhere in the app (e.g. CreateTaskModal).
+  // same shape as the cross-Space breadcrumbs elsewhere in the app (e.g. QuickCreatePopover).
   const listSpaceById = useMemo(() => {
     const map = new Map<string, { spaceName: string; listName: string }>();
     for (const ws of workspaces) {
