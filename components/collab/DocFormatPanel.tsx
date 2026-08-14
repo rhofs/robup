@@ -110,7 +110,31 @@ const MARK_BUTTONS: { key: string; label: string; icon: typeof Bold; isActive: (
     label: 'Code block',
     icon: Code2,
     isActive: (editor) => editor.isActive('codeBlock'),
-    run: (editor) => editor.chain().focus().toggleCodeBlock().run(),
+    // Tiptap's plain toggleCodeBlock() applies setBlockType to every selected textblock
+    // independently — selecting 3 existing paragraphs and toggling code-on converts each one into
+    // its *own* separate codeBlock node (3 boxes) instead of one block containing all 3 lines
+    // (reported directly: "instead of being one whole codeblock, there are 3 lines of codeblock").
+    // Toggling off, or toggling on with nothing selected, has no multiple-textblocks-at-once case
+    // to merge, so those still go through the plain command unchanged.
+    run: (editor) => {
+      if (editor.isActive('codeBlock')) {
+        editor.chain().focus().toggleCodeBlock().run();
+        return;
+      }
+      const { state } = editor;
+      const { from, to, empty } = state.selection;
+      if (empty) {
+        editor.chain().focus().toggleCodeBlock().run();
+        return;
+      }
+      const text = state.doc.textBetween(from, to, '\n', '\n');
+      editor
+        .chain()
+        .focus()
+        .deleteRange({ from, to })
+        .insertContentAt(from, { type: 'codeBlock', content: text ? [{ type: 'text', text }] : [] })
+        .run();
+    },
   },
 ];
 
