@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import { useEditorState, type Editor } from '@tiptap/react';
 import {
   Bold,
@@ -25,6 +25,7 @@ import {
   Plus,
   Code2,
   Check,
+  Upload,
 } from 'lucide-react';
 import FloatingPopover from '../FloatingPopover';
 import ColorSwatchPicker from '../ColorSwatchPicker';
@@ -197,6 +198,32 @@ export default function DocFormatPanel({
   const [sizeMenuOpen, setSizeMenuOpen] = useState(false);
   const [coverOpen, setCoverOpen] = useState(false);
   const [coverDraft, setCoverDraft] = useState('');
+  const [coverUploading, setCoverUploading] = useState(false);
+  const [coverUploadError, setCoverUploadError] = useState<string | null>(null);
+  const coverFileInputRef = useRef<HTMLInputElement>(null);
+
+  // Same local-disk upload endpoint the body image-insert modal already uses (see
+  // app/api/uploads/image and CollabDocEditor.tsx's own submitImageFile) — a cover is just
+  // another `coverImageUrl`, so no new backend needed, just this panel's own upload plumbing.
+  const submitCoverFile = async (file: File) => {
+    if (!onUpdateDoc) return;
+    setCoverUploadError(null);
+    setCoverUploading(true);
+    try {
+      const formData = new FormData();
+      formData.append('file', file);
+      const res = await fetch('/api/uploads/image', { method: 'POST', body: formData });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Upload failed');
+      onUpdateDoc({ coverImageUrl: data.url });
+      setCoverOpen(false);
+    } catch (err) {
+      setCoverUploadError(err instanceof Error ? err.message : 'Upload failed');
+    } finally {
+      setCoverUploading(false);
+      if (coverFileInputRef.current) coverFileInputRef.current.value = '';
+    }
+  };
 
   // `editor` is one stable object for the whole editing session — every control below reads its
   // live state directly (`editor.isActive()`/`getAttributes()`), which only reflects reality if
@@ -269,13 +296,17 @@ export default function DocFormatPanel({
           ) : (
             <FloatingPopover
               open={coverOpen}
-              onClose={() => setCoverOpen(false)}
+              onClose={() => {
+                if (coverUploading) return;
+                setCoverOpen(false);
+              }}
               panelClassName="w-52 bg-neutral-900 border border-neutral-800 rounded shadow-xl p-2 space-y-1.5"
               anchor={
                 <button
                   type="button"
                   onClick={() => {
                     setCoverDraft('');
+                    setCoverUploadError(null);
                     setCoverOpen((o) => !o);
                   }}
                   className="w-full text-[10px] text-neutral-400 hover:text-neutral-200 text-left cursor-pointer"
@@ -295,7 +326,8 @@ export default function DocFormatPanel({
                   setCoverOpen(false);
                 }}
                 placeholder="Paste an image URL..."
-                className="w-full bg-neutral-950 border border-neutral-700 rounded px-2 py-1 text-[11px] text-white focus:outline-none focus:border-blue-500"
+                disabled={coverUploading}
+                className="w-full bg-neutral-950 border border-neutral-700 rounded px-2 py-1 text-[11px] text-white focus:outline-none focus:border-blue-500 disabled:opacity-50"
               />
               <button
                 type="button"
@@ -304,10 +336,38 @@ export default function DocFormatPanel({
                   if (trimmed) onUpdateDoc({ coverImageUrl: trimmed });
                   setCoverOpen(false);
                 }}
-                className="w-full bg-blue-600 hover:bg-blue-500 text-white text-[10px] py-1 rounded font-medium cursor-pointer"
+                disabled={coverUploading}
+                className="w-full bg-blue-600 hover:bg-blue-500 text-white text-[10px] py-1 rounded font-medium cursor-pointer disabled:opacity-50 disabled:cursor-default"
               >
                 Set cover
               </button>
+
+              <div className="flex items-center gap-2 text-[9px] text-neutral-500">
+                <div className="flex-1 h-px bg-neutral-800" />
+                or
+                <div className="flex-1 h-px bg-neutral-800" />
+              </div>
+
+              <input
+                ref={coverFileInputRef}
+                type="file"
+                accept="image/png,image/jpeg,image/gif,image/webp"
+                className="hidden"
+                onChange={(e) => {
+                  const file = e.target.files?.[0];
+                  if (file) submitCoverFile(file);
+                }}
+              />
+              <button
+                type="button"
+                onClick={() => coverFileInputRef.current?.click()}
+                disabled={coverUploading}
+                className="w-full flex items-center justify-center gap-1.5 bg-neutral-800 hover:bg-neutral-700 text-neutral-200 text-[10px] py-1 rounded font-medium cursor-pointer disabled:opacity-50 disabled:cursor-default"
+              >
+                <Upload className="w-3 h-3" />
+                {coverUploading ? 'Uploading...' : 'Upload from your computer'}
+              </button>
+              {coverUploadError && <p className="text-[9px] text-red-400">{coverUploadError}</p>}
             </FloatingPopover>
           )}
 
