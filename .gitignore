@@ -44,3 +44,6 @@ next-env.d.ts
 
 # local SQLite dev database (contains machine-local seed/test data, not source)
 /prisma/dev.db
+
+# user-uploaded Doc images — machine-local content, not source (see app/api/uploads/image)
+/public/uploads

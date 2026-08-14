@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useEditor, EditorContent } from '@tiptap/react';
 import { BubbleMenu } from '@tiptap/react/menus';
 import { HocuspocusProvider } from '@hocuspocus/provider';
@@ -25,7 +25,7 @@ import CodeBlock from '@tiptap/extension-code-block';
 import Collaboration from '@tiptap/extension-collaboration';
 import CollaborationCaret from '@tiptap/extension-collaboration-caret';
 import Placeholder from '@tiptap/extension-placeholder';
-import { MessageSquare, Link2, X } from 'lucide-react';
+import { MessageSquare, Link2, X, Upload } from 'lucide-react';
 import { ClientMentionNode } from './mentionNodeView';
 import { ClientSubpagesIndexNode } from './subpagesIndexNodeView';
 import { ClientCommentMark } from './commentMarkView';
@@ -83,6 +83,9 @@ export default function CollabDocEditor({
   const [activeCommentId, setActiveCommentId] = useState<string | null>(null);
   const [linkDraft, setLinkDraft] = useState<string | null>(null);
   const [imageUrlDraft, setImageUrlDraft] = useState<string | null>(null);
+  const [imageUploading, setImageUploading] = useState(false);
+  const [imageUploadError, setImageUploadError] = useState<string | null>(null);
+  const imageFileInputRef = useRef<HTMLInputElement>(null);
 
   // Provider lifecycle lives in an effect, not useMemo — its constructor opens a real WebSocket,
   // a side effect that isn't safe inside useMemo (React's dev-mode Strict Mode double-invokes
@@ -136,7 +139,14 @@ export default function CollabDocEditor({
                 setCommentsExpanded(true);
               },
             }),
-            SlashCommand.configure({ spaceId, docId, onRequestImage: () => setImageUrlDraft('') }),
+            SlashCommand.configure({
+              spaceId,
+              docId,
+              onRequestImage: () => {
+                setImageUploadError(null);
+                setImageUrlDraft('');
+              },
+            }),
             Placeholder.configure({ placeholder: placeholder ?? 'Write notes, specs, anything...' }),
             Collaboration.configure({ document: provider.document }),
             CollaborationCaret.configure({
@@ -176,22 +186,50 @@ export default function CollabDocEditor({
     setLinkDraft(null);
   };
 
-  const submitImage = () => {
+  // A bare `setImage()` can leave the image as the very last node in the doc with nothing after
+  // it — Gapcursor technically still lets you click into that trailing gap, but it's a thin,
+  // easy-to-miss target (reported as "can't place the cursor above/below a pasted image").
+  // Explicitly inserting a following empty paragraph and landing the cursor in it guarantees a
+  // normal, full-width line is always there to keep typing on immediately. Shared by both the
+  // pasted-URL path and the uploaded-file path below.
+  const insertImageAtCursor = (url: string) => {
     if (!editor) return;
+    editor
+      .chain()
+      .focus()
+      .insertContent([{ type: 'image', attrs: { src: url } }, { type: 'paragraph' }])
+      .run();
+  };
+
+  const submitImage = () => {
     const url = imageUrlDraft?.trim();
-    // A bare `setImage()` can leave the image as the very last node in the doc with nothing
-    // after it — Gapcursor technically still lets you click into that trailing gap, but it's a
-    // thin, easy-to-miss target (reported as "can't place the cursor above/below a pasted
-    // image"). Explicitly inserting a following empty paragraph and landing the cursor in it
-    // guarantees a normal, full-width line is always there to keep typing on immediately.
-    if (url) {
-      editor
-        .chain()
-        .focus()
-        .insertContent([{ type: 'image', attrs: { src: url } }, { type: 'paragraph' }])
-        .run();
-    }
+    if (url) insertImageAtCursor(url);
     setImageUrlDraft(null);
+  };
+
+  const closeImageModal = () => {
+    if (imageUploading) return;
+    setImageUrlDraft(null);
+    setImageUploadError(null);
+  };
+
+  const submitImageFile = async (file: File) => {
+    setImageUploadError(null);
+    setImageUploading(true);
+    try {
+      const formData = new FormData();
+      formData.append('file', file);
+      const res = await fetch('/api/uploads/image', { method: 'POST', body: formData });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Upload failed');
+      insertImageAtCursor(data.url);
+      setImageUrlDraft(null);
+    } catch (err) {
+      setImageUploadError(err instanceof Error ? err.message : 'Upload failed');
+    } finally {
+      setImageUploading(false);
+      if (imageFileInputRef.current) imageFileInputRef.current.value = '';
+    }
   };
 
   return (
@@ -320,12 +358,12 @@ export default function CollabDocEditor({
       {imageUrlDraft !== null && (
         <div
           className="fixed inset-0 z-50 flex items-center justify-center bg-neutral-950/70 backdrop-blur-xs"
-          onClick={() => setImageUrlDraft(null)}
+          onClick={closeImageModal}
         >
           <div onClick={(e) => e.stopPropagation()} className="w-[380px] bg-neutral-900 border border-neutral-800 rounded shadow-2xl overflow-hidden">
             <div className="px-5 py-4 border-b border-neutral-800 flex items-center justify-between">
               <h3 className="font-bold text-sm text-white">Insert Image</h3>
-              <button onClick={() => setImageUrlDraft(null)} className="text-neutral-400 hover:text-white cursor-pointer">
+              <button onClick={closeImageModal} className="text-neutral-400 hover:text-white cursor-pointer">
                 <X className="w-3.5 h-3.5" />
               </button>
             </div>
@@ -336,14 +374,45 @@ export default function CollabDocEditor({
                 onChange={(e) => setImageUrlDraft(e.target.value)}
                 onKeyDown={(e) => {
                   if (e.key === 'Enter') submitImage();
-                  if (e.key === 'Escape') setImageUrlDraft(null);
+                  if (e.key === 'Escape') closeImageModal();
                 }}
                 placeholder="Paste an image URL..."
-                className="w-full bg-neutral-950 border border-neutral-700 rounded px-3 py-2 text-xs text-white focus:outline-none focus:border-blue-500"
+                disabled={imageUploading}
+                className="w-full bg-neutral-950 border border-neutral-700 rounded px-3 py-2 text-xs text-white focus:outline-none focus:border-blue-500 disabled:opacity-50"
               />
-              <button onClick={submitImage} className="w-full bg-blue-600 hover:bg-blue-500 text-white text-xs py-2 rounded font-medium cursor-pointer">
+              <button
+                onClick={submitImage}
+                disabled={imageUploading}
+                className="w-full bg-blue-600 hover:bg-blue-500 text-white text-xs py-2 rounded font-medium cursor-pointer disabled:opacity-50 disabled:cursor-default"
+              >
                 Insert
               </button>
+
+              <div className="flex items-center gap-2 text-[10px] text-neutral-500">
+                <div className="flex-1 h-px bg-neutral-800" />
+                or
+                <div className="flex-1 h-px bg-neutral-800" />
+              </div>
+
+              <input
+                ref={imageFileInputRef}
+                type="file"
+                accept="image/png,image/jpeg,image/gif,image/webp"
+                className="hidden"
+                onChange={(e) => {
+                  const file = e.target.files?.[0];
+                  if (file) submitImageFile(file);
+                }}
+              />
+              <button
+                onClick={() => imageFileInputRef.current?.click()}
+                disabled={imageUploading}
+                className="w-full flex items-center justify-center gap-1.5 bg-neutral-800 hover:bg-neutral-700 text-neutral-200 text-xs py-2 rounded font-medium cursor-pointer disabled:opacity-50 disabled:cursor-default"
+              >
+                <Upload className="w-3.5 h-3.5" />
+                {imageUploading ? 'Uploading...' : 'Upload from your computer'}
+              </button>
+              {imageUploadError && <p className="text-[10px] text-red-400">{imageUploadError}</p>}
             </div>
           </div>
         </div>
