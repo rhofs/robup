@@ -111,6 +111,13 @@ export type TaskDoc = {
   parentId: string | null;
   ownerId: string | null;
   contributorIds: string[];
+  // Page-level presentation settings (ClickUp's "Page Styles" panel) — only ever rendered/edited
+  // at the standalone Docs/Tasks-tab doc header, never the embedded task-modal editor.
+  // coverImageUrl/subtitle are presence-based (null = not shown), same as Space.coverImageUrl.
+  coverImageUrl: string | null;
+  subtitle: string | null;
+  pageWidth: 'normal' | 'full';
+  showLastModified: boolean;
   createdAt: string;
   updatedAt: string;
 };
@@ -436,7 +443,17 @@ interface TaskStore {
   updateSpaceDoc: (
     docId: string,
     spaceId: string,
-    patch: { title?: string; color?: string | null; textColor?: string | null; ownerId?: string | null; contributorIds?: string[] }
+    patch: {
+      title?: string;
+      color?: string | null;
+      textColor?: string | null;
+      ownerId?: string | null;
+      contributorIds?: string[];
+      coverImageUrl?: string | null;
+      subtitle?: string | null;
+      pageWidth?: 'normal' | 'full';
+      showLastModified?: boolean;
+    }
   ) => void;
   moveSpaceDoc: (spaceId: string, docId: string, folderId: string | null, targetSpaceId?: string) => Promise<void>;
   // Non-destructive, independent of deleteSpaceDoc/Trash — cascades to every subpage in this
@@ -2256,6 +2273,10 @@ export const useTaskStore = create<TaskStore>((set, get) => {
         if (patch.textColor !== undefined) oldPatch.textColor = oldDoc.textColor;
         if (patch.ownerId !== undefined) oldPatch.ownerId = oldDoc.ownerId;
         if (patch.contributorIds !== undefined) oldPatch.contributorIds = oldDoc.contributorIds;
+        if (patch.coverImageUrl !== undefined) oldPatch.coverImageUrl = oldDoc.coverImageUrl;
+        if (patch.subtitle !== undefined) oldPatch.subtitle = oldDoc.subtitle;
+        if (patch.pageWidth !== undefined) oldPatch.pageWidth = oldDoc.pageWidth;
+        if (patch.showLastModified !== undefined) oldPatch.showLastModified = oldDoc.showLastModified;
         useHistoryStore.getState().pushCoalesced(`doc-${docId}`, {
           label: 'Edit document',
           undo: () => get().updateSpaceDoc(docId, spaceId, oldPatch),

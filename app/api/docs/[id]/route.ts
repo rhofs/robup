@@ -38,6 +38,10 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
   if (body.parentId !== undefined) data.parentId = body.parentId;
   if (body.ownerId !== undefined) data.ownerId = body.ownerId;
   if (body.contributorIds !== undefined) data.contributorIdsJson = JSON.stringify(body.contributorIds);
+  if (body.coverImageUrl !== undefined) data.coverImageUrl = body.coverImageUrl;
+  if (body.subtitle !== undefined) data.subtitle = body.subtitle;
+  if (body.pageWidth !== undefined) data.pageWidth = body.pageWidth;
+  if (body.showLastModified !== undefined) data.showLastModified = body.showLastModified;
 
   const doc = await prisma.doc.update({
     where: { id },

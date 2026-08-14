@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { useEditor, EditorContent } from '@tiptap/react';
 import { BubbleMenu } from '@tiptap/react/menus';
 import { HocuspocusProvider } from '@hocuspocus/provider';
@@ -75,8 +75,21 @@ export default function CollabDocEditor({
 }: CollabDocEditorProps) {
   const users = useTaskStore((s) => s.users);
   const addDocComment = useTaskStore((s) => s.addDocComment);
+  const workspaces = useTaskStore((s) => s.workspaces);
+  const updateSpaceDoc = useTaskStore((s) => s.updateSpaceDoc);
   const currentUserId = useSessionStore((s) => s.currentUserId);
   const currentUser = users.find((u) => u.id === currentUserId);
+
+  // Page-level settings (cover/subtitle/width/last-edited toggle) only ever apply to a real
+  // Space-scoped Doc — undefined at the task-modal Documents-panel call site (no spaceId there),
+  // which is exactly when DocFormatPanel should skip rendering that section entirely.
+  const doc = useMemo(
+    () =>
+      spaceId
+        ? workspaces.flatMap((w) => w.spaces).find((s) => s.id === spaceId)?.spaceDocs.find((d) => d.id === docId)
+        : undefined,
+    [workspaces, spaceId, docId]
+  );
 
   const [commentDraft, setCommentDraft] = useState<string | null>(null);
   const [commentsExpanded, setCommentsExpanded] = useState(false);
@@ -344,7 +357,13 @@ export default function CollabDocEditor({
           <EditorContent editor={editor} />
         </div>
       </div>
-      {editor && <DocFormatPanel editor={editor} />}
+      {editor && (
+        <DocFormatPanel
+          editor={editor}
+          doc={doc}
+          onUpdateDoc={doc && spaceId ? (patch) => updateSpaceDoc(docId, spaceId, patch) : undefined}
+        />
+      )}
       {editor && (
         <DocCommentsPanel
           editor={editor}

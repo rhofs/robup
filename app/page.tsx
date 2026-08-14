@@ -3170,7 +3170,13 @@ function PageContent() {
         </header>
 
         <div className="flex-1 overflow-auto p-6" onClick={closeAllMenus}>
-          <div className="max-w-6xl mx-auto space-y-2">
+          <div
+            className={
+              (activeView === 'board' || activeView === 'docs') && activeStandaloneDoc?.pageWidth === 'full'
+                ? 'w-full space-y-2'
+                : 'max-w-6xl mx-auto space-y-2'
+            }
+          >
             {activeView === 'board' && !showingSpaceHome && (
             <div className="flex items-center justify-between">
               <div className="text-neutral-500 font-mono text-[10px]">{filteredTasks.length} tasks</div>
@@ -3379,12 +3385,35 @@ function PageContent() {
                   </div>
                 </div>
                 <div className="py-2 space-y-3">
+                  {activeStandaloneDoc.coverImageUrl && (
+                    <div className="relative -mx-6 group/cover">
+                      <img
+                        src={activeStandaloneDoc.coverImageUrl}
+                        alt=""
+                        className="w-full h-40 object-cover"
+                      />
+                      <button
+                        onClick={() => updateSpaceDoc(activeStandaloneDoc.id, currentSpace.id, { coverImageUrl: null })}
+                        className="absolute top-2 right-2 text-[10px] bg-neutral-900/80 hover:bg-neutral-900 text-neutral-300 hover:text-white px-2 py-1 rounded opacity-0 group-hover/cover:opacity-100 transition cursor-pointer"
+                      >
+                        Remove cover
+                      </button>
+                    </div>
+                  )}
                   <input
                     value={activeStandaloneDoc.title}
                     onChange={(e) => updateSpaceDoc(activeStandaloneDoc.id, currentSpace.id, { title: e.target.value })}
                     className="w-full bg-transparent text-lg font-semibold text-white focus:outline-none"
                     placeholder="Document title"
                   />
+                  {activeStandaloneDoc.subtitle !== null && (
+                    <input
+                      value={activeStandaloneDoc.subtitle}
+                      onChange={(e) => updateSpaceDoc(activeStandaloneDoc.id, currentSpace.id, { subtitle: e.target.value })}
+                      className="w-full -mt-2 bg-transparent text-sm text-neutral-400 focus:outline-none"
+                      placeholder="Add a subtitle..."
+                    />
+                  )}
                   {(() => {
                     const owner = activeStandaloneDoc.ownerId ? users.find((u) => u.id === activeStandaloneDoc.ownerId) : undefined;
                     const contributors = activeStandaloneDoc.contributorIds.map((id) => users.find((u) => u.id === id)).filter((u): u is AppUser => !!u);
@@ -3447,9 +3476,11 @@ function PageContent() {
                           ))}
                         </FloatingPopover>
 
-                        <span>
-                          Last updated {updated.toLocaleDateString()} at {updated.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-                        </span>
+                        {activeStandaloneDoc.showLastModified && (
+                          <span>
+                            Last updated {updated.toLocaleDateString()} at {updated.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                          </span>
+                        )}
 
                         <FloatingPopover
                           open={docContributorsPickerOpen}

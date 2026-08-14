@@ -406,6 +406,17 @@ model Doc {
   // Cascades to every subpage in this doc's own subtree on archive/restore.
   archived  Boolean   @default(false)
 
+  // Page-level presentation settings (ClickUp's "Page Styles" panel, DocFormatPanel.tsx) — every
+  // one of these only affects the standalone Docs/Tasks-tab doc header, never the lightweight
+  // embedded editor in a task modal's Documents panel. coverImageUrl/subtitle are presence-based
+  // (null = not shown), same "no upload, just a URL" precedent as Space.coverImageUrl and no
+  // separate on/off flag needed, same reasoning. showLastModified needs a real boolean since a
+  // timestamp always exists — there's no natural "unset" state to hide behind.
+  coverImageUrl    String?  @map("cover_image_url")
+  subtitle         String?
+  pageWidth        String   @default("normal") @map("page_width") // 'normal' | 'full'
+  showLastModified Boolean  @default(true) @map("show_last_modified")
+
   taskId String? @map("task_id")
   task   Task?   @relation(fields: [taskId], references: [id], onDelete: Cascade)
 

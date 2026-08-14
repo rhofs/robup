@@ -34,7 +34,7 @@ export async function GET() {
           // Space.docs is already scoped by the spaceId foreign key — task-scoped docs (spaceId
           // null) never come back here, they stay reachable only via /api/tasks/[id]/docs.
           docFolders: { where: { deletedAt: null }, select: { id: true, name: true, color: true, icon: true, spaceId: true, parentId: true, order: true } },
-          docs: { where: { deletedAt: null }, select: { id: true, title: true, content: true, color: true, textColor: true, order: true, taskId: true, spaceId: true, folderId: true, boardFolderId: true, parentId: true, ownerId: true, contributorIdsJson: true, archived: true, createdAt: true, updatedAt: true } },
+          docs: { where: { deletedAt: null }, select: { id: true, title: true, content: true, color: true, textColor: true, order: true, taskId: true, spaceId: true, folderId: true, boardFolderId: true, parentId: true, ownerId: true, contributorIdsJson: true, archived: true, coverImageUrl: true, subtitle: true, pageWidth: true, showLastModified: true, createdAt: true, updatedAt: true } },
         },
       },
     },

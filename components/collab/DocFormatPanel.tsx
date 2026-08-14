@@ -24,9 +24,18 @@ import {
   Minus,
   Plus,
   Code2,
+  Check,
 } from 'lucide-react';
 import FloatingPopover from '../FloatingPopover';
 import ColorSwatchPicker from '../ColorSwatchPicker';
+import type { TaskDoc } from '../../store/useTaskStore';
+
+type DocPagePatch = {
+  coverImageUrl?: string | null;
+  subtitle?: string | null;
+  pageWidth?: 'normal' | 'full';
+  showLastModified?: boolean;
+};
 
 // Same button set the old DocToolbar.tsx had, now living in a collapsible right-side column
 // instead of a fixed row between the title and the editor content — per explicit user feedback
@@ -147,11 +156,23 @@ const FONT_SIZE_CHOICES = [10, 12, 14, 16, 18, 20, 24, 28, 32, 36, 48, 64, 96];
 const TEXT_COLOR_CHOICES = ['#000000', '#404040', '#737373', '#e5e5e5', '#f87171', '#fb923c', '#facc15', '#4ade80', '#60a5fa', '#c084fc', '#f472b6'];
 const HIGHLIGHT_COLOR_CHOICES = ['#fef08a', '#bbf7d0', '#bfdbfe', '#fecaca', '#fed7aa', '#e9d5ff', '#fbcfe8'];
 
-export default function DocFormatPanel({ editor }: { editor: Editor }) {
+export default function DocFormatPanel({
+  editor,
+  doc,
+  onUpdateDoc,
+}: {
+  editor: Editor;
+  // Both undefined at the task-modal Documents-panel call site (no spaceId there, see
+  // CollabDocEditor.tsx) — page-level settings only ever apply to a real standalone Doc.
+  doc?: TaskDoc;
+  onUpdateDoc?: (patch: DocPagePatch) => void;
+}) {
   const [expanded, setExpanded] = useState(false);
   const [colorOpen, setColorOpen] = useState(false);
   const [highlightOpen, setHighlightOpen] = useState(false);
   const [sizeMenuOpen, setSizeMenuOpen] = useState(false);
+  const [coverOpen, setCoverOpen] = useState(false);
+  const [coverDraft, setCoverDraft] = useState('');
 
   // `editor` is one stable object for the whole editing session — every control below reads its
   // live state directly (`editor.isActive()`/`getAttributes()`), which only reflects reality if
@@ -185,9 +206,113 @@ export default function DocFormatPanel({ editor }: { editor: Editor }) {
         onClick={() => setExpanded(false)}
         className="flex items-center gap-1 text-[10px] text-neutral-500 hover:text-neutral-300 mb-1 cursor-pointer"
       >
-        <ChevronRight className="w-3 h-3" /> Formatting
+        <ChevronRight className="w-3 h-3" /> Page styles
       </button>
 
+      {doc && onUpdateDoc && (
+        <div className="space-y-1.5 pb-2 mb-1 border-b border-neutral-800">
+          <label className="text-[9px] uppercase tracking-wide text-neutral-500 block">Page</label>
+
+          <div className="flex items-center gap-1 bg-neutral-950 border border-neutral-800 rounded p-0.5">
+            <button
+              type="button"
+              onClick={() => onUpdateDoc({ pageWidth: 'normal' })}
+              className={`flex-1 text-[10px] py-1 rounded cursor-pointer transition ${
+                doc.pageWidth !== 'full' ? 'bg-neutral-800 text-blue-400' : 'text-neutral-400 hover:text-neutral-200'
+              }`}
+            >
+              Normal
+            </button>
+            <button
+              type="button"
+              onClick={() => onUpdateDoc({ pageWidth: 'full' })}
+              className={`flex-1 text-[10px] py-1 rounded cursor-pointer transition ${
+                doc.pageWidth === 'full' ? 'bg-neutral-800 text-blue-400' : 'text-neutral-400 hover:text-neutral-200'
+              }`}
+            >
+              Full width
+            </button>
+          </div>
+
+          {doc.coverImageUrl ? (
+            <button
+              type="button"
+              onClick={() => onUpdateDoc({ coverImageUrl: null })}
+              className="w-full text-[10px] text-neutral-400 hover:text-red-400 text-left cursor-pointer"
+            >
+              Remove cover
+            </button>
+          ) : (
+            <FloatingPopover
+              open={coverOpen}
+              onClose={() => setCoverOpen(false)}
+              panelClassName="w-52 bg-neutral-900 border border-neutral-800 rounded shadow-xl p-2 space-y-1.5"
+              anchor={
+                <button
+                  type="button"
+                  onClick={() => {
+                    setCoverDraft('');
+                    setCoverOpen((o) => !o);
+                  }}
+                  className="w-full text-[10px] text-neutral-400 hover:text-neutral-200 text-left cursor-pointer"
+                >
+                  + Add cover
+                </button>
+              }
+            >
+              <input
+                autoFocus
+                value={coverDraft}
+                onChange={(e) => setCoverDraft(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key !== 'Enter') return;
+                  const trimmed = coverDraft.trim();
+                  if (trimmed) onUpdateDoc({ coverImageUrl: trimmed });
+                  setCoverOpen(false);
+                }}
+                placeholder="Paste an image URL..."
+                className="w-full bg-neutral-950 border border-neutral-700 rounded px-2 py-1 text-[11px] text-white focus:outline-none focus:border-blue-500"
+              />
+              <button
+                type="button"
+                onClick={() => {
+                  const trimmed = coverDraft.trim();
+                  if (trimmed) onUpdateDoc({ coverImageUrl: trimmed });
+                  setCoverOpen(false);
+                }}
+                className="w-full bg-blue-600 hover:bg-blue-500 text-white text-[10px] py-1 rounded font-medium cursor-pointer"
+              >
+                Set cover
+              </button>
+            </FloatingPopover>
+          )}
+
+          <button
+            type="button"
+            onClick={() => onUpdateDoc({ subtitle: doc.subtitle === null ? '' : null })}
+            className="w-full text-[10px] text-neutral-400 hover:text-neutral-200 text-left cursor-pointer"
+          >
+            {doc.subtitle === null ? '+ Add subtitle' : 'Remove subtitle'}
+          </button>
+
+          <button
+            type="button"
+            onClick={() => onUpdateDoc({ showLastModified: !doc.showLastModified })}
+            className="w-full flex items-center gap-1.5 text-[10px] text-neutral-400 hover:text-neutral-200 cursor-pointer"
+          >
+            <span
+              className={`w-3.5 h-3.5 rounded border flex items-center justify-center shrink-0 transition ${
+                doc.showLastModified ? 'bg-blue-500 border-blue-500 text-white' : 'border-neutral-600'
+              }`}
+            >
+              {doc.showLastModified && <Check className="w-2.5 h-2.5" />}
+            </span>
+            Show last edited
+          </button>
+        </div>
+      )}
+
+      <label className="text-[9px] uppercase tracking-wide text-neutral-500 block">Text</label>
       <div className="grid grid-cols-4 gap-1">
         {MARK_BUTTONS.map(({ key, label, icon: Icon, isActive, run }) => (
           <button
