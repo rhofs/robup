@@ -139,7 +139,19 @@ function writeLine(
   doc.fillColor('black').fontSize(BODY_SIZE); // reset graphics state so it never bleeds into the next block
 }
 
-function renderBlock(doc: PDFKit.PDFDocument, node: PMNode, depth: number) {
+// Max box an embedded image is scaled into (same fit-within-bounds math pdfkit's own `fit` option
+// uses internally) — computed here too, ahead of the actual draw call, purely so a page break can
+// be inserted first if the image wouldn't fit in the space remaining on the current page. pdfkit's
+// image() advances doc.y like text() does, but never auto-paginates the way text() does.
+const IMAGE_MAX_HEIGHT = 320;
+
+function fitWithin(intrinsicW: number, intrinsicH: number, maxW: number, maxH: number) {
+  const boxRatio = maxW / maxH;
+  const imageRatio = intrinsicW / intrinsicH;
+  return imageRatio > boxRatio ? { w: maxW, h: maxW / imageRatio } : { h: maxH, w: maxH * imageRatio };
+}
+
+function renderBlock(doc: PDFKit.PDFDocument, node: PMNode, depth: number, images: Map<string, Buffer>) {
   if (node.type === 'heading') {
     const level = node.attrs?.level ?? 1;
     writeLine(doc, node.content, { size: level === 1 ? H1_SIZE : H2_SIZE, bold: true, indent: depth * LIST_INDENT, align: node.attrs?.textAlign });
@@ -180,10 +192,34 @@ function renderBlock(doc: PDFKit.PDFDocument, node: PMNode, depth: number) {
     return;
   }
   if (node.type === 'image') {
-    // Placeholder text only, deliberately — pdfkit's doc.image() needs a local Buffer/path, not a
-    // remote URL, so embedding the real image would need async URL-fetching threaded through this
-    // otherwise-synchronous walker. A separate, larger piece of work if wanted later.
-    writeLine(doc, undefined, { size: BODY_SIZE, bold: true, indent: depth * LIST_INDENT, marker: `[Image${node.attrs?.alt ? `: ${node.attrs.alt}` : ''}]` });
+    const buffer = node.attrs?.src ? images.get(node.attrs.src) : undefined;
+    const indent = depth * LIST_INDENT;
+    if (buffer) {
+      try {
+        // openImage() isn't in @types/pdfkit even though it's the same public method image()
+        // itself calls internally to read intrinsic width/height — needed here, ahead of the
+        // actual image() draw call below, purely to decide whether a page break is needed first.
+        const opened = (doc as unknown as { openImage(src: Buffer): { width: number; height: number } }).openImage(buffer);
+        const maxWidth = doc.page.width - doc.page.margins.left - doc.page.margins.right - indent;
+        const { w, h } = fitWithin(opened.width, opened.height, maxWidth, IMAGE_MAX_HEIGHT);
+        const pageBottom = doc.page.height - doc.page.margins.bottom;
+        if (doc.y + h > pageBottom) doc.addPage();
+        // Positional x with y left undefined (not the {x, ...} options form — @types/pdfkit
+        // doesn't declare `x`/`y` on ImageOption even though the runtime honors them there too)
+        // keeps this in pdfkit's "document flow" mode, so doc.y auto-advances by h afterward,
+        // same as doc.text() does.
+        doc.image(buffer, doc.page.margins.left + indent, undefined, { width: w, height: h });
+        doc.moveDown(0.4);
+        return;
+      } catch {
+        // Fall through to the placeholder below — a resolved buffer that still fails to parse as
+        // an image (corrupt file, or a non-image file smuggled through the URL-paste field despite
+        // resolveDocImages' own content-type/extension checks) shouldn't ever crash the whole export.
+      }
+    }
+    // Placeholder text — either the image couldn't be fetched/embedded, or (this doc was exported
+    // through a path that never resolved images at all, e.g. a stale caller) images is empty.
+    writeLine(doc, undefined, { size: BODY_SIZE, bold: true, indent, marker: `[Image${node.attrs?.alt ? `: ${node.attrs.alt}` : ''}]` });
     doc.moveDown(0.4);
     return;
   }
@@ -196,14 +232,14 @@ function renderBlock(doc: PDFKit.PDFDocument, node: PMNode, depth: number) {
           writeLine(doc, block.content, { size: BODY_SIZE, bold: false, indent: (depth + 1) * LIST_INDENT, marker });
           doc.moveDown(0.2);
         } else {
-          renderBlock(doc, block, depth + 1);
+          renderBlock(doc, block, depth + 1, images);
         }
       });
     });
     doc.moveDown(0.2);
     return;
   }
-  (node.content ?? []).forEach((child) => renderBlock(doc, child, depth));
+  (node.content ?? []).forEach((child) => renderBlock(doc, child, depth, images));
 }
 
 // Same recursive-descent shape as lib/collab/docJSONToPlainText.ts, but issues pdfkit draw calls
@@ -211,7 +247,7 @@ function renderBlock(doc: PDFKit.PDFDocument, node: PMNode, depth: number) {
 // listItem (recursing for nested lists), inline bold/italic/underline/strike/color/font-size/
 // font-family/link all map onto pdfkit's own native text-drawing options — no new capability
 // needed, everything here was already supported by pdfkit itself.
-export function writeDocToPdf(doc: PDFKit.PDFDocument, json: { content?: PMNode[] }) {
+export function writeDocToPdf(doc: PDFKit.PDFDocument, json: { content?: PMNode[] }, images: Map<string, Buffer>) {
   doc.font('Helvetica').fontSize(BODY_SIZE).fillColor('black');
-  (json.content ?? []).forEach((node) => renderBlock(doc, node, 0));
+  (json.content ?? []).forEach((node) => renderBlock(doc, node, 0, images));
 }
