@@ -7,6 +7,8 @@ import { collabSchema } from '../lib/collab/schema';
 import { legacyContentToDocJSON } from '../lib/collab/legacyContentToDocJSON';
 import { docJSONToPlainText } from '../lib/collab/docJSONToPlainText';
 import { isPresenceDocumentName, workspaceIdFromPresenceDocumentName } from '../lib/collab/presenceRoom';
+import { isChatDocumentName, channelIdFromChatDocumentName } from '../lib/collab/chatRoom';
+import { canSee, type AccessContext } from '../lib/auth/access';
 
 // Standalone sidecar process (run via `npm run dev:collab` / bundled into `npm run dev` via
 // concurrently — see package.json) — deliberately NOT embedded into the Next server, so `next
@@ -25,6 +27,13 @@ const XML_FRAGMENT_FIELD = 'default';
 async function resolveWorkspaceId(documentName: string): Promise<string | null> {
   if (isPresenceDocumentName(documentName)) {
     return workspaceIdFromPresenceDocumentName(documentName);
+  }
+  if (isChatDocumentName(documentName)) {
+    const channel = await prisma.chatChannel.findUnique({
+      where: { id: channelIdFromChatDocumentName(documentName) },
+      select: { workspaceId: true },
+    });
+    return channel?.workspaceId ?? null;
   }
   const doc = await prisma.doc.findUnique({
     where: { id: documentName },
@@ -55,7 +64,21 @@ const server = new Server({
   // implicitly trusts it. This process previously loaded no env vars at all (SQLite's datasource
   // URL is hardcoded in schema.prisma, so it never needed any) — `AUTH_SECRET` now comes from
   // `--env-file=.env.local` on the npm scripts that start this process (package.json).
-  async onAuthenticate({ documentName, requestHeaders }) {
+  async onAuthenticate({ documentName, requestHeaders, token: providedToken }) {
+    // Trusted server-to-server bridge, scoped narrowly to chat rooms only — lets the message-POST
+    // route (app/api/channels/[id]/messages/route.ts, running in the separate Next.js process)
+    // open a short-lived connection here purely to broadcast "something changed," with no real
+    // user identity of its own. Safe when CHAT_BROADCAST_SECRET is unset: `undefined ===
+    // providedToken` is never true for a real (non-empty) token.
+    if (
+      isChatDocumentName(documentName) &&
+      providedToken &&
+      process.env.CHAT_BROADCAST_SECRET &&
+      providedToken === process.env.CHAT_BROADCAST_SECRET
+    ) {
+      return;
+    }
+
     const token = await getToken({ req: { headers: requestHeaders }, secret: process.env.AUTH_SECRET, secureCookie: false });
     const userId = token?.sub;
     if (!userId) throw new Error('Unauthorized: no valid session');
@@ -65,16 +88,44 @@ const server = new Server({
 
     const membership = await prisma.workspaceMembership.findUnique({
       where: { workspaceId_userId: { workspaceId, userId } },
-      select: { id: true },
+      select: { role: true },
     });
     if (!membership) throw new Error(`Unauthorized: user is not a member of workspace ${workspaceId}`);
 
+    // Chat-specific tightening, after the generic membership check above — a private channel
+    // needs the same canSee() grant check as everything else in this app (lib/auth/access.ts),
+    // not just "is a workspace member." Public channels (the only kind that exists as of Phase 1)
+    // need nothing further. DM/group-DM rooms don't exist yet (Phase 3) so there's no branch for
+    // them here — when they land, they must check ChatChannelMember directly and never canSee, per
+    // PLANNING.md's "canSee vs membership split" note (canSee's owner/admin-sees-everything rule
+    // would wrongly let a workspace owner listen in on two other members' private DM).
+    if (isChatDocumentName(documentName)) {
+      const channel = await prisma.chatChannel.findUnique({
+        where: { id: channelIdFromChatDocumentName(documentName) },
+        select: { isPrivate: true, accessJson: true },
+      });
+      if (channel?.isPrivate) {
+        const role = membership.role as AccessContext['role'];
+        const isManager = role === 'owner' || role === 'admin';
+        const heldRoleIds = isManager
+          ? []
+          : (
+              await prisma.role.findMany({
+                where: { workspaceId, members: { some: { id: userId } } },
+                select: { id: true },
+              })
+            ).map((r) => r.id);
+        const ctx: AccessContext = { userId, role, isManager, isMember: true, heldRoleIds };
+        if (!canSee(channel, ctx)) throw new Error('Unauthorized: private channel');
+      }
+    }
+
     // Best-effort "contributor" tracking for the Docs Subpages table's avatar column — deliberately
     // approximate (records "has connected to edit this doc," not "has made a specific edit"; see
-    // PLANNING.md). A presence room isn't a real Doc row, so skip it the same way the load/store
-    // hooks below do. Fire-and-forget: a lost race on this display-only field isn't worth blocking
-    // the connection over.
-    if (!isPresenceDocumentName(documentName)) {
+    // PLANNING.md). A presence or chat room isn't a real Doc row, so skip it the same way the
+    // load/store hooks below do. Fire-and-forget: a lost race on this display-only field isn't
+    // worth blocking the connection over.
+    if (!isPresenceDocumentName(documentName) && !isChatDocumentName(documentName)) {
       prisma.doc
         .findUnique({ where: { id: documentName }, select: { contributorIdsJson: true } })
         .then((doc) => {
@@ -90,10 +141,20 @@ const server = new Server({
     }
   },
 
+  // Stateless messages (used for chat's live-signal broadcast) do NOT auto-relay to other
+  // connections on the same document — confirmed by spiking against this exact installed version
+  // (4.5.0) before wiring this up for real: without this hook explicitly re-broadcasting, a
+  // sender's sendStateless() call reaches the server and is silently dropped, no other client ever
+  // sees it. document.broadcastStateless(payload) is what actually fans it out.
+  async onStateless({ document, payload }) {
+    document.broadcastStateless(payload);
+  },
+
   async onLoadDocument({ document, documentName }) {
-    // The workspace-presence room carries no persisted content, only ephemeral awareness state
-    // (who's connected) — it isn't a real Doc row, so skip the DB lookup entirely.
-    if (isPresenceDocumentName(documentName)) return;
+    // The workspace-presence room and a chat room both carry no persisted content, only
+    // ephemeral awareness/stateless-signal traffic — neither is a real Doc row, so skip the DB
+    // lookup entirely for both.
+    if (isPresenceDocumentName(documentName) || isChatDocumentName(documentName)) return;
 
     const doc = await prisma.doc.findUnique({ where: { id: documentName } });
     if (!doc) throw new Error(`Doc ${documentName} not found`);
@@ -119,7 +180,7 @@ const server = new Server({
   },
 
   async onStoreDocument({ document, documentName }) {
-    if (isPresenceDocumentName(documentName)) return;
+    if (isPresenceDocumentName(documentName) || isChatDocumentName(documentName)) return;
 
     const json = yXmlFragmentToProsemirrorJSON(document.getXmlFragment(XML_FRAGMENT_FIELD));
     await prisma.doc.update({

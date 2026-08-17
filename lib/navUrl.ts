@@ -1,7 +1,7 @@
 import { startOfDay } from './calendarDates';
 
 export type NavGranularity = 'month' | 'week' | 'day';
-export type NavView = 'board' | 'calendar' | 'docs' | 'office' | 'mytasks' | 'mypersonal' | 'profile';
+export type NavView = 'board' | 'calendar' | 'docs' | 'office' | 'mytasks' | 'mypersonal' | 'profile' | 'chat';
 
 // `workspaceId`/`spaceId`/`listIds` are nullable — null means the URL simply didn't mention them
 // at all, which is distinct from an explicit `space=everything`. That distinction lets a bare
@@ -63,7 +63,9 @@ export function parseNavUrl(params: URLSearchParams): ParsedNavUrl {
               ? 'mypersonal'
               : viewParam === 'profile'
                 ? 'profile'
-                : 'board';
+                : viewParam === 'chat'
+                  ? 'chat'
+                  : 'board';
   const workspaceId = params.get('workspace');
   const spaceId = params.has('space') ? params.get('space') : null;
   const listIds = params.has('lists') ? (params.get('lists') || '').split(',').filter(Boolean) : null;

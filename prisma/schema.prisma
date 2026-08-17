@@ -15,6 +15,7 @@ model Workspace {
   spaces          Space[]
   rooms           Room[]
   events          Event[]
+  chatChannels    ChatChannel[]
   // Explicit join model, not a plain implicit M2M like Task.assignees/User.tasks below — this one
   // needs to carry a role tier (owner/admin/member) per membership row, which an implicit M2M
   // can't do. A workspace with exactly one member is still what "private" means in this app:
@@ -130,6 +131,7 @@ model Space {
   // which genuinely live inside a Space. Deleting a Space un-links its Events (SetNull on the
   // Event side) rather than deleting them.
   events        Event[]
+  chatChannels  ChatChannel[]
   // Independent per-level private access (Space/Folder/List/Task each have this same pair) — a
   // private item is visible only to the workspace's Owner/Admins plus whoever accessJson grants.
   // Defaults keep every existing row (and every new one until someone opts in) fully open, same
@@ -279,6 +281,10 @@ model User {
   comments      Comment[]
   ownedDocs     Doc[]     @relation("DocOwner")
   docComments   DocComment[]
+  createdChatChannels   ChatChannel[]       @relation("ChatChannelCreator")
+  chatChannelMemberships ChatChannelMember[]
+  chatMessages  ChatMessage[]
+  chatReactions ChatReaction[]
   createdAt     DateTime  @default(now()) @map("created_at")
 }
 
@@ -335,6 +341,7 @@ model Task {
   assignees User[]    @relation("TaskAssignees")
   comments  Comment[]
   docs      Doc[]
+  chatChannels ChatChannel[]
 
   customFieldValues String @default("{}") @map("custom_field_values")
 
@@ -499,4 +506,130 @@ model DocFolder {
   docs      Doc[]
   order     Int         @default(0)
   createdAt DateTime    @default(now()) @map("created_at")
+}
+
+// 12. Chat — channels/DMs (Prisma-native content, Hocuspocus is only ever a live-signal transport
+// for this, see PLANNING.md's "Planned: Discord/Slack-style chat" section). Phase 1: schema only,
+// built once for every later phase so none of them need their own migration.
+model ChatChannel {
+  id          String    @id @default(uuid())
+  workspaceId String    @map("workspace_id")
+  workspace   Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+
+  type  String  // 'channel' | 'dm' | 'group_dm'
+  name  String?
+  topic String?
+
+  // Loosely-related, optional link — never required, unlike Doc.taskId. SetNull (not Cascade like
+  // Doc.taskId/spaceId) so a channel's message history isn't destroyed just because the Task/Space
+  // it was tied to got deleted, same reasoning as Event.spaceId/User.roomId.
+  taskId String? @map("task_id")
+  task   Task?   @relation(fields: [taskId], references: [id], onDelete: SetNull)
+
+  spaceId String? @map("space_id")
+  space   Space?  @relation(fields: [spaceId], references: [id], onDelete: SetNull)
+
+  // Reused verbatim from Space/Folder/List/Task (see lib/auth/access.ts) — only meaningful for
+  // type='channel'. DM/group-DM visibility goes through ChatChannelMember membership directly and
+  // must never be checked via canSee — its "owner/admin always sees everything" rule would
+  // incorrectly let a workspace owner see into two other members' private DM.
+  isPrivate  Boolean @default(false) @map("is_private")
+  accessJson String  @default("[]") @map("access_json")
+
+  // 1:1-DM dedupe key (`${workspaceId}:${[userIdA,userIdB].sort().join(':')}`) — null for
+  // channel/group_dm rows, since group DMs deliberately don't dedupe (every "create group" makes a
+  // new row, matching real Slack/Discord).
+  dmKey String? @unique @map("dm_key")
+
+  createdById String? @map("created_by_id")
+  createdBy   User?   @relation("ChatChannelCreator", fields: [createdById], references: [id], onDelete: SetNull)
+
+  members  ChatChannelMember[]
+  messages ChatMessage[]
+
+  // Channel is a container object like Space/List/Folder/Doc, so it gets the normal Trash pattern
+  // even though individual messages deliberately don't (hard delete, decided for v1). No
+  // delete/restore route touches this yet — deliberately unbuilt in Phase 1.
+  deletedAt DateTime? @map("deleted_at")
+  createdAt DateTime  @default(now()) @map("created_at")
+}
+
+model ChatChannelMember {
+  id        String      @id @default(uuid())
+  channelId String      @map("channel_id")
+  channel   ChatChannel @relation(fields: [channelId], references: [id], onDelete: Cascade)
+  userId    String      @map("user_id")
+  user      User        @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  // Unused until the optional Phase 8 unread-tracking work — included now so that phase doesn't
+  // need its own migration touching this row again.
+  lastReadMessageId String?   @map("last_read_message_id")
+  lastReadAt        DateTime? @map("last_read_at")
+
+  joinedAt DateTime @default(now()) @map("joined_at")
+
+  @@unique([channelId, userId])
+}
+
+model ChatMessage {
+  id        String      @id @default(uuid())
+  channelId String      @map("channel_id")
+  channel   ChatChannel @relation(fields: [channelId], references: [id], onDelete: Cascade)
+
+  // SetNull — same "history outlives the person" precedent as Comment.authorId/DocComment.authorId.
+  authorId String? @map("author_id")
+  author   User?   @relation(fields: [authorId], references: [id], onDelete: SetNull)
+
+  body String
+
+  // Inline quote-reply (orthogonal to threading below — a message can be both at once). Snapshots
+  // are captured at reply-creation time, same idea as DocComment.quotedText, so the quote preview
+  // keeps showing what was actually quoted even after the original is edited/hard-deleted.
+  quotedMessageId    String?       @map("quoted_message_id")
+  quotedMessage      ChatMessage?  @relation("ChatMessageQuotes", fields: [quotedMessageId], references: [id], onDelete: SetNull)
+  quotedBy           ChatMessage[] @relation("ChatMessageQuotes")
+  quotedBodySnapshot String?       @map("quoted_body_snapshot")
+  quotedAuthorId     String?       @map("quoted_author_id")
+
+  // Thread branch (orthogonal to quoting above). SetNull, not Cascade — deleting a root shouldn't
+  // cascade-destroy every reply; former replies just fall back to rendering as normal main-feed
+  // messages once threadRootId goes null. threadReplyCount is denormalized, kept in sync in the
+  // same request that creates/deletes a thread reply, to avoid a COUNT(*) per rendered message.
+  threadRootId     String?       @map("thread_root_id")
+  threadRoot       ChatMessage?  @relation("ChatMessageThread", fields: [threadRootId], references: [id], onDelete: SetNull)
+  threadReplies    ChatMessage[] @relation("ChatMessageThread")
+  threadReplyCount Int           @default(0) @map("thread_reply_count")
+
+  reactions   ChatReaction[]
+  attachments ChatAttachment[]
+
+  createdAt DateTime @default(now()) @map("created_at")
+}
+
+model ChatReaction {
+  id        String      @id @default(uuid())
+  messageId String      @map("message_id")
+  message   ChatMessage @relation(fields: [messageId], references: [id], onDelete: Cascade)
+  userId    String      @map("user_id")
+  user      User        @relation(fields: [userId], references: [id], onDelete: Cascade)
+  emoji     String
+
+  createdAt DateTime @default(now()) @map("created_at")
+
+  @@unique([messageId, userId, emoji])
+}
+
+model ChatAttachment {
+  id        String      @id @default(uuid())
+  messageId String      @map("message_id")
+  message   ChatMessage @relation(fields: [messageId], references: [id], onDelete: Cascade)
+
+  url      String
+  kind     String  @default("image")
+  fileName String? @map("file_name")
+  byteSize Int?    @map("byte_size")
+  width    Int?
+  height   Int?
+
+  createdAt DateTime @default(now()) @map("created_at")
 }

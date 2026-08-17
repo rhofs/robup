@@ -5,16 +5,18 @@ import Papa from 'papaparse';
 import { X, Settings, Check, Trash2, Plus, Link2, Upload } from 'lucide-react';
 import { useTaskStore, type HierarchyWorkspace } from '../store/useTaskStore';
 import ColorSwatchPicker from './ColorSwatchPicker';
+import { copyToClipboard } from '../lib/copyToClipboard';
 
 const HIDDEN_NAV_TABS_STORAGE_KEY = 'robup.hiddenNavTabs';
 
-export type NavTabId = 'board' | 'calendar' | 'docs' | 'office';
+export type NavTabId = 'board' | 'calendar' | 'docs' | 'office' | 'chat';
 
 const NAV_TABS: { id: NavTabId; label: string }[] = [
   { id: 'board', label: 'Tasks' },
   { id: 'calendar', label: 'Planner' },
   { id: 'docs', label: 'Docs' },
   { id: 'office', label: 'Office' },
+  { id: 'chat', label: 'Chat' },
 ];
 
 // Same "only persist the non-default (hidden) minority" Set-of-ids shape as FolderTree.tsx's
@@ -165,8 +167,9 @@ export default function SettingsPanel({
     await fetch(`/api/workspaces/${workspace.id}/invites/${inviteId}`, { method: 'DELETE' });
   };
 
-  const copyInviteLink = (inviteId: string) => {
-    navigator.clipboard.writeText(`${window.location.origin}/invite/${inviteId}`);
+  const copyInviteLink = async (inviteId: string) => {
+    const ok = await copyToClipboard(`${window.location.origin}/invite/${inviteId}`);
+    if (!ok) return;
     setCopiedId(inviteId);
     setTimeout(() => setCopiedId((id) => (id === inviteId ? null : id)), 1500);
   };

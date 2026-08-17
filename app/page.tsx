@@ -63,6 +63,7 @@ import {
 import { useTaskStore, HierarchySpace, HierarchyFolder, HierarchyList, HierarchyDocFolder, HierarchyRoom, HierarchyWorkspace, StatusDef, CustomFieldDef, Task, TaskDoc, AppUser } from '../store/useTaskStore';
 import { useHistoryStore } from '../store/useHistoryStore';
 import { useSessionStore } from '../store/useSessionStore';
+import { useChatStore } from '../store/useChatStore';
 import { usePresenceConnection } from '../lib/collab/usePresenceConnection';
 import { SessionSync } from '../components/SessionSync';
 import { signOut } from 'next-auth/react';
@@ -75,6 +76,7 @@ import ColorSwatchPicker from '../components/ColorSwatchPicker';
 import ConfirmDialog from '../components/ConfirmDialog';
 import FloatingPopover from '../components/FloatingPopover';
 import { activeGlowStyle } from '../lib/activeGlowStyle';
+import { copyToClipboard } from '../lib/copyToClipboard';
 import DocExportMenu from '../components/collab/DocExportMenu';
 import TaskRow, { ColumnDef } from '../components/TaskRow';
 import FolderTree, { FOLDER_ICON_CHOICES, FOLDER_ICON_MAP } from '../components/FolderTree';
@@ -87,6 +89,8 @@ import DocsBrowser from '../components/DocsBrowser';
 import DocSubpagesPanel from '../components/DocSubpagesPanel';
 import { getChildDocs } from '../lib/docFolderTree';
 import OfficePage from '../components/OfficePage';
+import ChatPanel from '../components/ChatPanel';
+import ChatChannelSidebar from '../components/ChatChannelSidebar';
 import MyTasksPage from '../components/MyTasksPage';
 import PersonalTasksPage from '../components/PersonalTasksPage';
 import ProfilePage from '../components/ProfilePage';
@@ -548,6 +552,14 @@ function PageContent() {
 
   const { currentUserId } = useSessionStore();
   usePresenceConnection(activeWorkspaceId ?? null);
+
+  // Just for the breadcrumb's "/ #channel-name" segment — the channel list/messages themselves
+  // live inside ChatChannelSidebar/ChatPanel, which read the rest of useChatStore directly.
+  const activeChatChannelName = useChatStore((s) => {
+    const id = s.activeChannelId;
+    if (!id || !activeWorkspaceId) return null;
+    return (s.channelsByWorkspace[activeWorkspaceId] || []).find((c) => c.id === id)?.name ?? null;
+  });
 
   const [sortBy, setSortBy] = useState<'dueDate' | 'startDate' | 'name' | 'none'>('none');
   const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('asc');
@@ -1548,8 +1560,12 @@ function PageContent() {
     }
     const me = await res.json();
     const url = `${window.location.origin}/api/calendar/${me.calendarToken}`;
-    await navigator.clipboard.writeText(url);
-    showToast('Calendar feed link copied — paste it into Google/Apple/Outlook calendar as a subscription.');
+    const ok = await copyToClipboard(url);
+    showToast(
+      ok
+        ? 'Calendar feed link copied — paste it into Google/Apple/Outlook calendar as a subscription.'
+        : 'Could not copy automatically — copy this link manually: ' + url
+    );
   };
 
   // One-shot signal from app/api/google/oauth/callback/route.ts's redirect — deliberately not
@@ -2645,6 +2661,18 @@ function PageContent() {
             <span className="text-[8px] font-medium leading-none">Office</span>
           </button>
         )}
+        {!hiddenNavTabs.has('chat') && (
+          <button
+            onClick={() => setActiveView('chat')}
+            title="Chat"
+            className={`w-10 h-10 rounded flex flex-col items-center justify-center gap-0.5 transition cursor-pointer ${
+              activeView === 'chat' ? 'bg-neutral-800 text-blue-400' : 'text-neutral-500 hover:bg-neutral-800/60 hover:text-neutral-200'
+            }`}
+          >
+            <MessageSquare className="w-4 h-4" />
+            <span className="text-[8px] font-medium leading-none">Chat</span>
+          </button>
+        )}
 
         {/* Pushes Trash/Settings down to the bottom, visually separated from the view-switching
             tabs above — neither is a tab, so they shouldn't sit in the same run as Tasks/Planner/
@@ -2840,6 +2868,8 @@ function PageContent() {
                   );
                 })}
               </div>
+            ) : activeView === 'chat' ? (
+              <ChatChannelSidebar workspaceId={activeWorkspaceId} />
             ) : (
             <div className="space-y-3">
               <div className="flex items-center justify-between px-2">
@@ -3127,6 +3157,18 @@ function PageContent() {
                       <span className="text-neutral-300 font-semibold">
                         {workspaces.flatMap((w) => w.rooms).find((r) => r.id === activeOfficeRoomId)?.name}
                       </span>
+                    </>
+                  )}
+                </>
+              ) : activeView === 'chat' ? (
+                <>
+                  <span className={`flex items-center gap-1.5 ${activeChatChannelName ? 'text-neutral-500' : 'text-blue-400 font-semibold'}`}>
+                    <MessageSquare className="w-3.5 h-3.5" /> Chat
+                  </span>
+                  {activeChatChannelName && (
+                    <>
+                      <span className="text-neutral-600">/</span>
+                      <span className="text-neutral-300 font-semibold">#{activeChatChannelName}</span>
                     </>
                   )}
                 </>
@@ -3598,6 +3640,16 @@ function PageContent() {
                 onDeleteRoomRequest={setRoomToDelete}
                 onRequestRemoveMember={(user) => setMemberToRemove(user)}
               />
+            ) : activeView === 'chat' ? (
+              !activeWorkspaceId ? (
+                <div className="text-[11px] text-neutral-500 px-1 py-8 text-center border border-dashed border-neutral-800 rounded">
+                  Pick a workspace to open Chat.
+                </div>
+              ) : (
+                <div className="h-[75vh]">
+                  <ChatPanel workspaceId={activeWorkspaceId} />
+                </div>
+              )
             ) : activeView === 'docs' ? (
               !currentSpace ? (
                 <div className="text-[11px] text-neutral-500 px-1 py-8 text-center border border-dashed border-neutral-800 rounded">
