@@ -245,7 +245,10 @@ export default function SettingsPanel({
               Roles
             </button>
           )}
-          {canManage && (
+          {/* A personal workspace has no invite concept — it's inherently single-member/private
+              (the "My tasks" auto-created Workspace), so a shareable join link here would be a
+              real leak, not just clutter. */}
+          {canManage && !workspace.isPersonal && (
             <button
               onClick={() => setTab('invite')}
               className={`flex-1 text-xs py-2 cursor-pointer transition ${tab === 'invite' ? 'text-white border-b-2 border-blue-500' : 'text-neutral-500 hover:text-neutral-300'}`}

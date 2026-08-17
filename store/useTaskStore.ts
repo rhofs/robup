@@ -225,7 +225,7 @@ interface TaskStore {
   comments: Record<string, TaskComment[]>;
   docComments: Record<string, DocComment[]>;
   docs: Record<string, TaskDoc[]>;
-  activeView: 'board' | 'calendar' | 'docs' | 'office' | 'mytasks' | 'mypersonal' | 'profile' | 'chat';
+  activeView: 'board' | 'calendar' | 'docs' | 'office' | 'mytasks' | 'profile' | 'chat' | 'directMessages';
   // Which Workspace the sidebar/nav is currently scoped to — null only until the first
   // fetchInitialData() resolves (or if the current identity has no workspaces at all).
   activeWorkspaceId: string | null;
@@ -252,7 +252,7 @@ interface TaskStore {
   refetchWorkspaces: () => Promise<void>;
   refetchTasks: () => Promise<void>;
   refetchEvents: () => Promise<void>;
-  setActiveView: (view: 'board' | 'calendar' | 'docs' | 'office' | 'mytasks' | 'mypersonal' | 'profile' | 'chat') => void;
+  setActiveView: (view: 'board' | 'calendar' | 'docs' | 'office' | 'mytasks' | 'profile' | 'chat' | 'directMessages') => void;
   setActiveWorkspaceId: (id: string) => void;
   setNavigation: (spaceId: string, listIds?: string[]) => void;
   setCalendarGranularity: (g: 'month' | 'week' | 'day') => void;
@@ -647,17 +647,21 @@ export const useTaskStore = create<TaskStore>((set, get) => {
     // it right after.
     //
     // Also bounces activeView back to 'board' when leaving one of the Space/List-agnostic screens
-    // (My Tasks, My Personal, Profile, Office, Chat) — those screens ignore activeSpaceId/activeListIds
-    // entirely, so a sidebar List/Doc click made from one of them would otherwise update the nav
-    // state with no visible effect, stranding the user on the same screen. 'board'/'docs'/'calendar'
-    // already handle List/Doc navigation contextually and are left alone.
+    // (My Tasks, Profile, Office, Chat, Direct Messages) — those screens ignore
+    // activeSpaceId/activeListIds entirely, so a sidebar List/Doc click made from one of them
+    // would otherwise update the nav state with no visible effect, stranding the user on the same
+    // screen. 'board'/'docs'/'calendar' already handle List/Doc navigation contextually and are
+    // left alone. "My tasks" (the personal Workspace) is deliberately NOT in this list — it's a
+    // real activeView === 'board' + activeWorkspaceId combo now, not its own agnostic screen, so
+    // a Space/List click while viewing it should behave exactly like it does for any other
+    // workspace (switch the selection, stay on 'board').
     setNavigation: (spaceId, listIds = []) =>
       set((state) => ({
         activeSpaceId: spaceId,
         activeListIds: new Set(listIds),
         activeDocFolderId: null,
         activeStandaloneDocId: null,
-        activeView: (['mytasks', 'mypersonal', 'profile', 'office', 'chat'] as TaskStore['activeView'][]).includes(
+        activeView: (['mytasks', 'profile', 'office', 'chat', 'directMessages'] as TaskStore['activeView'][]).includes(
           state.activeView
         )
           ? 'board'

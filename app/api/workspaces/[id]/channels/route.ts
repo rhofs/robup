@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import { prisma } from '@/lib/prisma';
+import { prisma, publicUserSelect } from '@/lib/prisma';
 import { getCurrentUserId } from '@/lib/auth/session';
 import { getAccessContext, canSee, type AccessJsonEntry } from '@/lib/auth/access';
 
@@ -13,6 +13,10 @@ export async function GET(_req: Request, { params }: { params: Promise<{ id: str
 
   const channels = await prisma.chatChannel.findMany({
     where: { workspaceId, type: 'channel', deletedAt: null },
+    // Same shape as a dm/group_dm row's `.members` — lets ChatPanel/ChatThreadPanel resolve
+    // author names for both channel types from one identical code path, no separate
+    // workspace-member lookup needed.
+    include: { members: { include: { user: { select: publicUserSelect } } } },
     orderBy: { createdAt: 'asc' },
   });
   return NextResponse.json(channels.filter((c) => canSee(c, ctx)));
@@ -47,6 +51,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
       createdById: userId,
       members: { create: { userId } },
     },
+    include: { members: { include: { user: { select: publicUserSelect } } } },
   });
 
   // Directly-granted users get their membership row created now too, so "who's allowed" (accessJson)

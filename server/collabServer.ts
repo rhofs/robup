@@ -83,30 +83,52 @@ const server = new Server({
     const userId = token?.sub;
     if (!userId) throw new Error('Unauthorized: no valid session');
 
-    const workspaceId = await resolveWorkspaceId(documentName);
-    if (!workspaceId) throw new Error(`Unauthorized: ${documentName} does not resolve to a workspace`);
+    // A dm/group_dm chat room has no workspaceId at all now (Connections work — DMs can span
+    // people who share no Workspace) — its own ChatChannelMember check below is the complete and
+    // correct gate for that case, so the generic workspace-membership requirement only applies to
+    // real channels (and every non-chat document, unchanged).
+    const chatChannelType = isChatDocumentName(documentName)
+      ? (
+          await prisma.chatChannel.findUnique({
+            where: { id: channelIdFromChatDocumentName(documentName) },
+            select: { type: true, isPrivate: true, accessJson: true },
+          })
+        )
+      : null;
+    const isDmRoom = chatChannelType?.type === 'dm' || chatChannelType?.type === 'group_dm';
 
-    const membership = await prisma.workspaceMembership.findUnique({
-      where: { workspaceId_userId: { workspaceId, userId } },
-      select: { role: true },
-    });
-    if (!membership) throw new Error(`Unauthorized: user is not a member of workspace ${workspaceId}`);
+    let membership: { role: string } | null = null;
+    let resolvedWorkspaceId: string | null = null;
+    if (!isDmRoom) {
+      resolvedWorkspaceId = await resolveWorkspaceId(documentName);
+      if (!resolvedWorkspaceId) throw new Error(`Unauthorized: ${documentName} does not resolve to a workspace`);
+
+      membership = await prisma.workspaceMembership.findUnique({
+        where: { workspaceId_userId: { workspaceId: resolvedWorkspaceId, userId } },
+        select: { role: true },
+      });
+      if (!membership) throw new Error(`Unauthorized: user is not a member of workspace ${resolvedWorkspaceId}`);
+    }
 
     // Chat-specific tightening, after the generic membership check above — a private channel
     // needs the same canSee() grant check as everything else in this app (lib/auth/access.ts),
-    // not just "is a workspace member." Public channels (the only kind that exists as of Phase 1)
-    // need nothing further. DM/group-DM rooms don't exist yet (Phase 3) so there's no branch for
-    // them here — when they land, they must check ChatChannelMember directly and never canSee, per
-    // PLANNING.md's "canSee vs membership split" note (canSee's owner/admin-sees-everything rule
-    // would wrongly let a workspace owner listen in on two other members' private DM).
+    // not just "is a workspace member." Public channels need nothing further. DM/group-DM rooms
+    // go through a completely different check — real ChatChannelMember membership, never canSee —
+    // per PLANNING.md's "canSee vs membership split" note: canSee's owner/admin-sees-everything
+    // rule would otherwise let a workspace owner listen in on two other members' private DM, which
+    // is exactly the leak this split exists to prevent.
     if (isChatDocumentName(documentName)) {
-      const channel = await prisma.chatChannel.findUnique({
-        where: { id: channelIdFromChatDocumentName(documentName) },
-        select: { isPrivate: true, accessJson: true },
-      });
-      if (channel?.isPrivate) {
+      const channelId = channelIdFromChatDocumentName(documentName);
+      const channel = chatChannelType;
+      if (channel?.type === 'dm' || channel?.type === 'group_dm') {
+        const isChatMember = await prisma.chatChannelMember.findUnique({
+          where: { channelId_userId: { channelId, userId } },
+        });
+        if (!isChatMember) throw new Error('Unauthorized: not a participant in this conversation');
+      } else if (channel?.isPrivate && membership && resolvedWorkspaceId) {
         const role = membership.role as AccessContext['role'];
         const isManager = role === 'owner' || role === 'admin';
+        const workspaceId = resolvedWorkspaceId;
         const heldRoleIds = isManager
           ? []
           : (

@@ -12,5 +12,5 @@ export const config = {
   // app/api/*). Also excludes /login itself to avoid a redirect loop, and /invite — an invite
   // link's whole point is showing "you're invited to X" to someone who doesn't have a session
   // yet, so that page has to be reachable before auth, not gated behind it.
-  matcher: ['/((?!api|login|invite|_next/static|_next/image|favicon.ico).*)'],
+  matcher: ['/((?!api|login|invite|connect|_next/static|_next/image|favicon.ico).*)'],
 };

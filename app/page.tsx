@@ -42,6 +42,7 @@ import {
   FileText,
   Check,
   MessageSquare,
+  MessageCircle,
   ChevronUp,
   ChevronDown,
   Lock,
@@ -90,9 +91,11 @@ import DocSubpagesPanel from '../components/DocSubpagesPanel';
 import { getChildDocs } from '../lib/docFolderTree';
 import OfficePage from '../components/OfficePage';
 import ChatPanel from '../components/ChatPanel';
+import ChatThreadPanel from '../components/ChatThreadPanel';
 import ChatChannelSidebar from '../components/ChatChannelSidebar';
 import MyTasksPage from '../components/MyTasksPage';
-import PersonalTasksPage from '../components/PersonalTasksPage';
+import DirectMessagesPage from '../components/DirectMessagesPage';
+import DirectMessagesSidebar from '../components/DirectMessagesSidebar';
 import ProfilePage from '../components/ProfilePage';
 import CommandPalette from '../components/CommandPalette';
 import TrashPanel from '../components/TrashPanel';
@@ -554,12 +557,25 @@ function PageContent() {
   usePresenceConnection(activeWorkspaceId ?? null);
 
   // Just for the breadcrumb's "/ #channel-name" segment — the channel list/messages themselves
-  // live inside ChatChannelSidebar/ChatPanel, which read the rest of useChatStore directly.
-  const activeChatChannelName = useChatStore((s) => {
+  // live inside ChatChannelSidebar/ChatPanel, which read the rest of useChatStore directly. This
+  // per-workspace 'chat' view only ever selects a real channel now — DMs/group chats moved to
+  // their own top-level "Direct Messages" destination (DirectMessagesPage.tsx), which doesn't use
+  // this breadcrumb at all.
+  const activeChatChannel = useChatStore((s) => {
     const id = s.activeChannelId;
     if (!id || !activeWorkspaceId) return null;
-    return (s.channelsByWorkspace[activeWorkspaceId] || []).find((c) => c.id === id)?.name ?? null;
+    return (s.channelsByWorkspace[activeWorkspaceId] || []).find((c) => c.id === id) ?? null;
   });
+  const activeChatChannelName = activeChatChannel?.name ?? null;
+
+  // The Thread side panel (Phase 5) needs the actual root message object, not just its id — it's
+  // already sitting in messagesByChannel (a thread root is a completely normal main-feed message,
+  // it just also happens to have threadReplyCount > 0), so this is a lookup, not a fetch.
+  const activeThreadRootMessage = useChatStore((s) => {
+    if (!s.activeThreadRootId || !s.activeChannelId) return null;
+    return (s.messagesByChannel[s.activeChannelId] || []).find((m) => m.id === s.activeThreadRootId) ?? null;
+  });
+  const setActiveThreadRootId = useChatStore((s) => s.setActiveThreadRootId);
 
   const [sortBy, setSortBy] = useState<'dueDate' | 'startDate' | 'name' | 'none'>('none');
   const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('asc');
@@ -2556,7 +2572,7 @@ function PageContent() {
                 <Plus className="w-3 h-3" /> New workspace
               </button>
             )}
-            {currentWorkspace && (
+            {currentWorkspace && !currentWorkspace.isPersonal && (
               <>
                 <div className="border-t border-neutral-800 my-1" />
                 <div className="text-[10px] uppercase tracking-wide text-neutral-500 px-3 py-1">Members</div>
@@ -2610,7 +2626,12 @@ function PageContent() {
             onClick={() => setActiveView('board')}
             title="Tasks"
             className={`w-10 h-10 rounded flex flex-col items-center justify-center gap-0.5 transition cursor-pointer ${
-              activeView === 'board' ? 'bg-neutral-800 text-blue-400' : 'text-neutral-500 hover:bg-neutral-800/60 hover:text-neutral-200'
+              // Excludes the personal workspace's board — "My tasks" in the Me zone owns that
+              // highlighted state instead (see its own condition below), so the two never both
+              // light up at once for what's structurally the same activeView === 'board'.
+              activeView === 'board' && !currentWorkspace?.isPersonal
+                ? 'bg-neutral-800 text-blue-400'
+                : 'text-neutral-500 hover:bg-neutral-800/60 hover:text-neutral-200'
             }`}
           >
             <ListIcon className="w-4 h-4" />
@@ -2791,14 +2812,30 @@ function PageContent() {
                     </button>
                   </FloatingPopover>
                   <button
-                    // ensurePersonalWorkspace itself is called by PersonalTasksPage.tsx's own
-                    // mount effect, not here — calling it from both places raced (worse, doubled
-                    // again by React Strict Mode's dev double-invoke) before the /personal route
-                    // was made atomic; this also makes deep-linking straight to ?view=mypersonal
-                    // work without needing the sidebar click at all.
-                    onClick={() => setActiveView('mypersonal')}
+                    // "My tasks" is a real private Workspace under the hood (isPersonal: true,
+                    // its own Space/List, auto-created via the atomic /personal upsert route) —
+                    // this button switches straight into it, same as picking any workspace from
+                    // the switcher, so the exact same Spaces/Lists sidebar tree and Board columns
+                    // render for it with zero new UI: create as many/few personal Spaces/Lists as
+                    // you want, tasks look identical to any other workspace's board. Deliberately
+                    // NOT its own activeView — Board rendering isn't componentized in this file,
+                    // it's the real activeView === 'board' branch keyed on activeWorkspaceId, so
+                    // reusing it this way is what makes the personal Space/List tree "just work."
+                    onClick={async () => {
+                      if (!currentUserId) return;
+                      const { workspaceId } = await ensurePersonalWorkspace(currentUserId);
+                      setActiveWorkspaceId(workspaceId);
+                      setActiveView('board');
+                    }}
                     className={`w-full text-left px-2 py-1.5 rounded text-[11px] cursor-pointer flex items-center gap-1.5 transition ${
-                      activeView === 'mypersonal' ? 'bg-neutral-800 text-blue-400' : 'text-neutral-400 hover:bg-neutral-800/40 hover:text-neutral-200'
+                      // Requires activeView === 'board' too, not just "the active workspace
+                      // happens to be personal" — otherwise this stayed highlighted after
+                      // navigating to Chat/Docs/etc. for the personal workspace (activeWorkspaceId
+                      // doesn't change when you click a different icon-rail tab), showing two
+                      // things "active" at once.
+                      currentWorkspace?.isPersonal && activeView === 'board'
+                        ? 'bg-neutral-800 text-blue-400'
+                        : 'text-neutral-400 hover:bg-neutral-800/40 hover:text-neutral-200'
                     }`}
                   >
                     <ListChecks className="w-3 h-3" /> My tasks
@@ -2810,6 +2847,14 @@ function PageContent() {
                     }`}
                   >
                     <ClipboardCheck className="w-3 h-3" /> My assigned tasks
+                  </button>
+                  <button
+                    onClick={() => setActiveView('directMessages')}
+                    className={`w-full text-left px-2 py-1.5 rounded text-[11px] cursor-pointer flex items-center gap-1.5 transition ${
+                      activeView === 'directMessages' ? 'bg-neutral-800 text-blue-400' : 'text-neutral-400 hover:bg-neutral-800/40 hover:text-neutral-200'
+                    }`}
+                  >
+                    <MessageCircle className="w-3 h-3" /> Direct Messages
                   </button>
                 </div>
               );
@@ -2870,6 +2915,8 @@ function PageContent() {
               </div>
             ) : activeView === 'chat' ? (
               <ChatChannelSidebar workspaceId={activeWorkspaceId} />
+            ) : activeView === 'directMessages' ? (
+              <DirectMessagesSidebar />
             ) : (
             <div className="space-y-3">
               <div className="flex items-center justify-between px-2">
@@ -3607,16 +3654,8 @@ function PageContent() {
                 statuses={statuses}
                 onOpenTask={(id) => setModalTaskStack([id])}
               />
-            ) : activeView === 'mypersonal' ? (
-              <PersonalTasksPage
-                currentUser={users.find((u) => u.id === currentUserId) ?? null}
-                tasks={tasks}
-                statuses={statuses}
-                ensurePersonalWorkspace={ensurePersonalWorkspace}
-                onCreateTask={(title, listId, spaceId) => optimisticCreateTask(title, listId, spaceId)}
-                onOpenTask={(id) => setModalTaskStack([id])}
-                onSetStatus={(taskId, status) => optimisticMoveTask(taskId, status)}
-              />
+            ) : activeView === 'directMessages' ? (
+              <DirectMessagesPage />
             ) : activeView === 'profile' ? (
               <ProfilePage
                 currentUser={users.find((u) => u.id === currentUserId) ?? null}
@@ -3646,8 +3685,13 @@ function PageContent() {
                   Pick a workspace to open Chat.
                 </div>
               ) : (
-                <div className="h-[75vh]">
-                  <ChatPanel workspaceId={activeWorkspaceId} />
+                <div className="h-[75vh] flex gap-3">
+                  <div className="flex-1 min-w-0">
+                    <ChatPanel />
+                  </div>
+                  {activeThreadRootMessage && (
+                    <ChatThreadPanel rootMessage={activeThreadRootMessage} onClose={() => setActiveThreadRootId(null)} />
+                  )}
                 </div>
               )
             ) : activeView === 'docs' ? (

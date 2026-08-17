@@ -83,6 +83,63 @@ model WorkspaceInvite {
   createdAt   DateTime  @default(now()) @map("created_at")
 }
 
+// Explicit user-to-user connection — the thing that lets two people who share NO Workspace start
+// a DM. Coworkers do NOT get a row here: sharing any Workspace via WorkspaceMembership already
+// counts as "connected" for DM/group purposes (see lib/auth/connections.ts's
+// getConnectedUserIds/areConnected), computed on the fly rather than materialized — this table is
+// only ever written when someone accepts a /connect/[code] link from outside any shared
+// Workspace. One row per pair, stored in canonical order (userAId < userBId, enforced at the
+// application layer via lib/auth/connections.ts's canonicalPair()) so a pair is representable by
+// exactly one row and a lookup never needs an OR-query across both column orders.
+model Connection {
+  id        String   @id @default(uuid())
+  userAId   String   @map("user_a_id")
+  userA     User     @relation("ConnectionsAsA", fields: [userAId], references: [id], onDelete: Cascade)
+  userBId   String   @map("user_b_id")
+  userB     User     @relation("ConnectionsAsB", fields: [userBId], references: [id], onDelete: Cascade)
+  createdAt DateTime @default(now()) @map("created_at")
+
+  @@unique([userAId, userBId])
+}
+
+// Pending connection request — opening someone's /connect/[code] link creates one of these (from
+// the visitor to the link owner) rather than an instant Connection; the link owner then sees it as
+// an incoming request in the Connections tab and explicitly accepts or declines it (see
+// app/api/connect/[code]/accept/route.ts and app/api/connections/requests/*). Directional, unlike
+// Connection's own canonical-pair storage, since "who requested whom" is exactly what the
+// incoming/outgoing split in the UI needs to show. Accepting creates the real Connection row
+// (canonical pair) and deletes this row; declining just deletes it. If both people happen to
+// request each other (B opens A's link, A separately opens B's), the second request's own route
+// detects the reverse row already exists and auto-accepts both immediately — mirrors real
+// friend-request UX (mutual add = instant friends, no redundant double-confirm).
+model ConnectionRequest {
+  id          String   @id @default(uuid())
+  fromUserId  String   @map("from_user_id")
+  fromUser    User     @relation("ConnectionRequestsSent", fields: [fromUserId], references: [id], onDelete: Cascade)
+  toUserId    String   @map("to_user_id")
+  toUser      User     @relation("ConnectionRequestsReceived", fields: [toUserId], references: [id], onDelete: Cascade)
+  createdAt   DateTime @default(now()) @map("created_at")
+
+  @@unique([fromUserId, toUserId])
+}
+
+// Personal, reusable connect-link — mirrors WorkspaceInvite's shape (`id` itself is the code in
+// /connect/[id], reusable/unlimited, no expiry, "revoke" = delete the row) minus `role` (a
+// connection has no tiers) and `workspaceId` (this belongs to a User, not a Workspace).
+// createdById is @unique — each user has exactly ONE personal link at a time, not a manageable
+// list, making GET /api/connections/invite's find-or-create atomic via upsert (same
+// Workspace.personalOwnerId precedent this schema already uses to dodge a Strict-Mode
+// double-invoke race). Opening this link while signed in creates a ConnectionRequest (see above)
+// rather than an instant Connection — the link owner must explicitly accept it, same "real accept
+// step" shape as WorkspaceInvite's own /invite/[code] page, just requiring the *owner's* action
+// instead of the visitor's.
+model ConnectionInvite {
+  id          String   @id @default(uuid())
+  createdById String   @unique @map("created_by_id")
+  createdBy   User     @relation("ConnectionInviteCreator", fields: [createdById], references: [id], onDelete: Cascade)
+  createdAt   DateTime @default(now()) @map("created_at")
+}
+
 // Kosé "kontorer" i Office-fanen — rent visuelt/organisatorisk, ingen kobling til Space-treet.
 // Sletting av et rom fjerner ikke medlemmene, de blir bare urepresenterte (SetNull).
 model Room {
@@ -278,6 +335,11 @@ model User {
   workspaceMemberships WorkspaceMembership[]
   roles         Role[]    @relation("RoleMembers")
   invitesCreated WorkspaceInvite[]
+  connectionsAsA    Connection[]      @relation("ConnectionsAsA")
+  connectionsAsB    Connection[]      @relation("ConnectionsAsB")
+  connectionInvite  ConnectionInvite? @relation("ConnectionInviteCreator")
+  connectionRequestsSent     ConnectionRequest[] @relation("ConnectionRequestsSent")
+  connectionRequestsReceived ConnectionRequest[] @relation("ConnectionRequestsReceived")
   comments      Comment[]
   ownedDocs     Doc[]     @relation("DocOwner")
   docComments   DocComment[]
@@ -512,9 +574,14 @@ model DocFolder {
 // for this, see PLANNING.md's "Planned: Discord/Slack-style chat" section). Phase 1: schema only,
 // built once for every later phase so none of them need their own migration.
 model ChatChannel {
-  id          String    @id @default(uuid())
-  workspaceId String    @map("workspace_id")
-  workspace   Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  id          String     @id @default(uuid())
+  // Nullable — only 'channel' rows are truly workspace-scoped. 'dm'/'group_dm' rows are created
+  // with workspaceId: null (a DM can span people who share no workspace at all, or several).
+  // SetNull (not Cascade) mirrors this same model's own taskId/spaceId precedent below — deleting
+  // a Workspace must never destroy a real channel's message history just because it happened to
+  // be created there.
+  workspaceId String?    @map("workspace_id")
+  workspace   Workspace? @relation(fields: [workspaceId], references: [id], onDelete: SetNull)
 
   type  String  // 'channel' | 'dm' | 'group_dm'
   name  String?
@@ -536,10 +603,18 @@ model ChatChannel {
   isPrivate  Boolean @default(false) @map("is_private")
   accessJson String  @default("[]") @map("access_json")
 
-  // 1:1-DM dedupe key (`${workspaceId}:${[userIdA,userIdB].sort().join(':')}`) — null for
-  // channel/group_dm rows, since group DMs deliberately don't dedupe (every "create group" makes a
-  // new row, matching real Slack/Discord).
+  // 1:1-DM dedupe key — `[userIdA, userIdB].sort().join(':')`, workspace-independent (previously
+  // embedded workspaceId; a pair who share more than one Workspace, or who connect outside any
+  // Workspace, must still land on exactly one conversation). Null for channel/group_dm rows, since
+  // group DMs deliberately don't dedupe (every "create group" makes a new row, matching real
+  // Slack/Discord).
   dmKey String? @unique @map("dm_key")
+
+  // Denormalized "most recent activity" timestamp, defaulted to createdAt's own value so a
+  // brand-new empty DM still sorts sensibly before its first message. Bumped in the same request
+  // that creates a top-level message or a thread reply — the cheap alternative to a correlated
+  // MAX(ChatMessage.createdAt) subquery on every DM-list fetch.
+  lastMessageAt DateTime @default(now()) @map("last_message_at")
 
   createdById String? @map("created_by_id")
   createdBy   User?   @relation("ChatChannelCreator", fields: [createdById], references: [id], onDelete: SetNull)

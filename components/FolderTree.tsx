@@ -211,7 +211,7 @@ export const FOLDER_ICON_MAP: Record<string, LucideIcon> = {
 type FolderTreeProps = {
   space: HierarchySpace;
   tasks: Task[];
-  activeView: 'board' | 'calendar' | 'docs' | 'office' | 'mytasks' | 'mypersonal' | 'profile' | 'chat';
+  activeView: 'board' | 'calendar' | 'docs' | 'office' | 'mytasks' | 'profile' | 'chat' | 'directMessages';
   activeListIds: Set<string>;
   calendarVisibleListIds: Set<string>;
   onNavigateList: (e: React.MouseEvent, listId: string) => void;
