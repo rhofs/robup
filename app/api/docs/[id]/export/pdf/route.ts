@@ -3,6 +3,8 @@ import { prisma } from '@/lib/prisma';
 import { loadDocJSONForExport } from '@/lib/collab/loadDocForExport';
 import { writeDocToPdf } from '@/lib/collab/docJSONToPdf';
 import { resolveDocImages } from '@/lib/collab/resolveDocImages';
+import { getCurrentUserId } from '@/lib/auth/session';
+import { ensureDocAccess } from '@/lib/auth/resourceAccess';
 
 function renderPdfBuffer(build: (doc: PDFKit.PDFDocument) => void): Promise<Buffer> {
   return new Promise((resolve, reject) => {
@@ -18,6 +20,10 @@ function renderPdfBuffer(build: (doc: PDFKit.PDFDocument) => void): Promise<Buff
 
 export async function GET(_req: Request, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
+  const userId = await getCurrentUserId();
+  if (!userId) return new Response('Not authenticated', { status: 401 });
+  if (!(await ensureDocAccess(id, userId))) return new Response('Not authorized for this doc', { status: 403 });
+
   const doc = await prisma.doc.findUnique({ where: { id } });
   if (!doc || doc.deletedAt) return new Response('Not found', { status: 404 });
 

@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
+import { getCurrentUserId } from '@/lib/auth/session';
 
 // A Space delete cascades deletedAt down through every Folder/List/Task/DocFolder/Doc
 // nested inside it, so the Trash view shouldn't list all of those separately — that would
@@ -7,10 +8,26 @@ import { prisma } from '@/lib/prisma';
 // own immediate parent is NOT also trashed. If the parent is trashed too, this item is already
 // covered by the parent's own Trash entry (and will come back together when that's restored).
 export async function GET() {
+  const userId = await getCurrentUserId();
+  if (!userId) return NextResponse.json([]);
+
+  // Scoped to workspaces this identity is actually a member of — every query below previously had
+  // no workspaceId filter at all, meaning any authenticated (or even unauthenticated, since this
+  // route also had no getCurrentUserId check) caller could enumerate every deleted item across
+  // every workspace in the whole app. This closes the cross-workspace leak; it does not yet also
+  // hide a trashed *private* item from a workspace member who wouldn't normally have canSee access
+  // to it — a narrower, further refinement, named here rather than silently assumed handled.
+  const memberships = await prisma.workspaceMembership.findMany({ where: { userId }, select: { workspaceId: true } });
+  const workspaceIds = memberships.map((m) => m.workspaceId);
+  if (workspaceIds.length === 0) return NextResponse.json([]);
+
   const [spaces, folders, lists, tasks, docFolders, docs, events] = await Promise.all([
-    prisma.space.findMany({ where: { deletedAt: { not: null } }, select: { id: true, name: true, deletedAt: true } }),
+    prisma.space.findMany({
+      where: { deletedAt: { not: null }, workspaceId: { in: workspaceIds } },
+      select: { id: true, name: true, deletedAt: true },
+    }),
     prisma.folder.findMany({
-      where: { deletedAt: { not: null } },
+      where: { deletedAt: { not: null }, space: { workspaceId: { in: workspaceIds } } },
       select: {
         id: true,
         name: true,
@@ -20,7 +37,7 @@ export async function GET() {
       },
     }),
     prisma.list.findMany({
-      where: { deletedAt: { not: null } },
+      where: { deletedAt: { not: null }, space: { workspaceId: { in: workspaceIds } } },
       select: {
         id: true,
         name: true,
@@ -30,7 +47,7 @@ export async function GET() {
       },
     }),
     prisma.task.findMany({
-      where: { deletedAt: { not: null } },
+      where: { deletedAt: { not: null }, list: { space: { workspaceId: { in: workspaceIds } } } },
       select: {
         id: true,
         title: true,
@@ -40,7 +57,7 @@ export async function GET() {
       },
     }),
     prisma.docFolder.findMany({
-      where: { deletedAt: { not: null } },
+      where: { deletedAt: { not: null }, space: { workspaceId: { in: workspaceIds } } },
       select: {
         id: true,
         name: true,
@@ -50,7 +67,12 @@ export async function GET() {
       },
     }),
     prisma.doc.findMany({
-      where: { deletedAt: { not: null } },
+      // A Doc's own workspace is reachable via either its Space or its Task's List's Space (see
+      // the schema's own note that taskId/spaceId are independent, not mutually exclusive).
+      where: {
+        deletedAt: { not: null },
+        OR: [{ space: { workspaceId: { in: workspaceIds } } }, { task: { list: { space: { workspaceId: { in: workspaceIds } } } } }],
+      },
       select: {
         id: true,
         title: true,
@@ -63,7 +85,7 @@ export async function GET() {
     // No parent-trashed check needed — an Event's spaceId is SetNull on Space delete, never
     // cascade-deleted, so it can never inherit a trashed ancestor the way List/Doc/Task can.
     prisma.event.findMany({
-      where: { deletedAt: { not: null } },
+      where: { deletedAt: { not: null }, workspaceId: { in: workspaceIds } },
       select: { id: true, title: true, deletedAt: true, space: { select: { name: true } } },
     }),
   ]);

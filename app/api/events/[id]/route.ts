@@ -1,11 +1,27 @@
 import { NextResponse } from 'next/server';
 import { prisma, publicUserSelect } from '@/lib/prisma';
+import { getCurrentUserId } from '@/lib/auth/session';
+import { getAccessContext } from '@/lib/auth/access';
+
+async function ensureEventAccess(eventId: string, userId: string) {
+  const event = await prisma.event.findUnique({ where: { id: eventId }, select: { workspaceId: true } });
+  if (!event) return null;
+  const ctx = await getAccessContext(event.workspaceId, userId);
+  if (!ctx.isMember) return null;
+  return event;
+}
 
 // A leaf entity with nothing nested inside it (unlike List/Doc/Folder/Space/Task) — soft-delete
-// and restore are both a single-row update, no cascade helper needed.
+// and restore are both a single-row update, no cascade helper needed. Event has no isPrivate of
+// its own (workspace-scoped only), so a plain membership check is the whole story here — no
+// canSee/ancestor-chain needed the way Task/Space/List/Folder/Doc need.
 export async function PATCH(req: Request, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
   const body = await req.json();
+
+  const userId = await getCurrentUserId();
+  if (!userId) return NextResponse.json({ error: 'Not authenticated' }, { status: 401 });
+  if (!(await ensureEventAccess(id, userId))) return NextResponse.json({ error: 'Not authorized for this event' }, { status: 403 });
 
   if (body.restore === true) {
     const event = await prisma.event.update({
@@ -38,6 +54,10 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
 
 export async function DELETE(req: Request, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
+  const userId = await getCurrentUserId();
+  if (!userId) return NextResponse.json({ error: 'Not authenticated' }, { status: 401 });
+  if (!(await ensureEventAccess(id, userId))) return NextResponse.json({ error: 'Not authorized for this event' }, { status: 403 });
+
   const permanent = new URL(req.url).searchParams.get('permanent') === 'true';
   if (permanent) {
     await prisma.event.delete({ where: { id } });

@@ -1,11 +1,15 @@
 import { NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { getCurrentUserId } from '@/lib/auth/session';
+import { ensureSpaceAccess, ensureDocAccess } from '@/lib/auth/resourceAccess';
 
 export async function POST(req: Request, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
-  const body = await req.json().catch(() => ({}));
   const userId = await getCurrentUserId();
+  if (!userId) return NextResponse.json({ error: 'Not authenticated' }, { status: 401 });
+  if (!(await ensureSpaceAccess(id, userId))) return NextResponse.json({ error: 'Not authorized for this space' }, { status: 403 });
+
+  const body = await req.json().catch(() => ({}));
 
   // A subpage (parentId set) inherits spaceId from its parent doc server-side rather than trusting
   // whatever spaceId the client sent — the parent doc is the source of truth for which Space (and
@@ -16,6 +20,13 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
   let folderId = body.folderId ?? null;
   let boardFolderId = body.boardFolderId ?? null;
   if (body.parentId) {
+    // The parent doc can in principle live in a different Space than the one in the URL — check
+    // the parent doc's own access directly rather than assuming the URL's already-checked space
+    // covers it too, or a caller with access to Space A could smuggle a subpage into a private
+    // Space B's doc tree just by naming one of its doc ids as parentId.
+    if (!(await ensureDocAccess(body.parentId, userId))) {
+      return NextResponse.json({ error: 'Not authorized for the parent doc' }, { status: 403 });
+    }
     const parent = await prisma.doc.findUniqueOrThrow({ where: { id: body.parentId }, select: { spaceId: true } });
     spaceId = parent.spaceId ?? id;
     folderId = null;

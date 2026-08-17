@@ -3,10 +3,15 @@ import { prisma } from '@/lib/prisma';
 import { cascadeSpace } from '@/lib/trashCascade';
 import { getCurrentUserId } from '@/lib/auth/session';
 import { getWorkspaceRole, canManageWorkspace } from '@/lib/auth/access';
+import { ensureSpaceAccess } from '@/lib/auth/resourceAccess';
 
 export async function PATCH(req: Request, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
   const body = await req.json();
+
+  const userId = await getCurrentUserId();
+  if (!userId) return NextResponse.json({ error: 'Not authenticated' }, { status: 401 });
+  if (!(await ensureSpaceAccess(id, userId))) return NextResponse.json({ error: 'Not authorized for this space' }, { status: 403 });
 
   // Restore is its own thing, not a plain field patch: it has to cascade back down through
   // every Folder/List/Task/DocFolder/Doc that was soft-deleted along with this Space, not just
@@ -26,17 +31,13 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
   if (body.description !== undefined) data.description = body.description;
   if (body.coverImageUrl !== undefined) data.coverImageUrl = body.coverImageUrl;
 
-  // Marking something private, or editing who it's shared with, is an Owner/Admin-only action —
-  // a regular member can still edit every other field above exactly as before (this route had no
-  // caller-identity check at all pre-existing, and this pass deliberately doesn't add one for
-  // the fields that already worked unauthenticated; see PLANNING.md's deferred "broader
-  // per-route authorization hardening" note).
+  // Marking something private, or editing who it's shared with, is a stricter, separate
+  // Owner/Admin-only gate on top of the plain "can you see this" check above — every other field
+  // only needs the latter, same as any regular member editing any other visible Space.
   if (body.isPrivate !== undefined || body.accessJson !== undefined) {
-    const callerId = await getCurrentUserId();
-    if (!callerId) return NextResponse.json({ error: 'Not authenticated' }, { status: 401 });
     const existing = await prisma.space.findUnique({ where: { id }, select: { workspaceId: true } });
     if (!existing) return NextResponse.json({ error: 'Not found' }, { status: 404 });
-    const role = await getWorkspaceRole(existing.workspaceId, callerId);
+    const role = await getWorkspaceRole(existing.workspaceId, userId);
     if (!canManageWorkspace(role)) return NextResponse.json({ error: 'Only the workspace owner/admins can change access' }, { status: 403 });
     if (body.isPrivate !== undefined) data.isPrivate = body.isPrivate;
     if (body.accessJson !== undefined) data.accessJson = body.accessJson;
@@ -51,6 +52,10 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
 
 export async function DELETE(req: Request, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
+  const userId = await getCurrentUserId();
+  if (!userId) return NextResponse.json({ error: 'Not authenticated' }, { status: 401 });
+  if (!(await ensureSpaceAccess(id, userId))) return NextResponse.json({ error: 'Not authorized for this space' }, { status: 403 });
+
   const permanent = new URL(req.url).searchParams.get('permanent') === 'true';
   if (permanent) {
     // Real delete: Prisma's onDelete: Cascade FKs take it from here (Folders, Lists, Tasks,

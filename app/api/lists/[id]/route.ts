@@ -4,6 +4,7 @@ import { cascadeList } from '@/lib/trashCascade';
 import { archiveList } from '@/lib/archiveCascade';
 import { getCurrentUserId } from '@/lib/auth/session';
 import { getWorkspaceRole, canManageWorkspace } from '@/lib/auth/access';
+import { ensureListAccess } from '@/lib/auth/resourceAccess';
 
 const LIST_SELECT = {
   id: true,
@@ -22,6 +23,10 @@ const LIST_SELECT = {
 export async function PATCH(req: Request, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
   const body = await req.json();
+
+  const userId = await getCurrentUserId();
+  if (!userId) return NextResponse.json({ error: 'Not authenticated' }, { status: 401 });
+  if (!(await ensureListAccess(id, userId))) return NextResponse.json({ error: 'Not authorized for this list' }, { status: 403 });
 
   if (body.restore === true) {
     await cascadeList(id, null);
@@ -47,14 +52,11 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
   if (body.order !== undefined) data.order = body.order;
   if (body.spaceId !== undefined) data.spaceId = body.spaceId;
 
-  // Same Owner/Admin gate as Space's own PATCH — see that route's comment for why only the
-  // privacy fields specifically get a caller-identity check here.
+  // Stricter, separate Owner/Admin-only gate on top of the plain "can you see this" check above.
   if (body.isPrivate !== undefined || body.accessJson !== undefined) {
-    const callerId = await getCurrentUserId();
-    if (!callerId) return NextResponse.json({ error: 'Not authenticated' }, { status: 401 });
     const existing = await prisma.list.findUnique({ where: { id }, select: { space: { select: { workspaceId: true } } } });
     if (!existing) return NextResponse.json({ error: 'Not found' }, { status: 404 });
-    const role = await getWorkspaceRole(existing.space.workspaceId, callerId);
+    const role = await getWorkspaceRole(existing.space.workspaceId, userId);
     if (!canManageWorkspace(role)) return NextResponse.json({ error: 'Only the workspace owner/admins can change access' }, { status: 403 });
     if (body.isPrivate !== undefined) data.isPrivate = body.isPrivate;
     if (body.accessJson !== undefined) data.accessJson = body.accessJson;
@@ -70,6 +72,10 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
 
 export async function DELETE(req: Request, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
+  const userId = await getCurrentUserId();
+  if (!userId) return NextResponse.json({ error: 'Not authenticated' }, { status: 401 });
+  if (!(await ensureListAccess(id, userId))) return NextResponse.json({ error: 'Not authorized for this list' }, { status: 403 });
+
   const permanent = new URL(req.url).searchParams.get('permanent') === 'true';
   if (permanent) {
     await prisma.list.delete({ where: { id } });

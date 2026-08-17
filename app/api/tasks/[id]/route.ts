@@ -3,10 +3,15 @@ import { prisma, publicUserSelect } from '@/lib/prisma';
 import { cascadeTask } from '@/lib/trashCascade';
 import { getCurrentUserId } from '@/lib/auth/session';
 import { getWorkspaceRole, canManageWorkspace } from '@/lib/auth/access';
+import { ensureTaskAccess } from '@/lib/auth/resourceAccess';
 
 export async function PATCH(req: Request, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
   const body = await req.json();
+
+  const userId = await getCurrentUserId();
+  if (!userId) return NextResponse.json({ error: 'Not authenticated' }, { status: 401 });
+  if (!(await ensureTaskAccess(id, userId))) return NextResponse.json({ error: 'Not authorized for this task' }, { status: 403 });
 
   if (body.restore === true) {
     await cascadeTask(id, null);
@@ -144,6 +149,10 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
 
 export async function DELETE(req: Request, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
+  const userId = await getCurrentUserId();
+  if (!userId) return NextResponse.json({ error: 'Not authenticated' }, { status: 401 });
+  if (!(await ensureTaskAccess(id, userId))) return NextResponse.json({ error: 'Not authorized for this task' }, { status: 403 });
+
   const permanent = new URL(req.url).searchParams.get('permanent') === 'true';
   if (permanent) {
     await prisma.task.delete({ where: { id } });

@@ -207,9 +207,10 @@ export type HierarchyWorkspace = {
   // than a parallel lookup structure — see app/api/workspaces/route.ts's mapping.
   members: (AppUser & { workspaceRole: WorkspaceRole })[];
   roles: HierarchyRole[];
-  // The one auto-created workspace behind the sidebar's private "My tasks" list — deliberately
-  // excluded from the workspace switcher and from ever being auto-selected as "the current
-  // workspace" (see the workspace switcher and fetchInitialData's initial pick).
+  // The one auto-created workspace behind the sidebar's "My tasks" Me-zone button — excluded
+  // from the workspace switcher and from fetchInitialData's own auto-selection on page load, but
+  // (since the 2026-08-17 personal-workspace rework) DOES become the real activeWorkspaceId/
+  // currentWorkspace when "My tasks" is clicked, reusing the entire normal Board/Spaces/Lists UI.
   isPersonal: boolean;
 };
 
@@ -549,13 +550,16 @@ export const useTaskStore = create<TaskStore>((set, get) => {
         const taskDocs = await taskDocsRes.json();
         const events = await eventsRes.json();
 
-        // Keep the current workspace selection if the newly-fetched list still contains it
-        // (e.g. a plain refetch, or an identity switch to someone who's also a member of the
-        // same workspace) — otherwise fall back to the first non-personal workspace this identity
-        // can see. A personal workspace (the hidden one behind "My tasks") never becomes "the
-        // current workspace" — it has no Space/List browsing UI of its own.
+        // Keep the current workspace selection if the newly-fetched list still contains it (e.g.
+        // a plain refetch, or an identity switch to someone who's also a member of the same
+        // workspace) — including a personal workspace: since the 2026-08-17 rework, "My tasks" is
+        // a real activeWorkspaceId like any other, so a refresh while inside it should land back
+        // there, not silently bounce out to some other team workspace (the old `!w.isPersonal`
+        // exclusion here predates that rework and was never updated). Only the *fallback* — no
+        // previous selection at all, e.g. very first login — defaults to a real team workspace,
+        // never auto-picking the personal one as a first landing spot.
         const previousWorkspaceId = get().activeWorkspaceId;
-        const activeWorkspaceId = workspaces.some((w: HierarchyWorkspace) => w.id === previousWorkspaceId && !w.isPersonal)
+        const activeWorkspaceId = workspaces.some((w: HierarchyWorkspace) => w.id === previousWorkspaceId)
           ? previousWorkspaceId
           : (workspaces.find((w: HierarchyWorkspace) => !w.isPersonal)?.id ?? null);
         const activeWorkspace = workspaces.find((w: HierarchyWorkspace) => w.id === activeWorkspaceId);
@@ -1600,16 +1604,26 @@ export const useTaskStore = create<TaskStore>((set, get) => {
     // Find-or-create the caller's personal workspace/Space/List behind the sidebar's private "My
     // tasks" — called lazily on first use, not eagerly at startup. No undo/redo (there's nothing
     // meaningful to undo — creating it is idempotent from the caller's perspective either way).
-    // Deliberately does NOT refetch/patch `workspaces` local state: the personal workspace is
-    // excluded from the switcher and never becomes "the current workspace," so nothing in the UI
-    // actually needs it to exist in that array — callers only need the returned ids.
+    // Refetches `workspaces` local state if it doesn't already contain this id — required since
+    // "My tasks" now switches into this workspace via setActiveWorkspaceId right after calling
+    // this (the personal-workspace rework's whole point). On the very first-ever call in a
+    // session the workspace was just created server-side and isn't in the client's already-loaded
+    // `workspaces` array yet — without this, setActiveWorkspaceId's own `workspaces.find(...)`
+    // silently misses it and falls back to a different (real team) workspace instead, which is
+    // what caused "must refresh before new tasks under My tasks show up": every subsequent action
+    // (task creation, list selection) was actually operating on the wrong workspace's data until a
+    // full page reload re-ran fetchInitialData and picked up the real one.
     ensurePersonalWorkspace: async (userId) => {
       const res = await fetch('/api/workspaces/personal', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ userId }),
       });
-      return res.json();
+      const result = await res.json();
+      if (!get().workspaces.some((w) => w.id === result.workspaceId)) {
+        await get().refetchWorkspaces();
+      }
+      return result;
     },
 
     updateSpace: async (spaceId, patch) => {

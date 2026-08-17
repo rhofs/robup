@@ -1,5 +1,7 @@
 import { NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
+import { getCurrentUserId } from '@/lib/auth/session';
+import { ensureSpaceAccess } from '@/lib/auth/resourceAccess';
 
 export async function PATCH(req: Request, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
@@ -7,6 +9,10 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
 
   const existing = await prisma.customField.findUnique({ where: { id } });
   if (!existing) return NextResponse.json({ error: 'Field not found' }, { status: 404 });
+
+  const userId = await getCurrentUserId();
+  if (!userId) return NextResponse.json({ error: 'Not authenticated' }, { status: 401 });
+  if (!(await ensureSpaceAccess(existing.spaceId, userId))) return NextResponse.json({ error: 'Not authorized for this space' }, { status: 403 });
 
   const data: any = {};
   if (body.name !== undefined) data.name = body.name;
@@ -49,6 +55,13 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
 
 export async function DELETE(_req: Request, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
+  const existing = await prisma.customField.findUnique({ where: { id }, select: { spaceId: true } });
+  if (!existing) return NextResponse.json({ error: 'Field not found' }, { status: 404 });
+
+  const userId = await getCurrentUserId();
+  if (!userId) return NextResponse.json({ error: 'Not authenticated' }, { status: 401 });
+  if (!(await ensureSpaceAccess(existing.spaceId, userId))) return NextResponse.json({ error: 'Not authorized for this space' }, { status: 403 });
+
   await prisma.customField.delete({ where: { id } });
   return NextResponse.json({ ok: true });
 }

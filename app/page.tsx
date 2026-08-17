@@ -556,6 +556,31 @@ function PageContent() {
   const { currentUserId } = useSessionStore();
   usePresenceConnection(activeWorkspaceId ?? null);
 
+  // Unread badges (Phase 8) — fetched here, not just inside ChatChannelSidebar/DirectMessagesSidebar
+  // (which only mount once the user has already navigated into Chat/DMs), so the nav-rail/Me-zone
+  // badges below can show *before* the user opens either. No global "anything changed anywhere"
+  // broadcast room exists (the real-time signal is per-channel, only for whatever's open in
+  // ChatPanel) — a 30s poll is the pragmatic, no-new-infrastructure way to keep these reasonably
+  // fresh otherwise.
+  const chatChannelsByWorkspace = useChatStore((s) => s.channelsByWorkspace);
+  const chatDms = useChatStore((s) => s.dms);
+  const fetchChatChannels = useChatStore((s) => s.fetchChannels);
+  const fetchChatDMs = useChatStore((s) => s.fetchDMs);
+  useEffect(() => {
+    fetchChatDMs();
+    if (activeWorkspaceId) fetchChatChannels(activeWorkspaceId);
+    const interval = setInterval(() => {
+      fetchChatDMs();
+      if (activeWorkspaceId) fetchChatChannels(activeWorkspaceId);
+    }, 30000);
+    return () => clearInterval(interval);
+  }, [activeWorkspaceId, fetchChatDMs, fetchChatChannels]);
+  const chatUnreadCount = useMemo(
+    () => (activeWorkspaceId ? (chatChannelsByWorkspace[activeWorkspaceId] || []).reduce((sum, c) => sum + (c.unreadCount || 0), 0) : 0),
+    [chatChannelsByWorkspace, activeWorkspaceId]
+  );
+  const dmUnreadCount = useMemo(() => chatDms.reduce((sum, d) => sum + (d.unreadCount || 0), 0), [chatDms]);
+
   // Just for the breadcrumb's "/ #channel-name" segment — the channel list/messages themselves
   // live inside ChatChannelSidebar/ChatPanel, which read the rest of useChatStore directly. This
   // per-workspace 'chat' view only ever selects a real channel now — DMs/group chats moved to
@@ -2623,7 +2648,18 @@ function PageContent() {
       <nav className="w-14 bg-neutral-950 border-r border-neutral-800/80 flex flex-col items-center py-4 gap-2 shrink-0 select-none">
         {!hiddenNavTabs.has('board') && (
           <button
-            onClick={() => setActiveView('board')}
+            onClick={() => {
+              // Clicking Tasks while inside "My tasks" (the personal workspace) previously did
+              // nothing visible — activeView was already 'board', so this was a no-op, and nothing
+              // ever switched activeWorkspaceId back to a real team workspace. Fall back to the
+              // first non-personal workspace, same lookup currentWorkspace's own useMemo already
+              // uses.
+              if (currentWorkspace?.isPersonal) {
+                const fallback = workspaces.find((w) => !w.isPersonal);
+                if (fallback) setActiveWorkspaceId(fallback.id);
+              }
+              setActiveView('board');
+            }}
             title="Tasks"
             className={`w-10 h-10 rounded flex flex-col items-center justify-center gap-0.5 transition cursor-pointer ${
               // Excludes the personal workspace's board — "My tasks" in the Me zone owns that
@@ -2686,12 +2722,17 @@ function PageContent() {
           <button
             onClick={() => setActiveView('chat')}
             title="Chat"
-            className={`w-10 h-10 rounded flex flex-col items-center justify-center gap-0.5 transition cursor-pointer ${
+            className={`relative w-10 h-10 rounded flex flex-col items-center justify-center gap-0.5 transition cursor-pointer ${
               activeView === 'chat' ? 'bg-neutral-800 text-blue-400' : 'text-neutral-500 hover:bg-neutral-800/60 hover:text-neutral-200'
             }`}
           >
             <MessageSquare className="w-4 h-4" />
             <span className="text-[8px] font-medium leading-none">Chat</span>
+            {chatUnreadCount > 0 && (
+              <span className="absolute top-0.5 right-1 min-w-[15px] h-[15px] px-1 rounded-full bg-red-500 text-white text-[8px] font-bold flex items-center justify-center leading-none">
+                {chatUnreadCount > 99 ? '99+' : chatUnreadCount}
+              </span>
+            )}
           </button>
         )}
 
@@ -2854,7 +2895,12 @@ function PageContent() {
                       activeView === 'directMessages' ? 'bg-neutral-800 text-blue-400' : 'text-neutral-400 hover:bg-neutral-800/40 hover:text-neutral-200'
                     }`}
                   >
-                    <MessageCircle className="w-3 h-3" /> Direct Messages
+                    <MessageCircle className="w-3 h-3" /> Network
+                    {dmUnreadCount > 0 && (
+                      <span className="ml-auto min-w-[16px] h-4 px-1 rounded-full bg-red-500 text-white text-[9px] font-bold flex items-center justify-center leading-none">
+                        {dmUnreadCount > 99 ? '99+' : dmUnreadCount}
+                      </span>
+                    )}
                   </button>
                 </div>
               );

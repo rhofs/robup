@@ -1,8 +1,14 @@
 import { NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
+import { getCurrentUserId } from '@/lib/auth/session';
+import { ensureTaskAccess } from '@/lib/auth/resourceAccess';
 
 export async function GET(_req: Request, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
+  const userId = await getCurrentUserId();
+  if (!userId) return NextResponse.json([]);
+  if (!(await ensureTaskAccess(id, userId))) return NextResponse.json({ error: 'Not authorized for this task' }, { status: 403 });
+
   const docs = await prisma.doc.findMany({
     where: { taskId: id, deletedAt: null },
     orderBy: { order: 'asc' },
@@ -12,6 +18,10 @@ export async function GET(_req: Request, { params }: { params: Promise<{ id: str
 
 export async function POST(req: Request, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
+  const userId = await getCurrentUserId();
+  if (!userId) return NextResponse.json({ error: 'Not authenticated' }, { status: 401 });
+  if (!(await ensureTaskAccess(id, userId))) return NextResponse.json({ error: 'Not authorized for this task' }, { status: 403 });
+
   const body = await req.json().catch(() => ({}));
   const order = await prisma.doc.count({ where: { taskId: id } });
   const doc = await prisma.doc.create({

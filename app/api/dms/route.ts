@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import { prisma, publicUserSelect } from '@/lib/prisma';
 import { getCurrentUserId } from '@/lib/auth/session';
 import { getConnectedUserIds } from '@/lib/auth/connections';
+import { withUnreadCounts } from '@/lib/chatUnread';
 
 // Global (workspace-independent) DM/group-DM list+create — replaces
 // /api/workspaces/[id]/dms now that a DM is never scoped to one workspace (Connections work).
@@ -17,7 +18,7 @@ export async function GET() {
     include: { members: { include: { user: { select: publicUserSelect } } } },
     orderBy: { lastMessageAt: 'desc' },
   });
-  return NextResponse.json(dms);
+  return NextResponse.json(await withUnreadCounts(dms, userId));
 }
 
 export async function POST(req: Request) {

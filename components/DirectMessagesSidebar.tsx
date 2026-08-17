@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { MessageCircle, Users, Plus, Check } from 'lucide-react';
 import { useChatStore, type Connection } from '../store/useChatStore';
 import { useSessionStore } from '../store/useSessionStore';
@@ -17,6 +17,7 @@ export default function DirectMessagesSidebar() {
     useChatStore();
   const currentUserId = useSessionStore((s) => s.currentUserId);
   const [newChatOpen, setNewChatOpen] = useState(false);
+  const dmUnreadTotal = useMemo(() => dms.reduce((sum, d) => sum + (d.unreadCount || 0), 0), [dms]);
 
   useEffect(() => {
     fetchDMs();
@@ -45,6 +46,11 @@ export default function DirectMessagesSidebar() {
           }`}
         >
           <MessageCircle className="w-3.5 h-3.5" /> Chats
+          {dmUnreadTotal > 0 && (
+            <span className="ml-auto min-w-[16px] h-4 px-1 rounded-full bg-red-500 text-white text-[9px] font-bold flex items-center justify-center leading-none">
+              {dmUnreadTotal > 99 ? '99+' : dmUnreadTotal}
+            </span>
+          )}
         </button>
         <button
           onClick={() => setActiveDmTab('connections')}
@@ -103,7 +109,12 @@ export default function DirectMessagesSidebar() {
                     </span>
                   ))}
                 </span>
-                <span className="truncate">{label}</span>
+                <span className="truncate flex-1">{label}</span>
+                {!!dm.unreadCount && (
+                  <span className="shrink-0 min-w-[16px] h-4 px-1 rounded-full bg-red-500 text-white text-[9px] font-bold flex items-center justify-center leading-none">
+                    {dm.unreadCount > 99 ? '99+' : dm.unreadCount}
+                  </span>
+                )}
               </button>
             );
           })}

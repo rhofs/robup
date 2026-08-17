@@ -1,8 +1,14 @@
 import { NextResponse } from 'next/server';
 import { prisma, publicUserSelect } from '@/lib/prisma';
+import { getCurrentUserId } from '@/lib/auth/session';
+import { ensureDocAccess } from '@/lib/auth/resourceAccess';
 
 export async function GET(_req: Request, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
+  const userId = await getCurrentUserId();
+  if (!userId) return NextResponse.json([]);
+  if (!(await ensureDocAccess(id, userId))) return NextResponse.json({ error: 'Not authorized for this doc' }, { status: 403 });
+
   const comments = await prisma.docComment.findMany({
     where: { docId: id },
     include: { author: { select: publicUserSelect } },
@@ -13,6 +19,10 @@ export async function GET(_req: Request, { params }: { params: Promise<{ id: str
 
 export async function POST(req: Request, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
+  const userId = await getCurrentUserId();
+  if (!userId) return NextResponse.json({ error: 'Not authenticated' }, { status: 401 });
+  if (!(await ensureDocAccess(id, userId))) return NextResponse.json({ error: 'Not authorized for this doc' }, { status: 403 });
+
   try {
     const body = await req.json();
     if (!body.body || !body.body.trim()) {

@@ -39,3 +39,39 @@ export async function areConnected(userIdA: string, userIdB: string): Promise<bo
 export function canonicalPair(idA: string, idB: string): [string, string] {
   return idA < idB ? [idA, idB] : [idB, idA];
 }
+
+export type SendConnectionRequestResult =
+  | { status: 'connected'; connectedUserId: string }
+  | { status: 'requested'; connectedUserId: string }
+  | { status: 'error'; error: string };
+
+// Shared by both ways of starting a connection — opening someone's personal /connect/[code] link
+// (app/api/connect/[code]/accept/route.ts) and searching for them directly
+// (app/api/connections/requests/route.ts POST). Same rules either way: idempotent if already
+// connected, instant mutual-accept if they'd already requested you back, otherwise a normal
+// pending request (upsert, so re-sending is a no-op rather than a unique-constraint error).
+export async function sendConnectionRequest(fromUserId: string, toUserId: string): Promise<SendConnectionRequestResult> {
+  if (fromUserId === toUserId) return { status: 'error', error: "That's you" };
+
+  const [userAId, userBId] = canonicalPair(fromUserId, toUserId);
+  const existingConnection = await prisma.connection.findUnique({ where: { userAId_userBId: { userAId, userBId } } });
+  if (existingConnection) return { status: 'connected', connectedUserId: toUserId };
+
+  const reverseRequest = await prisma.connectionRequest.findUnique({
+    where: { fromUserId_toUserId: { fromUserId: toUserId, toUserId: fromUserId } },
+  });
+  if (reverseRequest) {
+    await prisma.$transaction([
+      prisma.connection.create({ data: { userAId, userBId } }),
+      prisma.connectionRequest.delete({ where: { id: reverseRequest.id } }),
+    ]);
+    return { status: 'connected', connectedUserId: toUserId };
+  }
+
+  await prisma.connectionRequest.upsert({
+    where: { fromUserId_toUserId: { fromUserId, toUserId } },
+    update: {},
+    create: { fromUserId, toUserId },
+  });
+  return { status: 'requested', connectedUserId: toUserId };
+}

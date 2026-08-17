@@ -25,6 +25,17 @@ export async function GET(_req: Request, { params }: { params: Promise<{ id: str
     include: { author: { select: publicUserSelect }, attachments: true, reactions: { include: { user: { select: publicUserSelect } } } },
     orderBy: { createdAt: 'asc' },
   });
+
+  // Mark-as-read: opening a channel's message list IS "reading" it, client-side — catch the
+  // caller up to the latest message that existed at fetch time (Phase 8, unread badges). A
+  // message that arrives a moment after this response is correctly still unread until the next
+  // open. The membership row is guaranteed to exist from the upsert just above, plain update.
+  const latest = messages[messages.length - 1];
+  await prisma.chatChannelMember.update({
+    where: { channelId_userId: { channelId, userId } },
+    data: { lastReadAt: new Date(), lastReadMessageId: latest?.id ?? null },
+  });
+
   return NextResponse.json(messages);
 }
 

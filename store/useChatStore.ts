@@ -24,9 +24,14 @@ export type ChatChannel = {
   // `include`) — a DM has no meaningful `name` of its own (name: null always), it's rendered
   // client-side from whichever *other* members are in this list, per viewer, same as Slack/Discord.
   members?: { userId: string; user: ChatDMMember }[];
+  // Only present on GET /api/workspaces/[id]/channels and GET /api/dms's own responses (Phase 8,
+  // unread badges) — POST create-channel/create-DM responses don't compute it (a freshly created
+  // channel has nothing unread yet), so those call sites set it to 0 locally instead.
+  unreadCount?: number;
 };
 
 export type Connection = ChatDMMember & { source: 'connection' | 'workspace' };
+export type ConnectionSearchResult = ChatDMMember & { status: 'connected' | 'requested-by-me' | 'requested-by-them' | 'none' };
 export type ConnectionInvite = { id: string; createdAt: string };
 export type ConnectionRequest = { id: string; createdAt: string; user: ChatDMMember };
 
@@ -124,6 +129,11 @@ interface ChatStore {
   // correct by construction.
   acceptConnectionRequest: (id: string) => Promise<void>;
   declineConnectionRequest: (id: string) => Promise<void>;
+  // Free-text name search (app/api/connections/search/route.ts) — the other way in besides
+  // opening someone's personal connect link. Not cached in store state (a transient search-box
+  // result, not app-wide data other components need), just returned straight to the caller.
+  searchUsersToConnect: (query: string) => Promise<ConnectionSearchResult[]>;
+  sendConnectionRequestTo: (userId: string) => Promise<{ status: string } | null>;
   fetchMessages: (channelId: string) => Promise<void>;
   postMessage: (
     channelId: string,
@@ -164,6 +174,12 @@ function bumpDmRecency(dms: ChatChannel[], channelId: string, at: string): ChatC
     .sort((a, b) => +new Date(b.lastMessageAt) - +new Date(a.lastMessageAt));
 }
 
+// Opening a channel (fetchMessages) is also the mark-as-read trigger server-side — zero the badge
+// locally right away instead of waiting for the next poll to pick up the server's own update.
+function zeroUnread(channels: ChatChannel[], channelId: string): ChatChannel[] {
+  return channels.map((c) => (c.id === channelId ? { ...c, unreadCount: 0 } : c));
+}
+
 export const useChatStore = create<ChatStore>((set, get) => ({
   channelsByWorkspace: {},
   dms: [],
@@ -195,7 +211,7 @@ export const useChatStore = create<ChatStore>((set, get) => ({
       body: JSON.stringify(opts),
     });
     if (!res.ok) return null;
-    const channel = await res.json();
+    const channel: ChatChannel = { ...(await res.json()), unreadCount: 0 };
     set((state) => ({
       channelsByWorkspace: {
         ...state.channelsByWorkspace,
@@ -236,8 +252,13 @@ export const useChatStore = create<ChatStore>((set, get) => ({
     const dm = await res.json();
     set((state) => {
       // A 1:1 re-open returns the same id as one already in the list — replace it in place
-      // (picks up any member changes) rather than appending a duplicate row.
-      const next = state.dms.some((d) => d.id === dm.id) ? state.dms.map((d) => (d.id === dm.id ? dm : d)) : [dm, ...state.dms];
+      // (picks up any member changes) rather than appending a duplicate row. This route's own
+      // response never computes unreadCount (unlike GET /api/dms), so a re-open keeps whatever
+      // the existing local entry already had (real, possibly nonzero) rather than resetting it —
+      // only a genuinely brand-new DM defaults to 0 (nothing could be unread in it yet).
+      const existing = state.dms.find((d) => d.id === dm.id);
+      const merged: ChatChannel = { ...dm, unreadCount: existing?.unreadCount ?? 0 };
+      const next = existing ? state.dms.map((d) => (d.id === dm.id ? merged : d)) : [merged, ...state.dms];
       return { dms: next };
     });
     return dm;
@@ -286,11 +307,37 @@ export const useChatStore = create<ChatStore>((set, get) => ({
     }));
   },
 
+  searchUsersToConnect: async (query) => {
+    const res = await fetch(`/api/connections/search?q=${encodeURIComponent(query)}`);
+    if (!res.ok) return [];
+    return res.json();
+  },
+
+  sendConnectionRequestTo: async (userId) => {
+    const res = await fetch('/api/connections/requests', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ toUserId: userId }),
+    });
+    if (!res.ok) return null;
+    const result = await res.json();
+    // A mutual-accept lands us straight in 'connected'; either way the request lists may have
+    // changed (outgoing gained one, or an incoming one that mutually resolved just disappeared).
+    await Promise.all([get().fetchConnections(), get().fetchConnectionRequests()]);
+    return result;
+  },
+
   fetchMessages: async (channelId) => {
     const res = await fetch(`/api/channels/${channelId}/messages`);
     if (!res.ok) return;
     const messages = await res.json();
-    set((state) => ({ messagesByChannel: { ...state.messagesByChannel, [channelId]: messages } }));
+    set((state) => ({
+      messagesByChannel: { ...state.messagesByChannel, [channelId]: messages },
+      dms: zeroUnread(state.dms, channelId),
+      channelsByWorkspace: Object.fromEntries(
+        Object.entries(state.channelsByWorkspace).map(([wsId, channels]) => [wsId, zeroUnread(channels, channelId)])
+      ),
+    }));
   },
 
   postMessage: async (channelId, opts) => {

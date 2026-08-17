@@ -61,7 +61,7 @@ export default function ConnectPage() {
                 onClick={() => router.push('/?view=directMessages')}
                 className="w-full bg-blue-600 hover:bg-blue-500 rounded px-3 py-2 text-xs font-medium text-white transition cursor-pointer"
               >
-                Open Direct Messages
+                Open Network
               </button>
             </>
           ) : outcome === 'requested' ? (
@@ -73,7 +73,7 @@ export default function ConnectPage() {
                 onClick={() => router.push('/?view=directMessages')}
                 className="w-full border border-neutral-700 hover:bg-neutral-800/60 rounded px-3 py-2 text-xs text-neutral-300 transition cursor-pointer"
               >
-                Back to Direct Messages
+                Back to Network
               </button>
             </>
           ) : (

@@ -1,8 +1,8 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { Link2, Check, X, Clock } from 'lucide-react';
-import { useChatStore, type ConnectionRequest } from '../store/useChatStore';
+import { Link2, Check, X, Clock, Search, UserPlus } from 'lucide-react';
+import { useChatStore, type ConnectionRequest, type ConnectionSearchResult } from '../store/useChatStore';
 import ChatPanel from './ChatPanel';
 import ChatThreadPanel from './ChatThreadPanel';
 
@@ -28,6 +28,8 @@ export default function DirectMessagesPage() {
     regenerateConnectionInvite,
     acceptConnectionRequest,
     declineConnectionRequest,
+    searchUsersToConnect,
+    sendConnectionRequestTo,
   } = useChatStore();
   const [copied, setCopied] = useState(false);
 
@@ -50,6 +52,11 @@ export default function DirectMessagesPage() {
     return (
       <div className="h-[75vh] overflow-y-auto">
         <div className="max-w-xl mx-auto space-y-6 py-2">
+          <div>
+            <p className="text-[10px] font-bold text-neutral-500 uppercase tracking-wider mb-1.5">Find people</p>
+            <PeopleSearch onSearch={searchUsersToConnect} onSendRequest={sendConnectionRequestTo} />
+          </div>
+
           <div>
             <p className="text-[10px] font-bold text-neutral-500 uppercase tracking-wider mb-1.5">Your connect link</p>
             <p className="text-[11px] text-neutral-500 mb-2">
@@ -151,6 +158,93 @@ export default function DirectMessagesPage() {
         <ChatPanel />
       </div>
       {activeThreadRootMessage && <ChatThreadPanel rootMessage={activeThreadRootMessage} onClose={() => setActiveThreadRootId(null)} />}
+    </div>
+  );
+}
+
+// Free-text name search — the other way in besides sharing/opening a personal connect link.
+// Debounced (300ms) so every keystroke doesn't fire a request; a query under 2 chars is treated
+// as "not searching yet" both here and server-side (app/api/connections/search/route.ts).
+function PeopleSearch({
+  onSearch,
+  onSendRequest,
+}: {
+  onSearch: (query: string) => Promise<ConnectionSearchResult[]>;
+  onSendRequest: (userId: string) => Promise<{ status: string } | null>;
+}) {
+  const [query, setQuery] = useState('');
+  const [results, setResults] = useState<ConnectionSearchResult[]>([]);
+  const [loading, setLoading] = useState(false);
+  const [sentIds, setSentIds] = useState<Set<string>>(new Set());
+
+  useEffect(() => {
+    const q = query.trim();
+    if (q.length < 2) {
+      setResults([]);
+      return;
+    }
+    setLoading(true);
+    const t = setTimeout(() => {
+      onSearch(q)
+        .then(setResults)
+        .finally(() => setLoading(false));
+    }, 300);
+    return () => clearTimeout(t);
+  }, [query, onSearch]);
+
+  const handleSend = async (userId: string) => {
+    setSentIds((prev) => new Set(prev).add(userId));
+    await onSendRequest(userId);
+  };
+
+  return (
+    <div className="space-y-1.5">
+      <div className="relative">
+        <Search className="w-3.5 h-3.5 absolute left-2.5 top-1/2 -translate-y-1/2 text-neutral-600" />
+        <input
+          value={query}
+          onChange={(e) => setQuery(e.target.value)}
+          placeholder="Search by name..."
+          className="w-full bg-neutral-950 border border-neutral-800 rounded pl-8 pr-2 py-1.5 text-xs text-white placeholder:text-neutral-600 focus:outline-none focus:border-blue-500"
+        />
+      </div>
+      {loading && <p className="text-[11px] text-neutral-500 px-0.5">Searching…</p>}
+      {!loading && query.trim().length >= 2 && results.length === 0 && (
+        <p className="text-[11px] text-neutral-500 px-0.5">No one found.</p>
+      )}
+      <div className="space-y-0.5">
+        {results.map((u) => {
+          const justSent = sentIds.has(u.id) && u.status === 'none';
+          return (
+            <div key={u.id} className="flex items-center gap-2.5 px-2 py-1.5 rounded hover:bg-neutral-900/40">
+              <span
+                className="w-7 h-7 rounded-full text-[10px] font-bold flex items-center justify-center text-white shrink-0"
+                style={{ backgroundColor: u.color }}
+              >
+                {u.initials}
+              </span>
+              <div className="min-w-0 flex-1 text-xs text-neutral-200 truncate">{u.name}</div>
+              {u.status === 'connected' ? (
+                <span className="text-[10px] text-neutral-500 shrink-0">Connected</span>
+              ) : u.status === 'requested-by-them' ? (
+                <span className="text-[10px] text-neutral-500 shrink-0">Sent you a request</span>
+              ) : u.status === 'requested-by-me' || justSent ? (
+                <span className="text-[10px] text-neutral-500 flex items-center gap-1 shrink-0">
+                  <Clock className="w-2.5 h-2.5" /> Requested
+                </span>
+              ) : (
+                <button
+                  onClick={() => handleSend(u.id)}
+                  title="Send connection request"
+                  className="shrink-0 text-[10px] text-blue-400 hover:text-blue-300 flex items-center gap-1 cursor-pointer"
+                >
+                  <UserPlus className="w-3 h-3" /> Add
+                </button>
+              )}
+            </div>
+          );
+        })}
+      </div>
     </div>
   );
 }

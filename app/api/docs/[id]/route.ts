@@ -2,10 +2,16 @@ import { NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { cascadeDoc } from '@/lib/trashCascade';
 import { archiveDoc } from '@/lib/archiveCascade';
+import { getCurrentUserId } from '@/lib/auth/session';
+import { ensureDocAccess } from '@/lib/auth/resourceAccess';
 
 export async function PATCH(req: Request, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
   const body = await req.json();
+
+  const userId = await getCurrentUserId();
+  if (!userId) return NextResponse.json({ error: 'Not authenticated' }, { status: 401 });
+  if (!(await ensureDocAccess(id, userId))) return NextResponse.json({ error: 'Not authorized for this doc' }, { status: 403 });
 
   if (body.restore === true) {
     await cascadeDoc(id, null);
@@ -52,6 +58,10 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
 
 export async function DELETE(req: Request, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
+  const userId = await getCurrentUserId();
+  if (!userId) return NextResponse.json({ error: 'Not authenticated' }, { status: 401 });
+  if (!(await ensureDocAccess(id, userId))) return NextResponse.json({ error: 'Not authorized for this doc' }, { status: 403 });
+
   const url = new URL(req.url);
   const authorId = url.searchParams.get('authorId');
   const permanent = url.searchParams.get('permanent') === 'true';

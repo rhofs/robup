@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { prisma, publicUserSelect } from '@/lib/prisma';
 import { getCurrentUserId } from '@/lib/auth/session';
+import { sendConnectionRequest } from '@/lib/auth/connections';
 
 // My pending connection requests, both directions — incoming (someone opened my connect link,
 // waiting on me to accept/decline) and outgoing (I opened someone else's link, waiting on them).
@@ -27,4 +28,19 @@ export async function GET() {
     incoming: incomingRows.map((r) => ({ id: r.id, createdAt: r.createdAt, user: r.fromUser })),
     outgoing: outgoingRows.map((r) => ({ id: r.id, createdAt: r.createdAt, user: r.toUser })),
   });
+}
+
+// Send a request directly to a user found via search (app/api/connections/search/route.ts) —
+// the other way in besides opening someone's personal connect link. Same underlying
+// create-or-mutual-accept rules either way (lib/auth/connections.ts's sendConnectionRequest).
+export async function POST(req: Request) {
+  const userId = await getCurrentUserId();
+  if (!userId) return NextResponse.json({ error: 'Not authenticated' }, { status: 401 });
+
+  const body = await req.json();
+  if (!body.toUserId) return NextResponse.json({ error: 'Missing toUserId' }, { status: 400 });
+
+  const result = await sendConnectionRequest(userId, body.toUserId);
+  if (result.status === 'error') return NextResponse.json({ error: result.error }, { status: 400 });
+  return NextResponse.json(result);
 }

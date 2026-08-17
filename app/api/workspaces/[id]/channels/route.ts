@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import { prisma, publicUserSelect } from '@/lib/prisma';
 import { getCurrentUserId } from '@/lib/auth/session';
 import { getAccessContext, canSee, type AccessJsonEntry } from '@/lib/auth/access';
+import { withUnreadCounts } from '@/lib/chatUnread';
 
 export async function GET(_req: Request, { params }: { params: Promise<{ id: string }> }) {
   const { id: workspaceId } = await params;
@@ -19,7 +20,8 @@ export async function GET(_req: Request, { params }: { params: Promise<{ id: str
     include: { members: { include: { user: { select: publicUserSelect } } } },
     orderBy: { createdAt: 'asc' },
   });
-  return NextResponse.json(channels.filter((c) => canSee(c, ctx)));
+  const visible = channels.filter((c) => canSee(c, ctx));
+  return NextResponse.json(await withUnreadCounts(visible, userId));
 }
 
 export async function POST(req: Request, { params }: { params: Promise<{ id: string }> }) {

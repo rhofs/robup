@@ -4,12 +4,18 @@ import { prisma } from '@/lib/prisma';
 import { createGoogleOAuthClient } from '@/lib/google/oauthClient';
 import { loadDocJSONForExport } from '@/lib/collab/loadDocForExport';
 import { docJSONToGoogleRequests } from '@/lib/collab/docJSONToGoogleRequests';
+import { getCurrentUserId } from '@/lib/auth/session';
+import { ensureDocAccess } from '@/lib/auth/resourceAccess';
 
-export async function POST(req: Request, { params }: { params: Promise<{ id: string }> }) {
+export async function POST(_req: Request, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
-  const body = await req.json().catch(() => ({}));
-  const userId = body.userId as string | undefined;
-  if (!userId) return NextResponse.json({ error: 'Missing userId' }, { status: 400 });
+
+  // Always "export as me" — never a body-supplied identity. This was previously trusted straight
+  // from the request body, letting any caller pass an arbitrary victim's user id and have RobUp
+  // write into *their* real Google Drive using their stored refresh token.
+  const userId = await getCurrentUserId();
+  if (!userId) return NextResponse.json({ error: 'Not authenticated' }, { status: 401 });
+  if (!(await ensureDocAccess(id, userId))) return NextResponse.json({ error: 'Not authorized for this doc' }, { status: 403 });
 
   const doc = await prisma.doc.findUnique({ where: { id } });
   if (!doc || doc.deletedAt) return NextResponse.json({ error: 'Not found' }, { status: 404 });

@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import { prisma, publicUserSelect } from '@/lib/prisma';
 import { getCurrentUserId } from '@/lib/auth/session';
 import { getTaskVisibilityContext } from '@/lib/auth/access';
+import { ensureListAccess } from '@/lib/auth/resourceAccess';
 
 export async function GET() {
   const userId = await getCurrentUserId();
@@ -28,6 +29,10 @@ export async function GET() {
 
 export async function POST(req: Request) {
   const body = await req.json();
+  const userId = await getCurrentUserId();
+  if (!userId) return NextResponse.json({ error: 'Not authenticated' }, { status: 401 });
+  if (!(await ensureListAccess(body.listId, userId))) return NextResponse.json({ error: 'Not authorized for this list' }, { status: 403 });
+
   const task = await prisma.task.create({
     data: {
       ...(body.id ? { id: body.id } : {}),
