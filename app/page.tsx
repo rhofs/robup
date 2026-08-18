@@ -416,9 +416,9 @@ const listPathLabel = (space: HierarchySpace, listId: string): string => {
 const DEFAULT_COLUMN_WIDTHS: Record<string, number> = { name: 280 };
 const NAME_WIDTH_RANGE = { min: 140, max: 640 };
 const COLUMN_WIDTH_RANGE = { min: 70, max: 300 };
-const COLUMN_WIDTHS_STORAGE_KEY = 'qvip.columnWidths';
-const ACTIVITY_PANEL_STORAGE_KEY = 'qvip.showActivityPanel';
-const COLLAPSED_SPACES_STORAGE_KEY = 'qvip.collapsedSpaces';
+const COLUMN_WIDTHS_STORAGE_KEY = 'siqt.columnWidths';
+const ACTIVITY_PANEL_STORAGE_KEY = 'siqt.showActivityPanel';
+const COLLAPSED_SPACES_STORAGE_KEY = 'siqt.collapsedSpaces';
 
 // Same "only persist the collapsed ones" shape as FolderTree.tsx's readCollapsedFolders —
 // Spaces default to expanded, so the minority (collapsed) is what's worth remembering.
@@ -2491,7 +2491,7 @@ function PageContent() {
       <div className="flex h-screen w-screen items-center justify-center bg-neutral-950 text-blue-400 font-mono text-sm">
         <div className="flex items-center gap-3">
           <div className="w-5 h-5 border-2 border-blue-500 border-t-transparent rounded-full animate-spin"></div>
-          <span>Loading Qvip...</span>
+          <span>Loading Siqt...</span>
         </div>
       </div>
     );
@@ -2558,7 +2558,7 @@ function PageContent() {
               >
                 <div className="min-w-0 text-left">
                   <h1 className="font-bold tracking-tight text-white leading-tight text-sm truncate">
-                    {currentWorkspace?.name || 'Qvip Workspace'}
+                    {currentWorkspace?.name || 'Siqt Workspace'}
                   </h1>
                   <p className="text-[9px] text-emerald-400 font-mono flex items-center gap-1">
                     <span className="w-1 h-1 rounded-full bg-emerald-400 animate-pulse shrink-0"></span> Zero-Cloud SQLite
@@ -3221,7 +3221,7 @@ function PageContent() {
 
         <div className="p-3 m-3 space-y-2">
           <div className="bg-neutral-950/60 rounded border border-neutral-800/80 px-3 py-2 text-[11px] text-neutral-400 flex items-center justify-between">
-            <span className="flex items-center gap-1.5"><Zap className="w-3.5 h-3.5" /> Qvip</span>
+            <span className="flex items-center gap-1.5"><Zap className="w-3.5 h-3.5" /> Siqt</span>
             <span className="text-emerald-400 font-mono">Flat List</span>
           </div>
         </div>

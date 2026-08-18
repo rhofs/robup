@@ -7,7 +7,7 @@ import { useTaskStore, type HierarchyWorkspace } from '../store/useTaskStore';
 import ColorSwatchPicker from './ColorSwatchPicker';
 import { copyToClipboard } from '../lib/copyToClipboard';
 
-const HIDDEN_NAV_TABS_STORAGE_KEY = 'qvip.hiddenNavTabs';
+const HIDDEN_NAV_TABS_STORAGE_KEY = 'siqt.hiddenNavTabs';
 
 export type NavTabId = 'board' | 'calendar' | 'docs' | 'office' | 'chat';
 
@@ -41,7 +41,7 @@ export function setNavTabHidden(tabId: NavTabId, hidden: boolean) {
   } catch {}
 }
 
-const HIDE_WEEK_NUMBERS_STORAGE_KEY = 'qvip.hideWeekNumbers';
+const HIDE_WEEK_NUMBERS_STORAGE_KEY = 'siqt.hideWeekNumbers';
 
 // Same "only persist the non-default minority" idea as the nav-tab toggles above — week numbers
 // are visible unless someone's explicitly turned them off, so a missing key means "show them."

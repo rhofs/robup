@@ -14,8 +14,8 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "Qvip",
-  description: "Qvip — task management, docs, planning, and chat in one place.",
+  title: "Siqt",
+  description: "Siqt — task management, docs, planning, and chat in one place.",
 };
 
 export default function RootLayout({

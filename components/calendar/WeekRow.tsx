@@ -246,7 +246,7 @@ export default function WeekRow({
 // color itself is per-task/per-event and dynamic — Tailwind can't vary an arbitrary inline color
 // by pseudo-class, so this is the reliable way to get a real hover response out of it.
 // Exported so DayTimeline.tsx can render its own task/event blocks with the exact same tint
-// treatment — one source of truth for "what does a Qvip calendar bar look like."
+// treatment — one source of truth for "what does a Siqt calendar bar look like."
 export const BASE_BG_ALPHA = 18;
 export const BASE_BORDER_ALPHA = 45;
 export const HOVER_BG_ALPHA = 32;

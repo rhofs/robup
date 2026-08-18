@@ -38,7 +38,7 @@ export async function GET(_req: Request, { params }: { params: Promise<{ token: 
     const dtend = addDays(end, 1);
     const lines = [
       'BEGIN:VEVENT',
-      `UID:${t.id}@qvip`,
+      `UID:${t.id}@siqt`,
       `DTSTAMP:${now}`,
       `DTSTART;VALUE=DATE:${icsDate(start)}`,
       `DTEND;VALUE=DATE:${icsDate(dtend)}`,
@@ -52,10 +52,10 @@ export async function GET(_req: Request, { params }: { params: Promise<{ token: 
   const calendar = [
     'BEGIN:VCALENDAR',
     'VERSION:2.0',
-    'PRODID:-//Qvip//Task Calendar//EN',
+    'PRODID:-//Siqt//Task Calendar//EN',
     'CALSCALE:GREGORIAN',
     'METHOD:PUBLISH',
-    `X-WR-CALNAME:Qvip \u2014 ${icsEscape(user.name)}`,
+    `X-WR-CALNAME:Siqt \u2014 ${icsEscape(user.name)}`,
     ...events,
     'END:VCALENDAR',
   ].join('\r\n');
@@ -63,7 +63,7 @@ export async function GET(_req: Request, { params }: { params: Promise<{ token: 
   return new Response(calendar, {
     headers: {
       'Content-Type': 'text/calendar; charset=utf-8',
-      'Content-Disposition': 'inline; filename="qvip.ics"',
+      'Content-Disposition': 'inline; filename="siqt.ics"',
       'Cache-Control': 'no-store',
     },
   });

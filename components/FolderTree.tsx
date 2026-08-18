@@ -94,7 +94,7 @@ import { useTaskStore, HierarchySpace, HierarchyFolder, HierarchyList, Task, Tas
 import { getChildFolders, getListsIn, getBoardDocsIn, collectListIdsUnder } from '../lib/folderTree';
 import { activeGlowStyle } from '../lib/activeGlowStyle';
 
-const COLLAPSED_FOLDERS_STORAGE_KEY = 'qvip.collapsedFolders';
+const COLLAPSED_FOLDERS_STORAGE_KEY = 'siqt.collapsedFolders';
 
 // Folders default to expanded, so we only need to persist the collapsed ones (usually the
 // minority). Read/write the whole set on each toggle — toggles are one-at-a-time user clicks,

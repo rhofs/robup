@@ -75,9 +75,9 @@ function LoginPageContent() {
       <div className="w-full max-w-sm">
         <div className="text-center mb-6">
           <div className="w-10 h-10 rounded bg-blue-500 text-white font-bold flex items-center justify-center mx-auto mb-3">
-            Q
+            S
           </div>
-          <h1 className="text-lg font-semibold text-white">Qvip</h1>
+          <h1 className="text-lg font-semibold text-white">Siqt</h1>
         </div>
 
         <div className="bg-neutral-900 border border-neutral-800 rounded-lg p-5">
