@@ -26,11 +26,14 @@ type QuickCreatePopoverProps = {
   }) => void;
 };
 
-// Replaces the old CreateTaskModal — same Task-creation fields (unchanged behavior, Task tab is
-// the default so nothing changes for anyone who never touches the Event tab), plus a genuinely
-// new Event concept per the ClickUp-style "New" popover reference. Deliberately not the full
-// reference (no Focus time/OOO tabs, video call, location, recurrence, visibility icons — none of
-// that maps to anything this app can actually do today; see PLANNING.md for the scoping decision).
+// Replaces the old CreateTaskModal — same Task-creation fields, plus a genuinely new Event
+// concept per the ClickUp-style "New" popover reference. Deliberately not the full reference (no
+// Focus time/OOO tabs, video call, location, recurrence, visibility icons — none of that maps to
+// anything this app can actually do today; see PLANNING.md for the scoping decision).
+// Event is the DEFAULT tab, Task secondary — this popover only ever opens from the Planner/
+// Calendar view (its one render site is app/page.tsx, triggered by the "+ New task" header
+// button and a day cell's hover "+"), where creating a calendar event is the more natural
+// action than a task with no inherent date concept of its own.
 export default function QuickCreatePopover({
   open,
   workspaces,
@@ -41,7 +44,7 @@ export default function QuickCreatePopover({
   onCreateTask,
   onCreateEvent,
 }: QuickCreatePopoverProps) {
-  const [tab, setTab] = useState<'task' | 'event'>('task');
+  const [tab, setTab] = useState<'task' | 'event'>('event');
   const [title, setTitle] = useState('');
 
   // Task tab fields
@@ -60,7 +63,7 @@ export default function QuickCreatePopover({
 
   useEffect(() => {
     if (open) {
-      setTab('task');
+      setTab('event');
       setTitle('');
       setSpaceId('');
       setListId('');
@@ -114,7 +117,7 @@ export default function QuickCreatePopover({
         </div>
 
         <div className="px-5 pt-4 flex items-center gap-1 border-b border-neutral-800">
-          {(['task', 'event'] as const).map((t) => (
+          {(['event', 'task'] as const).map((t) => (
             <button
               key={t}
               onClick={() => setTab(t)}

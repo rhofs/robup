@@ -1,4 +1,8 @@
 export const WEEKDAY_LABELS = ['Mo', 'Tu', 'We', 'Th', 'Fr', 'Sa', 'Su'];
+// 3-letter uppercase, for the Planner's own weekday header row (CalendarView.tsx) — visually
+// distinct from the 2-letter WEEKDAY_LABELS used elsewhere (DatePickerPopover etc.), matching
+// the "MON 17" style requested for the calendar redesign specifically.
+export const WEEKDAY_LABELS_SHORT = ['MON', 'TUE', 'WED', 'THU', 'FRI', 'SAT', 'SUN'];
 export const MONTH_LABELS = [
   'January', 'February', 'March', 'April', 'May', 'June',
   'July', 'August', 'September', 'October', 'November', 'December',

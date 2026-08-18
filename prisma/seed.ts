@@ -9,7 +9,7 @@ const STATUS_DEFS = [
 ]
 
 async function main() {
-  console.log('🌱 Starter seeding av RobUp testmiljø...')
+  console.log('🌱 Starter seeding av Qvip testmiljø...')
 
   // Tøm eksisterende data (rekkefølge pga. relasjoner)
   await prisma.task.deleteMany()

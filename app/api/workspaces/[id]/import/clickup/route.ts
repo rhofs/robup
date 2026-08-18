@@ -41,7 +41,21 @@ function parseAssignees(raw: string | undefined): string[] {
 function parseEpochMs(raw: string | undefined): Date | null {
   if (!raw) return null;
   const n = Number(raw);
-  return Number.isFinite(n) && n > 0 ? new Date(n) : null;
+  if (!Number.isFinite(n) || n <= 0) return null;
+  const d = new Date(n);
+  // ClickUp represents a date-only field (no specific time picked) as UTC midnight of the
+  // intended calendar day, regardless of the workspace's own timezone — landing on a nonzero
+  // *local* hour anywhere east of UTC (02:00 in Oslo during DST). This app's own date picker
+  // (DatePickerPopover) always stores "no time set" as LOCAL midnight instead, and the Planner's
+  // Day view infers "all day" from that local convention — so an unconverted import silently
+  // misread as "has a specific time," landing at ~02:00 in the timeline instead of the All-day
+  // strip. Re-anchor to local midnight of the same UTC calendar day so imported tasks match this
+  // app's own convention. Safe without a separate "has time" column to consult: a row that
+  // genuinely has a time-of-day set essentially never lands exactly on UTC midnight by coincidence.
+  if (d.getUTCHours() === 0 && d.getUTCMinutes() === 0 && d.getUTCSeconds() === 0) {
+    return new Date(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate());
+  }
+  return d;
 }
 
 export async function POST(req: Request, { params }: { params: Promise<{ id: string }> }) {

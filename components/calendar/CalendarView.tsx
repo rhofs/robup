@@ -1,16 +1,18 @@
 'use client';
 
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { ChevronLeft, ChevronRight, Plus } from 'lucide-react';
+import { ChevronLeft, ChevronRight, Maximize2, Plus } from 'lucide-react';
 import {
   addDays,
   chunkIntoWeeks,
   daysBetween,
   formatFullDate,
   formatMonthYear,
+  isSameDay,
   monthGridDays,
   startOfDay,
   startOfWeek,
+  WEEKDAY_LABELS_SHORT,
 } from '../../lib/calendarDates';
 import { assignLanes, clipRangeToWeek, type ClippedSegment, type DragMode, type DragState, type TaskRange } from '../../lib/ganttLayout';
 import { useTaskStore, StatusDef, Task, Event, HierarchyWorkspace } from '../../store/useTaskStore';
@@ -19,9 +21,9 @@ import DayTimeline from './DayTimeline';
 
 type Granularity = 'month' | 'week' | 'day';
 
-// Bars are 13px/16px per lane now (was 20px/26px) — these caps were never re-tuned after
-// that slimming pass, so raise them to use the same visual row budget as before instead of
-// wasting the extra headroom on an early "+N more".
+// Default lane caps, used whenever Fit mode isn't actively overriding them (see isFitActive/
+// maxVisibleLanes below) — Fit mode derives its own cap from however many lanes the viewport-fitted
+// row height actually has room for, which can be lower (never higher) than these.
 const MONTH_MAX_LANES = 6;
 const WEEK_MAX_LANES = 12;
 // Measured against the chip's actual rendered height (24px, from its py-[3px] padding + line
@@ -43,12 +45,13 @@ type CalendarViewProps = {
   events: Event[];
   statuses: StatusDef[];
   workspaces: HierarchyWorkspace[];
+  showWeekNumbers: boolean;
   onOpenTask: (id: string) => void;
   onOpenEvent: (id: string) => void;
   onRequestCreateTask: (date: Date) => void;
 };
 
-export default function CalendarView({ tasks, events, statuses, workspaces, onOpenTask, onOpenEvent, onRequestCreateTask }: CalendarViewProps) {
+export default function CalendarView({ tasks, events, statuses, workspaces, showWeekNumbers, onOpenTask, onOpenEvent, onRequestCreateTask }: CalendarViewProps) {
   const {
     optimisticSetDates,
     optimisticSetCalendarLane,
@@ -59,6 +62,13 @@ export default function CalendarView({ tasks, events, statuses, workspaces, onOp
   } = useTaskStore();
   const [weekDrag, setWeekDrag] = useState<DragState | null>(null);
   const gridContainerRef = useRef<HTMLDivElement>(null);
+  // "Fit" — Month view only, on by default: the whole month fits the viewport with no vertical
+  // scroll, every week forced to the exact same height (containerHeight / weeks.length), rather
+  // than the normal fixed-per-lane-cap height that can require scrolling on a 6-week month. Never
+  // shrinks individual events to make everything visible — see maxVisibleLanes below, which
+  // derives how many lanes actually fit that height and pushes the rest into the existing
+  // overflow ("+N more") affordance, completely unchanged.
+  const [fitMode, setFitMode] = useState(true);
 
   // Row height used to be purely content-driven (just tall enough for the day number + however
   // many task bars are in it), which left a large dead void below the grid on a light/empty
@@ -158,6 +168,23 @@ export default function CalendarView({ tasks, events, statuses, workspaces, onOp
     setGranularity('day');
   };
 
+  // "N" opens the quick-create popover, same idea as Linear/Notion's single-letter shortcuts —
+  // guarded against firing while any text input/textarea/contenteditable has focus (typing a
+  // task title shouldn't accidentally reopen the popover on its own "n"), and against the
+  // modifier-key combos (Cmd/Ctrl/Alt+N) browsers and OSes already reserve.
+  useEffect(() => {
+    const handler = (e: KeyboardEvent) => {
+      if (e.key.toLowerCase() !== 'n' || e.metaKey || e.ctrlKey || e.altKey) return;
+      const target = e.target as HTMLElement | null;
+      const tag = target?.tagName;
+      if (tag === 'INPUT' || tag === 'TEXTAREA' || target?.isContentEditable) return;
+      e.preventDefault();
+      onRequestCreateTask(focusDate);
+    };
+    window.addEventListener('keydown', handler);
+    return () => window.removeEventListener('keydown', handler);
+  }, [focusDate, onRequestCreateTask]);
+
   const step = (dir: 1 | -1) => {
     if (granularity === 'month') setFocusDate(new Date(focusDate.getFullYear(), focusDate.getMonth() + dir, 1));
     else if (granularity === 'week') setFocusDate(addDays(focusDate, dir * 7));
@@ -175,7 +202,6 @@ export default function CalendarView({ tasks, events, statuses, workspaces, onOp
 
   let weeks: Date[][] = [];
   let segmentsByWeek: ClippedSegment[][] = [];
-  let maxVisibleLanes = MONTH_MAX_LANES;
   let lanes = new Map<string, number>();
 
   if (granularity !== 'day') {
@@ -190,7 +216,10 @@ export default function CalendarView({ tasks, events, statuses, workspaces, onOp
     // merge into one shared cluster spanning the whole month, so every day inside that chain drew
     // from the same maxVisibleLanes budget: dragging a task to a different day still inside that
     // same chain never actually freed a slot, since it never left the shared pool. Scoping the
-    // packing to one row at a time is what makes "N visible per day" actually mean that.
+    // packing to one row at a time is what makes "N visible per day" actually mean that. Note
+    // this never depends on maxVisibleLanes/rowHeight below — lane *assignment* is always
+    // unbounded; maxVisibleLanes is purely a later display filter (see WeekRow.tsx), so Fit mode
+    // computing its own cap from the viewport doesn't need to feed back into this at all.
     const allRowLanes = new Map<string, number>();
     segmentsByWeek = weeks.map((weekDays) => {
       const weekStart = weekDays[0];
@@ -201,21 +230,34 @@ export default function CalendarView({ tasks, events, statuses, workspaces, onOp
       return rowRanges.map((r) => clipRangeToWeek(r, weekDays, rowLanes.get(r.id) ?? 0)).filter((s): s is ClippedSegment => !!s);
     });
     lanes = allRowLanes;
-    maxVisibleLanes = granularity === 'month' ? MONTH_MAX_LANES : WEEK_MAX_LANES;
   }
 
-  // A fixed size, not content-driven — always reserves room for the full maxVisibleLanes cap
-  // plus the overflow strip, whether or not any given render actually uses all of it. Used to be
-  // computed from how many lanes were actually in use *anywhere in the visible month*, which
-  // meant every row's height (and the "+N more" chip's own vertical spot within its row, see
-  // WeekRow.tsx) shifted by OVERFLOW_H the instant overflow appeared or cleared *anywhere* in the
-  // grid — dragging one task in or out of a pileup made the whole calendar grow or shrink under
-  // you. A constant reserved height, same as a real calendar app's day cells, fixes that.
+  const isFitActive = granularity === 'month' && fitMode;
+
+  // Two modes, both still "every week gets the exact same height" (never content-driven per
+  // row — the "keep weekly rows static" constraint holds in both):
+  // - Fit: rowHeight is purely containerHeight / weeks.length, full stop — the whole month
+  //   always fits with no scrolling, whatever that works out to per week.
+  // - Not Fit (unchanged from before Fit existed): a fixed size reserving room for the full
+  //   per-granularity lane cap plus the overflow strip, stretched to fill the container evenly
+  //   if there's room to spare, scrolling if there isn't.
   const rowHeight = useMemo(() => {
     if (granularity === 'day') return 0;
-    const contentHeight = DAY_NUM_H + maxVisibleLanes * (BAR_H + BAR_GAP) + OVERFLOW_H;
+    if (isFitActive && weeks.length > 0 && containerHeight > 0) return Math.floor(containerHeight / weeks.length);
+    const defaultMaxLanes = granularity === 'month' ? MONTH_MAX_LANES : WEEK_MAX_LANES;
+    const contentHeight = DAY_NUM_H + defaultMaxLanes * (BAR_H + BAR_GAP) + OVERFLOW_H;
     return weeks.length > 0 && containerHeight > 0 ? Math.max(contentHeight, containerHeight / weeks.length) : contentHeight;
-  }, [granularity, maxVisibleLanes, containerHeight, weeks.length]);
+  }, [granularity, isFitActive, containerHeight, weeks.length]);
+
+  // Fit mode never shrinks events — it shrinks how many LANES are visible before "+N more" kicks
+  // in, derived from whatever rowHeight Fit just computed. Outside Fit mode, the same fixed caps
+  // as always. Either way this is purely a display-time filter (see WeekRow.tsx's own
+  // `segments.filter(s => s.lane < maxVisibleLanes)`) — never touches lane assignment itself.
+  const maxVisibleLanes = isFitActive
+    ? Math.max(1, Math.floor((rowHeight - DAY_NUM_H - OVERFLOW_H) / (BAR_H + BAR_GAP)))
+    : granularity === 'month'
+      ? MONTH_MAX_LANES
+      : WEEK_MAX_LANES;
 
   const gridStartDate = weeks.length > 0 ? weeks[0][0] : today;
 
@@ -303,7 +345,12 @@ export default function CalendarView({ tasks, events, statuses, workspaces, onOp
           }
         } else if (mode === 'resize-end') {
           // No due date yet (task only had a start date) — stretching from the end
-          // edge creates one, anchored off the single visible date.
+          // edge creates one, anchored off the single visible date. Mirror case: no
+          // start date yet (task only had a due date, the common "1-day task" shape) —
+          // anchor a start at the task's original position *first*, or newStart stays
+          // null and `ranges`' own start-falls-back-to-due logic makes the whole task
+          // silently relocate to the new day instead of actually spanning to it.
+          if (!start && due) newStart = new Date(due);
           const base = due ?? start;
           if (base) {
             newDue = addDays(base, d.deltaDays);
@@ -415,25 +462,64 @@ export default function CalendarView({ tasks, events, statuses, workspaces, onOp
         <div className="flex items-center gap-2">
           <button
             onClick={() => onRequestCreateTask(focusDate)}
-            className="text-[11px] bg-blue-600 hover:bg-blue-500 text-white px-2.5 py-1.5 rounded font-medium cursor-pointer flex items-center gap-1"
+            title="New task (N)"
+            className="text-[10px] bg-blue-600 hover:bg-blue-500 text-white pl-2 pr-1.5 py-1 rounded font-medium cursor-pointer flex items-center gap-1"
           >
-            <Plus className="w-3.5 h-3.5" /> New task
+            <Plus className="w-3 h-3" /> New task
+            <span className="text-[9px] text-blue-200/70 font-mono ml-0.5">N</span>
           </button>
-          <div className="flex items-center gap-1 bg-neutral-900 border border-neutral-800 rounded p-0.5">
+          <div className="flex items-center gap-0.5 bg-neutral-900 border border-neutral-800 rounded-md p-0.5">
             {(['month', 'week', 'day'] as Granularity[]).map((g) => (
               <button
                 key={g}
                 onClick={() => setGranularity(g)}
                 className={`text-[11px] px-2.5 py-1 rounded cursor-pointer capitalize transition ${
-                  granularity === g ? 'bg-neutral-800 text-blue-400' : 'text-neutral-400 hover:text-neutral-200'
+                  granularity === g ? 'bg-neutral-800 text-blue-400 shadow-sm' : 'text-neutral-400 hover:text-neutral-200'
                 }`}
               >
                 {g}
               </button>
             ))}
           </div>
+          {granularity === 'month' && (
+            <button
+              onClick={() => setFitMode((v) => !v)}
+              title="Fit calendar to screen"
+              className={`p-1.5 rounded-md border transition cursor-pointer ${
+                fitMode ? 'bg-neutral-800 border-neutral-700 text-blue-400' : 'bg-neutral-900 border-neutral-800 text-neutral-400 hover:text-neutral-200'
+              }`}
+            >
+              <Maximize2 className="w-3.5 h-3.5" />
+            </button>
+          )}
         </div>
       </div>
+
+      {granularity !== 'day' && (
+        // No border-b of its own — the grid container directly below already draws a top border,
+        // and stacking a second line right above it read as an unintentional "double border."
+        <div className="flex shrink-0 pb-1 mb-0.5">
+          <div className="shrink-0" style={{ width: GUTTER_WIDTH }} />
+          <div className="flex-1 grid grid-cols-7">
+            {WEEKDAY_LABELS_SHORT.map((label, i) => {
+              // Week view has real dates per column (only one row, so "MON 17" reads naturally
+              // per the redesign brief); month view spans several rows with different dates each,
+              // so its header is just the weekday name, once, at the top — the day cells below
+              // carry their own date number per row.
+              const day = granularity === 'week' ? weeks[0]?.[i] : null;
+              const isToday = day ? isSameDay(day, today) : false;
+              return (
+                <div key={i} className="flex flex-col items-center justify-center gap-0">
+                  <span className={`text-[9px] font-semibold tracking-wide ${isToday ? 'text-blue-400' : 'text-neutral-500'}`}>{label}</span>
+                  {day && (
+                    <span className={`text-base font-bold leading-tight ${isToday ? 'text-blue-400' : 'text-white'}`}>{day.getDate()}</span>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
 
       <div className="flex-1 min-h-0 bg-neutral-900/60 border border-neutral-800/80 rounded overflow-hidden">
         {granularity === 'day' ? (
@@ -448,7 +534,14 @@ export default function CalendarView({ tasks, events, statuses, workspaces, onOp
             onOpenEvent={onOpenEvent}
           />
         ) : (
-          <div ref={gridContainerRef} className="relative h-full overflow-y-auto">
+          // overflow-x-hidden always — the grid is a 7-column percentage-based layout that should
+          // never need to scroll sideways; without this, a stray 1px rounding overflow (percentage
+          // widths not landing on exact whole pixels) was enough to surface a horizontal
+          // scrollbar along the very bottom of the grid.
+          <div
+            ref={gridContainerRef}
+            className={`relative h-full overflow-x-hidden ${isFitActive ? 'overflow-y-hidden' : 'overflow-y-auto'}`}
+          >
             {weeks.map((weekDays, i) => (
               <WeekRow
                 key={i}
@@ -460,6 +553,8 @@ export default function CalendarView({ tasks, events, statuses, workspaces, onOp
                 eventColorOf={eventColorOf}
                 onOpenEvent={onOpenEvent}
                 today={today}
+                isLastRow={i === weeks.length - 1}
+                showWeekNumbers={showWeekNumbers}
                 monthAnchor={granularity === 'month' ? focusDate : undefined}
                 maxVisibleLanes={maxVisibleLanes}
                 height={rowHeight}

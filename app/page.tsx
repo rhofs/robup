@@ -36,6 +36,7 @@ import {
   Maximize2,
   Undo2,
   CheckCircle2,
+  Eye,
   EyeOff,
   Palette,
   RefreshCw,
@@ -99,7 +100,7 @@ import DirectMessagesSidebar from '../components/DirectMessagesSidebar';
 import ProfilePage from '../components/ProfilePage';
 import CommandPalette from '../components/CommandPalette';
 import TrashPanel from '../components/TrashPanel';
-import SettingsPanel, { readHiddenNavTabs, type NavTabId } from '../components/SettingsPanel';
+import SettingsPanel, { readHiddenNavTabs, readHideWeekNumbers, type NavTabId } from '../components/SettingsPanel';
 import AccessControlPanel from '../components/AccessControlPanel';
 import AccountSettingsPanel from '../components/AccountSettingsPanel';
 import MentionText from '../components/MentionText';
@@ -415,9 +416,9 @@ const listPathLabel = (space: HierarchySpace, listId: string): string => {
 const DEFAULT_COLUMN_WIDTHS: Record<string, number> = { name: 280 };
 const NAME_WIDTH_RANGE = { min: 140, max: 640 };
 const COLUMN_WIDTH_RANGE = { min: 70, max: 300 };
-const COLUMN_WIDTHS_STORAGE_KEY = 'robup.columnWidths';
-const ACTIVITY_PANEL_STORAGE_KEY = 'robup.showActivityPanel';
-const COLLAPSED_SPACES_STORAGE_KEY = 'robup.collapsedSpaces';
+const COLUMN_WIDTHS_STORAGE_KEY = 'qvip.columnWidths';
+const ACTIVITY_PANEL_STORAGE_KEY = 'qvip.showActivityPanel';
+const COLLAPSED_SPACES_STORAGE_KEY = 'qvip.collapsedSpaces';
 
 // Same "only persist the collapsed ones" shape as FolderTree.tsx's readCollapsedFolders —
 // Spaces default to expanded, so the minority (collapsed) is what's worth remembering.
@@ -593,6 +594,22 @@ function PageContent() {
   });
   const activeChatChannelName = activeChatChannel?.name ?? null;
 
+  // Breadcrumb's own first segment — used to just say the literal word "Workspace" regardless of
+  // which tab was open, which read as redundant/confusing once the actual workspace name is
+  // already shown up in the header's own workspace switcher (top-left). Now reflects whichever
+  // view is actually active instead, matching the nav-rail's own labels.
+  const BREADCRUMB_VIEW_LABEL: Record<typeof activeView, string> = {
+    board: 'Tasks',
+    calendar: 'Planner',
+    docs: 'Docs',
+    office: 'Office',
+    chat: 'Chat',
+    mytasks: 'My assigned tasks',
+    directMessages: 'Direct Messages',
+    profile: 'Profile',
+  };
+  const breadcrumbViewLabel = BREADCRUMB_VIEW_LABEL[activeView];
+
   // The Thread side panel (Phase 5) needs the actual root message object, not just its id — it's
   // already sitting in messagesByChannel (a thread root is a completely normal main-feed message,
   // it just also happens to have threadReplyCount > 0), so this is a lookup, not a fetch.
@@ -666,8 +683,10 @@ function PageContent() {
   const [trashOpen, setTrashOpen] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [hiddenNavTabs, setHiddenNavTabs] = useState<Set<NavTabId>>(() => new Set());
+  const [hideWeekNumbers, setHideWeekNumbers] = useState(false);
   useEffect(() => {
     setHiddenNavTabs(readHiddenNavTabs());
+    setHideWeekNumbers(readHideWeekNumbers());
   }, []);
   const [newSpaceDraft, setNewSpaceDraft] = useState('');
   const [workspaceSwitcherOpen, setWorkspaceSwitcherOpen] = useState(false);
@@ -2472,7 +2491,7 @@ function PageContent() {
       <div className="flex h-screen w-screen items-center justify-center bg-neutral-950 text-blue-400 font-mono text-sm">
         <div className="flex items-center gap-3">
           <div className="w-5 h-5 border-2 border-blue-500 border-t-transparent rounded-full animate-spin"></div>
-          <span>Loading RobUp...</span>
+          <span>Loading Qvip...</span>
         </div>
       </div>
     );
@@ -2539,7 +2558,7 @@ function PageContent() {
               >
                 <div className="min-w-0 text-left">
                   <h1 className="font-bold tracking-tight text-white leading-tight text-sm truncate">
-                    {currentWorkspace?.name || 'RobUp Workspace'}
+                    {currentWorkspace?.name || 'Qvip Workspace'}
                   </h1>
                   <p className="text-[9px] text-emerald-400 font-mono flex items-center gap-1">
                     <span className="w-1 h-1 rounded-full bg-emerald-400 animate-pulse shrink-0"></span> Zero-Cloud SQLite
@@ -3104,16 +3123,21 @@ function PageContent() {
                               </span>
                             </span>
                             {activeView === 'calendar' && (
-                              <span
-                                className={`w-3.5 h-3.5 rounded-xs border flex items-center justify-center shrink-0 transition ${
-                                  spaceAllChecked
-                                    ? 'bg-blue-500/20 border-blue-500/60 text-blue-400'
-                                    : spaceSomeChecked
-                                    ? 'bg-blue-500/10 border-blue-500/40'
-                                    : 'border-neutral-600'
-                                }`}
-                              >
-                                {spaceAllChecked && <Check className="w-2.5 h-2.5" />}
+                              // Same dot-that-morphs-into-an-eye-on-hover treatment as List/Folder
+                              // rows (FolderTree.tsx) — a checkbox reads as "select this to do
+                              // something," an eye reads as "show/hide," which is what this
+                              // actually does. Whole-row click already toggles it (see this
+                              // button's own onClick above), this is purely the visual indicator.
+                              <span className="relative w-3.5 h-3.5 shrink-0 flex items-center justify-center">
+                                <span
+                                  className="absolute w-2 h-2 rounded-full transition group-hover:opacity-0"
+                                  style={{ backgroundColor: space.color || '#6b7280', opacity: spaceAllChecked ? 1 : spaceSomeChecked ? 0.6 : 0.25 }}
+                                />
+                                {spaceAllChecked ? (
+                                  <Eye className="absolute w-3 h-3 text-neutral-300 opacity-0 group-hover:opacity-100 transition" />
+                                ) : (
+                                  <EyeOff className="absolute w-3 h-3 text-neutral-600 opacity-0 group-hover:opacity-100 transition" />
+                                )}
                               </span>
                             )}
                             {/* Own color always — only the checkbox indicates "checked" (Google
@@ -3197,7 +3221,7 @@ function PageContent() {
 
         <div className="p-3 m-3 space-y-2">
           <div className="bg-neutral-950/60 rounded border border-neutral-800/80 px-3 py-2 text-[11px] text-neutral-400 flex items-center justify-between">
-            <span className="flex items-center gap-1.5"><Zap className="w-3.5 h-3.5" /> RobUp</span>
+            <span className="flex items-center gap-1.5"><Zap className="w-3.5 h-3.5" /> Qvip</span>
             <span className="text-emerald-400 font-mono">Flat List</span>
           </div>
         </div>
@@ -3223,8 +3247,16 @@ function PageContent() {
         <header className="border-b border-neutral-800/80 bg-neutral-900/40 shrink-0">
           <div className="h-11 px-6 flex items-center justify-between border-b border-neutral-800/40">
             <div className="flex items-center gap-2 text-xs font-medium">
-              <span className="text-neutral-500">Workspace</span>
-              <span className="text-neutral-600">/</span>
+              {/* Office/Chat already lead with their own icon+label as the breadcrumb's first
+                  real segment below (and Office's own click-to-reset behavior lives on that
+                  button) — prefixing the same word again here would just recreate the exact
+                  "Workspace / Office" redundancy this change exists to remove, one word later. */}
+              {activeView !== 'office' && activeView !== 'chat' && (
+                <>
+                  <span className="text-neutral-500">{breadcrumbViewLabel}</span>
+                  <span className="text-neutral-600">/</span>
+                </>
+              )}
               {activeView === 'office' ? (
                 <>
                   <button
@@ -3304,10 +3336,15 @@ function PageContent() {
           </div>
         </header>
 
-        <div className="flex-1 overflow-auto p-6" onClick={closeAllMenus}>
+        <div
+          className={activeView === 'calendar' ? 'flex-1 min-h-0 overflow-hidden p-6 flex flex-col' : 'flex-1 overflow-auto p-6'}
+          onClick={closeAllMenus}
+        >
           <div
             className={
-              (activeView === 'board' || activeView === 'docs') && activeStandaloneDoc?.pageWidth === 'full'
+              activeView === 'calendar'
+                ? 'flex-1 min-h-0 flex flex-col'
+                : (activeView === 'board' || activeView === 'docs') && activeStandaloneDoc?.pageWidth === 'full'
                 ? 'w-full space-y-2'
                 : 'max-w-6xl mx-auto space-y-2'
             }
@@ -3766,12 +3803,13 @@ function PageContent() {
                 </>
               )
             ) : activeView === 'calendar' ? (
-              <div className="h-[75vh]">
+              <div className="flex-1 min-h-0">
                 <CalendarView
                   tasks={calendarFilteredTasks}
                   events={events}
                   statuses={statuses}
                   workspaces={workspaces}
+                  showWeekNumbers={!hideWeekNumbers}
                   onOpenTask={(id) => setModalTaskStack([id])}
                   onOpenEvent={(id) => setEventDetailId(id)}
                   onRequestCreateTask={(date) => {
@@ -5459,7 +5497,10 @@ function PageContent() {
           workspace={currentWorkspace}
           canManage={canManageCurrentWorkspace}
           onClose={() => setSettingsOpen(false)}
-          onChange={() => setHiddenNavTabs(readHiddenNavTabs())}
+          onChange={() => {
+            setHiddenNavTabs(readHiddenNavTabs());
+            setHideWeekNumbers(readHideWeekNumbers());
+          }}
         />
       )}
       {accountSettingsOpen &&

@@ -11,7 +11,7 @@ export async function POST(_req: Request, { params }: { params: Promise<{ id: st
   const { id } = await params;
 
   // Always "export as me" — never a body-supplied identity. This was previously trusted straight
-  // from the request body, letting any caller pass an arbitrary victim's user id and have RobUp
+  // from the request body, letting any caller pass an arbitrary victim's user id and have Qvip
   // write into *their* real Google Drive using their stored refresh token.
   const userId = await getCurrentUserId();
   if (!userId) return NextResponse.json({ error: 'Not authenticated' }, { status: 401 });

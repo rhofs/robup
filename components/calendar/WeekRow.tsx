@@ -1,13 +1,17 @@
 'use client';
 
-import { useRef } from 'react';
+import { useRef, useState } from 'react';
 import { Plus, Pin } from 'lucide-react';
 import { getISOWeek, isSameDay } from '../../lib/calendarDates';
+import { withAlpha } from '../../lib/colorAlpha';
 import type { ClippedSegment, DragMode, DragState } from '../../lib/ganttLayout';
 import type { Task, Event } from '../../store/useTaskStore';
 
-export const BAR_H = 13;
-export const BAR_GAP = 3;
+// Landed in the expert visual-refinement pass's 22-26px/3-5px target range. CalendarView.tsx's
+// Fit mode (see its own comment) derives how many lanes actually fit a given row height from
+// these two constants, same as the non-Fit MONTH_MAX_LANES/WEEK_MAX_LANES caps always have.
+export const BAR_H = 24;
+export const BAR_GAP = 4;
 export const DAY_NUM_H = 26;
 export const GUTTER_WIDTH = 34;
 const CLICK_DRAG_THRESHOLD = 4;
@@ -24,6 +28,11 @@ type WeekRowProps = {
   eventColorOf: (event: Event) => string;
   onOpenEvent: (id: string) => void;
   today: Date;
+  // The very last row's own bottom border would sit right on top of the grid container's own
+  // bottom border (see CalendarView.tsx) — an unintentional "double line" right under each other.
+  // Skipped here so the container's border is the only line closing off the grid's bottom edge.
+  isLastRow: boolean;
+  showWeekNumbers: boolean;
   monthAnchor?: Date;
   maxVisibleLanes: number;
   height: number;
@@ -46,6 +55,8 @@ export default function WeekRow({
   eventColorOf,
   onOpenEvent,
   today,
+  isLastRow,
+  showWeekNumbers,
   monthAnchor,
   maxVisibleLanes,
   height,
@@ -106,8 +117,13 @@ export default function WeekRow({
 
   return (
     <div className="relative flex" style={{ height }}>
-      <div className="shrink-0 flex items-start justify-center pt-1 text-[9px] text-neutral-600 font-mono border-r border-b border-neutral-800/60" style={{ width: GUTTER_WIDTH }}>
-        {getISOWeek(weekDays[0])}
+      {/* Week numbers are metadata, not content — 10px, low-contrast, no border of their own
+          (the week-row boundary below is what actually separates weeks). */}
+      <div
+        className={`shrink-0 flex items-start justify-center pt-1.5 text-[10px] text-neutral-700 font-mono ${isLastRow ? '' : 'border-b border-neutral-800/50'}`}
+        style={{ width: GUTTER_WIDTH }}
+      >
+        {showWeekNumbers && getISOWeek(weekDays[0])}
       </div>
       <div className="relative flex-1">
         <div className="absolute inset-0 grid grid-cols-7">
@@ -119,16 +135,22 @@ export default function WeekRow({
             // dimmest/most muted signal, today is the strongest, weekend is a subtle in-between
             // tint (same idea as Google Calendar/Notion's faint weekend column shading) — never
             // combined, so the grid doesn't get visually noisy.
-            const cellBg = outOfMonth ? 'bg-neutral-950/40' : isToday ? 'bg-blue-500/[0.06]' : isWeekend ? 'bg-white/[0.025]' : '';
+            const cellBg = outOfMonth ? 'bg-neutral-950/30' : isToday ? 'bg-blue-500/[0.035]' : isWeekend ? 'bg-white/[0.015]' : '';
             return (
               <div key={i} className="relative group/day">
                 <button
                   onClick={() => onDrillDay(day)}
-                  className={`w-full h-full flex flex-col items-start text-left border-r border-b border-neutral-800/60 last:border-r-0 px-1.5 pt-1 cursor-pointer hover:bg-neutral-800/30 transition ${cellBg}`}
+                  // Vertical separators kept, but deliberately faint — the grid should register
+                  // subconsciously, not read as a spreadsheet of boxed cells. The week-row
+                  // boundary (this same border-b, once per row) stays clearly stronger so weeks
+                  // are still easy to tell apart at a glance.
+                  className={`w-full h-full flex flex-col items-start text-left border-r border-r-neutral-800/[0.12] last:border-r-0 px-2 pt-1 cursor-pointer hover:bg-neutral-800/20 transition ${
+                    isLastRow ? '' : 'border-b border-b-neutral-800/50'
+                  } ${cellBg}`}
                 >
                   <span
-                    className={`text-[10px] font-mono inline-flex items-center justify-center w-5 h-5 rounded-full ${
-                      isToday ? 'bg-blue-600 text-white font-semibold' : outOfMonth ? 'text-neutral-600' : 'text-neutral-400'
+                    className={`text-[11px] font-mono inline-flex items-center justify-center w-5 h-5 rounded-full ${
+                      isToday ? 'bg-blue-500 text-white font-semibold' : outOfMonth ? 'text-neutral-600' : 'text-neutral-300 font-semibold'
                     }`}
                   >
                     {day.getDate()}
@@ -140,7 +162,13 @@ export default function WeekRow({
                     onQuickAddDay(day);
                   }}
                   title="New task"
-                  className="absolute top-1 right-1 w-4 h-4 rounded bg-neutral-800 text-neutral-400 hover:bg-blue-600 hover:text-white flex items-center justify-center opacity-0 group-hover/day:opacity-100 transition cursor-pointer"
+                  // Bottom-right, not top-right — the date number already owns the top of the
+                  // cell, and the bottom is where a day's own content visually "ends," so that's
+                  // where adding something new to it belongs. z-10 (matching the overflow chip's
+                  // own z-index) so it stays clickable on the rare day that both has overflow and
+                  // is being hovered at once, rather than the two silently fighting over the same
+                  // corner.
+                  className="absolute bottom-1 right-1 z-10 w-4 h-4 rounded bg-neutral-800 text-neutral-400 hover:bg-blue-600 hover:text-white flex items-center justify-center opacity-0 group-hover/day:opacity-100 transition cursor-pointer"
                 >
                   <Plus className="w-2.5 h-2.5" />
                 </button>
@@ -187,82 +215,183 @@ export default function WeekRow({
             // Events never drag (see WeekRowProps' own comment) — a plain clickable bar, same
             // shape/color-cascade convention as Task bars, no pointer handlers at all.
             if (event) {
-              return (
-                <div key={seg.taskId} className="absolute pointer-events-auto" style={barStyle}>
-                  <button
-                    onClick={() => onOpenEvent(event.id)}
-                    title={event.title}
-                    className={`relative w-full h-full flex items-center text-[9px] leading-none text-white font-medium truncate cursor-pointer select-none ${
-                      seg.isStartEdge ? 'rounded-l pl-1.5' : 'pl-1'
-                    } ${seg.isEndEdge ? 'rounded-r pr-1.5' : 'pr-1'}`}
-                    style={{ backgroundColor: eventColorOf(event) }}
-                  >
-                    <span className="truncate">{event.title}</span>
-                  </button>
-                </div>
-              );
+              return <EventBar key={seg.taskId} event={event} seg={seg} barStyle={barStyle} color={eventColorOf(event)} onOpenEvent={onOpenEvent} />;
             }
 
-            const isDraggingThis = activeDrag?.taskId === seg.taskId;
-            const color = taskColorOf(task!);
-
             return (
-              <div
+              <TaskBar
                 key={seg.taskId}
-                className="absolute pointer-events-auto group/bar"
-                style={{ ...barStyle, opacity: isDraggingThis ? 0.35 : 1 }}
-              >
-                <div
-                  onPointerDown={(e) => startInteraction(e, task!, 'move')}
-                  onPointerMove={(e) => moveInteraction(e, task!)}
-                  onPointerUp={(e) => endInteraction(e, task!, 'move')}
-                  title={task!.title}
-                  className={`relative h-full flex items-center text-[9px] leading-none text-white font-medium truncate cursor-grab active:cursor-grabbing select-none ${
-                    seg.isStartEdge ? 'rounded-l pl-1.5' : 'pl-1'
-                  } ${seg.isEndEdge ? 'rounded-r pr-1.5' : 'pr-1'}`}
-                  style={{ backgroundColor: color }}
-                >
-                  <span className="truncate">{task!.title}</span>
-
-                  {seg.isStartEdge && (
-                    <div
-                      onPointerDown={(e) => startInteraction(e, task!, 'resize-start')}
-                      onPointerMove={(e) => moveInteraction(e, task!)}
-                      onPointerUp={(e) => endInteraction(e, task!, 'resize-start')}
-                      className="absolute left-0 top-0 h-full w-2 cursor-ew-resize"
-                    />
-                  )}
-                  {seg.isEndEdge && (
-                    <div
-                      onPointerDown={(e) => startInteraction(e, task!, 'resize-end')}
-                      onPointerMove={(e) => moveInteraction(e, task!)}
-                      onPointerUp={(e) => endInteraction(e, task!, 'resize-end')}
-                      className="absolute right-0 top-0 h-full w-2 cursor-ew-resize"
-                    />
-                  )}
-                </div>
-
-                {/* Manually-pinned lane indicator (see Task.calendarLane / assignLanes) — a
-                    sibling of the draggable inner div, not nested inside it, so its own click
-                    never triggers the drag handlers above. Only shown on hover, same corner-badge
-                    convention as PersonAvatar's DND dot elsewhere in this app. */}
-                {task!.calendarLane !== null && task!.calendarLane !== undefined && (
-                  <button
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      onUnpinLane(task!.id);
-                    }}
-                    title="Manually pinned to this lane — click to let it auto-arrange again"
-                    className="absolute -top-1 -right-1 z-10 w-3 h-3 rounded-full bg-neutral-900 border border-neutral-600 text-neutral-300 hover:text-white hover:border-white flex items-center justify-center opacity-0 group-hover/bar:opacity-100 transition cursor-pointer"
-                  >
-                    <Pin className="w-2 h-2" />
-                  </button>
-                )}
-              </div>
+                task={task!}
+                seg={seg}
+                barStyle={barStyle}
+                color={taskColorOf(task!)}
+                isDraggingThis={activeDrag?.taskId === seg.taskId}
+                onStartInteraction={startInteraction}
+                onMoveInteraction={moveInteraction}
+                onEndInteraction={endInteraction}
+                onUnpinLane={onUnpinLane}
+              />
             );
           })}
         </div>
       </div>
+    </div>
+  );
+}
+
+// Tint alphas, per the expert visual-refinement brief: 15-25% background, a somewhat stronger
+// border, text at the color's own full saturation (not white) — "information sitting inside the
+// calendar," not a solid block on top of it. Hover bumps both up a notch for a touch more
+// saturation, per the same brief. Local hover state (not a Tailwind `hover:` class) because the
+// color itself is per-task/per-event and dynamic — Tailwind can't vary an arbitrary inline color
+// by pseudo-class, so this is the reliable way to get a real hover response out of it.
+// Exported so DayTimeline.tsx can render its own task/event blocks with the exact same tint
+// treatment — one source of truth for "what does a Qvip calendar bar look like."
+export const BASE_BG_ALPHA = 18;
+export const BASE_BORDER_ALPHA = 45;
+export const HOVER_BG_ALPHA = 32;
+export const HOVER_BORDER_ALPHA = 70;
+
+function EventBar({
+  event,
+  seg,
+  barStyle,
+  color,
+  onOpenEvent,
+}: {
+  event: Event;
+  seg: ClippedSegment;
+  barStyle: React.CSSProperties;
+  color: string;
+  onOpenEvent: (id: string) => void;
+}) {
+  const [hovered, setHovered] = useState(false);
+  return (
+    <div className="absolute pointer-events-auto" style={barStyle}>
+      <button
+        onClick={() => onOpenEvent(event.id)}
+        onMouseEnter={() => setHovered(true)}
+        onMouseLeave={() => setHovered(false)}
+        title={event.title}
+        className={`relative w-full h-full flex items-center gap-1 text-[10px] leading-none font-medium truncate cursor-pointer select-none border transition-colors ${
+          seg.isStartEdge ? 'rounded-l-md pl-2.5' : 'pl-1.5'
+        } ${seg.isEndEdge ? 'rounded-r-md pr-2' : 'pr-1'}`}
+        style={{
+          backgroundColor: withAlpha(color, hovered ? HOVER_BG_ALPHA : BASE_BG_ALPHA),
+          borderColor: withAlpha(color, hovered ? HOVER_BORDER_ALPHA : BASE_BORDER_ALPHA),
+          color,
+        }}
+      >
+        <span className="truncate">{event.title}</span>
+      </button>
+    </div>
+  );
+}
+
+function TaskBar({
+  task,
+  seg,
+  barStyle,
+  color,
+  isDraggingThis,
+  onStartInteraction,
+  onMoveInteraction,
+  onEndInteraction,
+  onUnpinLane,
+}: {
+  task: Task;
+  seg: ClippedSegment;
+  barStyle: React.CSSProperties;
+  color: string;
+  isDraggingThis: boolean;
+  onStartInteraction: (e: React.PointerEvent, task: Task, mode: DragMode) => void;
+  onMoveInteraction: (e: React.PointerEvent, task: Task) => void;
+  onEndInteraction: (e: React.PointerEvent, task: Task, mode: DragMode) => void;
+  onUnpinLane: (taskId: string) => void;
+}) {
+  const [hovered, setHovered] = useState(false);
+  const assignees = task.assignees;
+  return (
+    <div className="absolute pointer-events-auto group/bar" style={{ ...barStyle, opacity: isDraggingThis ? 0.35 : 1 }}>
+      <div
+        onPointerDown={(e) => onStartInteraction(e, task, 'move')}
+        onPointerMove={(e) => onMoveInteraction(e, task)}
+        onPointerUp={(e) => onEndInteraction(e, task, 'move')}
+        onMouseEnter={() => setHovered(true)}
+        onMouseLeave={() => setHovered(false)}
+        title={task.title}
+        // "Information sitting inside the calendar" — a tinted background + colored border +
+        // colored text, all derived from the one cascaded color, rather than a solid fill.
+        className={`relative h-full flex items-center gap-1 text-[10px] leading-none font-medium truncate cursor-grab active:cursor-grabbing select-none border transition-colors ${
+          seg.isStartEdge ? 'rounded-l-md pl-2.5' : 'pl-1.5'
+        } ${seg.isEndEdge ? 'rounded-r-md pr-2' : 'pr-1'}`}
+        style={{
+          backgroundColor: withAlpha(color, hovered ? HOVER_BG_ALPHA : BASE_BG_ALPHA),
+          borderColor: withAlpha(color, hovered ? HOVER_BORDER_ALPHA : BASE_BORDER_ALPHA),
+          color,
+        }}
+      >
+        <span className="truncate flex-1">{task.title}</span>
+
+        {/* Assignee avatar(s) — only where there's real room (the segment's trailing edge), same
+            "don't clutter a 2-day sliver" restraint as the overflow chip. First initial, +N badge
+            for the rest — same convention PersonAvatar clusters use elsewhere in this app (Office
+            rooms). Kept as solid color chips (not tinted) — they're small enough that a tint would
+            just read as noise, and the whole point of an avatar is the solid, recognizable color. */}
+        {seg.isEndEdge && assignees.length > 0 && (
+          <span className="flex items-center -space-x-1 shrink-0">
+            {assignees.slice(0, 1).map((a) => (
+              <span
+                key={a.id}
+                title={a.name}
+                className="w-3.5 h-3.5 rounded-full border border-neutral-900/60 text-[7px] font-bold flex items-center justify-center text-white shrink-0"
+                style={{ backgroundColor: a.color }}
+              >
+                {a.initials}
+              </span>
+            ))}
+            {assignees.length > 1 && (
+              <span className="w-3.5 h-3.5 rounded-full border border-neutral-900/60 bg-neutral-700 text-[7px] font-bold flex items-center justify-center text-white shrink-0">
+                +{assignees.length - 1}
+              </span>
+            )}
+          </span>
+        )}
+
+        {seg.isStartEdge && (
+          <div
+            onPointerDown={(e) => onStartInteraction(e, task, 'resize-start')}
+            onPointerMove={(e) => onMoveInteraction(e, task)}
+            onPointerUp={(e) => onEndInteraction(e, task, 'resize-start')}
+            className="absolute left-0 top-0 h-full w-2 cursor-ew-resize"
+          />
+        )}
+        {seg.isEndEdge && (
+          <div
+            onPointerDown={(e) => onStartInteraction(e, task, 'resize-end')}
+            onPointerMove={(e) => onMoveInteraction(e, task)}
+            onPointerUp={(e) => onEndInteraction(e, task, 'resize-end')}
+            className="absolute right-0 top-0 h-full w-2 cursor-ew-resize"
+          />
+        )}
+      </div>
+
+      {/* Manually-pinned lane indicator (see Task.calendarLane / assignLanes) — a sibling of the
+          draggable inner div, not nested inside it, so its own click never triggers the drag
+          handlers above. Only shown on hover, same corner-badge convention as PersonAvatar's DND
+          dot elsewhere in this app. */}
+      {task.calendarLane !== null && task.calendarLane !== undefined && (
+        <button
+          onClick={(e) => {
+            e.stopPropagation();
+            onUnpinLane(task.id);
+          }}
+          title="Manually pinned to this lane — click to let it auto-arrange again"
+          className="absolute -top-1 -right-1 z-10 w-3 h-3 rounded-full bg-neutral-900 border border-neutral-600 text-neutral-300 hover:text-white hover:border-white flex items-center justify-center opacity-0 group-hover/bar:opacity-100 transition cursor-pointer"
+        >
+          <Pin className="w-2 h-2" />
+        </button>
+      )}
     </div>
   );
 }

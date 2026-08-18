@@ -13,12 +13,12 @@ type ColorSwatchPickerProps = {
 };
 
 const SIZE_CLASSES = { sm: 'w-4 h-4', md: 'w-6 h-6' } as const;
-const SAVED_COLORS_KEY = 'robup.savedColors';
+const SAVED_COLORS_KEY = 'qvip.savedColors';
 const MAX_SAVED_COLORS = 16;
 
 // Shared app-wide across every color picker (Space/Folder/List/Room/Role/Status/custom-field/Doc
 // text+highlight) rather than scoped per-usage — a color a user picks and saves once should be
-// reachable everywhere, same "one shared list" precedent as robup.collapsedFolders.
+// reachable everywhere, same "one shared list" precedent as qvip.collapsedFolders.
 function readSavedColors(): string[] {
   if (typeof window === 'undefined') return [];
   try {

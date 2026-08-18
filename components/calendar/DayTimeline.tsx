@@ -3,6 +3,8 @@
 import { useRef, useState } from 'react';
 import { isSameDay } from '../../lib/calendarDates';
 import { layoutDayColumns } from '../../lib/ganttLayout';
+import { withAlpha } from '../../lib/colorAlpha';
+import { BASE_BG_ALPHA, BASE_BORDER_ALPHA, HOVER_BG_ALPHA, HOVER_BORDER_ALPHA } from './WeekRow';
 import type { Task, Event } from '../../store/useTaskStore';
 
 const HOUR_H = 48;
@@ -12,7 +14,18 @@ const CLICK_DRAG_THRESHOLD = 4;
 type DayDragMode = 'move' | 'resize-start' | 'resize-end';
 type DayDragState = { taskId: string; mode: DayDragMode; deltaMin: number; startClientY: number };
 
-const hasTimeOfDay = (d: Date) => d.getHours() !== 0 || d.getMinutes() !== 0;
+// "No time set" has two conventions in this app's own data: this app's own date picker
+// (DatePickerPopover) always stores it as LOCAL midnight, but ClickUp CSV imports
+// (`parseEpochMs` in the import route) carry raw epoch-ms timestamps that land on UTC midnight
+// regardless of local timezone — which reads as a nonzero *local* hour anywhere east of UTC (02:00
+// in Oslo during DST) and got misread as "has a specific time." Treat either convention as
+// all-day rather than trusting only the local one — a real timed task essentially never lands
+// exactly on UTC midnight by coincidence, so this stays safe for genuinely-timed tasks/events too.
+const hasTimeOfDay = (d: Date) => {
+  const isLocalMidnight = d.getHours() === 0 && d.getMinutes() === 0;
+  const isUtcMidnight = d.getUTCHours() === 0 && d.getUTCMinutes() === 0;
+  return !isLocalMidnight && !isUtcMidnight;
+};
 const minutesOfDay = (d: Date) => d.getHours() * 60 + d.getMinutes();
 
 type DayTimelineProps = {
@@ -109,26 +122,10 @@ export default function DayTimeline({ day, tasks, taskColorOf, onOpenTask, onCom
         <div className="shrink-0 border-b border-neutral-800 px-3 py-2 space-y-1">
           <div className="text-[9px] uppercase tracking-wider text-neutral-500 mb-1">All day</div>
           {allDayTasks.map((task) => (
-            <button
-              key={task.id}
-              onClick={() => onOpenTask(task.id)}
-              title={task.title}
-              className="w-full text-left truncate text-[11px] text-white font-medium px-2 py-1 rounded cursor-pointer"
-              style={{ backgroundColor: taskColorOf(task) }}
-            >
-              {task.title}
-            </button>
+            <AllDayChip key={task.id} label={task.title} color={taskColorOf(task)} onClick={() => onOpenTask(task.id)} />
           ))}
           {allDayEvents.map((event) => (
-            <button
-              key={event.id}
-              onClick={() => onOpenEvent(event.id)}
-              title={event.title}
-              className="w-full text-left truncate text-[11px] text-white font-medium px-2 py-1 rounded cursor-pointer"
-              style={{ backgroundColor: eventColorOf(event) }}
-            >
-              {event.title}
-            </button>
+            <AllDayChip key={event.id} label={event.title} color={eventColorOf(event)} onClick={() => onOpenEvent(event.id)} />
           ))}
         </div>
       )}
@@ -145,11 +142,13 @@ export default function DayTimeline({ day, tasks, taskColorOf, onOpenTask, onCom
         </div>
 
         {isSameDay(day, today) && (
+          // Subtle, brand-accent blue rather than an alarm-red line — reads as "here's now"
+          // without competing for attention against the task/event cards themselves.
           <div
-            className="absolute left-0 right-0 border-t-2 border-red-500 z-20 pointer-events-none"
+            className="absolute left-0 right-0 border-t border-blue-500/70 z-20 pointer-events-none"
             style={{ top: (minutesOfDay(today) / 60) * HOUR_H }}
           >
-            <span className="absolute -left-1 -top-1 w-2 h-2 rounded-full bg-red-500" />
+            <span className="absolute -left-1 -top-1 w-2 h-2 rounded-full bg-blue-500" />
           </div>
         )}
 
@@ -175,20 +174,13 @@ export default function DayTimeline({ day, tasks, taskColorOf, onOpenTask, onCom
               const height = Math.max(20, ((endMin - startMin) / 60) * HOUR_H);
               const { col, cols } = columns.get(event.id) ?? { col: 0, cols: 1 };
               return (
-                <div
+                <DayEventBlock
                   key={event.id}
-                  className="absolute"
+                  event={event}
+                  color={eventColorOf(event)}
+                  onOpenEvent={onOpenEvent}
                   style={{ top, height, left: `${(col / cols) * 100}%`, width: `${(1 / cols) * 100}%`, paddingRight: cols > 1 ? 2 : 0 }}
-                >
-                  <button
-                    onClick={() => onOpenEvent(event.id)}
-                    title={event.title}
-                    className="relative w-full h-full rounded px-2 py-1 text-[10px] text-white font-medium truncate cursor-pointer text-left"
-                    style={{ backgroundColor: eventColorOf(event) }}
-                  >
-                    {event.title}
-                  </button>
-                </div>
+                />
               );
             });
             const taskBlocks = timedTasks.map(({ task, start, end }) => {
@@ -211,9 +203,13 @@ export default function DayTimeline({ day, tasks, taskColorOf, onOpenTask, onCom
             const { col, cols } = columns.get(task.id) ?? { col: 0, cols: 1 };
 
             return (
-              <div
+              <DayTaskBlock
                 key={task.id}
-                className="absolute group/block"
+                task={task}
+                start={start}
+                end={end}
+                color={color}
+                isDraggingThis={isDraggingThis}
                 style={{
                   top,
                   height,
@@ -221,37 +217,150 @@ export default function DayTimeline({ day, tasks, taskColorOf, onOpenTask, onCom
                   width: `${(1 / cols) * 100}%`,
                   paddingRight: cols > 1 ? 2 : 0,
                 }}
-              >
-                <div
-                  onPointerDown={(e) => startInteraction(e, task, 'move')}
-                  onPointerMove={(e) => moveInteraction(e, task)}
-                  onPointerUp={(e) => endInteraction(e, task, start, end)}
-                  title={task.title}
-                  className={`relative h-full rounded px-2 py-1 text-[10px] text-white font-medium truncate cursor-grab active:cursor-grabbing select-none ${
-                    isDraggingThis ? 'opacity-70 ring-2 ring-white/70' : ''
-                  }`}
-                  style={{ backgroundColor: color }}
-                >
-                  {task.title}
-                  <div
-                    onPointerDown={(e) => startInteraction(e, task, 'resize-start')}
-                    onPointerMove={(e) => moveInteraction(e, task)}
-                    onPointerUp={(e) => endInteraction(e, task, start, end)}
-                    className="absolute left-0 right-0 top-0 h-1.5 cursor-ns-resize"
-                  />
-                  <div
-                    onPointerDown={(e) => startInteraction(e, task, 'resize-end')}
-                    onPointerMove={(e) => moveInteraction(e, task)}
-                    onPointerUp={(e) => endInteraction(e, task, start, end)}
-                    className="absolute left-0 right-0 bottom-0 h-1.5 cursor-ns-resize"
-                  />
-                </div>
-              </div>
+                onStartInteraction={startInteraction}
+                onMoveInteraction={moveInteraction}
+                onEndInteraction={endInteraction}
+              />
             );
             });
             return [...eventBlocks, ...taskBlocks];
           })()}
         </div>
+      </div>
+    </div>
+  );
+}
+
+// Same tinted background + colored border + colored text treatment as Month/Week's own
+// TaskBar/EventBar (WeekRow.tsx) — a task/event should look like the same object whichever
+// granularity it's viewed at, not switch to a solid white-on-color fill just because it's Day
+// view. Extracted to its own component (rather than inlined in a `.map()`) since the hover state
+// needs a real hook.
+function AllDayChip({ label, color, onClick }: { label: string; color: string; onClick: () => void }) {
+  const [hovered, setHovered] = useState(false);
+  return (
+    <button
+      onClick={onClick}
+      onMouseEnter={() => setHovered(true)}
+      onMouseLeave={() => setHovered(false)}
+      title={label}
+      className="w-full text-left truncate text-[11px] font-medium px-2 py-1 rounded-md border cursor-pointer transition-colors"
+      style={{
+        backgroundColor: withAlpha(color, hovered ? HOVER_BG_ALPHA : BASE_BG_ALPHA),
+        borderColor: withAlpha(color, hovered ? HOVER_BORDER_ALPHA : BASE_BORDER_ALPHA),
+        color,
+      }}
+    >
+      {label}
+    </button>
+  );
+}
+
+function DayEventBlock({
+  event,
+  color,
+  onOpenEvent,
+  style,
+}: {
+  event: Event;
+  color: string;
+  onOpenEvent: (id: string) => void;
+  style: React.CSSProperties;
+}) {
+  const [hovered, setHovered] = useState(false);
+  return (
+    <div className="absolute" style={style}>
+      <button
+        onClick={() => onOpenEvent(event.id)}
+        onMouseEnter={() => setHovered(true)}
+        onMouseLeave={() => setHovered(false)}
+        title={event.title}
+        className="relative w-full h-full rounded-md px-2.5 py-1.5 text-[10px] font-medium truncate cursor-pointer text-left border transition-colors"
+        style={{
+          backgroundColor: withAlpha(color, hovered ? HOVER_BG_ALPHA : BASE_BG_ALPHA),
+          borderColor: withAlpha(color, hovered ? HOVER_BORDER_ALPHA : BASE_BORDER_ALPHA),
+          color,
+        }}
+      >
+        {event.title}
+      </button>
+    </div>
+  );
+}
+
+function DayTaskBlock({
+  task,
+  start,
+  end,
+  color,
+  isDraggingThis,
+  style,
+  onStartInteraction,
+  onMoveInteraction,
+  onEndInteraction,
+}: {
+  task: Task;
+  start: Date;
+  end: Date;
+  color: string;
+  isDraggingThis: boolean;
+  style: React.CSSProperties;
+  onStartInteraction: (e: React.PointerEvent, task: Task, mode: DayDragMode) => void;
+  onMoveInteraction: (e: React.PointerEvent, task: Task) => void;
+  onEndInteraction: (e: React.PointerEvent, task: Task, start: Date, end: Date) => void;
+}) {
+  const [hovered, setHovered] = useState(false);
+  const height = typeof style.height === 'number' ? style.height : 0;
+  return (
+    <div className="absolute group/block" style={style}>
+      <div
+        onPointerDown={(e) => onStartInteraction(e, task, 'move')}
+        onPointerMove={(e) => onMoveInteraction(e, task)}
+        onPointerUp={(e) => onEndInteraction(e, task, start, end)}
+        onMouseEnter={() => setHovered(true)}
+        onMouseLeave={() => setHovered(false)}
+        title={task.title}
+        className={`relative h-full rounded-md px-2.5 py-1.5 text-[10px] font-medium cursor-grab active:cursor-grabbing select-none flex flex-col border transition-colors ${
+          isDraggingThis ? 'opacity-70 ring-2 ring-white/70' : ''
+        }`}
+        style={{
+          backgroundColor: withAlpha(color, hovered ? HOVER_BG_ALPHA : BASE_BG_ALPHA),
+          borderColor: withAlpha(color, hovered ? HOVER_BORDER_ALPHA : BASE_BORDER_ALPHA),
+          color,
+        }}
+      >
+        <span className="truncate">{task.title}</span>
+        {task.assignees.length > 0 && height >= 34 && (
+          <span className="flex items-center -space-x-1 mt-0.5">
+            {task.assignees.slice(0, 3).map((a) => (
+              <span
+                key={a.id}
+                title={a.name}
+                className="w-3.5 h-3.5 rounded-full border border-neutral-900/60 text-[7px] font-bold flex items-center justify-center text-white shrink-0"
+                style={{ backgroundColor: a.color }}
+              >
+                {a.initials}
+              </span>
+            ))}
+            {task.assignees.length > 3 && (
+              <span className="w-3.5 h-3.5 rounded-full border border-neutral-900/60 bg-neutral-700 text-[7px] font-bold flex items-center justify-center text-white shrink-0">
+                +{task.assignees.length - 3}
+              </span>
+            )}
+          </span>
+        )}
+        <div
+          onPointerDown={(e) => onStartInteraction(e, task, 'resize-start')}
+          onPointerMove={(e) => onMoveInteraction(e, task)}
+          onPointerUp={(e) => onEndInteraction(e, task, start, end)}
+          className="absolute left-0 right-0 top-0 h-1.5 cursor-ns-resize"
+        />
+        <div
+          onPointerDown={(e) => onStartInteraction(e, task, 'resize-end')}
+          onPointerMove={(e) => onMoveInteraction(e, task)}
+          onPointerUp={(e) => onEndInteraction(e, task, start, end)}
+          className="absolute left-0 right-0 bottom-0 h-1.5 cursor-ns-resize"
+        />
       </div>
     </div>
   );

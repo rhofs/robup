@@ -5,6 +5,8 @@ import { useDraggable, useDroppable } from '@dnd-kit/core';
 import {
   ChevronRight,
   ChevronDown,
+  Eye,
+  EyeOff,
   Folder as FolderIconLucide,
   FolderOpen,
   List as ListIcon,
@@ -12,7 +14,6 @@ import {
   Plus,
   Pencil,
   Trash2,
-  Check,
   Lock,
   Star,
   Rocket,
@@ -93,7 +94,7 @@ import { useTaskStore, HierarchySpace, HierarchyFolder, HierarchyList, Task, Tas
 import { getChildFolders, getListsIn, getBoardDocsIn, collectListIdsUnder } from '../lib/folderTree';
 import { activeGlowStyle } from '../lib/activeGlowStyle';
 
-const COLLAPSED_FOLDERS_STORAGE_KEY = 'robup.collapsedFolders';
+const COLLAPSED_FOLDERS_STORAGE_KEY = 'qvip.collapsedFolders';
 
 // Folders default to expanded, so we only need to persist the collapsed ones (usually the
 // minority). Read/write the whole set on each toggle — toggles are one-at-a-time user clicks,
@@ -276,8 +277,11 @@ function FolderLevel(props: FolderTreeProps & { parentId: string | null; depth: 
     // at a glance, especially two-plus levels deep. This is a flat increment that compounds
     // through natural DOM nesting (each recursive level adds another one on top), not a
     // depth-multiplied value — List rows inherit it automatically since they render in this
-    // same wrapper.
-    <div className={depth === 0 ? 'space-y-0.5' : 'ml-6 pl-3 border-l border-neutral-800 space-y-0.5'}>
+    // same wrapper. depth === 0 (a Space's own direct Lists/Docs, no Folder in between) gets a
+    // smaller version of the same treatment rather than none at all — previously flush with the
+    // Space header itself, which made it hard to tell where one Space's own content ended and
+    // the next Space's began when scanning down a list of several Spaces in a row.
+    <div className={depth === 0 ? 'ml-3 pl-2 border-l border-neutral-800/50 space-y-0.5' : 'ml-6 pl-3 border-l border-neutral-800 space-y-0.5'}>
       {folders.map((folder) => (
         <FolderRow key={folder.id} {...props} folder={folder} />
       ))}
@@ -614,15 +618,17 @@ function FolderRow(props: FolderTreeProps & { folder: HierarchyFolder; parentId:
                 e.stopPropagation();
                 toggleCalendarFolder(folder.id);
               }}
-              className={`w-3.5 h-3.5 rounded border flex items-center justify-center shrink-0 transition ${
-                allChecked
-                  ? 'bg-blue-500/20 border-blue-500/60 text-blue-400'
-                  : someChecked
-                  ? 'bg-blue-500/10 border-blue-500/40'
-                  : 'border-neutral-600'
-              }`}
+              className="relative w-3.5 h-3.5 shrink-0 flex items-center justify-center"
             >
-              {allChecked && <Check className="w-2.5 h-2.5" />}
+              <span
+                className="absolute w-2 h-2 rounded-full transition group-hover:opacity-0"
+                style={{ backgroundColor: folder.color || '#6b7280', opacity: allChecked ? 1 : someChecked ? 0.6 : 0.25 }}
+              />
+              {allChecked ? (
+                <Eye className="absolute w-3 h-3 text-neutral-300 opacity-0 group-hover:opacity-100 transition" />
+              ) : (
+                <EyeOff className="absolute w-3 h-3 text-neutral-600 opacity-0 group-hover:opacity-100 transition" />
+              )}
             </span>
           )}
           {/* No permanently-visible chevron — the folder's own icon shows by default and morphs
@@ -796,19 +802,35 @@ function ListRow({
     >
       <span className="truncate flex items-center gap-1.5 min-w-0">
         {filterMode && (
-          <span
-            className={`w-3.5 h-3.5 rounded-xs border flex items-center justify-center shrink-0 transition ${
-              checked ? 'bg-blue-500/20 border-blue-500/60 text-blue-400' : 'border-neutral-600'
-            }`}
-          >
-            {checked && <Check className="w-2.5 h-2.5" />}
+          // Colored dot (the list's own color, same as the icon beside it) instead of a plain
+          // checkbox — reads as "this list's color is showing on the calendar" rather than a
+          // generic form control. On hover it swaps for an explicit Eye/EyeOff toggle, same
+          // "icon reveals its action on hover" convention this row's own rename pencil already
+          // uses just to the right.
+          <span className="relative w-3.5 h-3.5 shrink-0 flex items-center justify-center">
+            <span
+              className="absolute w-2 h-2 rounded-full transition group-hover:opacity-0"
+              style={{ backgroundColor: list.color || '#6b7280', opacity: checked ? 1 : 0.25 }}
+            />
+            {checked ? (
+              <Eye className="absolute w-3 h-3 text-neutral-300 opacity-0 group-hover:opacity-100 transition" />
+            ) : (
+              <EyeOff className="absolute w-3 h-3 text-neutral-600 opacity-0 group-hover:opacity-100 transition" />
+            )}
           </span>
         )}
-        {(() => {
-          const CustomIcon = list.icon ? FOLDER_ICON_MAP[list.icon] : null;
-          const Icon = CustomIcon || ListIcon;
-          return <Icon className="w-3 h-3 shrink-0" style={{ color: list.color || undefined }} />;
-        })()}
+        {/* Fixed-size, centered slot (matches the dot/eye slot's own w-3.5 h-3.5 just before it)
+            — different chosen icons (camera, droplet, list-bullets, ...) don't all fill their own
+            viewBox identically, so without a common bounding box to center inside, rows with
+            different icons could drift a px or two off each other's vertical rhythm when
+            scanning down a list. */}
+        <span className="w-3.5 h-3.5 shrink-0 flex items-center justify-center">
+          {(() => {
+            const CustomIcon = list.icon ? FOLDER_ICON_MAP[list.icon] : null;
+            const Icon = CustomIcon || ListIcon;
+            return <Icon className="w-3 h-3" style={{ color: list.color || undefined }} />;
+          })()}
+        </span>
         {/* Own color always — only the checkbox indicates "checked" (Google Calendar's sidebar
             convention); when active/open, the name glows a bright version of that same color
             instead of switching to blue. */}

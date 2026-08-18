@@ -7,7 +7,7 @@ import { useTaskStore, type HierarchyWorkspace } from '../store/useTaskStore';
 import ColorSwatchPicker from './ColorSwatchPicker';
 import { copyToClipboard } from '../lib/copyToClipboard';
 
-const HIDDEN_NAV_TABS_STORAGE_KEY = 'robup.hiddenNavTabs';
+const HIDDEN_NAV_TABS_STORAGE_KEY = 'qvip.hiddenNavTabs';
 
 export type NavTabId = 'board' | 'calendar' | 'docs' | 'office' | 'chat';
 
@@ -38,6 +38,26 @@ export function setNavTabHidden(tabId: NavTabId, hidden: boolean) {
     if (hidden) next.add(tabId);
     else next.delete(tabId);
     localStorage.setItem(HIDDEN_NAV_TABS_STORAGE_KEY, JSON.stringify([...next]));
+  } catch {}
+}
+
+const HIDE_WEEK_NUMBERS_STORAGE_KEY = 'qvip.hideWeekNumbers';
+
+// Same "only persist the non-default minority" idea as the nav-tab toggles above — week numbers
+// are visible unless someone's explicitly turned them off, so a missing key means "show them."
+export function readHideWeekNumbers(): boolean {
+  if (typeof window === 'undefined') return false;
+  try {
+    return localStorage.getItem(HIDE_WEEK_NUMBERS_STORAGE_KEY) === '1';
+  } catch {
+    return false;
+  }
+}
+
+export function setHideWeekNumbers(hidden: boolean) {
+  try {
+    if (hidden) localStorage.setItem(HIDE_WEEK_NUMBERS_STORAGE_KEY, '1');
+    else localStorage.removeItem(HIDE_WEEK_NUMBERS_STORAGE_KEY);
   } catch {}
 }
 
@@ -124,11 +144,19 @@ export default function SettingsPanel({
   const { createRole, updateRole, deleteRole, assignRole, unassignRole } = useTaskStore();
   const [tab, setTab] = useState<'general' | 'roles' | 'invite' | 'import'>('general');
   const [hidden, setHidden] = useState(() => readHiddenNavTabs());
+  const [weekNumbersHidden, setWeekNumbersHidden] = useState(() => readHideWeekNumbers());
 
   const toggle = (tabId: NavTabId) => {
     const next = !hidden.has(tabId);
     setNavTabHidden(tabId, next);
     setHidden(readHiddenNavTabs());
+    onChange();
+  };
+
+  const toggleWeekNumbers = () => {
+    const next = !weekNumbersHidden;
+    setHideWeekNumbers(next);
+    setWeekNumbersHidden(next);
     onChange();
   };
 
@@ -288,6 +316,21 @@ export default function SettingsPanel({
                 </button>
               );
             })}
+
+            <div className="text-[10px] uppercase tracking-wide text-neutral-500 px-1 pt-3 pb-1">Planner</div>
+            <button
+              onClick={toggleWeekNumbers}
+              className="w-full flex items-center justify-between px-2 py-1.5 rounded hover:bg-neutral-800/60 cursor-pointer"
+            >
+              <span className="text-xs text-neutral-300">Show week numbers</span>
+              <span
+                className={`w-4 h-4 rounded border flex items-center justify-center ${
+                  !weekNumbersHidden ? 'bg-blue-600 border-blue-600' : 'border-neutral-700'
+                }`}
+              >
+                {!weekNumbersHidden && <Check className="w-3 h-3 text-white" />}
+              </span>
+            </button>
           </div>
         ) : tab === 'roles' ? (
           <div className="p-5 space-y-2 max-h-96 overflow-y-auto">
