@@ -9,7 +9,8 @@
     "collab:start": "tsx --env-file=.env.local server/collabServer.ts",
     "build": "next build",
     "start": "next start",
-    "start:prod": "concurrently -n next,collab -c blue,magenta \"npm:start\" \"npm:collab:start\"",
+    "collab:start:prod": "tsx server/collabServer.ts",
+    "start:prod": "concurrently -n next,collab -c blue,magenta \"npm:start\" \"npm:collab:start:prod\"",
     "lint": "next lint",
     "seed": "ts-node --compiler-options {\"module\":\"CommonJS\"} prisma/seed.ts",
     "backfill:dm-keys": "tsx --env-file=.env.local scripts/backfillDmKeys.ts"
