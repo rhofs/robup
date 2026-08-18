@@ -211,7 +211,7 @@ export default function ChatThreadPanel({
             {rootMessage.quotedBodySnapshot && (
               <QuotedPreview authorName={resolveAuthorName(rootMessage.quotedAuthorId)} body={rootMessage.quotedBodySnapshot} />
             )}
-            {rootMessage.body && <div className="text-[12px] text-neutral-200 break-words leading-snug">{renderChatMessageBody(rootMessage.body)}</div>}
+            {rootMessage.body && <div className="text-[12px] text-neutral-200 break-words leading-snug select-text">{renderChatMessageBody(rootMessage.body)}</div>}
             <AttachmentGrid attachments={rootMessage.attachments} />
             <ReactionBar reactions={rootMessage.reactions} currentUserId={currentUserId} onToggle={(emoji) => handleToggleReaction(rootMessage.id, emoji)} />
           </div>
@@ -241,7 +241,7 @@ export default function ChatThreadPanel({
                 <span className="text-[9px] text-neutral-500">{timeLabel(r.createdAt)}</span>
               </div>
               {r.quotedBodySnapshot && <QuotedPreview authorName={resolveAuthorName(r.quotedAuthorId)} body={r.quotedBodySnapshot} />}
-              {r.body && <div className="text-[12px] text-neutral-200 break-words leading-snug">{renderChatMessageBody(r.body)}</div>}
+              {r.body && <div className="text-[12px] text-neutral-200 break-words leading-snug select-text">{renderChatMessageBody(r.body)}</div>}
               <AttachmentGrid attachments={r.attachments} />
               <ReactionBar reactions={r.reactions} currentUserId={currentUserId} onToggle={(emoji) => handleToggleReaction(r.id, emoji)} />
             </div>

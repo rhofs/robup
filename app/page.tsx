@@ -2534,6 +2534,11 @@ function PageContent() {
 
   return (
     <DndContext sensors={taskSensors} collisionDetection={closestCenter} onDragStart={handleTaskDragStart} onDragOver={handleTaskDragOver} onDragEnd={handleTaskDragEnd}>
+    {/* select-none here is app-wide (mostly buttons/rows/drag targets, not prose) — CSS
+        user-select is inherited, so any real copyable text content (chat messages, task
+        descriptions, comments, etc.) needs its own explicit `select-text` to opt back in, or it
+        silently can't be highlighted at all. See ChatPanel.tsx/ChatThreadPanel.tsx's message
+        body divs for the pattern. */}
     <div className="flex flex-col h-screen bg-neutral-950 text-neutral-100 font-sans overflow-hidden select-none">
       {/* ================= TOP BAR — workspace + search, so the icon rail/sidebar below don't
           have to carry that weight themselves (previously both lived stacked at the very top
