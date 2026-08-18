@@ -9,9 +9,10 @@ export default defineConfig({
     path: "prisma/migrations",
   },
   datasource: {
-    // Matches prisma/schema.prisma's own hardcoded datasource url exactly — that's what the
-    // generated client actually uses at runtime; DATABASE_URL isn't referenced there at all, so
-    // this fallback is only to satisfy the type here for Prisma CLI commands (db push/studio).
+    // schema.prisma itself now reads DATABASE_URL too (env("DATABASE_URL")), so this normally
+    // just mirrors whatever's already set in .env.local. The "file:./dev.db" fallback only
+    // matters if DATABASE_URL is somehow unset when a Prisma CLI command runs (db push/studio) —
+    // satisfies the type here rather than crashing outright in that edge case.
     url: process.env["DATABASE_URL"] ?? "file:./dev.db",
   },
 });
