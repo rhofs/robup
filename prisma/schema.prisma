@@ -11,6 +11,13 @@ datasource db {
 
 generator client {
   provider = "prisma-client-js"
+  // "native" covers whatever platform actually runs `prisma generate` (Windows locally, or
+  // whatever the install container is). linux-musl-openssl-3.0.x is added explicitly for the
+  // Pterodactyl production deploy — its runtime image (ghcr.io/pterodactyl/yolks:nodejs_20) is
+  // Alpine/musl-based, which needs its own query-engine binary bundled or the client throws
+  // PrismaClientInitializationError at startup ("generated for debian-openssl-3.0.x, but the
+  // actual deployment required linux-musl-openssl-3.0.x").
+  binaryTargets = ["native", "linux-musl-openssl-3.0.x"]
 }
 
 // 1. Øverste beholder
