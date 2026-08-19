@@ -1191,6 +1191,47 @@ Pulled the deployment session's work (rebrand to Siqt, Planner/Calendar redesign
 
 **Root cause, a real gap not specific to this machine**: `prisma.config.ts`'s `import "dotenv/config"` only auto-loads a file literally named `.env` — this project has never had one, only `.env.local` (Next.js's own convention, loaded automatically by `next dev` and explicitly via `tsx --env-file=.env.local` for the sidecar). The CLI's own schema validation reads `process.env.DATABASE_URL` directly regardless of `prisma.config.ts`'s separate `datasource.url` fallback, so nothing there rescued it. Fixed by pointing the config's `dotenv` import at `.env.local` explicitly (`config({ path: ".env.local" })`) — a real, reusable fix, not a workaround specific to this machine; would have hit the exact same error on any other fresh clone running a plain `prisma` CLI command. Added this machine's own `DATABASE_URL="file:./dev.db"` to its (gitignored, per-machine) `.env.local`, ran `npm install` (picks up `concurrently`/`tsx` moving to real `dependencies`), `prisma db push` (schema already in sync, only the client needed regenerating for the new `binaryTargets`), and a full dev-server restart. Verified: `npx tsc --noEmit` fully clean (zero output, matching the deployment session's own milestone), `<title>Siqt</title>` renders correctly.
 
+## Backlog — 2026-08-19 product/UX pass (16 items, user-reported + ClickUp landing-page comparison)
+
+User compared the live app against a ClickUp marketing PDF and a screenshot of their own sidebar/time-picker, and listed issues/requests in one batch. Explicitly planning-only — **no code changed this session**, several items were grounded in a real code read first (marked "root cause confirmed" below) so the next session can start fixing instead of re-diagnosing. Logged verbatim-ish, numbering assigned here for reference — check off `[x]` as each ships.
+
+**Onboarding / identity**
+- [ ] **1. No workspace should ever look like a real default.** Currently, a user with zero real workspace memberships still sees a workspace-looking header. Wants: before creating/joining a workspace, only My tasks/Network etc. should be available, no implied "you're already in a workspace." **Root cause confirmed**: `app/page.tsx:2566` — the header literally falls back to the hardcoded string `{currentWorkspace?.name || 'Siqt Workspace'}` when `currentWorkspace` is `undefined`. Not a real workspace, just a placeholder string standing in for one.
+- [ ] **2. A more "official" workspace creation flow.** Add fields like a work email, and whether it's a company vs. a private/personal project — today workspace creation is presumably just a name.
+- [ ] **3. Replace the placeholder "R" logo.** **Root cause confirmed**: `app/page.tsx:2548-2550` — the top-left logo is a hardcoded `<div>R</div>` in a blue gradient box (a leftover from the RobUp name), unrelated to the current "Siqt" branding.
+
+**Visual/UI polish**
+- [ ] **4. Sidebar footer shows leftover dev-mode placeholder copy.** The `⚡ Siqt` / "Flat List" badge (`app/page.tsx:3230`) and the "Zero-Cloud SQLite" tagline directly under the workspace name (`app/page.tsx:2569`) both read as internal/dev labels, not real product UI — clean these up.
+- [ ] **5. Modernize the task date/time picker's look** — screenshot shows the current dropdown reading as old-fashioned/native-ish; wants a refreshed design.
+- [ ] **6. Sidebar item-creation UX, ClickUp-style.** Instead of separate buttons for new List/Doc/Folder, use a single "+" per level (see attached ClickUp sidebar screenshot) — same "+" appears next to a Folder when hovered, to create inside it. Right-click-for-context-menu on a List should stay as-is, but also add a "..." (3-dot) affordance next to each List/Doc row that opens the same context menu on click/tap — not a dedicated rename button and a dedicated delete button sitting in the row itself.
+
+**Landing page**
+- [ ] **7. Logged-out landing page should explain the product**, ClickUp-marketing-page style, instead of dropping straight into the login screen.
+
+**Social / invites**
+- [ ] **8. Email invites + a more Discord-like in-app invite/request flow via Network** — today the only mechanism is sharing a link. Wants a real request/invite notification surfaced to the recipient.
+- [ ] **9. Role assignment for workspace members.** Also: right-click a user to DM them / assign a role directly, and a smarter, more modern Office-tab UI for managing this (today it's unclear how roles are assigned at all).
+
+**Data safety / compliance**
+- [ ] **10. Real backups.** Tasks/Docs/everything important must survive an incident, and specifically must keep working across app patches/deploys — not just "works today."
+- [ ] **11. A security & privacy pass** — user flagged this as needed but open-ended; worth scoping into concrete sub-items rather than treating as one action item (see suggestions below).
+
+**Planner / Calendar / Events**
+- [ ] **12. Stretching an Event's date range doesn't log to Activities & Comments** inside the task-equivalent view. **Root cause confirmed, schema-level, not just UI**: `Comment.taskId` (`prisma/schema.prisma:464`) is a required, non-nullable FK to `Task` only — the `Event` model has no relation to `Comment` at all, so there is currently nowhere for an Event's activity log to be written even if the UI called for it.
+- [ ] **13. Full two-way Google Calendar integration** — including a location/"maps" field as part of it.
+- [ ] **14. Events can't be resized** (stretched/shrunk by dragging an edge) — only editable by going in and changing the date fields directly. **Root cause confirmed**: `components/calendar/WeekRow.tsx` has two separate bar components — `TaskBar` has full `move`/`resize-start`/`resize-end` pointer handlers; `EventBar` is a plain click-to-open button with no resize handles at all. Not a bug, a feature that was never built for Events.
+- [ ] **15. Need a clearer visual/structural distinction between Tasks and Events in the Planner view.**
+
+**Office tab**
+- [ ] **16. (Later) Give the Office tab a more meaningful purpose** beyond a member list — something more engaging tied to the office-space concept, not just settled scope yet.
+
+**Notes worth reading before starting #12/#14/#15**: these three are really one underlying gap — `Event` is missing most of the interaction plumbing `Task` has (no comments/activity relation, no resize handles, no manual lane/ordering system). Worth deciding upfront whether to bring `Event` to parity with `Task` as one piece of work rather than three separate patches.
+
+**Additional suggestions (assistant-proposed, not yet confirmed by user):**
+- Scoping for #11: production still has no `GOOGLE_CLIENT_ID`/`GOOGLE_CLIENT_SECRET` set (tracked above), session cookies should get a `Secure`/`SameSite` check now that HTTPS is actually live, and it's worth a pass on whether chat messages/Docs content need any encryption-at-rest on the VPS.
+- Concrete direction for #10: this is SQLite-on-a-single-VPS — a scheduled file-level DB snapshot (cron) copied off-box is the simplest real answer, and worth doing before real user data accumulates rather than after.
+- Not user-reported, worth adding to the list regardless: no rate limiting/abuse protection yet on public-facing routes (login, invite acceptance, search) — worth having before any real external users.
+
 ## Known bugs / things to remember
 
 - **dnd-kit gotcha**: `useDraggable`/`useDroppable` bind to the *nearest ancestor* `DndContext` by React-tree position, not by id-naming intent. Fix: one shared `DndContext` for all sidebar/task dragging, dispatch in `onDragEnd` by inspecting the dragged id's prefix (`task id`, `list-drag:`, `folder-drag:`, `space-drag:`).
