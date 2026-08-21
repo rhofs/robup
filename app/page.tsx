@@ -26,7 +26,6 @@ import {
   Calendar as CalendarIcon,
   UserCircle,
   LogOut,
-  Zap,
   Archive,
   Plus,
   Pencil,
@@ -1091,6 +1090,12 @@ function PageContent() {
     () => workspaces.find((w) => w.id === activeWorkspaceId) ?? workspaces.find((w) => !w.isPersonal),
     [workspaces, activeWorkspaceId]
   );
+  // Gates the Tasks/Planner/Docs/Office nav tabs — before creating/joining a real workspace,
+  // those tabs have nothing to show (every Space/List lives under a real workspace, never the
+  // personal one), so showing them just to render empty is more confusing than hiding them until
+  // there's something behind them. My tasks/Network/Chat aren't gated by this — they're
+  // cross-workspace by design.
+  const hasRealWorkspace = useMemo(() => workspaces.some((w) => !w.isPersonal), [workspaces]);
   // Owner or Admin of the current workspace — gates role management, member role changes, and
   // the "make private" control on Space/Folder/List/Task (server re-checks this independently on
   // every mutating route, this is only for what the UI offers to click).
@@ -2546,7 +2551,7 @@ function PageContent() {
       <header className="h-14 shrink-0 border-b border-neutral-800/80 bg-neutral-950 flex items-center px-3 gap-4">
         <div className="flex items-center gap-2 shrink-0 w-64">
           <div className="w-8 h-8 rounded bg-gradient-to-br from-blue-500 to-blue-700 flex items-center justify-center font-black text-white shadow-lg shadow-blue-500/20 shrink-0">
-            R
+            S
           </div>
           <FloatingPopover
             open={workspaceSwitcherOpen}
@@ -2563,11 +2568,8 @@ function PageContent() {
               >
                 <div className="min-w-0 text-left">
                   <h1 className="font-bold tracking-tight text-white leading-tight text-sm truncate">
-                    {currentWorkspace?.name || 'Siqt Workspace'}
+                    {currentWorkspace?.name ?? 'No workspace'}
                   </h1>
-                  <p className="text-[9px] text-emerald-400 font-mono flex items-center gap-1">
-                    <span className="w-1 h-1 rounded-full bg-emerald-400 animate-pulse shrink-0"></span> Zero-Cloud SQLite
-                  </p>
                 </div>
                 <ChevronDown className="w-3.5 h-3.5 text-neutral-500 group-hover:text-neutral-300 shrink-0" />
               </button>
@@ -2670,7 +2672,7 @@ function PageContent() {
       <div className="flex flex-1 overflow-hidden">
       {/* ================= ICON RAIL ================= */}
       <nav className="w-14 bg-neutral-950 border-r border-neutral-800/80 flex flex-col items-center py-4 gap-2 shrink-0 select-none">
-        {!hiddenNavTabs.has('board') && (
+        {!hiddenNavTabs.has('board') && hasRealWorkspace && (
           <button
             onClick={() => {
               // Clicking Tasks while inside "My tasks" (the personal workspace) previously did
@@ -2698,7 +2700,7 @@ function PageContent() {
             <span className="text-[8px] font-medium leading-none">Tasks</span>
           </button>
         )}
-        {!hiddenNavTabs.has('calendar') && (
+        {!hiddenNavTabs.has('calendar') && hasRealWorkspace && (
           <button
             onClick={() => setActiveView('calendar')}
             title="Planner"
@@ -2710,7 +2712,7 @@ function PageContent() {
             <span className="text-[8px] font-medium leading-none">Planner</span>
           </button>
         )}
-        {!hiddenNavTabs.has('docs') && (
+        {!hiddenNavTabs.has('docs') && hasRealWorkspace && (
           <button
             onClick={() => setActiveView('docs')}
             title="Docs"
@@ -2722,7 +2724,7 @@ function PageContent() {
             <span className="text-[8px] font-medium leading-none">Docs</span>
           </button>
         )}
-        {!hiddenNavTabs.has('office') && (
+        {!hiddenNavTabs.has('office') && hasRealWorkspace && (
           <button
             onClick={() => {
               // Always resets to the team grid, even if Office was already the active tab — same
@@ -3224,12 +3226,6 @@ function PageContent() {
           </div>
         </div>
 
-        <div className="p-3 m-3 space-y-2">
-          <div className="bg-neutral-950/60 rounded border border-neutral-800/80 px-3 py-2 text-[11px] text-neutral-400 flex items-center justify-between">
-            <span className="flex items-center gap-1.5"><Zap className="w-3.5 h-3.5" /> Siqt</span>
-            <span className="text-emerald-400 font-mono">Flat List</span>
-          </div>
-        </div>
       </aside>
 
       {currentSpace && activeStandaloneDoc && docBookRoot && docBookHasPages && (
