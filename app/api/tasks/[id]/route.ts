@@ -123,8 +123,10 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
     }
   }
   if (activities.length > 0) {
+    // The real signed-in caller (verified above), not the client-supplied body.authorId this
+    // used to trust directly — same spoofable-identity fix applied throughout this session.
     await prisma.comment.createMany({
-      data: activities.map((a) => ({ taskId: id, body: a.body, type: 'activity', activityKind: a.kind, authorId: body.authorId ?? null })),
+      data: activities.map((a) => ({ taskId: id, body: a.body, type: 'activity', activityKind: a.kind, authorId: userId })),
     });
   }
 
@@ -140,7 +142,9 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
           body: `Underoppgave lagt til: «${task.title}»`,
           type: 'activity',
           activityKind: 'subtaskAdded',
-          authorId: body.authorId ?? null,
+          // The real signed-in caller, not the client-supplied body.authorId this used to trust
+          // directly — same spoofable-identity fix applied throughout this session.
+          authorId: userId,
         },
       });
     }
@@ -151,7 +155,9 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
           body: `Underoppgave fjernet: «${task.title}»`,
           type: 'activity',
           activityKind: 'subtaskRemoved',
-          authorId: body.authorId ?? null,
+          // The real signed-in caller, not the client-supplied body.authorId this used to trust
+          // directly — same spoofable-identity fix applied throughout this session.
+          authorId: userId,
         },
       });
     }

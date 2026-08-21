@@ -39,7 +39,9 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
         markId: body.markId,
         parentId: body.parentId || null,
         quotedText: body.quotedText || null,
-        authorId: body.authorId || null,
+        // The real signed-in caller, not the client-supplied body.authorId this used to trust
+        // directly — same spoofable-identity fix applied throughout this session.
+        authorId: userId,
       },
       include: { author: { select: publicUserSelect } },
     });

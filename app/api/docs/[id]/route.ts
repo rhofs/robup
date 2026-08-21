@@ -63,7 +63,6 @@ export async function DELETE(req: Request, { params }: { params: Promise<{ id: s
   if (!(await ensureDocAccess(id, userId))) return NextResponse.json({ error: 'Not authorized for this doc' }, { status: 403 });
 
   const url = new URL(req.url);
-  const authorId = url.searchParams.get('authorId');
   const permanent = url.searchParams.get('permanent') === 'true';
   let doc;
   if (permanent) {
@@ -82,7 +81,10 @@ export async function DELETE(req: Request, { params }: { params: Promise<{ id: s
         body: `Dokument slettet: «${doc.title}»`,
         type: 'activity',
         activityKind: 'docDeleted',
-        authorId: authorId || null,
+        // The real signed-in caller, not a client-supplied ?authorId= query param this used to
+        // trust directly — same spoofable-identity fix applied everywhere else this pattern was
+        // found (see PLANNING.md's 2026-08-21 session entries).
+        authorId: userId,
       },
     });
   }

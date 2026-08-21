@@ -14,14 +14,21 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
   adapter: PrismaAdapter(prisma),
   session: { strategy: 'jwt' }, // required — Credentials + the adapter can't use 'database' sessions
   pages: { signIn: '/login' },
-  // No AUTH_URL/NEXTAUTH_URL is set (this app is reachable from more than one origin during dev —
-  // localhost:3000 AND whatever LAN IP a second machine uses, see next.config.ts's
+  // No AUTH_URL/NEXTAUTH_URL is set *locally* (this app is reachable from more than one origin
+  // during dev — localhost:3000 AND whatever LAN IP a second machine uses, see next.config.ts's
   // allowedDevOrigins) — trustHost makes Auth.js construct callback/redirect URLs from the
   // incoming request's own Host header instead of a single hardcoded origin. Without this,
   // someone reaching the app via a LAN IP got redirected to `localhost:3000` post-login — an
   // address that resolves to *their own machine*, not this server, so the page just looked dead
-  // after clicking any sign-in button. Safe here since this app isn't yet deployed behind a
-  // public-facing proxy where a spoofed Host header would matter; revisit once it is.
+  // after clicking any sign-in button.
+  // Now that the app is actually deployed behind Cloudflare (siqt.no), a bare Host-header-derived
+  // origin would be a real Host-header-injection risk (the Pterodactyl origin is also reachable
+  // directly by IP, not only through Cloudflare) — production's own `AUTH_URL=https://siqt.no`
+  // env var is what closes that gap: when set, it *fully* overrides Host-header-based URL
+  // construction regardless of trustHost (see the 2026-08-10 sessions in PLANNING.md, and its own
+  // confirmed-working record once deployed). trustHost itself stays on since dev still needs it —
+  // just confirm AUTH_URL is genuinely still set on the production server if this ever comes into
+  // question again, don't assume from this comment alone.
   trustHost: true,
   providers: [
     Google({

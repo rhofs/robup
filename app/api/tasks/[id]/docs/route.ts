@@ -43,7 +43,9 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
         body: `Dokument opprettet: «${doc.title}»`,
         type: 'activity',
         activityKind: 'docCreated',
-        authorId: body.authorId ?? null,
+        // The real signed-in caller, not the client-supplied body.authorId this used to trust
+        // directly — same spoofable-identity fix applied everywhere else this pattern was found.
+        authorId: userId,
       },
     });
   }

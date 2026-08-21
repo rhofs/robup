@@ -1,12 +1,20 @@
 import { NextResponse } from 'next/server';
 import bcrypt from 'bcryptjs';
 import { prisma } from '@/lib/prisma';
+import { checkRateLimit, getClientIp } from '@/lib/rateLimit';
 
 // Hand-rolled validation rather than adding zod for something this small — matches the project's
 // existing "skip a dependency for a small need" precedent (pdfkit over Puppeteer).
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
 export async function POST(req: Request) {
+  // No signup rate limiting existed at all before this — a public-facing signup form is an easy
+  // target for mass account creation. 10 attempts per 15 minutes per IP is generous for a genuine
+  // user (who needs at most one or two) but meaningfully slows down automated abuse.
+  if (!checkRateLimit(`signup:${getClientIp(req)}`, 10, 15 * 60 * 1000)) {
+    return NextResponse.json({ error: 'Too many attempts, please try again later' }, { status: 429 });
+  }
+
   const body = await req.json().catch(() => null);
   const email = typeof body?.email === 'string' ? body.email.trim().toLowerCase() : '';
   const password = typeof body?.password === 'string' ? body.password : '';

@@ -56,7 +56,10 @@ export async function POST(req: Request) {
         body: 'Oppgave opprettet',
         type: 'activity',
         activityKind: 'created',
-        authorId: body.authorId ?? null,
+        // The real signed-in caller (already verified above), not the client-supplied
+        // body.authorId this used to trust directly — same spoofable-identity fix already
+        // applied to the Task/Event comment routes (see PLANNING.md's 2026-08-21 session entry).
+        authorId: userId,
       },
     });
     // A task created directly as a subtask also logs on its immediate parent — but only that
@@ -68,7 +71,10 @@ export async function POST(req: Request) {
           body: `Underoppgave lagt til: «${task.title}»`,
           type: 'activity',
           activityKind: 'subtaskAdded',
-          authorId: body.authorId ?? null,
+          // The real signed-in caller (already verified above), not the client-supplied
+        // body.authorId this used to trust directly — same spoofable-identity fix already
+        // applied to the Task/Event comment routes (see PLANNING.md's 2026-08-21 session entry).
+        authorId: userId,
         },
       });
     }
