@@ -1,6 +1,7 @@
 'use client';
 
 import { useRef, useState } from 'react';
+import { CalendarClock } from 'lucide-react';
 import { isSameDay } from '../../lib/calendarDates';
 import { layoutDayColumns } from '../../lib/ganttLayout';
 import { withAlpha } from '../../lib/colorAlpha';
@@ -33,15 +34,29 @@ type DayTimelineProps = {
   tasks: Task[];
   taskColorOf: (task: Task) => string;
   onOpenTask: (id: string) => void;
-  onCommitDates: (taskId: string, startISO: string | null, dueISO: string | null) => void;
-  // Events never drag here either (see WeekRow.tsx's own comment) — rendered read-only, click to
-  // open EventDetailModal.
+  onCommitTaskDates: (taskId: string, startISO: string | null, dueISO: string | null) => void;
+  // Timed Events can be resized (stretch/shrink either edge) same as timed Tasks, via
+  // onCommitEventDates below — all-day Events (AllDayChip) stay click-only, same as all-day
+  // Tasks, since "resize" has no meaning for a day-wide chip. Never move-draggable either way,
+  // matching WeekRow.tsx's EventBar (a deliberate edit via the resize handle, not something that
+  // drifts from an accidental drag on the whole block).
   events: Event[];
   eventColorOf: (event: Event) => string;
   onOpenEvent: (id: string) => void;
+  onCommitEventDates: (eventId: string, startISO: string, endISO: string) => void;
 };
 
-export default function DayTimeline({ day, tasks, taskColorOf, onOpenTask, onCommitDates, events, eventColorOf, onOpenEvent }: DayTimelineProps) {
+export default function DayTimeline({
+  day,
+  tasks,
+  taskColorOf,
+  onOpenTask,
+  onCommitTaskDates,
+  events,
+  eventColorOf,
+  onOpenEvent,
+  onCommitEventDates,
+}: DayTimelineProps) {
   const [drag, setDrag] = useState<DayDragState | null>(null);
   const draggedRef = useRef(false);
   const today = new Date();
@@ -72,15 +87,18 @@ export default function DayTimeline({ day, tasks, taskColorOf, onOpenTask, onCom
     }
   }
 
-  const startInteraction = (e: React.PointerEvent, task: Task, mode: DayDragMode) => {
+  // Shared by DayTaskBlock (move + both resize edges) and DayEventBlock (resize edges only) —
+  // generic over id, same "figure out which kind this is, then call the right callback" pattern
+  // WeekRow.tsx's own endInteraction uses.
+  const startInteraction = (e: React.PointerEvent, id: string, mode: DayDragMode) => {
     e.stopPropagation();
     (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
     draggedRef.current = false;
-    setDrag({ taskId: task.id, mode, deltaMin: 0, startClientY: e.clientY });
+    setDrag({ taskId: id, mode, deltaMin: 0, startClientY: e.clientY });
   };
 
-  const moveInteraction = (e: React.PointerEvent, task: Task) => {
-    if (!drag || drag.taskId !== task.id) return;
+  const moveInteraction = (e: React.PointerEvent, id: string) => {
+    if (!drag || drag.taskId !== id) return;
     e.stopPropagation();
     if (Math.abs(e.clientY - drag.startClientY) > CLICK_DRAG_THRESHOLD) draggedRef.current = true;
     const deltaPx = e.clientY - drag.startClientY;
@@ -89,11 +107,13 @@ export default function DayTimeline({ day, tasks, taskColorOf, onOpenTask, onCom
     setDrag((d) => (d ? { ...d, deltaMin } : d));
   };
 
-  const endInteraction = (e: React.PointerEvent, task: Task, start: Date, end: Date) => {
+  const endInteraction = (e: React.PointerEvent, id: string, start: Date, end: Date) => {
     e.stopPropagation();
-    if (!drag || drag.taskId !== task.id) return;
+    if (!drag || drag.taskId !== id) return;
+    const isTask = timedTasks.some(({ task }) => task.id === id);
     if (!draggedRef.current) {
-      onOpenTask(task.id);
+      if (isTask) onOpenTask(id);
+      else onOpenEvent(id);
       setDrag(null);
       return;
     }
@@ -112,7 +132,8 @@ export default function DayTimeline({ day, tasks, taskColorOf, onOpenTask, onCom
     newStart.setHours(0, newStartMin, 0, 0);
     const newEnd = new Date(day);
     newEnd.setHours(0, newEndMin, 0, 0);
-    onCommitDates(task.id, newStart.toISOString(), newEnd.toISOString());
+    if (isTask) onCommitTaskDates(id, newStart.toISOString(), newEnd.toISOString());
+    else onCommitEventDates(id, newStart.toISOString(), newEnd.toISOString());
     setDrag(null);
   };
 
@@ -125,7 +146,7 @@ export default function DayTimeline({ day, tasks, taskColorOf, onOpenTask, onCom
             <AllDayChip key={task.id} label={task.title} color={taskColorOf(task)} onClick={() => onOpenTask(task.id)} />
           ))}
           {allDayEvents.map((event) => (
-            <AllDayChip key={event.id} label={event.title} color={eventColorOf(event)} onClick={() => onOpenEvent(event.id)} />
+            <AllDayChip key={event.id} label={event.title} color={eventColorOf(event)} onClick={() => onOpenEvent(event.id)} isEvent />
           ))}
         </div>
       )}
@@ -168,8 +189,18 @@ export default function DayTimeline({ day, tasks, taskColorOf, onOpenTask, onCom
               }),
             ]);
             const eventBlocks = timedEvents.map(({ event, start, end }) => {
-              const startMin = minutesOfDay(start);
-              const endMin = Math.max(minutesOfDay(end), startMin + 30);
+              const isDraggingThis = drag?.taskId === event.id;
+              let startMin = minutesOfDay(start);
+              let endMin = Math.max(minutesOfDay(end), startMin + 30);
+              if (isDraggingThis) {
+                // No 'move' branch — Events don't move-drag here (see DayTimelineProps' own
+                // comment), only the two resize modes ever apply to an event id.
+                if (drag!.mode === 'resize-start') {
+                  startMin = Math.min(startMin + drag!.deltaMin, endMin - 15);
+                } else if (drag!.mode === 'resize-end') {
+                  endMin = Math.max(endMin + drag!.deltaMin, startMin + 15);
+                }
+              }
               const top = (startMin / 60) * HOUR_H;
               const height = Math.max(20, ((endMin - startMin) / 60) * HOUR_H);
               const { col, cols } = columns.get(event.id) ?? { col: 0, cols: 1 };
@@ -177,8 +208,14 @@ export default function DayTimeline({ day, tasks, taskColorOf, onOpenTask, onCom
                 <DayEventBlock
                   key={event.id}
                   event={event}
+                  start={start}
+                  end={end}
                   color={eventColorOf(event)}
+                  isDraggingThis={isDraggingThis}
                   onOpenEvent={onOpenEvent}
+                  onStartInteraction={startInteraction}
+                  onMoveInteraction={moveInteraction}
+                  onEndInteraction={endInteraction}
                   style={{ top, height, left: `${(col / cols) * 100}%`, width: `${(1 / cols) * 100}%`, paddingRight: cols > 1 ? 2 : 0 }}
                 />
               );
@@ -236,7 +273,7 @@ export default function DayTimeline({ day, tasks, taskColorOf, onOpenTask, onCom
 // granularity it's viewed at, not switch to a solid white-on-color fill just because it's Day
 // view. Extracted to its own component (rather than inlined in a `.map()`) since the hover state
 // needs a real hook.
-function AllDayChip({ label, color, onClick }: { label: string; color: string; onClick: () => void }) {
+function AllDayChip({ label, color, onClick, isEvent }: { label: string; color: string; onClick: () => void; isEvent?: boolean }) {
   const [hovered, setHovered] = useState(false);
   return (
     <button
@@ -244,27 +281,44 @@ function AllDayChip({ label, color, onClick }: { label: string; color: string; o
       onMouseEnter={() => setHovered(true)}
       onMouseLeave={() => setHovered(false)}
       title={label}
-      className="w-full text-left truncate text-[11px] font-medium px-2 py-1 rounded-md border cursor-pointer transition-colors"
+      // Dashed border + CalendarClock icon for Events, same Task-vs-Event tell as everywhere
+      // else in Planner — plain-color alone isn't reliable since either can be any color.
+      className={`w-full text-left truncate text-[11px] font-medium px-2 py-1 rounded-md border cursor-pointer transition-colors flex items-center gap-1 ${
+        isEvent ? 'border-dashed' : ''
+      }`}
       style={{
         backgroundColor: withAlpha(color, hovered ? HOVER_BG_ALPHA : BASE_BG_ALPHA),
         borderColor: withAlpha(color, hovered ? HOVER_BORDER_ALPHA : BASE_BORDER_ALPHA),
         color,
       }}
     >
-      {label}
+      {isEvent && <CalendarClock className="w-2.5 h-2.5 shrink-0" />}
+      <span className="truncate">{label}</span>
     </button>
   );
 }
 
 function DayEventBlock({
   event,
+  start,
+  end,
   color,
+  isDraggingThis,
   onOpenEvent,
+  onStartInteraction,
+  onMoveInteraction,
+  onEndInteraction,
   style,
 }: {
   event: Event;
+  start: Date;
+  end: Date;
   color: string;
+  isDraggingThis: boolean;
   onOpenEvent: (id: string) => void;
+  onStartInteraction: (e: React.PointerEvent, id: string, mode: DayDragMode) => void;
+  onMoveInteraction: (e: React.PointerEvent, id: string) => void;
+  onEndInteraction: (e: React.PointerEvent, id: string, start: Date, end: Date) => void;
   style: React.CSSProperties;
 }) {
   const [hovered, setHovered] = useState(false);
@@ -275,15 +329,34 @@ function DayEventBlock({
         onMouseEnter={() => setHovered(true)}
         onMouseLeave={() => setHovered(false)}
         title={event.title}
-        className="relative w-full h-full rounded-md px-2.5 py-1.5 text-[10px] font-medium truncate cursor-pointer text-left border transition-colors"
+        // Dashed border + CalendarClock icon — same Task-vs-Event tell as WeekRow.tsx's EventBar,
+        // kept visually consistent across every Planner granularity.
+        className={`relative w-full h-full rounded-md px-2.5 py-1.5 text-[10px] font-medium truncate cursor-pointer text-left border border-dashed transition-colors flex items-center gap-1 ${
+          isDraggingThis ? 'opacity-70 ring-2 ring-white/70' : ''
+        }`}
         style={{
           backgroundColor: withAlpha(color, hovered ? HOVER_BG_ALPHA : BASE_BG_ALPHA),
           borderColor: withAlpha(color, hovered ? HOVER_BORDER_ALPHA : BASE_BORDER_ALPHA),
           color,
         }}
       >
-        {event.title}
+        <CalendarClock className="w-2.5 h-2.5 shrink-0" />
+        <span className="truncate">{event.title}</span>
       </button>
+      {/* Resize only (stretch/shrink either edge) — no move handler on the body, same
+          deliberate-edit-only reasoning as WeekRow.tsx's EventBar. */}
+      <div
+        onPointerDown={(e) => onStartInteraction(e, event.id, 'resize-start')}
+        onPointerMove={(e) => onMoveInteraction(e, event.id)}
+        onPointerUp={(e) => onEndInteraction(e, event.id, start, end)}
+        className="absolute left-0 right-0 top-0 h-1.5 cursor-ns-resize"
+      />
+      <div
+        onPointerDown={(e) => onStartInteraction(e, event.id, 'resize-end')}
+        onPointerMove={(e) => onMoveInteraction(e, event.id)}
+        onPointerUp={(e) => onEndInteraction(e, event.id, start, end)}
+        className="absolute left-0 right-0 bottom-0 h-1.5 cursor-ns-resize"
+      />
     </div>
   );
 }
@@ -305,18 +378,18 @@ function DayTaskBlock({
   color: string;
   isDraggingThis: boolean;
   style: React.CSSProperties;
-  onStartInteraction: (e: React.PointerEvent, task: Task, mode: DayDragMode) => void;
-  onMoveInteraction: (e: React.PointerEvent, task: Task) => void;
-  onEndInteraction: (e: React.PointerEvent, task: Task, start: Date, end: Date) => void;
+  onStartInteraction: (e: React.PointerEvent, id: string, mode: DayDragMode) => void;
+  onMoveInteraction: (e: React.PointerEvent, id: string) => void;
+  onEndInteraction: (e: React.PointerEvent, id: string, start: Date, end: Date) => void;
 }) {
   const [hovered, setHovered] = useState(false);
   const height = typeof style.height === 'number' ? style.height : 0;
   return (
     <div className="absolute group/block" style={style}>
       <div
-        onPointerDown={(e) => onStartInteraction(e, task, 'move')}
-        onPointerMove={(e) => onMoveInteraction(e, task)}
-        onPointerUp={(e) => onEndInteraction(e, task, start, end)}
+        onPointerDown={(e) => onStartInteraction(e, task.id, 'move')}
+        onPointerMove={(e) => onMoveInteraction(e, task.id)}
+        onPointerUp={(e) => onEndInteraction(e, task.id, start, end)}
         onMouseEnter={() => setHovered(true)}
         onMouseLeave={() => setHovered(false)}
         title={task.title}
@@ -350,15 +423,15 @@ function DayTaskBlock({
           </span>
         )}
         <div
-          onPointerDown={(e) => onStartInteraction(e, task, 'resize-start')}
-          onPointerMove={(e) => onMoveInteraction(e, task)}
-          onPointerUp={(e) => onEndInteraction(e, task, start, end)}
+          onPointerDown={(e) => onStartInteraction(e, task.id, 'resize-start')}
+          onPointerMove={(e) => onMoveInteraction(e, task.id)}
+          onPointerUp={(e) => onEndInteraction(e, task.id, start, end)}
           className="absolute left-0 right-0 top-0 h-1.5 cursor-ns-resize"
         />
         <div
-          onPointerDown={(e) => onStartInteraction(e, task, 'resize-end')}
-          onPointerMove={(e) => onMoveInteraction(e, task)}
-          onPointerUp={(e) => onEndInteraction(e, task, start, end)}
+          onPointerDown={(e) => onStartInteraction(e, task.id, 'resize-end')}
+          onPointerMove={(e) => onMoveInteraction(e, task.id)}
+          onPointerUp={(e) => onEndInteraction(e, task.id, start, end)}
           className="absolute left-0 right-0 bottom-0 h-1.5 cursor-ns-resize"
         />
       </div>

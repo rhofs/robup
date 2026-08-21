@@ -1,7 +1,7 @@
 'use client';
 
 import { useRef, useState } from 'react';
-import { Plus, Pin } from 'lucide-react';
+import { Plus, Pin, CalendarClock } from 'lucide-react';
 import { getISOWeek, isSameDay } from '../../lib/calendarDates';
 import { withAlpha } from '../../lib/colorAlpha';
 import type { ClippedSegment, DragMode, DragState } from '../../lib/ganttLayout';
@@ -40,9 +40,12 @@ type WeekRowProps = {
   onOpenTask: (id: string) => void;
   onDrillDay: (day: Date) => void;
   onQuickAddDay: (day: Date) => void;
-  onDragStart: (taskId: string, mode: DragMode, e: React.PointerEvent) => void;
+  onDragStart: (id: string, mode: DragMode, e: React.PointerEvent) => void;
   onDragMove: (e: React.PointerEvent) => void;
-  onDragEnd: (task: Task, mode: DragMode) => void;
+  // Takes the dragged id, not a whole Task — CalendarView.tsx looks up whether it's a Task or an
+  // Event itself (see its own handleDragEnd), same "generic by id" pattern ranges/lanes already
+  // use everywhere else in this file.
+  onDragEnd: (id: string, mode: DragMode) => void;
   onUnpinLane: (taskId: string) => void;
 };
 
@@ -87,16 +90,19 @@ export default function WeekRow({
   const laneCountInRow = Math.max(1, Math.min(maxVisibleLanes, visibleSegments.reduce((max, s) => Math.max(max, s.lane + 1), 0)));
   const overflowTop = DAY_NUM_H + laneCountInRow * (BAR_H + BAR_GAP);
 
-  const startInteraction = (e: React.PointerEvent, task: Task, mode: DragMode) => {
+  // Shared by TaskBar (move + both resize edges) and EventBar (resize edges only, no move — see
+  // EventBar's own comment). Generic over id: "is this a click or a drag" and "which callback
+  // opens this thing" only need the id, not the whole Task/Event object.
+  const startInteraction = (e: React.PointerEvent, id: string, mode: DragMode) => {
     e.stopPropagation();
     (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
     pointerDownXYRef.current = { x: e.clientX, y: e.clientY };
     draggedRef.current = false;
-    onDragStart(task.id, mode, e);
+    onDragStart(id, mode, e);
   };
 
-  const moveInteraction = (e: React.PointerEvent, task: Task) => {
-    if (!activeDrag || activeDrag.taskId !== task.id) return;
+  const moveInteraction = (e: React.PointerEvent, id: string) => {
+    if (!activeDrag || activeDrag.taskId !== id) return;
     e.stopPropagation();
     const dx = e.clientX - pointerDownXYRef.current.x;
     const dy = e.clientY - pointerDownXYRef.current.y;
@@ -104,14 +110,15 @@ export default function WeekRow({
     onDragMove(e);
   };
 
-  const endInteraction = (e: React.PointerEvent, task: Task, mode: DragMode) => {
+  const endInteraction = (e: React.PointerEvent, id: string, mode: DragMode) => {
     e.stopPropagation();
-    if (!activeDrag || activeDrag.taskId !== task.id) return;
+    if (!activeDrag || activeDrag.taskId !== id) return;
     if (draggedRef.current) {
-      onDragEnd(task, mode);
+      onDragEnd(id, mode);
     } else {
-      onOpenTask(task.id);
-      onDragEnd(task, mode);
+      if (tasksById.has(id)) onOpenTask(id);
+      else onOpenEvent(id);
+      onDragEnd(id, mode);
     }
   };
 
@@ -212,10 +219,23 @@ export default function WeekRow({
               paddingRight: 2,
             };
 
-            // Events never drag (see WeekRowProps' own comment) — a plain clickable bar, same
-            // shape/color-cascade convention as Task bars, no pointer handlers at all.
+            // Events can be resized (stretch/shrink either edge) but never moved by dragging the
+            // body — see EventBar's own comment on why the split.
             if (event) {
-              return <EventBar key={seg.taskId} event={event} seg={seg} barStyle={barStyle} color={eventColorOf(event)} onOpenEvent={onOpenEvent} />;
+              return (
+                <EventBar
+                  key={seg.taskId}
+                  event={event}
+                  seg={seg}
+                  barStyle={barStyle}
+                  color={eventColorOf(event)}
+                  isDraggingThis={activeDrag?.taskId === seg.taskId}
+                  onOpenEvent={onOpenEvent}
+                  onStartInteraction={startInteraction}
+                  onMoveInteraction={moveInteraction}
+                  onEndInteraction={endInteraction}
+                />
+              );
             }
 
             return (
@@ -257,23 +277,34 @@ function EventBar({
   seg,
   barStyle,
   color,
+  isDraggingThis,
   onOpenEvent,
+  onStartInteraction,
+  onMoveInteraction,
+  onEndInteraction,
 }: {
   event: Event;
   seg: ClippedSegment;
   barStyle: React.CSSProperties;
   color: string;
+  isDraggingThis: boolean;
   onOpenEvent: (id: string) => void;
+  onStartInteraction: (e: React.PointerEvent, id: string, mode: DragMode) => void;
+  onMoveInteraction: (e: React.PointerEvent, id: string) => void;
+  onEndInteraction: (e: React.PointerEvent, id: string, mode: DragMode) => void;
 }) {
   const [hovered, setHovered] = useState(false);
   return (
-    <div className="absolute pointer-events-auto" style={barStyle}>
+    <div className="absolute pointer-events-auto" style={{ ...barStyle, opacity: isDraggingThis ? 0.35 : 1 }}>
       <button
         onClick={() => onOpenEvent(event.id)}
         onMouseEnter={() => setHovered(true)}
         onMouseLeave={() => setHovered(false)}
         title={event.title}
-        className={`relative w-full h-full flex items-center gap-1 text-[10px] leading-none font-medium truncate cursor-pointer select-none border transition-colors ${
+        // Dashed border (Tasks are always solid) is the at-a-glance Task-vs-Event tell in every
+        // Planner granularity, alongside the CalendarClock icon — a plain color difference alone
+        // isn't reliable since either can be given any color.
+        className={`relative w-full h-full flex items-center gap-1 text-[10px] leading-none font-medium truncate cursor-pointer select-none border border-dashed transition-colors ${
           seg.isStartEdge ? 'rounded-l-md pl-2.5' : 'pl-1.5'
         } ${seg.isEndEdge ? 'rounded-r-md pr-2' : 'pr-1'}`}
         style={{
@@ -282,8 +313,29 @@ function EventBar({
           color,
         }}
       >
+        <CalendarClock className="w-2.5 h-2.5 shrink-0" />
         <span className="truncate">{event.title}</span>
       </button>
+      {/* Resizable (stretch/shrink either edge, same gesture as a Task bar) but never draggable
+          by the body — an Event's date range is meant to be a deliberate edit, not something that
+          drifts from an accidental drag on the whole bar the way a Task's due-date-driven bar
+          does. */}
+      {seg.isStartEdge && (
+        <div
+          onPointerDown={(e) => onStartInteraction(e, event.id, 'resize-start')}
+          onPointerMove={(e) => onMoveInteraction(e, event.id)}
+          onPointerUp={(e) => onEndInteraction(e, event.id, 'resize-start')}
+          className="absolute left-0 top-0 h-full w-2 cursor-ew-resize"
+        />
+      )}
+      {seg.isEndEdge && (
+        <div
+          onPointerDown={(e) => onStartInteraction(e, event.id, 'resize-end')}
+          onPointerMove={(e) => onMoveInteraction(e, event.id)}
+          onPointerUp={(e) => onEndInteraction(e, event.id, 'resize-end')}
+          className="absolute right-0 top-0 h-full w-2 cursor-ew-resize"
+        />
+      )}
     </div>
   );
 }
@@ -304,9 +356,9 @@ function TaskBar({
   barStyle: React.CSSProperties;
   color: string;
   isDraggingThis: boolean;
-  onStartInteraction: (e: React.PointerEvent, task: Task, mode: DragMode) => void;
-  onMoveInteraction: (e: React.PointerEvent, task: Task) => void;
-  onEndInteraction: (e: React.PointerEvent, task: Task, mode: DragMode) => void;
+  onStartInteraction: (e: React.PointerEvent, id: string, mode: DragMode) => void;
+  onMoveInteraction: (e: React.PointerEvent, id: string) => void;
+  onEndInteraction: (e: React.PointerEvent, id: string, mode: DragMode) => void;
   onUnpinLane: (taskId: string) => void;
 }) {
   const [hovered, setHovered] = useState(false);
@@ -314,9 +366,9 @@ function TaskBar({
   return (
     <div className="absolute pointer-events-auto group/bar" style={{ ...barStyle, opacity: isDraggingThis ? 0.35 : 1 }}>
       <div
-        onPointerDown={(e) => onStartInteraction(e, task, 'move')}
-        onPointerMove={(e) => onMoveInteraction(e, task)}
-        onPointerUp={(e) => onEndInteraction(e, task, 'move')}
+        onPointerDown={(e) => onStartInteraction(e, task.id, 'move')}
+        onPointerMove={(e) => onMoveInteraction(e, task.id)}
+        onPointerUp={(e) => onEndInteraction(e, task.id, 'move')}
         onMouseEnter={() => setHovered(true)}
         onMouseLeave={() => setHovered(false)}
         title={task.title}
@@ -360,17 +412,17 @@ function TaskBar({
 
         {seg.isStartEdge && (
           <div
-            onPointerDown={(e) => onStartInteraction(e, task, 'resize-start')}
-            onPointerMove={(e) => onMoveInteraction(e, task)}
-            onPointerUp={(e) => onEndInteraction(e, task, 'resize-start')}
+            onPointerDown={(e) => onStartInteraction(e, task.id, 'resize-start')}
+            onPointerMove={(e) => onMoveInteraction(e, task.id)}
+            onPointerUp={(e) => onEndInteraction(e, task.id, 'resize-start')}
             className="absolute left-0 top-0 h-full w-2 cursor-ew-resize"
           />
         )}
         {seg.isEndEdge && (
           <div
-            onPointerDown={(e) => onStartInteraction(e, task, 'resize-end')}
-            onPointerMove={(e) => onMoveInteraction(e, task)}
-            onPointerUp={(e) => onEndInteraction(e, task, 'resize-end')}
+            onPointerDown={(e) => onStartInteraction(e, task.id, 'resize-end')}
+            onPointerMove={(e) => onMoveInteraction(e, task.id)}
+            onPointerUp={(e) => onEndInteraction(e, task.id, 'resize-end')}
             className="absolute right-0 top-0 h-full w-2 cursor-ew-resize"
           />
         )}

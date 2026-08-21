@@ -86,6 +86,19 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
     if (existing && body.listId !== undefined && body.listId !== existing.listId) {
       activities.push({ body: 'Flyttet til en annen liste', kind: 'movedList' });
     }
+    // Was missing entirely before this session — dragging/resizing a Task's bar in Planner (or
+    // editing its dates any other way) PATCHes startDate/dueDate but never logged it, same gap
+    // backlog #12 flagged for Event (fixed there too, PATCH /api/events/[id]/route.ts, same shape).
+    if (existing && (body.startDate !== undefined || body.dueDate !== undefined)) {
+      const oldStart = existing.startDate ? existing.startDate.toISOString().slice(0, 10) : null;
+      const oldDue = existing.dueDate ? existing.dueDate.toISOString().slice(0, 10) : null;
+      const newStart = (data.startDate as Date | null | undefined) !== undefined ? (data.startDate ? data.startDate.toISOString().slice(0, 10) : null) : oldStart;
+      const newDue = (data.dueDate as Date | null | undefined) !== undefined ? (data.dueDate ? data.dueDate.toISOString().slice(0, 10) : null) : oldDue;
+      if (newStart !== oldStart || newDue !== oldDue) {
+        const range = newStart && newDue ? (newStart === newDue ? newStart : `${newStart} – ${newDue}`) : newStart || newDue || 'fjernet';
+        activities.push({ body: `Dato endret til ${range}`, kind: 'datesChanged' });
+      }
+    }
     if (existing && body.assigneeIds !== undefined) {
       const oldIds = new Set(existing.assignees.map((a) => a.id));
       const newIds = new Set<string>(body.assigneeIds);

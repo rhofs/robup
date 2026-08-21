@@ -101,3 +101,15 @@ export async function ensureDocFolderAccess(docFolderId: string, userId: string)
   if (!spaceResult) return null;
   return { docFolder, ctx: spaceResult.ctx };
 }
+
+// Event has no isPrivate/accessJson of its own (workspace-scoped only, per its own schema
+// comment) — a plain workspace-membership check is the whole story here, no canSee/ancestor
+// chain needed the way Task/Space/List/Folder/Doc need. Moved here from being defined inline in
+// app/api/events/[id]/route.ts so the new Event comments routes can share it too.
+export async function ensureEventAccess(eventId: string, userId: string) {
+  const event = await prisma.event.findUnique({ where: { id: eventId } });
+  if (!event) return null;
+  const ctx = await getAccessContext(event.workspaceId, userId);
+  if (!ctx.isMember) return null;
+  return { event, ctx };
+}

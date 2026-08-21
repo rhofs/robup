@@ -6,6 +6,7 @@ import { Event, HierarchyWorkspace, AppUser } from '../../store/useTaskStore';
 import DatePickerPopover from '../DatePickerPopover';
 import FloatingPopover from '../FloatingPopover';
 import ColorSwatchPicker from '../ColorSwatchPicker';
+import EventActivityPanel from './EventActivityPanel';
 
 const EVENT_COLOR_CHOICES = ['#c89642', '#618cd1', '#9a61d1', '#349f7c', '#cd6565', '#31a0b3', '#cb6798', '#8d97a5'];
 
@@ -28,7 +29,9 @@ type EventDetailModalProps = {
 };
 
 // Opens on clicking an Event bar in the Planner. Deliberately much smaller than the Task modal —
-// no subtasks/comments/docs/status/custom-fields, none of that concept applies to an Event.
+// no subtasks/docs/status/custom-fields, none of that concept applies to an Event. Does now have
+// Activity & Comments (backlog #12 — see EventActivityPanel), the one thing from the Task modal
+// that genuinely does apply here (a date-range edit needs somewhere to log to).
 export default function EventDetailModal({ event, workspaces, users, onClose, onUpdate, onSetAssignees, onDelete }: EventDetailModalProps) {
   const [titleDraft, setTitleDraft] = useState(event?.title ?? '');
   const [editingTitle, setEditingTitle] = useState(false);
@@ -73,7 +76,7 @@ export default function EventDetailModal({ event, workspaces, users, onClose, on
           </button>
         </div>
 
-        <div className="p-5 space-y-3">
+        <div className="p-5 space-y-3 max-h-[80vh] overflow-y-auto">
           <div className="grid grid-cols-2 gap-3">
             <div className="space-y-1.5">
               <label className="text-[10px] uppercase tracking-wide text-neutral-500 font-semibold">Start</label>
@@ -192,6 +195,8 @@ export default function EventDetailModal({ event, workspaces, users, onClose, on
               </FloatingPopover>
             </div>
           </div>
+
+          <EventActivityPanel eventId={event.id} />
 
           <button
             onClick={() => {

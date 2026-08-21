@@ -389,6 +389,7 @@ const ACTIVITY_ICONS: Record<string, LucideIcon> = {
   becameSubtask: CornerDownRight,
   leftSubtask: CornerUpLeft,
   movedList: FolderInput,
+  datesChanged: CalendarIcon,
   assigned: UserCircle,
   unassigned: UserCircle,
   subtaskAdded: ListPlus,

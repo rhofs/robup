@@ -55,6 +55,7 @@ export default function CalendarView({ tasks, events, statuses, workspaces, show
   const {
     optimisticSetDates,
     optimisticSetCalendarLane,
+    updateEvent,
     calendarGranularity: granularity,
     calendarFocusDate: focusDate,
     setCalendarGranularity: setGranularity,
@@ -324,7 +325,12 @@ export default function CalendarView({ tasks, events, statuses, workspaces, show
     });
   };
 
-  const handleDragEnd = (task: Task, mode: DragMode) => {
+  const handleDragEnd = (id: string, mode: DragMode) => {
+    const task = tasksById.get(id);
+    if (!task) {
+      handleEventDragEnd(id, mode);
+      return;
+    }
     const d = weekDrag;
     if (d) {
       const start = task.startDate ? new Date(task.startDate) : null;
@@ -390,6 +396,29 @@ export default function CalendarView({ tasks, events, statuses, workspaces, show
     setWeekDrag(null);
   };
 
+  // Events only ever resize (EventBar wires up resize-start/resize-end but never a move handler
+  // on the body — see that component's own comment), so this only needs the two resize branches,
+  // no move/lane-pin handling at all (Event has no calendarLane field to pin). Mirrors the Task
+  // resize math above exactly, just against startDate/endDate directly instead of the
+  // startDate-falls-back-to-dueDate juggling Task needs (an Event always has both).
+  const handleEventDragEnd = (eventId: string, mode: DragMode) => {
+    const event = eventsById.get(eventId);
+    const d = weekDrag;
+    if (event && d && d.deltaDays !== 0) {
+      let newStart = new Date(event.startDate);
+      let newEnd = new Date(event.endDate);
+      if (mode === 'resize-start') {
+        newStart = addDays(newStart, d.deltaDays);
+        if (newStart > newEnd) newStart = new Date(newEnd);
+      } else if (mode === 'resize-end') {
+        newEnd = addDays(newEnd, d.deltaDays);
+        if (newEnd < newStart) newEnd = new Date(newStart);
+      }
+      updateEvent(eventId, { startDate: newStart.toISOString(), endDate: newEnd.toISOString() });
+    }
+    setWeekDrag(null);
+  };
+
   // Live ghost preview of the dragged task, positioned across whichever rows it now spans —
   // lets a bar be dragged from one week row into another instead of clipping at the row edge.
   const ghostSegments = useMemo(() => {
@@ -421,6 +450,7 @@ export default function CalendarView({ tasks, events, statuses, workspaces, show
   }, [weekDrag, granularity, rangesById, lanes, weeks]);
 
   const draggedTask = weekDrag ? tasksById.get(weekDrag.taskId) : null;
+  const draggedEvent = weekDrag && !draggedTask ? eventsById.get(weekDrag.taskId) : null;
 
   const dayTasks = useMemo(() => {
     if (granularity !== 'day') return [];
@@ -528,10 +558,11 @@ export default function CalendarView({ tasks, events, statuses, workspaces, show
             tasks={dayTasks}
             taskColorOf={taskColorOf}
             onOpenTask={onOpenTask}
-            onCommitDates={(taskId, startISO, dueISO) => optimisticSetDates(taskId, startISO, dueISO)}
+            onCommitTaskDates={(taskId, startISO, dueISO) => optimisticSetDates(taskId, startISO, dueISO)}
             events={dayEvents}
             eventColorOf={eventColorOf}
             onOpenEvent={onOpenEvent}
+            onCommitEventDates={(eventId, startISO, endISO) => updateEvent(eventId, { startDate: startISO, endDate: endISO })}
           />
         ) : (
           // overflow-x-hidden always — the grid is a 7-column percentage-based layout that should
@@ -569,7 +600,7 @@ export default function CalendarView({ tasks, events, statuses, workspaces, show
               />
             ))}
 
-            {draggedTask && ghostSegments.length > 0 && (
+            {(draggedTask || draggedEvent) && ghostSegments.length > 0 && (
               <div className="absolute inset-y-0 pointer-events-none z-20" style={{ left: GUTTER_WIDTH, right: 0 }}>
                 {ghostSegments.map((seg) => (
                   <div
@@ -588,9 +619,9 @@ export default function CalendarView({ tasks, events, statuses, workspaces, show
                       className={`h-full flex items-center text-[9px] leading-none text-white font-medium truncate px-1.5 border border-dashed border-white/80 ${
                         seg.isStartEdge ? 'rounded-l' : ''
                       } ${seg.isEndEdge ? 'rounded-r' : ''}`}
-                      style={{ backgroundColor: taskColorOf(draggedTask), opacity: 0.85 }}
+                      style={{ backgroundColor: draggedTask ? taskColorOf(draggedTask) : eventColorOf(draggedEvent!), opacity: 0.85 }}
                     >
-                      <span className="truncate">{draggedTask.title}</span>
+                      <span className="truncate">{draggedTask ? draggedTask.title : draggedEvent!.title}</span>
                     </div>
                   </div>
                 ))}

@@ -224,6 +224,9 @@ interface TaskStore {
   users: AppUser[];
   workspaces: HierarchyWorkspace[];
   comments: Record<string, TaskComment[]>;
+  // Same shape/API pattern as `comments` above, keyed by eventId instead of taskId (backlog #12
+  // — Event gained its own Activity & Comments the same session Comment.eventId was added).
+  eventComments: Record<string, TaskComment[]>;
   docComments: Record<string, DocComment[]>;
   docs: Record<string, TaskDoc[]>;
   activeView: 'board' | 'calendar' | 'docs' | 'office' | 'mytasks' | 'profile' | 'chat' | 'directMessages';
@@ -476,6 +479,9 @@ interface TaskStore {
   addComment: (taskId: string, body: string, authorId?: string | null) => Promise<void>;
   deleteComment: (taskId: string, commentId: string) => Promise<void>;
   logActivity: (taskId: string, body: string, kind: string) => Promise<void>;
+  fetchEventComments: (eventId: string) => Promise<void>;
+  addEventComment: (eventId: string, body: string) => Promise<void>;
+  deleteEventComment: (eventId: string, commentId: string) => Promise<void>;
 
   fetchDocComments: (docId: string) => Promise<void>;
   addDocComment: (docId: string, opts: { id?: string; body: string; markId: string; parentId?: string | null; quotedText?: string | null }) => Promise<DocComment | null>;
@@ -516,6 +522,7 @@ export const useTaskStore = create<TaskStore>((set, get) => {
     users: [],
     workspaces: [],
     comments: {},
+    eventComments: {},
     docComments: {},
     docs: {},
     activeView: 'board',
@@ -2539,6 +2546,48 @@ export const useTaskStore = create<TaskStore>((set, get) => {
         comments: { ...state.comments, [taskId]: (state.comments[taskId] || []).filter((c) => c.id !== commentId) },
       }));
       await fetch(`/api/tasks/${taskId}/comments/${commentId}`, { method: 'DELETE' });
+    },
+
+    // Same fetch-replaces-wholesale / append-after-server-response shape as fetchComments/
+    // addComment/deleteComment above, keyed by eventId — no authorId param (unlike addComment's
+    // legacy one) since the route always uses the real signed-in caller now regardless of what's
+    // sent (see POST /api/events/[id]/comments/route.ts).
+    fetchEventComments: async (eventId) => {
+      try {
+        const res = await fetch(`/api/events/${eventId}/comments`);
+        if (!res.ok) return;
+        const comments = await res.json();
+        set((state) => ({ eventComments: { ...state.eventComments, [eventId]: comments } }));
+      } catch (error) {
+        console.error('Failed to fetch event comments:', error);
+      }
+    },
+
+    addEventComment: async (eventId, body) => {
+      try {
+        const res = await fetch(`/api/events/${eventId}/comments`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ body }),
+        });
+        if (!res.ok) {
+          console.error('Event comment API returned an error:', res.status);
+          return;
+        }
+        const comment = await res.json();
+        set((state) => ({
+          eventComments: { ...state.eventComments, [eventId]: [...(state.eventComments[eventId] || []), comment] },
+        }));
+      } catch (error) {
+        console.error('Failed to send event comment:', error);
+      }
+    },
+
+    deleteEventComment: async (eventId, commentId) => {
+      set((state) => ({
+        eventComments: { ...state.eventComments, [eventId]: (state.eventComments[eventId] || []).filter((c) => c.id !== commentId) },
+      }));
+      await fetch(`/api/events/${eventId}/comments/${commentId}`, { method: 'DELETE' });
     },
 
     // Same fetch-replaces-wholesale / append-after-server-response / optimistic-delete shape as
