@@ -1205,7 +1205,7 @@ User compared the live app against a ClickUp marketing PDF and a screenshot of t
 
 **Visual/UI polish**
 - [x] **4. Sidebar footer shows leftover dev-mode placeholder copy.** Fixed 2026-08-21 — both the `⚡ Siqt`/"Flat List" footer badge and the "Zero-Cloud SQLite" tagline removed outright (pure decoration, no dynamic value behind either, no replacement copy was asked for).
-- [ ] **5. Modernize the task date/time picker's look** — screenshot shows the current dropdown reading as old-fashioned/native-ish; wants a refreshed design.
+- [x] **5. Modernize the task date/time picker's look.** Fixed 2026-08-21, see session entry below — the "old" element was a bare native `<input type="time">`, replaced with a custom text-input + FloatingPopover dropdown. `DatePickerPopover.tsx` is shared by Task, Event, and quick-create, so this one fix covers all three.
 - [x] **6. Sidebar item-creation UX, ClickUp-style.** Built 2026-08-21, see session entry below — one "+" per level (a small popover: List/Folder/Doc) instead of three buttons, a matching hover "+" directly on Folder rows to create inside without expanding first, and a "..." trigger on List/Folder/Doc rows opening the exact same menu right-click already does, replacing the separate inline Rename/Delete buttons. Scoped to the Tasks-tab sidebar (`FolderTree.tsx`) only — the Docs-tab's own separate tree (`DocFolderTree.tsx`) wasn't touched, flagged as a possible follow-up if the same parity is wanted there.
 
 **Landing page**
@@ -1297,6 +1297,16 @@ User picked this bundle next off the 2026-08-19 backlog. Ended up touching schem
 **#15 — modest visual differentiator, not a deeper redesign.** Every Event bar/block/chip, in every Planner granularity (`EventBar`, `DayEventBlock`, `AllDayChip` when passed `isEvent`), now gets a dashed border (Tasks stay solid) plus a small `CalendarClock` icon before the title — a plain color difference alone isn't reliable since either a Task or an Event can be given any color, so this is the actual at-a-glance tell.
 
 **Verified end-to-end against the real dev server + real SQLite DB** (scripted, logged-in sessions — no Playwright in this project): created a real Task and a real Event, PATCHed each one's dates (simulating what a resize-drag does), confirmed both now produce a `datesChanged` activity comment with the correct human-readable date range; posted a real comment on an Event and confirmed its `authorId` matches the actual signed-in session, not anything client-supplied; confirmed an unauthenticated request gets an empty array, and — more importantly — that a second real logged-in user who is **not** a member of the event's workspace gets a real `403` on `GET`/`POST /api/events/[id]/comments` and `PATCH /api/events/[id]` (not just "unauthenticated is blocked" — a genuine cross-account authorization check, matching this project's own established access-control precedent). `npx tsc --noEmit` clean throughout. **Not yet visually confirmed in a real browser** — the actual pointer-drag resize gesture, the dashed-border/icon treatment, and the new Activity & Comments panel's layout inside `EventDetailModal.tsx` all still need a real look; the dev server was left running locally for that.
+
+## Today's session (2026-08-21, continued a fourth time) — Modernized the date/time picker (backlog #5)
+
+Root cause of "looks old/native": `DatePickerPopover.tsx`'s time field was a bare `<input type="time">` — literally the browser's own unstyled spinner/clock widget, not something this app was rendering itself at all (same class of issue as a native `<datalist>` dropdown fixed earlier this project for the Docs font-size picker).
+
+**Fixed**: new `TimeField` component (bottom of `DatePickerPopover.tsx`) — a plain text input (type exact times like `14:07`, validated against `HH:MM` with 0-23/0-59 range, snaps back to the last real value on anything invalid rather than accepting garbage) plus a chevron-anchored `FloatingPopover` with a scrollable quarter-hour list (`00:00`–`23:45`), same "text input + preset dropdown, both fully app-controlled" pattern the font-size picker already established. Opening the dropdown auto-scrolls to whatever's currently selected instead of always landing at midnight.
+
+`DatePickerPopover` is the one shared component behind the Task modal, `EventDetailModal.tsx`, and `QuickCreatePopover.tsx`'s Task/Event tabs alike (confirmed via grep — the native `type="time"` input existed in exactly one place in the whole codebase) — this single fix covers all three, no separate work needed per surface.
+
+**Verified**: `npx tsc --noEmit` clean; hit the app through a real logged-in session afterward, no compile/runtime error. **Not yet visually confirmed in a real browser** — the actual dropdown open/scroll-to-selected behavior and general look need a real look (dev server left running locally).
 
 ## Known bugs / things to remember
 

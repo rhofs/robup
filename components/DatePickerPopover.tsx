@@ -1,7 +1,7 @@
 'use client';
 
-import { useEffect, useMemo, useState } from 'react';
-import { ChevronLeft, ChevronRight, X } from 'lucide-react';
+import { useEffect, useMemo, useRef, useState } from 'react';
+import { ChevronDown, ChevronLeft, ChevronRight, X } from 'lucide-react';
 import FloatingPopover from './FloatingPopover';
 
 type DatePickerPopoverProps = {
@@ -42,6 +42,10 @@ const isSameDay = (a: Date | null, b: Date | null) =>
   !!a && !!b && a.getFullYear() === b.getFullYear() && a.getMonth() === b.getMonth() && a.getDate() === b.getDate();
 
 const formatShort = (d: Date) => `${d.getDate()}. ${MONTH_LABELS[d.getMonth()].slice(0, 3)}`;
+
+// Quarter-hour options for the time dropdown below — a plain, quick "pick a common time" list.
+// The text input right next to it still accepts anything (e.g. 14:07), this is just a shortcut.
+const TIME_OPTIONS = Array.from({ length: 96 }, (_, i) => `${pad(Math.floor(i / 4))}:${pad((i % 4) * 15)}`);
 
 export default function DatePickerPopover({ value, onChange, placeholder = 'Not set', align = 'left', badgeColorHex, tooltip }: DatePickerPopoverProps) {
   const [open, setOpen] = useState(false);
@@ -206,16 +210,7 @@ export default function DatePickerPopover({ value, onChange, placeholder = 'Not 
           <div className="flex items-center gap-2">
             <span className="text-[9px] uppercase tracking-wide text-neutral-500 w-9 shrink-0">Time</span>
             {showTimeInput ? (
-              <input
-                type="time"
-                autoFocus
-                value={`${pad(selected.getHours())}:${pad(selected.getMinutes())}`}
-                onChange={(e) => {
-                  const [h, m] = e.target.value.split(':').map(Number);
-                  if (!isNaN(h) && !isNaN(m)) commitTime(h, m);
-                }}
-                className="bg-neutral-900 border border-neutral-700 rounded px-2 py-1 text-[11px] text-neutral-200 focus:outline-none focus:border-blue-500"
-              />
+              <TimeField value={selected} onCommit={commitTime} />
             ) : (
               <button
                 type="button"
@@ -229,5 +224,90 @@ export default function DatePickerPopover({ value, onChange, placeholder = 'Not 
         </div>
       )}
     </FloatingPopover>
+  );
+}
+
+// Replaces a bare native <input type="time"> — reported as looking dated (that's the browser's
+// own spinner/clock chrome, not styled by this app at all, and inconsistent across browsers).
+// Same pattern the font-size dropdown already established (components/collab/DocFormatPanel.tsx):
+// a plain text input for typing an exact value, plus a chevron-anchored FloatingPopover with a
+// scrollable list of common presets — this app fully controls both, unlike a native widget.
+function TimeField({ value, onCommit }: { value: Date; onCommit: (hh: number, mm: number) => void }) {
+  const currentLabel = `${pad(value.getHours())}:${pad(value.getMinutes())}`;
+  const [text, setText] = useState(currentLabel);
+  const [menuOpen, setMenuOpen] = useState(false);
+  const selectedRef = useRef<HTMLButtonElement>(null);
+
+  // Synced from the real value whenever it changes elsewhere (picked from the list below, or
+  // committed via Enter/blur) — but not on every keystroke, so typing a partial value like "14:"
+  // isn't stomped by a re-render before it's actually committed.
+  useEffect(() => {
+    setText(currentLabel);
+  }, [currentLabel]);
+
+  useEffect(() => {
+    if (menuOpen) selectedRef.current?.scrollIntoView({ block: 'center' });
+  }, [menuOpen]);
+
+  const commitText = (raw: string) => {
+    const match = raw.trim().match(/^(\d{1,2}):(\d{2})$/);
+    if (!match || Number(match[1]) > 23 || Number(match[2]) > 59) {
+      setText(currentLabel); // invalid — snap back to the last real value instead of accepting garbage
+      return;
+    }
+    onCommit(Number(match[1]), Number(match[2]));
+  };
+
+  return (
+    <div className="flex items-center gap-1">
+      <input
+        type="text"
+        inputMode="numeric"
+        value={text}
+        onChange={(e) => setText(e.target.value)}
+        onBlur={(e) => commitText(e.target.value)}
+        onKeyDown={(e) => {
+          if (e.key === 'Enter') (e.target as HTMLInputElement).blur();
+        }}
+        placeholder="HH:MM"
+        className="w-14 bg-neutral-900 border border-neutral-700 rounded px-2 py-1 text-[11px] text-neutral-200 text-center focus:outline-none focus:border-blue-500"
+      />
+      <FloatingPopover
+        open={menuOpen}
+        onClose={() => setMenuOpen(false)}
+        panelClassName="w-16 max-h-48 overflow-y-auto bg-neutral-900 border border-neutral-800 rounded shadow-xl py-1"
+        anchor={
+          <button
+            type="button"
+            title="Common times"
+            onClick={() => setMenuOpen((o) => !o)}
+            className="w-6 h-7 rounded flex items-center justify-center cursor-pointer hover:bg-neutral-800 text-neutral-400"
+          >
+            <ChevronDown className="w-3.5 h-3.5" />
+          </button>
+        }
+      >
+        {TIME_OPTIONS.map((t) => {
+          const isSelected = t === currentLabel;
+          return (
+            <button
+              key={t}
+              ref={isSelected ? selectedRef : undefined}
+              type="button"
+              onClick={() => {
+                const [hh, mm] = t.split(':').map(Number);
+                onCommit(hh, mm);
+                setMenuOpen(false);
+              }}
+              className={`w-full text-center px-2 py-1 text-[11px] cursor-pointer hover:bg-neutral-800 ${
+                isSelected ? 'text-blue-400 font-semibold' : 'text-neutral-300'
+              }`}
+            >
+              {t}
+            </button>
+          );
+        })}
+      </FloatingPopover>
+    </div>
   );
 }
