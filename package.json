@@ -75,7 +75,11 @@
     "tailwindcss": "^4",
     "tsx": "^4.23.10",
     "typescript": "^5",
+    "web-push": "^3.6.7",
     "yjs": "^13.6.32",
     "zustand": "^5.0.14"
+  },
+  "devDependencies": {
+    "@types/web-push": "^3.6.4"
   }
 }

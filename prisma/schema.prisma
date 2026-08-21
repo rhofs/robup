@@ -388,7 +388,23 @@ model User {
   chatChannelMemberships ChatChannelMember[]
   chatMessages  ChatMessage[]
   chatReactions ChatReaction[]
+  pushSubscriptions PushSubscription[]
   createdAt     DateTime  @default(now()) @map("created_at")
+}
+
+// One row per subscribed browser/device (a user can have several — phone, laptop, etc.), keyed
+// on the push service's own endpoint URL (genuinely unique per subscription, per the Push API
+// spec). p256dh/auth are the two keys Web Push encryption needs, straight off
+// PushSubscription.toJSON().keys client-side. A dead/revoked endpoint (push service returns 404
+// or 410) is deleted by lib/push.ts's sendPushToUser as it's discovered, not proactively swept.
+model PushSubscription {
+  id        String   @id @default(uuid())
+  userId    String   @map("user_id")
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  endpoint  String   @unique
+  p256dh    String
+  auth      String
+  createdAt DateTime @default(now()) @map("created_at")
 }
 
 // Standard @auth/prisma-adapter model, needed only for Google OAuth account linking — sessions

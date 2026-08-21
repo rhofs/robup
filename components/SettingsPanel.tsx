@@ -5,6 +5,7 @@ import Papa from 'papaparse';
 import { X, Settings, Check, Trash2, Plus, Link2, Upload } from 'lucide-react';
 import { useTaskStore, type HierarchyWorkspace } from '../store/useTaskStore';
 import { useChatStore } from '../store/useChatStore';
+import { getPushStatus, enablePush, disablePush } from '../lib/pushClient';
 import ColorSwatchPicker from './ColorSwatchPicker';
 import { copyToClipboard } from '../lib/copyToClipboard';
 
@@ -152,6 +153,14 @@ export default function SettingsPanel({
   // here by Owner/Admin only (server-enforced too, see PATCH /api/workspaces/[id]/route.ts).
   const [emailDraft, setEmailDraft] = useState(workspace.workEmail ?? '');
   const [editingEmail, setEditingEmail] = useState(false);
+
+  // --- Push notifications --- per-browser, not per-account (a phone and a laptop are two
+  // separate subscriptions) — see lib/pushClient.ts.
+  const [pushStatus, setPushStatus] = useState<'unsupported' | 'subscribed' | 'not-subscribed' | 'loading'>('loading');
+  const [pushError, setPushError] = useState<string | null>(null);
+  useEffect(() => {
+    getPushStatus().then(setPushStatus);
+  }, []);
 
   const toggle = (tabId: NavTabId) => {
     const next = !hidden.has(tabId);
@@ -424,6 +433,37 @@ export default function SettingsPanel({
                 {!weekNumbersHidden && <Check className="w-3 h-3 text-white" />}
               </span>
             </button>
+
+            <div className="text-[10px] uppercase tracking-wide text-neutral-500 px-1 pt-3 pb-1">Notifications</div>
+            <div className="px-2 py-1.5">
+              {pushStatus === 'loading' ? (
+                <p className="text-xs text-neutral-500">Checking…</p>
+              ) : pushStatus === 'unsupported' ? (
+                <p className="text-xs text-neutral-500">Push notifications aren't supported in this browser.</p>
+              ) : (
+                <button
+                  onClick={async () => {
+                    setPushError(null);
+                    if (pushStatus === 'subscribed') {
+                      await disablePush();
+                      setPushStatus('not-subscribed');
+                    } else {
+                      const result = await enablePush();
+                      if (result.ok) setPushStatus('subscribed');
+                      else setPushError(result.error || 'Could not enable notifications');
+                    }
+                  }}
+                  className={`w-full flex items-center justify-center gap-1.5 text-xs py-1.5 rounded font-medium cursor-pointer ${
+                    pushStatus === 'subscribed'
+                      ? 'border border-neutral-700 text-neutral-300 hover:border-neutral-600'
+                      : 'bg-blue-600 hover:bg-blue-500 text-white'
+                  }`}
+                >
+                  {pushStatus === 'subscribed' ? 'Disable push notifications' : 'Enable push notifications'}
+                </button>
+              )}
+              {pushError && <p className="text-[11px] text-red-400 mt-1">{pushError}</p>}
+            </div>
           </div>
         ) : tab === 'roles' ? (
           <div className="p-5 space-y-2 max-h-96 overflow-y-auto">
