@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import { useDraggable, useDroppable } from '@dnd-kit/core';
+import FloatingPopover from './FloatingPopover';
 import {
   ChevronRight,
   ChevronDown,
@@ -12,8 +13,7 @@ import {
   List as ListIcon,
   FileText,
   Plus,
-  Pencil,
-  Trash2,
+  MoreHorizontal,
   Lock,
   Star,
   Rocket,
@@ -252,6 +252,7 @@ function FolderLevel(props: FolderTreeProps & { parentId: string | null; depth: 
   const { createList, createFolder, createSpaceDoc, renameList } = useTaskStore();
   const [addMode, setAddMode] = useState<'list' | 'folder' | 'doc' | null>(null);
   const [draft, setDraft] = useState('');
+  const [createMenuOpen, setCreateMenuOpen] = useState(false);
 
   const folders = getChildFolders(space, parentId);
   const lists = getListsIn(space, parentId, showArchived);
@@ -363,44 +364,59 @@ function FolderLevel(props: FolderTreeProps & { parentId: string | null; depth: 
           className="w-full bg-neutral-950 border border-blue-500 rounded px-2 py-1 text-[11px] text-white focus:outline-none"
         />
       ) : (
-        <div className="flex items-center gap-1">
+        // ClickUp-style single "+" instead of three separate buttons — one anchor, a small
+        // popover offering List/Folder/(Doc) picks `addMode` exactly like the three buttons
+        // used to, so everything below (the inline name input, commitAdd) is unchanged.
+        <FloatingPopover
+          open={createMenuOpen}
+          onClose={() => setCreateMenuOpen(false)}
+          panelClassName="w-36 bg-neutral-900 border border-neutral-800 rounded shadow-xl py-1"
+          anchor={
+            <button
+              onClick={() => setCreateMenuOpen((o) => !o)}
+              title="New..."
+              className="inline-flex items-center gap-1.5 px-2 py-1 rounded text-[11px] text-neutral-500 hover:text-blue-400 hover:bg-neutral-800/30 cursor-pointer"
+            >
+              <Plus className="w-3 h-3" /> New
+            </button>
+          }
+        >
           <button
             onClick={() => {
               setDraft('');
               setAddMode('list');
+              setCreateMenuOpen(false);
             }}
-            className="flex-1 text-left px-2 py-1 rounded text-[11px] text-neutral-500 hover:text-blue-400 hover:bg-neutral-800/30 cursor-pointer flex items-center gap-1.5"
+            className="w-full text-left px-3 py-1.5 text-[11px] text-neutral-300 hover:bg-neutral-800/60 cursor-pointer flex items-center gap-2"
           >
-            <Plus className="w-3 h-3" /> New list
+            <ListIcon className="w-3 h-3" /> List
           </button>
-          {/* Available at every depth — a Doc created here gets `boardFolderId: parentId` (see
-              commitAdd above), the Tasks-tab-sidebar folder axis, independent of the Docs tab's
-              own `folderId`/DocFolder tree. (An earlier pass gated this to the Space root only,
-              since a Doc's `folderId` — the wrong field — can't point at a real Folder; fixed
-              properly now via the dedicated boardFolderId field instead of hiding the button.) */}
+          <button
+            onClick={() => {
+              setDraft('');
+              setAddMode('folder');
+              setCreateMenuOpen(false);
+            }}
+            className="w-full text-left px-3 py-1.5 text-[11px] text-neutral-300 hover:bg-neutral-800/60 cursor-pointer flex items-center gap-2"
+          >
+            <FolderIconLucide className="w-3 h-3" /> Folder
+          </button>
+          {/* Available at every depth — a Doc created here gets `boardFolderId: parentId`, the
+              Tasks-tab-sidebar folder axis, independent of the Docs tab's own `folderId`/DocFolder
+              tree. Hidden in Planner (calendar) — Docs have no calendar-filter meaning there. */}
           {activeView !== 'calendar' && (
             <button
               onClick={() => {
                 setDraft('');
                 setAddMode('doc');
+                setCreateMenuOpen(false);
               }}
-              title="New doc"
-              className="px-1.5 py-1 rounded text-[11px] text-neutral-500 hover:text-blue-400 hover:bg-neutral-800/30 cursor-pointer"
+              className="w-full text-left px-3 py-1.5 text-[11px] text-neutral-300 hover:bg-neutral-800/60 cursor-pointer flex items-center gap-2"
             >
-              <FileText className="w-3 h-3" />
+              <FileText className="w-3 h-3" /> Doc
             </button>
           )}
-          <button
-            onClick={() => {
-              setDraft('');
-              setAddMode('folder');
-            }}
-            title="New folder"
-            className="px-1.5 py-1 rounded text-[11px] text-neutral-500 hover:text-blue-400 hover:bg-neutral-800/30 cursor-pointer"
-          >
-            <FolderIconLucide className="w-3 h-3" />
-          </button>
-        </div>
+        </FloatingPopover>
       )}
     </div>
   );
@@ -504,15 +520,18 @@ function DocRow({
             {doc.title || 'Untitled'}
           </span>
         </span>
+        {/* Right-click still opens the same menu directly on the row; this button is just a
+            click/tap-reachable trigger for it — same menu, same Rename/Delete/etc., not a
+            separate rename/delete pair. */}
         <button
           onClick={(e) => {
             e.stopPropagation();
-            onDeleteRequest();
+            onContextMenu(e);
           }}
-          title="Delete"
-          className="opacity-0 group-hover:opacity-100 text-neutral-500 hover:text-red-400 cursor-pointer shrink-0"
+          title="More"
+          className="opacity-0 group-hover:opacity-100 text-neutral-500 hover:text-neutral-200 cursor-pointer shrink-0"
         >
-          <Trash2 className="w-2.5 h-2.5" />
+          <MoreHorizontal className="w-3 h-3" />
         </button>
       </div>
       {listDropIndicator?.targetId === doc.id && listDropIndicator.position === 'below' && (
@@ -535,7 +554,7 @@ function FolderRow(props: FolderTreeProps & { folder: HierarchyFolder; parentId:
     onRenameFolderHandled,
     folder,
   } = props;
-  const { renameFolder } = useTaskStore();
+  const { renameFolder, createList, createFolder, createSpaceDoc } = useTaskStore();
   const [expanded, setExpandedState] = useState(() => !readCollapsedFolders().has(folder.id));
   const setExpanded = (next: boolean | ((v: boolean) => boolean)) => {
     setExpandedState((prev) => {
@@ -546,6 +565,25 @@ function FolderRow(props: FolderTreeProps & { folder: HierarchyFolder; parentId:
   };
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState(folder.name);
+
+  // A shortcut for creating directly inside this Folder without first expanding it and
+  // scrolling to its own FolderLevel's "+" at the bottom (which could be far away in a Folder
+  // with many children already). Deliberately separate from that "+"'s own addMode/draft state
+  // (FolderLevel's), since this one always targets `folder.id` and must force the folder open so
+  // the newly created child is immediately visible.
+  const [childCreateMenuOpen, setChildCreateMenuOpen] = useState(false);
+  const [childAddMode, setChildAddMode] = useState<'list' | 'folder' | 'doc' | null>(null);
+  const [childDraft, setChildDraft] = useState('');
+  const commitChildAdd = async () => {
+    const trimmed = childDraft.trim();
+    if (trimmed) {
+      if (childAddMode === 'list') createList(space.id, trimmed, folder.id);
+      else if (childAddMode === 'folder') createFolder(space.id, trimmed, folder.id);
+      else if (childAddMode === 'doc') await createSpaceDoc(space.id, null, { title: trimmed, boardFolderId: folder.id });
+    }
+    setChildDraft('');
+    setChildAddMode(null);
+  };
 
   // Triggered by the "Rename" item in the folder's right-click context menu (page.tsx),
   // which lives outside this row and has no direct handle on its local `editing` state.
@@ -670,29 +708,96 @@ function FolderRow(props: FolderTreeProps & { folder: HierarchyFolder; parentId:
         </span>
         <span className="flex items-center gap-1 shrink-0">
           {activeView === 'board' && <span className="text-[10px] text-neutral-500 font-mono">{folderTaskCount}</span>}
+          {/* Shortcut to create directly inside this Folder — same List/Folder/Doc picker
+              FolderLevel's own "+" opens, just scoped here and forcing the folder open so the
+              new child is immediately visible instead of created "into the void" while
+              collapsed. */}
+          <FloatingPopover
+            open={childCreateMenuOpen}
+            onClose={() => setChildCreateMenuOpen(false)}
+            panelClassName="w-36 bg-neutral-900 border border-neutral-800 rounded shadow-xl py-1"
+            anchor={
+              <button
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setChildCreateMenuOpen((o) => !o);
+                }}
+                title="New inside this folder"
+                className="opacity-0 group-hover:opacity-100 text-neutral-500 hover:text-blue-400 cursor-pointer"
+              >
+                <Plus className="w-3 h-3" />
+              </button>
+            }
+          >
+            <button
+              onClick={() => {
+                setExpanded(true);
+                setChildDraft('');
+                setChildAddMode('list');
+                setChildCreateMenuOpen(false);
+              }}
+              className="w-full text-left px-3 py-1.5 text-[11px] text-neutral-300 hover:bg-neutral-800/60 cursor-pointer flex items-center gap-2"
+            >
+              <ListIcon className="w-3 h-3" /> List
+            </button>
+            <button
+              onClick={() => {
+                setExpanded(true);
+                setChildDraft('');
+                setChildAddMode('folder');
+                setChildCreateMenuOpen(false);
+              }}
+              className="w-full text-left px-3 py-1.5 text-[11px] text-neutral-300 hover:bg-neutral-800/60 cursor-pointer flex items-center gap-2"
+            >
+              <FolderIconLucide className="w-3 h-3" /> Folder
+            </button>
+            {activeView !== 'calendar' && (
+              <button
+                onClick={() => {
+                  setExpanded(true);
+                  setChildDraft('');
+                  setChildAddMode('doc');
+                  setChildCreateMenuOpen(false);
+                }}
+                className="w-full text-left px-3 py-1.5 text-[11px] text-neutral-300 hover:bg-neutral-800/60 cursor-pointer flex items-center gap-2"
+              >
+                <FileText className="w-3 h-3" /> Doc
+              </button>
+            )}
+          </FloatingPopover>
+          {/* Right-click still opens the same menu directly on the row; this is just a
+              click/tap-reachable trigger for it (Rename, Delete, appearance, etc. all live there
+              already) instead of a separate rename button + delete button. */}
           <button
             onClick={(e) => {
               e.stopPropagation();
-              setDraft(folder.name);
-              setEditing(true);
+              onFolderContextMenu(e, folder);
             }}
-            title="Rename"
+            title="More"
             className="opacity-0 group-hover:opacity-100 text-neutral-500 hover:text-neutral-200 cursor-pointer"
           >
-            <Pencil className="w-2.5 h-2.5" />
-          </button>
-          <button
-            onClick={(e) => {
-              e.stopPropagation();
-              onDeleteFolderRequest(folder);
-            }}
-            title="Delete"
-            className="opacity-0 group-hover:opacity-100 text-neutral-500 hover:text-red-400 cursor-pointer"
-          >
-            <Trash2 className="w-2.5 h-2.5" />
+            <MoreHorizontal className="w-3 h-3" />
           </button>
         </span>
       </div>
+      {childAddMode && (
+        <input
+          autoFocus
+          value={childDraft}
+          onChange={(e) => setChildDraft(e.target.value)}
+          onClick={(e) => e.stopPropagation()}
+          onBlur={commitChildAdd}
+          onKeyDown={(e) => {
+            if (e.key === 'Enter') (e.target as HTMLInputElement).blur();
+            if (e.key === 'Escape') {
+              setChildDraft('');
+              setChildAddMode(null);
+            }
+          }}
+          placeholder={childAddMode === 'list' ? 'List name...' : childAddMode === 'doc' ? 'Doc title...' : 'Folder name...'}
+          className="ml-6 w-[calc(100%-1.5rem)] bg-neutral-950 border border-blue-500 rounded px-2 py-1 text-[11px] text-white focus:outline-none"
+        />
+      )}
       {expanded && <FolderLevel {...props} parentId={folder.id} depth={props.depth + 1} />}
     </div>
   );
@@ -805,8 +910,8 @@ function ListRow({
           // Colored dot (the list's own color, same as the icon beside it) instead of a plain
           // checkbox — reads as "this list's color is showing on the calendar" rather than a
           // generic form control. On hover it swaps for an explicit Eye/EyeOff toggle, same
-          // "icon reveals its action on hover" convention this row's own rename pencil already
-          // uses just to the right.
+          // "icon reveals its action on hover" convention this row's own "..." trigger just to
+          // the right also uses.
           <span className="relative w-3.5 h-3.5 shrink-0 flex items-center justify-center">
             <span
               className="absolute w-2 h-2 rounded-full transition group-hover:opacity-0"
@@ -841,29 +946,19 @@ function ListRow({
       </span>
       <span className="flex items-center gap-1 shrink-0">
         {!filterMode && <span className="text-[9px] text-neutral-500 font-mono">{count}</span>}
+        {/* Right-click still opens the same menu directly on the row; this is just a
+            click/tap-reachable trigger for it (Rename, Delete, appearance, etc. all live there
+            already) instead of a separate rename button + delete button. */}
         <button
           onClick={(e) => {
             e.stopPropagation();
-            setDraft(list.name);
-            setEditing(true);
+            onContextMenu(e);
           }}
-          title="Rename"
+          title="More"
           className="opacity-0 group-hover:opacity-100 text-neutral-500 hover:text-neutral-200 cursor-pointer"
         >
-          <Pencil className="w-2.5 h-2.5" />
+          <MoreHorizontal className="w-3 h-3" />
         </button>
-        {!filterMode && (
-          <button
-            onClick={(e) => {
-              e.stopPropagation();
-              onDeleteRequest();
-            }}
-            title="Delete"
-            className="opacity-0 group-hover:opacity-100 text-neutral-500 hover:text-red-400 cursor-pointer"
-          >
-            <Trash2 className="w-2.5 h-2.5" />
-          </button>
-        )}
       </span>
       </div>
       {listDropIndicator?.targetId === list.id && listDropIndicator.position === 'below' && (
