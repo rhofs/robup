@@ -1209,7 +1209,7 @@ User compared the live app against a ClickUp marketing PDF and a screenshot of t
 - [x] **6. Sidebar item-creation UX, ClickUp-style.** Built 2026-08-21, see session entry below — one "+" per level (a small popover: List/Folder/Doc) instead of three buttons, a matching hover "+" directly on Folder rows to create inside without expanding first, and a "..." trigger on List/Folder/Doc rows opening the exact same menu right-click already does, replacing the separate inline Rename/Delete buttons. Scoped to the Tasks-tab sidebar (`FolderTree.tsx`) only — the Docs-tab's own separate tree (`DocFolderTree.tsx`) wasn't touched, flagged as a possible follow-up if the same parity is wanted there.
 
 **Landing page**
-- [ ] **7. Logged-out landing page should explain the product**, ClickUp-marketing-page style, instead of dropping straight into the login screen.
+- [x] **7. Logged-out landing page should explain the product**, ClickUp-marketing-page style, instead of dropping straight into the login screen. Fixed 2026-08-21, see session entry below — `/login` itself redesigned into a two-column layout (marketing pitch + the same 5 nav-rail icons/feature blurbs, auth card kept functionally untouched), rather than adding a whole separate route.
 
 **Social / invites**
 - [ ] **8. Email invites + a more Discord-like in-app invite/request flow via Network** — today the only mechanism is sharing a link. Wants a real request/invite notification surfaced to the recipient.
@@ -1321,6 +1321,14 @@ Root cause of "looks old/native": `DatePickerPopover.tsx`'s time field was a bar
 **Verified**: a real login (correct password) still succeeds normally; 25 rapid wrong-password attempts against the same account got a real `429` starting at attempt #20 (limit working exactly as configured), while the legitimate first attempt still went through; 12 rapid signups got `429` starting at #10. `npx tsc --noEmit` clean throughout.
 
 **Not addressed this pass, explicitly out of scope**: Google OAuth env vars (needs the user, real third-party credentials, not a code fix); encryption-at-rest for the SQLite file or chat message content (an infra/architecture decision, not a quick pass item — flag separately if wanted).
+
+## Today's session (2026-08-21, continued a sixth time) — Logged-out landing page (backlog #7)
+
+**Design decision made, not just executed**: considered adding a genuinely separate public marketing route (e.g. `/welcome`) with the bare `/` redirecting there when logged out, matching how ClickUp itself splits a marketing domain from the app. Went the other way instead — `proxy.ts`'s auth gating (`/` → `/login` via Auth.js's own `authorized()`/`pages.signIn`) is a real security boundary already working correctly, and `app/page.tsx` is a single giant client component that starts fetching protected data on mount with no built-in "logged-out" render path of its own; carving out a new always-public route at `/` (or teaching `page.tsx` to conditionally skip its own data-fetching) would have meant touching that boundary for a purely cosmetic ask. `/login` was already public, already the first thing every logged-out visitor sees, and had nothing in it beyond a bare centered auth card — enriching that one page satisfies the actual request ("the landing page... should explain the product") with zero risk to the auth boundary.
+
+**Built**: `app/login/page.tsx` restructured into a two-column layout (stacks on mobile) — marketing pitch on the left (headline, one-paragraph pitch leaning on the app's own self-hosted/local-SQLite identity, "your data stays on infrastructure you control"), the exact same functional sign-in/signup card on the right, completely untouched (no logic, state, or handler changed — only the outer JSX wrapper). Five feature blurbs (Tasks/Planner/Docs/Chat/Office) use the *same* icons as the real app's own nav rail (`List`/`Calendar`/`FileText`/`MessageSquare`/`Building2`), so a new user recognizes them once actually inside.
+
+**Verified**: `npx tsc --noEmit` clean; `curl http://localhost:3000/login` (unauthenticated) returns a real `200` with the new headline text present in the server-rendered HTML, confirming it's not just client-side-only content. **Not yet visually confirmed in a real browser** — the responsive stacking on mobile and general look need a real look (dev server left running locally).
 
 ## Known bugs / things to remember
 
