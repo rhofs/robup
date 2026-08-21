@@ -1213,7 +1213,7 @@ User compared the live app against a ClickUp marketing PDF and a screenshot of t
 - [ ] **9. Role assignment for workspace members.** Also: right-click a user to DM them / assign a role directly, and a smarter, more modern Office-tab UI for managing this (today it's unclear how roles are assigned at all).
 
 **Data safety / compliance**
-- [ ] **10. Real backups.** Tasks/Docs/everything important must survive an incident, and specifically must keep working across app patches/deploys — not just "works today."
+- [x] **10. Real backups.** Tasks/Docs/everything important must survive an incident, and specifically must keep working across app patches/deploys — not just "works today." App-level layer built 2026-08-21, see session entry below. **Still open, panel-side, not code**: scheduling the script to actually run periodically, and true off-box protection (see that entry for both).
 - [ ] **11. A security & privacy pass** — user flagged this as needed but open-ended; worth scoping into concrete sub-items rather than treating as one action item (see suggestions below).
 
 **Planner / Calendar / Events**
@@ -1231,6 +1231,24 @@ User compared the live app against a ClickUp marketing PDF and a screenshot of t
 - Scoping for #11: production still has no `GOOGLE_CLIENT_ID`/`GOOGLE_CLIENT_SECRET` set (tracked above), session cookies should get a `Secure`/`SameSite` check now that HTTPS is actually live, and it's worth a pass on whether chat messages/Docs content need any encryption-at-rest on the VPS.
 - Concrete direction for #10: this is SQLite-on-a-single-VPS — a scheduled file-level DB snapshot (cron) copied off-box is the simplest real answer, and worth doing before real user data accumulates rather than after.
 - Not user-reported, worth adding to the list regardless: no rate limiting/abuse protection yet on public-facing routes (login, invite acceptance, search) — worth having before any real external users.
+
+## Today's session (2026-08-21) — Backup layer 1: rotating on-disk SQLite snapshots (backlog #10)
+
+Started on the 2026-08-19 backlog, picking backup first per the user's explicit request — sequenced ahead of the other 15 items specifically because production is about to hold real data and a `git reset --hard` Reinstall was already flagged as a workflow the DB file needs to survive.
+
+**Built**: `scripts/backupDb.ts`, run via a new `npm run backup:db` (local, loads `.env.local` — mirrors the existing `collab:start`/`collab:start:prod` split) / `npm run backup:db:prod` (production — env vars already live in the container, no `--env-file` needed, would otherwise hard-fail like `dev:collab` did on a missing `.env.local` historically). Uses SQLite's own `VACUUM INTO '<path>'` (via `prisma.$executeRawUnsafe`) rather than a plain file copy — a raw copy can land mid-write and produce a torn/corrupt snapshot even under normal operation; `VACUUM INTO` is SQLite's documented safe way to snapshot a live, in-use database. Writes timestamped files (`backups/siqt-backup-<ISO timestamp>.db`) and prunes down to the newest `BACKUP_RETENTION_COUNT` (env-overridable, default 14) on every run — verified locally: ran it 3x with retention forced to 2, confirmed exactly the 2 newest files survived each time and the correct oldest one was named in the "Pruned" log line each round. Also confirmed the written file is a real, valid SQLite database (header bytes `SQLite format 3`, opens fine), not just "a file got created." `backups/` is gitignored (machine-local data, same treatment as `dev.db` itself).
+
+**What this does and doesn't cover — important, read before assuming backups are "done":**
+- **Covers**: a bad migration, an accidental delete, app-level data corruption — any of these can be recovered by restoring the most recent `.db` snapshot, since each one is a separate consistent file.
+- **Does NOT cover**: losing the whole VPS/disk/volume, since today these snapshots sit right next to the live database on the exact same persistent volume. A destroyed server destroys the live db and every one of these snapshots identically. This is explicitly **layer 1 only**.
+
+**Not yet done, panel-side (needs the user, no code left to write for this part):**
+1. **Actually schedule it.** Nothing runs this automatically yet. Pterodactyl has a **Schedules** tab per-server (separate from its Backups feature) that can run an arbitrary command inside the running container on a cron-like interval — set one up to run `npm run backup:db:prod` daily (or more often once real usage starts).
+2. **Get a copy off the box** — the real gap layer 1 doesn't close. Two options, either is fine, doing both is better:
+   - Check whether the server's own **Backups** tab in Pterodactyl is enabled/configured for this instance — Pterodactyl's native backup system snapshots the whole server volume on its own schedule and, depending on how Pebblehost has the node configured, can store it off the VPS (S3-compatible remote) rather than only locally. Worth just looking at what's actually available/already configured before building anything custom.
+   - Alternative/addition: periodically pull the newest file in `backups/` off the server entirely (SFTP/manual download, or a small remote-upload step added to the script later) — flagged here rather than built now since it needs a decision on where "off-box" actually means (own PC, cloud storage, etc.), a real user choice, not an engineering default to just pick.
+
+**Verified**: ran `npm run backup:db` locally end-to-end, confirmed valid SQLite output and correct retention/pruning behavior (see above). **Not yet verified in production** — next step once this is pushed is running `npm run backup:db:prod` once by hand on the actual server (via Pterodactyl's console) to confirm it behaves the same way against the real `DATABASE_URL`/persistent volume, before relying on a schedule to run it unattended.
 
 ## Known bugs / things to remember
 
