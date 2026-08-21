@@ -692,6 +692,12 @@ function PageContent() {
   const [workspaceSwitcherOpen, setWorkspaceSwitcherOpen] = useState(false);
   const [creatingWorkspace, setCreatingWorkspace] = useState(false);
   const [newWorkspaceDraft, setNewWorkspaceDraft] = useState('');
+  // A more "official" workspace-creation step (backlog #2) — org type + an optional work email,
+  // alongside the plain name this already had. Neither is verified (no email-sending
+  // infrastructure exists in this app yet — that's a separate, larger feature); this is purely
+  // metadata captured up front rather than a bare name field, and shown back in Workspace Settings.
+  const [newWorkspaceType, setNewWorkspaceType] = useState<'company' | 'personal_project'>('company');
+  const [newWorkspaceEmail, setNewWorkspaceEmail] = useState('');
   const [collapsedSpaceIds, setCollapsedSpaceIds] = useState<Set<string>>(() => readCollapsedSpaces());
   const toggleSpaceCollapsed = (spaceId: string) => {
     setCollapsedSpaceIds((prev) => {
@@ -2594,26 +2600,74 @@ function PageContent() {
             ))}
             <div className="border-t border-neutral-800 my-1" />
             {creatingWorkspace ? (
-              <input
-                autoFocus
-                value={newWorkspaceDraft}
-                onChange={(e) => setNewWorkspaceDraft(e.target.value)}
-                onBlur={() => {
-                  const trimmed = newWorkspaceDraft.trim();
-                  if (trimmed && currentUserId) createWorkspace(trimmed, currentUserId);
-                  setNewWorkspaceDraft('');
-                  setCreatingWorkspace(false);
-                }}
-                onKeyDown={(e) => {
-                  if (e.key === 'Enter') (e.target as HTMLInputElement).blur();
-                  if (e.key === 'Escape') {
+              <div className="mx-3 my-1 space-y-2">
+                <input
+                  autoFocus
+                  value={newWorkspaceDraft}
+                  onChange={(e) => setNewWorkspaceDraft(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Escape') {
+                      setNewWorkspaceDraft('');
+                      setCreatingWorkspace(false);
+                    }
+                  }}
+                  placeholder="Workspace name..."
+                  className="w-full bg-neutral-950 border border-blue-500 rounded px-2 py-1 text-xs text-white focus:outline-none"
+                />
+                <div className="flex items-center gap-1 bg-neutral-950 border border-neutral-800 rounded p-0.5">
+                  <button
+                    type="button"
+                    onClick={() => setNewWorkspaceType('company')}
+                    className={`flex-1 text-[10px] py-1 rounded cursor-pointer transition ${
+                      newWorkspaceType === 'company' ? 'bg-neutral-800 text-white' : 'text-neutral-500 hover:text-neutral-300'
+                    }`}
+                  >
+                    Company
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setNewWorkspaceType('personal_project')}
+                    className={`flex-1 text-[10px] py-1 rounded cursor-pointer transition ${
+                      newWorkspaceType === 'personal_project' ? 'bg-neutral-800 text-white' : 'text-neutral-500 hover:text-neutral-300'
+                    }`}
+                  >
+                    Personal project
+                  </button>
+                </div>
+                <input
+                  type="email"
+                  value={newWorkspaceEmail}
+                  onChange={(e) => setNewWorkspaceEmail(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Escape') {
+                      setNewWorkspaceDraft('');
+                      setCreatingWorkspace(false);
+                    }
+                  }}
+                  placeholder="Work email (optional)"
+                  className="w-full bg-neutral-950 border border-neutral-700 rounded px-2 py-1 text-xs text-white focus:outline-none focus:border-blue-500"
+                />
+                <button
+                  type="button"
+                  onClick={() => {
+                    const trimmed = newWorkspaceDraft.trim();
+                    if (trimmed && currentUserId) {
+                      createWorkspace(trimmed, currentUserId, {
+                        orgType: newWorkspaceType,
+                        workEmail: newWorkspaceEmail.trim() || null,
+                      });
+                    }
                     setNewWorkspaceDraft('');
+                    setNewWorkspaceEmail('');
+                    setNewWorkspaceType('company');
                     setCreatingWorkspace(false);
-                  }
-                }}
-                placeholder="Workspace name..."
-                className="w-[calc(100%-1.5rem)] mx-3 my-1 bg-neutral-950 border border-blue-500 rounded px-2 py-1 text-xs text-white focus:outline-none"
-              />
+                  }}
+                  disabled={!newWorkspaceDraft.trim()}
+                  className="w-full bg-blue-600 hover:bg-blue-500 disabled:opacity-40 disabled:cursor-not-allowed text-white text-[11px] py-1.5 rounded font-medium cursor-pointer"
+                >
+                  Create workspace
+                </button>
+              </div>
             ) : (
               <button
                 onClick={() =>

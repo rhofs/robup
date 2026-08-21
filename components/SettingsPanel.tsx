@@ -141,10 +141,15 @@ export default function SettingsPanel({
   onClose: () => void;
   onChange: () => void;
 }) {
-  const { createRole, updateRole, deleteRole, assignRole, unassignRole } = useTaskStore();
+  const { createRole, updateRole, deleteRole, assignRole, unassignRole, updateWorkspaceDetails } = useTaskStore();
   const [tab, setTab] = useState<'general' | 'roles' | 'invite' | 'import'>('general');
   const [hidden, setHidden] = useState(() => readHiddenNavTabs());
   const [weekNumbersHidden, setWeekNumbersHidden] = useState(() => readHideWeekNumbers());
+
+  // --- Workspace identity (backlog #2) --- org type + work email, set at creation, editable
+  // here by Owner/Admin only (server-enforced too, see PATCH /api/workspaces/[id]/route.ts).
+  const [emailDraft, setEmailDraft] = useState(workspace.workEmail ?? '');
+  const [editingEmail, setEditingEmail] = useState(false);
 
   const toggle = (tabId: NavTabId) => {
     const next = !hidden.has(tabId);
@@ -296,6 +301,72 @@ export default function SettingsPanel({
 
         {tab === 'general' ? (
           <div className="p-4 space-y-1">
+            {!workspace.isPersonal && (
+              <>
+                <div className="text-[10px] uppercase tracking-wide text-neutral-500 px-1 pb-1">Workspace</div>
+                <div className="px-1 pb-3 space-y-2">
+                  <div className="flex items-center gap-2">
+                    <span className="text-[10px] text-neutral-500 w-16 shrink-0">Type</span>
+                    {canManage ? (
+                      <div className="flex items-center gap-1 bg-neutral-950 border border-neutral-800 rounded p-0.5 flex-1">
+                        <button
+                          onClick={() => updateWorkspaceDetails(workspace.id, { orgType: 'company' })}
+                          className={`flex-1 text-[10px] py-1 rounded cursor-pointer transition ${
+                            workspace.orgType === 'company' ? 'bg-neutral-800 text-white' : 'text-neutral-500 hover:text-neutral-300'
+                          }`}
+                        >
+                          Company
+                        </button>
+                        <button
+                          onClick={() => updateWorkspaceDetails(workspace.id, { orgType: 'personal_project' })}
+                          className={`flex-1 text-[10px] py-1 rounded cursor-pointer transition ${
+                            workspace.orgType === 'personal_project' ? 'bg-neutral-800 text-white' : 'text-neutral-500 hover:text-neutral-300'
+                          }`}
+                        >
+                          Personal project
+                        </button>
+                      </div>
+                    ) : (
+                      <span className="text-xs text-neutral-300">
+                        {workspace.orgType === 'company' ? 'Company' : workspace.orgType === 'personal_project' ? 'Personal project' : 'Not set'}
+                      </span>
+                    )}
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <span className="text-[10px] text-neutral-500 w-16 shrink-0">Work email</span>
+                    {canManage && editingEmail ? (
+                      <input
+                        autoFocus
+                        type="email"
+                        value={emailDraft}
+                        onChange={(e) => setEmailDraft(e.target.value)}
+                        onBlur={() => {
+                          setEditingEmail(false);
+                          updateWorkspaceDetails(workspace.id, { workEmail: emailDraft.trim() || null });
+                        }}
+                        onKeyDown={(e) => {
+                          if (e.key === 'Enter') (e.target as HTMLInputElement).blur();
+                          if (e.key === 'Escape') {
+                            setEmailDraft(workspace.workEmail ?? '');
+                            setEditingEmail(false);
+                          }
+                        }}
+                        className="flex-1 bg-neutral-950 border border-blue-500 rounded px-2 py-1 text-xs text-white focus:outline-none"
+                      />
+                    ) : (
+                      <button
+                        onClick={() => canManage && setEditingEmail(true)}
+                        disabled={!canManage}
+                        className={`flex-1 text-left text-xs px-1 ${canManage ? 'text-neutral-300 hover:text-white cursor-pointer' : 'text-neutral-500 cursor-default'}`}
+                      >
+                        {workspace.workEmail || (canManage ? 'Not set — click to add' : 'Not set')}
+                      </button>
+                    )}
+                  </div>
+                </div>
+              </>
+            )}
+
             <div className="text-[10px] uppercase tracking-wide text-neutral-500 px-1 pb-1">Visible tabs</div>
             {NAV_TABS.map((navTab) => {
               const visible = !hidden.has(navTab.id);

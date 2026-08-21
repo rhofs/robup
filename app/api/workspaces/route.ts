@@ -97,12 +97,16 @@ export async function POST(req: Request) {
   const workspace = await prisma.workspace.create({
     data: {
       name: body.name || 'Untitled workspace',
+      // Neither validated against a real value set — orgType is a plain UI-offered choice, not an
+      // enum SQLite enforces; workEmail is never verified (no email-sending infra in this app).
+      orgType: body.orgType === 'personal_project' ? 'personal_project' : body.orgType === 'company' ? 'company' : null,
+      workEmail: typeof body.workEmail === 'string' && body.workEmail.trim() ? body.workEmail.trim() : null,
       // The creator is always 'owner' — the one workspace-level tier that's permanent and
       // exclusive (see lib/auth/access.ts / PLANNING.md for why this couldn't stay a plain
       // implicit User<->Workspace M2M once a role tier needed attaching to the membership itself).
       memberships: { create: { userId, role: 'owner' } },
     },
-    select: { id: true, name: true, messageOfTheDay: true, createdAt: true },
+    select: { id: true, name: true, messageOfTheDay: true, orgType: true, workEmail: true, createdAt: true },
   });
   return NextResponse.json(workspace);
 }

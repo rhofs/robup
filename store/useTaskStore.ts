@@ -201,6 +201,10 @@ export type HierarchyWorkspace = {
   id: string;
   name: string;
   messageOfTheDay: string | null;
+  // A more "official" creation step (backlog #2) — plain metadata, never verified (no
+  // email-sending infrastructure in this app). Null on every workspace created before this.
+  orgType: 'company' | 'personal_project' | null;
+  workEmail: string | null;
   spaces: HierarchySpace[];
   rooms: HierarchyRoom[];
   // Each member's own tier (owner/admin/member) is attached directly onto their entry rather
@@ -364,7 +368,15 @@ interface TaskStore {
   deleteRoom: (roomId: string) => Promise<void>;
   assignUserToRoom: (userId: string, roomId: string | null) => Promise<void>;
   updateWorkspaceMessage: (workspaceId: string, message: string | null) => Promise<void>;
-  createWorkspace: (name: string, userId: string) => Promise<void>;
+  createWorkspace: (
+    name: string,
+    userId: string,
+    opts?: { orgType?: 'company' | 'personal_project'; workEmail?: string | null }
+  ) => Promise<void>;
+  updateWorkspaceDetails: (
+    workspaceId: string,
+    patch: { name?: string; orgType?: 'company' | 'personal_project'; workEmail?: string | null }
+  ) => Promise<void>;
   addWorkspaceMember: (workspaceId: string, userId: string) => Promise<void>;
   removeWorkspaceMember: (workspaceId: string, userId: string) => Promise<void>;
   // Owner/Admin only server-side (see app/api/workspaces/[id]/members/[userId]/route.ts PATCH) —
@@ -1471,15 +1483,29 @@ export const useTaskStore = create<TaskStore>((set, get) => {
     // out of scope for the multi-workspace feature this session. Refetches rather than hand-
     // splicing a new workspace into local state, since the fully-shaped nested include (spaces,
     // rooms, members) is nontrivial to fake locally and this is a rare, deliberate action.
-    createWorkspace: async (name, userId) => {
+    createWorkspace: async (name, userId, opts) => {
       const res = await fetch('/api/workspaces', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ name, userId }),
+        body: JSON.stringify({ name, userId, orgType: opts?.orgType, workEmail: opts?.workEmail }),
       });
       const created = await res.json();
       await get().refetchWorkspaces();
       get().setActiveWorkspaceId(created.id);
+    },
+
+    // Editing the workspace-identity fields set at creation (backlog #2) — Owner/Admin-gated
+    // server-side (see PATCH /api/workspaces/[id]/route.ts), same tier every other
+    // workspace-identity change already requires.
+    updateWorkspaceDetails: async (workspaceId, patch) => {
+      set((state) => ({
+        workspaces: state.workspaces.map((ws) => (ws.id === workspaceId ? { ...ws, ...patch } : ws)),
+      }));
+      await fetch(`/api/workspaces/${workspaceId}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(patch),
+      });
     },
 
     addWorkspaceMember: async (workspaceId, userId) => {

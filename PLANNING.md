@@ -1200,7 +1200,7 @@ User compared the live app against a ClickUp marketing PDF and a screenshot of t
 
 **Onboarding / identity**
 - [x] **1. No workspace should ever look like a real default.** Fixed 2026-08-21, see session entry below — header now reads "No workspace" instead of a fake name, and Tasks/Planner/Docs/Office are hidden entirely until a real (non-personal) workspace exists. My tasks/Network/Chat untouched (cross-workspace by design).
-- [ ] **2. A more "official" workspace creation flow.** Add fields like a work email, and whether it's a company vs. a private/personal project — today workspace creation is presumably just a name.
+- [x] **2. A more "official" workspace creation flow.** Fixed 2026-08-21, see session entry below — `Workspace.orgType`/`workEmail` added (neither verified, no email infra exists), create form expanded from a bare name field into name + Company/Personal-project toggle + optional work email, editable afterward in Workspace Settings (Owner/Admin-gated). Found and fixed a real, pre-existing gap while touching the PATCH route: it had no auth check at all before this.
 - [x] **3. Replace the placeholder "R" logo.** Fixed 2026-08-21 — swapped to "S" in the same badge for now (a real mark/icon is a separate design task, not done here, flag if wanted).
 
 **Visual/UI polish**
@@ -1329,6 +1329,18 @@ Root cause of "looks old/native": `DatePickerPopover.tsx`'s time field was a bar
 **Built**: `app/login/page.tsx` restructured into a two-column layout (stacks on mobile) — marketing pitch on the left (headline, one-paragraph pitch leaning on the app's own self-hosted/local-SQLite identity, "your data stays on infrastructure you control"), the exact same functional sign-in/signup card on the right, completely untouched (no logic, state, or handler changed — only the outer JSX wrapper). Five feature blurbs (Tasks/Planner/Docs/Chat/Office) use the *same* icons as the real app's own nav rail (`List`/`Calendar`/`FileText`/`MessageSquare`/`Building2`), so a new user recognizes them once actually inside.
 
 **Verified**: `npx tsc --noEmit` clean; `curl http://localhost:3000/login` (unauthenticated) returns a real `200` with the new headline text present in the server-rendered HTML, confirming it's not just client-side-only content. **Not yet visually confirmed in a real browser** — the responsive stacking on mobile and general look need a real look (dev server left running locally).
+
+## Today's session (2026-08-21, continued a seventh time) — Official workspace creation (backlog #2)
+
+**Schema**: `Workspace.orgType` (`'company' | 'personal_project' | null`) and `Workspace.workEmail` added — plain metadata, deliberately never verified (no email-sending infrastructure exists in this app; that's the separate, larger #8/#9 invites item, not built yet). Pushed clean, no backfill — existing workspaces just read `null`/`'Not set'`.
+
+**Real security finding, fixed in passing**: `PATCH /api/workspaces/[id]/route.ts` — the route this feature needed to extend for editing `orgType`/`workEmail` after creation — **had no authentication check at all**. Any caller, member or not, could PATCH any workspace's `messageOfTheDay` before this. Fixed: membership is now the floor for any edit there; `name`/`orgType`/`workEmail` (workspace identity, not a shared scratch note) additionally require Owner/Admin (`canManageWorkspace`), same tier every other workspace-identity change in this app already needs. Confirmed the existing `MessageBanner` (Office's message-of-the-day banner) has no `canManage` gating client-side either — any member can already click-to-edit it — so the membership-only floor for that one field matches the feature's actual intended UX, not a new restriction.
+
+**Creation flow** (`app/page.tsx`'s workspace-switcher popover): the old single "Workspace name..." input (committed on blur) is now a small form — name, a Company/Personal-project toggle, an optional work-email field, and an explicit "Create workspace" button (blur-to-commit doesn't work once there's more than one field to tab between). **Editable afterward** in `SettingsPanel.tsx`'s General tab — a new "Workspace" section shows type (Owner/Admin gets the toggle, everyone else sees plain text) and work email (click-to-edit for Owner/Admin, matching `MessageBanner`'s own inline-edit convention). Skipped entirely for the personal (hidden "My tasks") workspace — this metadata means nothing there.
+
+**Store** (`store/useTaskStore.ts`): `createWorkspace` gained an optional third `opts` param; new `updateWorkspaceDetails` action (optimistic set + PATCH, no undo/redo — matches `updateWorkspaceMessage`'s own precedent, not every workspace-level field needs it).
+
+**Verified end-to-end** against the real dev server: created a workspace with both fields set, confirmed `GET /api/workspaces` returns them; PATCHed both fields as the owner and confirmed the update; confirmed a real non-member gets `403`; added that same user as a plain member and confirmed they're correctly blocked from changing `orgType` (`403`) but can still update `messageOfTheDay` (`200`) — the exact split the fix was supposed to produce. `npx tsc --noEmit` clean; hit the root app page afterward with no compile/runtime error. **Not yet visually confirmed in a real browser** — the new create-workspace form and the Settings panel's new section both need a real look (dev server left running locally).
 
 ## Known bugs / things to remember
 

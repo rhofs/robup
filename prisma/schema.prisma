@@ -25,6 +25,11 @@ model Workspace {
   id              String   @id @default(uuid())
   name            String
   messageOfTheDay String?  @map("message_of_the_day")
+  // A more "official" creation step (backlog #2) than a bare name field — captured up front,
+  // shown back in Workspace Settings. workEmail is never verified (no email-sending
+  // infrastructure exists in this app) — plain metadata, not a real ownership/domain check.
+  orgType         String?  @map("org_type") // 'company' | 'personal_project'
+  workEmail       String?  @map("work_email")
   spaces          Space[]
   rooms           Room[]
   events          Event[]
