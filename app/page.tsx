@@ -520,6 +520,10 @@ function PageContent() {
     addWorkspaceMember,
     removeWorkspaceMember,
     deleteWorkspace,
+    memberInvitesIncoming,
+    fetchMemberInvites,
+    acceptMemberInvite,
+    declineMemberInvite,
     ensurePersonalWorkspace,
     updateSpace,
     reorderSpace,
@@ -567,6 +571,22 @@ function PageContent() {
   const chatDms = useChatStore((s) => s.dms);
   const fetchChatChannels = useChatStore((s) => s.fetchChannels);
   const fetchChatDMs = useChatStore((s) => s.fetchDMs);
+  const createOrOpenDM = useChatStore((s) => s.createOrOpenDM);
+  const setActiveChatChannelId = useChatStore((s) => s.setActiveChannelId);
+  const setActiveDmTab = useChatStore((s) => s.setActiveDmTab);
+
+  // "Send DM" from ManageableAvatar (Office, backlog #9) — jumps straight into the real
+  // conversation instead of just navigating to Direct Messages and leaving the user to find/start
+  // it themselves. Same createOrOpenDM + setActiveChannelId/setActiveDmTab shape
+  // DirectMessagesSidebar.tsx's own "start a new chat" flow already uses.
+  const handleStartDMFromOffice = async (targetUserId: string) => {
+    if (!currentUserId || targetUserId === currentUserId) return;
+    const dm = await createOrOpenDM([currentUserId, targetUserId]);
+    if (!dm) return;
+    setActiveChatChannelId(dm.id);
+    setActiveDmTab('chats');
+    setActiveView('directMessages');
+  };
   useEffect(() => {
     fetchChatDMs();
     if (activeWorkspaceId) fetchChatChannels(activeWorkspaceId);
@@ -581,6 +601,15 @@ function PageContent() {
     [chatChannelsByWorkspace, activeWorkspaceId]
   );
   const dmUnreadCount = useMemo(() => chatDms.reduce((sum, d) => sum + (d.unreadCount || 0), 0), [chatDms]);
+
+  // Same "fetch eagerly + 30s poll" shape as the chat unread badges just above — a workspace
+  // invite (backlog #8) should be noticeable in the switcher without having to already be
+  // looking at it, and there's no push mechanism for this yet either.
+  useEffect(() => {
+    fetchMemberInvites();
+    const interval = setInterval(fetchMemberInvites, 30000);
+    return () => clearInterval(interval);
+  }, [fetchMemberInvites]);
 
   // Just for the breadcrumb's "/ #channel-name" segment — the channel list/messages themselves
   // live inside ChatChannelSidebar/ChatPanel, which read the rest of useChatStore directly. This
@@ -2582,6 +2611,39 @@ function PageContent() {
               </button>
             }
           >
+            {/* Incoming, targeted workspace invites via Network (backlog #8) — shown first since
+                this is actionable, not just navigation. Same Accept/Decline shape as Connection
+                requests. */}
+            {memberInvitesIncoming.length > 0 && (
+              <>
+                <div className="text-[10px] uppercase tracking-wide text-neutral-500 px-3 py-1">Invites ({memberInvitesIncoming.length})</div>
+                {memberInvitesIncoming.map((inv) => (
+                  <div key={inv.id} className="px-3 py-1.5 flex items-center justify-between gap-2">
+                    <div className="min-w-0">
+                      <div className="text-xs text-neutral-200 truncate">{inv.workspace.name}</div>
+                      <div className="text-[10px] text-neutral-500 truncate">from {inv.invitedBy.name}</div>
+                    </div>
+                    <div className="flex items-center gap-1 shrink-0">
+                      <button
+                        onClick={() => acceptMemberInvite(inv.id)}
+                        title="Accept"
+                        className="w-6 h-6 rounded flex items-center justify-center text-green-500 hover:bg-neutral-800 cursor-pointer"
+                      >
+                        <Check className="w-3.5 h-3.5" />
+                      </button>
+                      <button
+                        onClick={() => declineMemberInvite(inv.id)}
+                        title="Decline"
+                        className="w-6 h-6 rounded flex items-center justify-center text-neutral-500 hover:text-red-400 hover:bg-neutral-800 cursor-pointer"
+                      >
+                        <X className="w-3.5 h-3.5" />
+                      </button>
+                    </div>
+                  </div>
+                ))}
+                <div className="border-t border-neutral-800 my-1" />
+              </>
+            )}
             <div className="text-[10px] uppercase tracking-wide text-neutral-500 px-3 py-1">Workspaces</div>
             {workspaces.filter((ws) => !ws.isPersonal).map((ws) => (
               <button
@@ -3817,6 +3879,7 @@ function PageContent() {
                 onUpdateUserField={(userId, field, value) => updateUser(userId, { [field]: value })}
                 onDeleteRoomRequest={setRoomToDelete}
                 onRequestRemoveMember={(user) => setMemberToRemove(user)}
+                onStartDM={handleStartDMFromOffice}
               />
             ) : activeView === 'chat' ? (
               !activeWorkspaceId ? (

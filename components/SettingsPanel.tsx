@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from 'react';
 import Papa from 'papaparse';
 import { X, Settings, Check, Trash2, Plus, Link2, Upload } from 'lucide-react';
 import { useTaskStore, type HierarchyWorkspace } from '../store/useTaskStore';
+import { useChatStore } from '../store/useChatStore';
 import ColorSwatchPicker from './ColorSwatchPicker';
 import { copyToClipboard } from '../lib/copyToClipboard';
 
@@ -141,7 +142,8 @@ export default function SettingsPanel({
   onClose: () => void;
   onChange: () => void;
 }) {
-  const { createRole, updateRole, deleteRole, assignRole, unassignRole, updateWorkspaceDetails } = useTaskStore();
+  const { createRole, updateRole, deleteRole, assignRole, unassignRole, updateWorkspaceDetails, sendWorkspaceMemberInvite } = useTaskStore();
+  const { connections, fetchConnections } = useChatStore();
   const [tab, setTab] = useState<'general' | 'roles' | 'invite' | 'import'>('general');
   const [hidden, setHidden] = useState(() => readHiddenNavTabs());
   const [weekNumbersHidden, setWeekNumbersHidden] = useState(() => readHideWeekNumbers());
@@ -177,12 +179,32 @@ export default function SettingsPanel({
   const [newInviteRole, setNewInviteRole] = useState<'admin' | 'member'>('member');
   const [copiedId, setCopiedId] = useState<string | null>(null);
 
+  // --- Direct invite via Network (backlog #8) --- targeted, in-app invites to a specific
+  // Connection/coworker, distinct from the reusable link above. Same local-state-not-store shape
+  // as `invites`.
+  const [directQuery, setDirectQuery] = useState('');
+  const [directPending, setDirectPending] = useState<
+    { id: string; role: 'admin' | 'member'; toUser: { id: string; name: string }; invitedBy: { name: string } }[] | null
+  >(null);
+  const [directInviteError, setDirectInviteError] = useState<string | null>(null);
+  const [directInviteBusyId, setDirectInviteBusyId] = useState<string | null>(null);
+
+  const refetchDirectPending = () => {
+    fetch(`/api/workspaces/${workspace.id}/member-invites`)
+      .then((r) => r.json())
+      .then(setDirectPending)
+      .catch(() => setDirectPending([]));
+  };
+
   useEffect(() => {
     if (tab !== 'invite' || !canManage) return;
     fetch(`/api/workspaces/${workspace.id}/invites`)
       .then((r) => r.json())
       .then(setInvites)
       .catch(() => setInvites([]));
+    refetchDirectPending();
+    fetchConnections();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [tab, canManage, workspace.id]);
 
   const createInvite = async () => {
@@ -498,6 +520,78 @@ export default function SettingsPanel({
           </div>
         ) : tab === 'invite' ? (
           <div className="p-5 space-y-2 max-h-96 overflow-y-auto">
+            {/* Discord-style targeted invite via Network (backlog #8) — pick someone from your
+                Connections/coworkers directly, rather than only ever sharing a link. */}
+            <p className="text-[10px] uppercase tracking-wide text-neutral-500 font-semibold">Invite from your Network</p>
+            <input
+              value={directQuery}
+              onChange={(e) => setDirectQuery(e.target.value)}
+              placeholder="Search your Network..."
+              className="w-full bg-neutral-950 border border-neutral-700 rounded px-2 py-1.5 text-xs text-white focus:outline-none focus:border-blue-500"
+            />
+            {directInviteError && <p className="text-[11px] text-red-400">{directInviteError}</p>}
+            <div className="space-y-1 max-h-32 overflow-y-auto">
+              {connections
+                .filter((c) => {
+                  const isMember = workspace.members.some((m) => m.id === c.id);
+                  const alreadyInvited = directPending?.some((i) => i.toUser.id === c.id);
+                  const matchesQuery = !directQuery.trim() || c.name.toLowerCase().includes(directQuery.trim().toLowerCase());
+                  return !isMember && !alreadyInvited && matchesQuery;
+                })
+                .map((c) => (
+                  <div key={c.id} className="flex items-center justify-between gap-2 px-2 py-1 rounded hover:bg-neutral-800/40">
+                    <div className="flex items-center gap-1.5 min-w-0">
+                      <span className="w-5 h-5 rounded-full text-[8px] font-bold flex items-center justify-center text-white shrink-0" style={{ backgroundColor: c.color }}>
+                        {c.initials}
+                      </span>
+                      <span className="text-xs text-neutral-300 truncate">{c.name}</span>
+                    </div>
+                    <button
+                      disabled={directInviteBusyId === c.id}
+                      onClick={async () => {
+                        setDirectInviteError(null);
+                        setDirectInviteBusyId(c.id);
+                        const result = await sendWorkspaceMemberInvite(workspace.id, c.id, newInviteRole);
+                        setDirectInviteBusyId(null);
+                        if (!result.ok) setDirectInviteError(result.error || 'Could not send invite');
+                        else refetchDirectPending();
+                      }}
+                      className="text-[10px] text-blue-400 hover:text-blue-300 disabled:opacity-40 cursor-pointer shrink-0 px-2 py-0.5"
+                    >
+                      Invite
+                    </button>
+                  </div>
+                ))}
+              {connections.length === 0 && <p className="text-[11px] text-neutral-500 px-2">No one in your Network yet — connect with people first.</p>}
+            </div>
+
+            {directPending && directPending.length > 0 && (
+              <div className="space-y-1 pt-1">
+                <p className="text-[10px] text-neutral-500">Pending:</p>
+                {directPending.map((inv) => (
+                  <div key={inv.id} className="flex items-center justify-between bg-neutral-950/60 border border-neutral-800 rounded px-2.5 py-1.5">
+                    <span className="text-xs text-neutral-300">{inv.toUser.name}</span>
+                    <button
+                      onClick={async () => {
+                        await fetch(`/api/workspace-member-invites/${inv.id}`, { method: 'DELETE' });
+                        refetchDirectPending();
+                      }}
+                      title="Cancel invite"
+                      className="text-neutral-500 hover:text-red-400 cursor-pointer"
+                    >
+                      <Trash2 className="w-3 h-3" />
+                    </button>
+                  </div>
+                ))}
+              </div>
+            )}
+
+            <div className="flex items-center gap-2 py-2">
+              <div className="flex-1 h-px bg-neutral-800" />
+              <span className="text-[9px] text-neutral-600 uppercase tracking-wide">or share a link</span>
+              <div className="flex-1 h-px bg-neutral-800" />
+            </div>
+
             <p className="text-[11px] text-neutral-500">Anyone with this link can join {workspace.name} — share it however you'd like (Slack, email, text). Links don't expire; revoke one to stop it from working.</p>
 
             <div className="flex items-center gap-2 pt-1">

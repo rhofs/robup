@@ -197,6 +197,17 @@ export type HierarchyRoom = {
   workspaceId: string;
 };
 
+// A pending, targeted "invite THIS person to this workspace" (backlog #8) — the recipient's own
+// view of one, always includes which workspace + who sent it (GET /api/workspace-member-invites'
+// own shape).
+export type WorkspaceMemberInvite = {
+  id: string;
+  role: 'admin' | 'member';
+  createdAt: string;
+  workspace: { id: string; name: string };
+  invitedBy: AppUser;
+};
+
 export type HierarchyWorkspace = {
   id: string;
   name: string;
@@ -379,6 +390,18 @@ interface TaskStore {
   ) => Promise<void>;
   addWorkspaceMember: (workspaceId: string, userId: string) => Promise<void>;
   removeWorkspaceMember: (workspaceId: string, userId: string) => Promise<void>;
+  // Targeted, in-app workspace invites via Network (backlog #8) — memberInvitesIncoming is mine,
+  // across every workspace (shown in the workspace switcher); sendWorkspaceMemberInvite is the
+  // Owner/Admin side, scoped to one workspace, used from Settings' Invite tab.
+  memberInvitesIncoming: WorkspaceMemberInvite[];
+  fetchMemberInvites: () => Promise<void>;
+  acceptMemberInvite: (id: string) => Promise<void>;
+  declineMemberInvite: (id: string) => Promise<void>;
+  sendWorkspaceMemberInvite: (
+    workspaceId: string,
+    toUserId: string,
+    role: 'admin' | 'member'
+  ) => Promise<{ ok: boolean; error?: string }>;
   // Owner/Admin only server-side (see app/api/workspaces/[id]/members/[userId]/route.ts PATCH) —
   // promote a 'member' to 'admin' or demote back, never targets/produces 'owner'.
   changeWorkspaceMemberRole: (workspaceId: string, userId: string, role: 'admin' | 'member') => Promise<void>;
@@ -533,6 +556,7 @@ export const useTaskStore = create<TaskStore>((set, get) => {
     events: [],
     users: [],
     workspaces: [],
+    memberInvitesIncoming: [],
     comments: {},
     eventComments: {},
     docComments: {},
@@ -1506,6 +1530,43 @@ export const useTaskStore = create<TaskStore>((set, get) => {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(patch),
       });
+    },
+
+    fetchMemberInvites: async () => {
+      try {
+        const res = await fetch('/api/workspace-member-invites');
+        if (!res.ok) return;
+        set({ memberInvitesIncoming: await res.json() });
+      } catch (error) {
+        console.error('Failed to fetch workspace member invites:', error);
+      }
+    },
+
+    acceptMemberInvite: async (id) => {
+      const res = await fetch(`/api/workspace-member-invites/${id}/accept`, { method: 'POST' });
+      if (!res.ok) return;
+      set((state) => ({ memberInvitesIncoming: state.memberInvitesIncoming.filter((i) => i.id !== id) }));
+      const { workspaceId } = await res.json();
+      await get().refetchWorkspaces();
+      if (workspaceId) get().setActiveWorkspaceId(workspaceId);
+    },
+
+    declineMemberInvite: async (id) => {
+      set((state) => ({ memberInvitesIncoming: state.memberInvitesIncoming.filter((i) => i.id !== id) }));
+      await fetch(`/api/workspace-member-invites/${id}`, { method: 'DELETE' });
+    },
+
+    sendWorkspaceMemberInvite: async (workspaceId, toUserId, role) => {
+      const res = await fetch(`/api/workspaces/${workspaceId}/member-invites`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ toUserId, role }),
+      });
+      if (!res.ok) {
+        const data = await res.json().catch(() => null);
+        return { ok: false, error: data?.error || 'Could not send invite' };
+      }
+      return { ok: true };
     },
 
     addWorkspaceMember: async (workspaceId, userId) => {

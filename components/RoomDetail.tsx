@@ -24,9 +24,10 @@ type RoomDetailProps = {
   onBack: () => void;
   onSelectUser: (userId: string) => void;
   onRequestRemoveMember: (user: AppUser) => void;
+  onStartDM: (userId: string) => void;
 };
 
-export default function RoomDetail({ room, members, workspace, currentUserId, canManage, onBack, onSelectUser, onRequestRemoveMember }: RoomDetailProps) {
+export default function RoomDetail({ room, members, workspace, currentUserId, canManage, onBack, onSelectUser, onRequestRemoveMember, onStartDM }: RoomDetailProps) {
   const { updateRoom } = useTaskStore();
   const [editingName, setEditingName] = useState(false);
   const [nameDraft, setNameDraft] = useState(room.name);
@@ -143,6 +144,7 @@ export default function RoomDetail({ room, members, workspace, currentUserId, ca
                   currentUserId={currentUserId}
                   canManage={canManage}
                   onRequestRemove={onRequestRemoveMember}
+                  onStartDM={onStartDM}
                   size="md"
                 />
                 <div className="min-w-0 flex-1">

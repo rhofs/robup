@@ -42,6 +42,7 @@ model Workspace {
   memberships     WorkspaceMembership[]
   roles           Role[]
   invites         WorkspaceInvite[]
+  memberInvites   WorkspaceMemberInvite[]
   // The one auto-created single-member workspace behind the sidebar's private "My tasks" list —
   // distinguishes it from any other single-member workspace a user creates by hand via the
   // normal switcher (which should still show up there; this one deliberately doesn't).
@@ -99,6 +100,26 @@ model WorkspaceInvite {
   createdById String    @map("created_by_id")
   createdBy   User      @relation(fields: [createdById], references: [id], onDelete: Cascade)
   createdAt   DateTime  @default(now()) @map("created_at")
+}
+
+// A targeted, Discord-style "invite THIS specific person to this workspace" (backlog #8) —
+// distinct from WorkspaceInvite above (a reusable link anyone with it can use). An Owner/Admin
+// picks someone from their Network (GET /api/connections — Connections + coworkers), which
+// creates a real, real notification for the recipient to accept/decline — same "real accept
+// step" shape as ConnectionRequest, not an instant membership. No email involved (no
+// email-sending infrastructure exists in this app yet) — this is entirely in-app.
+model WorkspaceMemberInvite {
+  id          String    @id @default(uuid())
+  workspaceId String    @map("workspace_id")
+  workspace   Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  toUserId    String    @map("to_user_id")
+  toUser      User      @relation("WorkspaceMemberInviteRecipient", fields: [toUserId], references: [id], onDelete: Cascade)
+  invitedById String    @map("invited_by_id")
+  invitedBy   User      @relation("WorkspaceMemberInviteSender", fields: [invitedById], references: [id], onDelete: Cascade)
+  role        String    @default("member") // 'admin' | 'member' — same tier WorkspaceInvite's own role uses
+  createdAt   DateTime  @default(now()) @map("created_at")
+
+  @@unique([workspaceId, toUserId])
 }
 
 // Explicit user-to-user connection — the thing that lets two people who share NO Workspace start
@@ -353,6 +374,8 @@ model User {
   workspaceMemberships WorkspaceMembership[]
   roles         Role[]    @relation("RoleMembers")
   invitesCreated WorkspaceInvite[]
+  memberInvitesSent     WorkspaceMemberInvite[] @relation("WorkspaceMemberInviteSender")
+  memberInvitesReceived WorkspaceMemberInvite[] @relation("WorkspaceMemberInviteRecipient")
   connectionsAsA    Connection[]      @relation("ConnectionsAsA")
   connectionsAsB    Connection[]      @relation("ConnectionsAsB")
   connectionInvite  ConnectionInvite? @relation("ConnectionInviteCreator")

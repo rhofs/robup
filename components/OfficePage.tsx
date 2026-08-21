@@ -28,6 +28,7 @@ type OfficePageProps = {
   onUpdateUserField: (userId: string, field: 'title' | 'status', value: string | null) => void;
   onDeleteRoomRequest: (room: HierarchyRoom) => void;
   onRequestRemoveMember: (user: AppUser) => void;
+  onStartDM: (userId: string) => void;
 };
 
 export default function OfficePage({
@@ -46,6 +47,7 @@ export default function OfficePage({
   onUpdateUserField,
   onDeleteRoomRequest,
   onRequestRemoveMember,
+  onStartDM,
 }: OfficePageProps) {
   // taskId's List/Space aren't embedded on Task itself — build the lookup once from the tree,
   // same shape as the cross-Space breadcrumbs elsewhere in the app (e.g. QuickCreatePopover).
@@ -89,6 +91,7 @@ export default function OfficePage({
         onBack={() => onSelectRoom(null)}
         onSelectUser={onSelectUser}
         onRequestRemoveMember={onRequestRemoveMember}
+        onStartDM={onStartDM}
       />
     );
   }
@@ -106,6 +109,7 @@ export default function OfficePage({
         onSelectRoom={(id) => onSelectRoom(id)}
         onDeleteRoomRequest={onDeleteRoomRequest}
         onRequestRemoveMember={onRequestRemoveMember}
+        onStartDM={onStartDM}
       />
     );
   }

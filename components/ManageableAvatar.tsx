@@ -2,7 +2,7 @@
 
 import { useState } from 'react';
 import type { useDraggable } from '@dnd-kit/core';
-import { Settings2, Crown, Shield, Trash2, Check } from 'lucide-react';
+import { Settings2, Crown, Shield, Trash2, Check, MessageCircle } from 'lucide-react';
 import { useTaskStore, type AppUser, type HierarchyWorkspace } from '../store/useTaskStore';
 import FloatingPopover from './FloatingPopover';
 import PersonAvatar from './PersonAvatar';
@@ -13,6 +13,9 @@ type ManageableAvatarProps = {
   currentUserId: string | null;
   canManage: boolean;
   onRequestRemove: (user: AppUser) => void;
+  // DM + right-click (backlog #9) — available to everyone, not just Owner/Admin (unlike
+  // role/remove below), so the popover itself is no longer Owner/Admin-only either.
+  onStartDM: (userId: string) => void;
   size?: 'sm' | 'md' | 'lg';
   onClick?: () => void;
   showDndToggle?: boolean;
@@ -41,6 +44,7 @@ export default function ManageableAvatar({
   currentUserId,
   canManage,
   onRequestRemove,
+  onStartDM,
   size = 'md',
   onClick,
   showDndToggle,
@@ -53,6 +57,11 @@ export default function ManageableAvatar({
 }: ManageableAvatarProps) {
   const { changeWorkspaceMemberRole, assignRole, unassignRole } = useTaskStore();
   const [open, setOpen] = useState(false);
+
+  const member = workspace.members.find((m) => m.id === user.id);
+  const workspaceRole = member?.workspaceRole ?? 'member';
+  const isOwner = workspaceRole === 'owner';
+  const isSelf = user.id === currentUserId;
 
   const avatar = (
     <PersonAvatar
@@ -69,15 +78,20 @@ export default function ManageableAvatar({
     />
   );
 
-  if (!canManage) return avatar;
-
-  const member = workspace.members.find((m) => m.id === user.id);
-  const workspaceRole = member?.workspaceRole ?? 'member';
-  const isOwner = workspaceRole === 'owner';
-  const isSelf = user.id === currentUserId;
+  // Never for yourself — nothing here (DM, role, remove) applies to your own avatar.
+  if (isSelf) return avatar;
 
   return (
-    <span className="relative inline-block shrink-0">
+    <span
+      className="relative inline-block shrink-0"
+      // Right-click as an alternative to the small gear badge below (backlog #9) — same popover
+      // either way, just a second, more discoverable entry point into it.
+      onContextMenu={(e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        setOpen(true);
+      }}
+    >
       {avatar}
       <FloatingPopover
         open={open}
@@ -88,10 +102,14 @@ export default function ManageableAvatar({
               e.stopPropagation();
               setOpen((o) => !o);
             }}
-            title="Manage"
+            title={canManage ? 'Manage' : 'Send DM'}
             className={`absolute ${BADGE_SIZE_CLASSES[size]} rounded-full bg-neutral-700 hover:bg-neutral-600 border-2 border-neutral-900 flex items-center justify-center cursor-pointer text-neutral-200`}
           >
-            <Settings2 className="w-[65%] h-[65%]" />
+            {/* Gear for Owner/Admin (there's real management underneath); a chat-bubble for
+                everyone else, since "Send DM" is the only thing they'd find in here — badge is
+                real either way, both for a correctly-sized FloatingPopover anchor and so the
+                action is actually discoverable without needing to already know about right-click. */}
+            {canManage ? <Settings2 className="w-[65%] h-[65%]" /> : <MessageCircle className="w-[60%] h-[60%]" />}
           </button>
         }
         panelClassName="w-56 bg-neutral-900 border border-neutral-800 rounded shadow-xl py-1.5 max-h-72 overflow-y-auto"
@@ -105,7 +123,17 @@ export default function ManageableAvatar({
           )}
         </div>
 
-        {!isOwner && (
+        <button
+          onClick={() => {
+            setOpen(false);
+            onStartDM(user.id);
+          }}
+          className="w-full flex items-center gap-2 px-3 py-1.5 text-xs text-neutral-300 hover:bg-neutral-800/60 cursor-pointer text-left"
+        >
+          <MessageCircle className="w-3.5 h-3.5 shrink-0" /> Send DM
+        </button>
+
+        {canManage && !isOwner && (
           <button
             onClick={() => changeWorkspaceMemberRole(workspace.id, user.id, workspaceRole === 'admin' ? 'member' : 'admin')}
             className="w-full flex items-center gap-2 px-3 py-1.5 text-xs text-neutral-300 hover:bg-neutral-800/60 cursor-pointer text-left"
@@ -115,7 +143,7 @@ export default function ManageableAvatar({
           </button>
         )}
 
-        {workspace.roles.length > 0 && (
+        {canManage && workspace.roles.length > 0 && (
           <div className="px-3 py-1.5 border-t border-neutral-800 mt-1 space-y-0.5">
             <div className="text-[10px] uppercase tracking-wide text-neutral-500 pb-0.5">Roles</div>
             {workspace.roles.map((r) => {
@@ -137,7 +165,7 @@ export default function ManageableAvatar({
           </div>
         )}
 
-        {!isOwner && !isSelf && (
+        {canManage && !isOwner && (
           <div className="border-t border-neutral-800 mt-1 pt-1">
             <button
               onClick={() => {

@@ -26,6 +26,7 @@ type OfficeRoomsProps = {
   onSelectRoom: (roomId: string) => void;
   onDeleteRoomRequest: (room: HierarchyRoom) => void;
   onRequestRemoveMember: (user: AppUser) => void;
+  onStartDM: (userId: string) => void;
 };
 
 export default function OfficeRooms({
@@ -38,6 +39,7 @@ export default function OfficeRooms({
   onSelectRoom,
   onDeleteRoomRequest,
   onRequestRemoveMember,
+  onStartDM,
 }: OfficeRoomsProps) {
   const { createRoom } = useTaskStore();
   const [creatingRoom, setCreatingRoom] = useState(false);
@@ -74,7 +76,7 @@ export default function OfficeRooms({
           backgroundSize: '16px 16px',
         }}
       >
-        <LobbyBox users={unassigned} workspace={workspace} currentUserId={currentUserId} canManage={canManage} onSelectUser={onSelectUser} onRequestRemoveMember={onRequestRemoveMember} />
+        <LobbyBox users={unassigned} workspace={workspace} currentUserId={currentUserId} canManage={canManage} onSelectUser={onSelectUser} onRequestRemoveMember={onRequestRemoveMember} onStartDM={onStartDM} />
 
         {rooms.map((room) => {
           const members = users.filter((u) => u.roomId === room.id);
@@ -91,6 +93,7 @@ export default function OfficeRooms({
               onSelectRoom={() => onSelectRoom(room.id)}
               onDeleteRequest={() => onDeleteRoomRequest(room)}
               onRequestRemoveMember={onRequestRemoveMember}
+              onStartDM={onStartDM}
             />
           );
         })}
@@ -185,12 +188,13 @@ type RoomBoxProps = {
   onSelectRoom: () => void;
   onDeleteRequest: () => void;
   onRequestRemoveMember: (user: AppUser) => void;
+  onStartDM: (userId: string) => void;
 };
 
 // A top-down room: bordered rectangle (the walls), a small header strip (name/icon/controls), a
 // "floor" area holding desks (member avatars), and a decorative door notch on the bottom wall —
 // replaces the old FloorRoom's horizontal name-bar-plus-avatar-row look.
-function RoomBox({ room, members, workspace, currentUserId, canManage, taskCount, onSelectUser, onSelectRoom, onDeleteRequest, onRequestRemoveMember }: RoomBoxProps) {
+function RoomBox({ room, members, workspace, currentUserId, canManage, taskCount, onSelectUser, onSelectRoom, onDeleteRequest, onRequestRemoveMember, onStartDM }: RoomBoxProps) {
   const { updateRoom } = useTaskStore();
   // Combined drag+drop, same trick as before: setNodeRef covers the whole room box (both for
   // drag-rect measurement and as the drop target people are dragged onto), {...attributes}/
@@ -280,6 +284,7 @@ function RoomBox({ room, members, workspace, currentUserId, canManage, taskCount
             currentUserId={currentUserId}
             canManage={canManage}
             onRequestRemoveMember={onRequestRemoveMember}
+            onStartDM={onStartDM}
             size="sm"
             onSelectUser={onSelectUser}
           />
@@ -300,6 +305,7 @@ function LobbyBox({
   canManage,
   onSelectUser,
   onRequestRemoveMember,
+  onStartDM,
 }: {
   users: AppUser[];
   workspace: HierarchyWorkspace;
@@ -307,6 +313,7 @@ function LobbyBox({
   canManage: boolean;
   onSelectUser: (userId: string) => void;
   onRequestRemoveMember: (user: AppUser) => void;
+  onStartDM: (userId: string) => void;
 }) {
   const { setNodeRef, isOver } = useDroppable({ id: 'room-drop:unassigned' });
   return (
@@ -327,6 +334,7 @@ function LobbyBox({
             currentUserId={currentUserId}
             canManage={canManage}
             onRequestRemoveMember={onRequestRemoveMember}
+            onStartDM={onStartDM}
             size="md"
             onSelectUser={onSelectUser}
           />
@@ -345,6 +353,7 @@ function DraggablePersonAvatar({
   currentUserId,
   canManage,
   onRequestRemoveMember,
+  onStartDM,
   onSelectUser,
   size,
 }: {
@@ -353,6 +362,7 @@ function DraggablePersonAvatar({
   currentUserId: string | null;
   canManage: boolean;
   onRequestRemoveMember: (user: AppUser) => void;
+  onStartDM: (userId: string) => void;
   onSelectUser: (userId: string) => void;
   size: 'sm' | 'md';
 }) {
@@ -365,6 +375,7 @@ function DraggablePersonAvatar({
       currentUserId={currentUserId}
       canManage={canManage}
       onRequestRemove={onRequestRemoveMember}
+      onStartDM={onStartDM}
       size={size}
       onClick={() => onSelectUser(user.id)}
       showDndToggle
