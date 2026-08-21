@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import { prisma, publicUserSelect } from '@/lib/prisma';
 import { getCurrentUserId } from '@/lib/auth/session';
 import { ensureEventAccess } from '@/lib/auth/resourceAccess';
+import { pushEventToGoogle, deleteEventFromGoogle } from '@/lib/google/calendarSync';
 
 // Event itself has no isPrivate of its own (workspace-scoped only), so a plain membership check
 // is the whole story here — no canSee/ancestor-chain needed the way Task/Space/List/Folder/Doc
@@ -21,6 +22,10 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
       data: { deletedAt: null },
       include: { assignees: { select: publicUserSelect } },
     });
+    // Best-effort re-create on Google (the soft-delete below removed it there too) — if the
+    // stored googleEventId is now stale, pushEventToGoogle's own 404 handling clears it, and the
+    // *next* push (any future edit) will create a fresh one; not retried inline here.
+    pushEventToGoogle(event.id).catch(() => {});
     return NextResponse.json(event);
   }
 
@@ -29,6 +34,7 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
   const data: any = {};
   if (body.title !== undefined) data.title = body.title;
   if (body.description !== undefined) data.description = body.description;
+  if (body.location !== undefined) data.location = body.location;
   if (body.startDate !== undefined) data.startDate = new Date(body.startDate);
   if (body.endDate !== undefined) data.endDate = new Date(body.endDate);
   if (body.allDay !== undefined) data.allDay = body.allDay;
@@ -87,6 +93,10 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
     });
   }
 
+  // Fire-and-forget push of the event's now-current state — cheaper to just always re-push
+  // rather than work out which specific field changes are calendar-relevant.
+  pushEventToGoogle(event.id).catch(() => {});
+
   return NextResponse.json(event);
 }
 
@@ -96,11 +106,21 @@ export async function DELETE(req: Request, { params }: { params: Promise<{ id: s
   if (!userId) return NextResponse.json({ error: 'Not authenticated' }, { status: 401 });
   if (!(await ensureEventAccess(id, userId))) return NextResponse.json({ error: 'Not authorized for this event' }, { status: 403 });
 
+  // Read before deleting the row — need these to remove the Google-side copy too, whether this
+  // is a soft (trash) or permanent delete. A trashed Event shouldn't linger on the calendar any
+  // more than a permanently-deleted one does.
+  const existing = await prisma.event.findUnique({ where: { id }, select: { googleEventId: true, googleSyncOwnerId: true } });
+
   const permanent = new URL(req.url).searchParams.get('permanent') === 'true';
   if (permanent) {
     await prisma.event.delete({ where: { id } });
   } else {
     await prisma.event.update({ where: { id }, data: { deletedAt: new Date() } });
   }
+
+  if (existing?.googleEventId && existing.googleSyncOwnerId) {
+    deleteEventFromGoogle(existing.googleSyncOwnerId, existing.googleEventId).catch(() => {});
+  }
+
   return NextResponse.json({ ok: true });
 }

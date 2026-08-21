@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import { prisma, publicUserSelect } from '@/lib/prisma';
 import { getCurrentUserId } from '@/lib/auth/session';
 import { getAccessContext } from '@/lib/auth/access';
+import { pushEventToGoogle } from '@/lib/google/calendarSync';
 
 // No isPrivate/accessJson concept on Event (unlike Task/Space/Folder/List) — not asked for, and
 // an Event has no natural "owning" hierarchy level to inherit privacy from the way a Task does
@@ -34,15 +35,24 @@ export async function POST(req: Request) {
       ...(body.id ? { id: body.id } : {}),
       title: body.title,
       description: body.description ?? null,
+      location: body.location ?? null,
       startDate: new Date(body.startDate),
       endDate: new Date(body.endDate),
       allDay: body.allDay ?? true,
       color: body.color ?? null,
       spaceId: body.spaceId ?? null,
       workspaceId: body.workspaceId,
+      // Fixed at creation — only this person's Google connection will ever read/write this
+      // event's calendar sync (see calendarSync.ts's own comment on why).
+      googleSyncOwnerId: userId,
       ...(body.assigneeIds ? { assignees: { connect: body.assigneeIds.map((id: string) => ({ id })) } } : {}),
     },
     include: { assignees: { select: publicUserSelect } },
   });
+
+  // Fire-and-forget — never blocks the response, and is a silent no-op if the creator hasn't
+  // connected Google (see pushEventToGoogle's own comment).
+  pushEventToGoogle(event.id).catch(() => {});
+
   return NextResponse.json(event);
 }

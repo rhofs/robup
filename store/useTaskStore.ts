@@ -299,6 +299,7 @@ interface TaskStore {
     patch: {
       title?: string;
       description?: string | null;
+      location?: string | null;
       startDate?: string;
       endDate?: string;
       allDay?: boolean;
@@ -770,6 +771,7 @@ export const useTaskStore = create<TaskStore>((set, get) => {
         const oldPatch: typeof patch = {};
         if (patch.title !== undefined) oldPatch.title = oldEvent.title;
         if (patch.description !== undefined) oldPatch.description = oldEvent.description;
+        if (patch.location !== undefined) oldPatch.location = oldEvent.location;
         if (patch.startDate !== undefined) oldPatch.startDate = new Date(oldEvent.startDate).toISOString();
         if (patch.endDate !== undefined) oldPatch.endDate = new Date(oldEvent.endDate).toISOString();
         if (patch.allDay !== undefined) oldPatch.allDay = oldEvent.allDay;

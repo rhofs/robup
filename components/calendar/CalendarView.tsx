@@ -56,12 +56,26 @@ export default function CalendarView({ tasks, events, statuses, workspaces, show
     optimisticSetDates,
     optimisticSetCalendarLane,
     updateEvent,
+    refetchEvents,
     calendarGranularity: granularity,
     calendarFocusDate: focusDate,
     setCalendarGranularity: setGranularity,
     setCalendarFocusDate: setFocusDate,
   } = useTaskStore();
   const [weekDrag, setWeekDrag] = useState<DragState | null>(null);
+
+  // On-demand Google Calendar pull (backlog #13) — once when Planner is opened, so a change made
+  // on the Google side doesn't wait for the next scheduled scripts/syncGoogleCalendar.ts run
+  // before showing up here. Silent no-op server-side if Google isn't connected.
+  useEffect(() => {
+    fetch('/api/google/calendar/sync', { method: 'POST' })
+      .then((res) => (res.ok ? res.json() : null))
+      .then((result) => {
+        if (result && (result.updated > 0 || result.deleted > 0)) refetchEvents();
+      })
+      .catch(() => {});
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
   const gridContainerRef = useRef<HTMLDivElement>(null);
   // "Fit" — Month view only, on by default: the whole month fits the viewport with no vertical
   // scroll, every week forced to the exact same height (containerHeight / weeks.length), rather

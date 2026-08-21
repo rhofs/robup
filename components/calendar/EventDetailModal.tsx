@@ -1,7 +1,7 @@
 'use client';
 
 import { useState } from 'react';
-import { X, Trash2, Check } from 'lucide-react';
+import { X, Trash2, Check, MapPin } from 'lucide-react';
 import { Event, HierarchyWorkspace, AppUser } from '../../store/useTaskStore';
 import DatePickerPopover from '../DatePickerPopover';
 import FloatingPopover from '../FloatingPopover';
@@ -18,6 +18,7 @@ type EventDetailModalProps = {
   onUpdate: (patch: {
     title?: string;
     description?: string | null;
+    location?: string | null;
     startDate?: string;
     endDate?: string;
     allDay?: boolean;
@@ -136,6 +137,19 @@ export default function EventDetailModal({ event, workspaces, users, onClose, on
               <ColorSwatchPicker value={event.color} onChange={(color) => onUpdate({ color })} choices={EVENT_COLOR_CHOICES} size="sm" />
             </div>
           )}
+
+          <div className="space-y-1.5">
+            <label className="text-[10px] uppercase tracking-wide text-neutral-500 font-semibold flex items-center gap-1">
+              <MapPin className="w-3 h-3" /> Location
+            </label>
+            <input
+              type="text"
+              value={event.location ?? ''}
+              onChange={(e) => onUpdate({ location: e.target.value || null })}
+              placeholder="Add a location..."
+              className="w-full bg-neutral-950 border border-neutral-700 rounded px-3 py-2 text-xs text-white focus:outline-none focus:border-blue-500"
+            />
+          </div>
 
           <div className="space-y-1.5">
             <label className="text-[10px] uppercase tracking-wide text-neutral-500 font-semibold">Description</label>

@@ -361,6 +361,16 @@ model User {
   // "connect your Google account to export Docs" flow. Two independent Google integrations.
   googleRefreshToken String? @map("google_refresh_token")
   googleEmail        String? @map("google_email")
+  // Google Calendar two-way sync (backlog #13) — same "connect your Google account" flow/token as
+  // Docs export above (one refresh token, a wider scope grant), just its own two fields.
+  // googleCalendarId is this user's dedicated secondary "Siqt" calendar (created lazily on first
+  // sync, never their primary calendar — keeps Siqt's own events cleanly separate from personal
+  // ones). googleCalendarSyncToken is Google Calendar API's own incremental-sync cursor
+  // (events.list's nextSyncToken) — lets pullChangesFromGoogle fetch only what changed since last
+  // time instead of the whole calendar on every poll.
+  googleCalendarId        String? @map("google_calendar_id")
+  googleCalendarSyncToken String? @map("google_calendar_sync_token")
+  googleSyncedEvents      Event[] @relation("EventGoogleSyncOwner")
   // Personal profile ("Me" zone) — avatarUrl is a plain URL string, same "no upload, just a
   // URL" precedent as Space.coverImageUrl (this app has no file/blob storage).
   avatarUrl     String?   @map("avatar_url")
@@ -482,6 +492,9 @@ model Event {
   id          String    @id @default(uuid())
   title       String
   description String?
+  // The "maps/hvor" half of backlog #13 — a plain text field (no real maps/geocoding
+  // integration, just free text), mapped directly to/from Google Calendar's own `location` field.
+  location    String?
   startDate   DateTime  @map("start_date")
   endDate     DateTime  @map("end_date")
   allDay      Boolean   @default(true) @map("all_day")
@@ -494,6 +507,16 @@ model Event {
   workspace   Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
   assignees   User[]    @relation("EventAssignees")
   comments    Comment[]
+  // Google Calendar two-way sync (backlog #13). googleEventId is null until the first successful
+  // push — unique since it's the join key `pullChangesFromGoogle` looks events up by on the way
+  // back in. googleSyncOwnerId is fixed at creation to whoever created the Event in Siqt (the
+  // caller of POST /api/events) — only THEIR Google connection can read/write this event via the
+  // Calendar API; other assignees are added as Calendar *attendees* (their own email, an ordinary
+  // invite) rather than each needing their own OAuth connection. If the sync owner later
+  // disconnects Google, this event simply stops syncing — not an error state, no cleanup needed.
+  googleEventId     String? @unique @map("google_event_id")
+  googleSyncOwnerId String? @map("google_sync_owner_id")
+  googleSyncOwner   User?   @relation("EventGoogleSyncOwner", fields: [googleSyncOwnerId], references: [id], onDelete: SetNull)
   deletedAt   DateTime? @map("deleted_at")
   createdAt   DateTime  @default(now()) @map("created_at")
   updatedAt   DateTime  @updatedAt @map("updated_at")
