@@ -101,6 +101,10 @@ import ProfilePage from '../components/ProfilePage';
 import CommandPalette from '../components/CommandPalette';
 import TrashPanel from '../components/TrashPanel';
 import SettingsPanel, { readHiddenNavTabs, readHideWeekNumbers, type NavTabId } from '../components/SettingsPanel';
+import type { NavTab } from '../components/mobile/navTypes';
+import MobileBottomNav from '../components/mobile/MobileBottomNav';
+import AppLauncherGrid from '../components/mobile/AppLauncherGrid';
+import MobileSpacesSheet from '../components/mobile/MobileSpacesSheet';
 import AccessControlPanel from '../components/AccessControlPanel';
 import AccountSettingsPanel from '../components/AccountSettingsPanel';
 import MentionText from '../components/MentionText';
@@ -713,6 +717,8 @@ function PageContent() {
   const [trashOpen, setTrashOpen] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [hiddenNavTabs, setHiddenNavTabs] = useState<Set<NavTabId>>(() => new Set());
+  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  const [mobileSpacesOpen, setMobileSpacesOpen] = useState(false);
   const [hideWeekNumbers, setHideWeekNumbers] = useState(false);
   useEffect(() => {
     setHiddenNavTabs(readHiddenNavTabs());
@@ -1133,6 +1139,86 @@ function PageContent() {
   // there's something behind them. My tasks/Network/Chat aren't gated by this — they're
   // cross-workspace by design.
   const hasRealWorkspace = useMemo(() => workspaces.some((w) => !w.isPersonal), [workspaces]);
+
+  // Shared with the mobile bottom nav / app-launcher grid (components/mobile/*) so both surfaces
+  // drive the exact same setters as the desktop icon rail — see handleTasksNavClick below and the
+  // "board" nav tab. Kept as a plain function (not useCallback) since currentWorkspace/workspaces
+  // already change identity on every relevant update and this isn't hot-path.
+  const handleTasksNavClick = () => {
+    // Clicking Tasks while inside "My tasks" (the personal workspace) previously did nothing
+    // visible — activeView was already 'board', so this was a no-op, and nothing ever switched
+    // activeWorkspaceId back to a real team workspace. Fall back to the first non-personal
+    // workspace, same lookup currentWorkspace's own useMemo already uses.
+    if (currentWorkspace?.isPersonal) {
+      const fallback = workspaces.find((w) => !w.isPersonal);
+      if (fallback) setActiveWorkspaceId(fallback.id);
+    }
+    setActiveView('board');
+  };
+
+  const handleOfficeNavClick = () => {
+    // Always resets to the team grid, even if Office was already the active tab — same
+    // "click the rail icon to go home" expectation as clicking a nav icon in most apps, not just
+    // a tab switch. Without this, clicking Office while already viewing a person's page did
+    // nothing (setActiveView('office') is a no-op when already there).
+    setActiveView('office');
+    setActiveOfficeUserId(null);
+    setActiveOfficeRoomId(null);
+  };
+
+  // Single source of truth for which view-switching tabs are visible right now — read by both the
+  // desktop icon rail and the mobile bottom nav / app-launcher grid, so hiddenNavTabs/
+  // hasRealWorkspace are never re-derived (and never drift) between the two surfaces.
+  const visibleNavTabs: NavTab[] = useMemo(() => {
+    const tabs: NavTab[] = [];
+    if (!hiddenNavTabs.has('board') && hasRealWorkspace) {
+      tabs.push({
+        id: 'board',
+        label: 'Tasks',
+        icon: ListIcon,
+        onClick: handleTasksNavClick,
+        active: activeView === 'board' && !currentWorkspace?.isPersonal,
+      });
+    }
+    if (!hiddenNavTabs.has('calendar') && hasRealWorkspace) {
+      tabs.push({
+        id: 'calendar',
+        label: 'Planner',
+        icon: CalendarIcon,
+        onClick: () => setActiveView('calendar'),
+        active: activeView === 'calendar',
+      });
+    }
+    if (!hiddenNavTabs.has('docs') && hasRealWorkspace) {
+      tabs.push({
+        id: 'docs',
+        label: 'Docs',
+        icon: FileText,
+        onClick: () => setActiveView('docs'),
+        active: activeView === 'docs',
+      });
+    }
+    if (!hiddenNavTabs.has('office') && hasRealWorkspace) {
+      tabs.push({
+        id: 'office',
+        label: 'Office',
+        icon: Building2,
+        onClick: handleOfficeNavClick,
+        active: activeView === 'office',
+      });
+    }
+    if (!hiddenNavTabs.has('chat')) {
+      tabs.push({
+        id: 'chat',
+        label: 'Chat',
+        icon: MessageSquare,
+        onClick: () => setActiveView('chat'),
+        active: activeView === 'chat',
+        badge: chatUnreadCount,
+      });
+    }
+    return tabs;
+  }, [hiddenNavTabs, hasRealWorkspace, activeView, currentWorkspace, workspaces, chatUnreadCount]);
   // Owner or Admin of the current workspace — gates role management, member role changes, and
   // the "make private" control on Space/Folder/List/Task (server re-checks this independently on
   // every mutating route, this is only for what the UI offers to click).
@@ -2789,96 +2875,25 @@ function PageContent() {
 
       <div className="flex flex-1 overflow-hidden">
       {/* ================= ICON RAIL ================= */}
-      <nav className="w-14 bg-neutral-950 border-r border-neutral-800/80 flex flex-col items-center py-4 gap-2 shrink-0 select-none">
-        {!hiddenNavTabs.has('board') && hasRealWorkspace && (
+      <nav className="w-14 bg-neutral-950 border-r border-neutral-800/80 hidden md:flex flex-col items-center py-4 gap-2 shrink-0 select-none">
+        {visibleNavTabs.map((tab) => (
           <button
-            onClick={() => {
-              // Clicking Tasks while inside "My tasks" (the personal workspace) previously did
-              // nothing visible — activeView was already 'board', so this was a no-op, and nothing
-              // ever switched activeWorkspaceId back to a real team workspace. Fall back to the
-              // first non-personal workspace, same lookup currentWorkspace's own useMemo already
-              // uses.
-              if (currentWorkspace?.isPersonal) {
-                const fallback = workspaces.find((w) => !w.isPersonal);
-                if (fallback) setActiveWorkspaceId(fallback.id);
-              }
-              setActiveView('board');
-            }}
-            title="Tasks"
-            className={`w-10 h-10 rounded flex flex-col items-center justify-center gap-0.5 transition cursor-pointer ${
-              // Excludes the personal workspace's board — "My tasks" in the Me zone owns that
-              // highlighted state instead (see its own condition below), so the two never both
-              // light up at once for what's structurally the same activeView === 'board'.
-              activeView === 'board' && !currentWorkspace?.isPersonal
-                ? 'bg-neutral-800 text-blue-400'
-                : 'text-neutral-500 hover:bg-neutral-800/60 hover:text-neutral-200'
-            }`}
-          >
-            <ListIcon className="w-4 h-4" />
-            <span className="text-[8px] font-medium leading-none">Tasks</span>
-          </button>
-        )}
-        {!hiddenNavTabs.has('calendar') && hasRealWorkspace && (
-          <button
-            onClick={() => setActiveView('calendar')}
-            title="Planner"
-            className={`w-10 h-10 rounded flex flex-col items-center justify-center gap-0.5 transition cursor-pointer ${
-              activeView === 'calendar' ? 'bg-neutral-800 text-blue-400' : 'text-neutral-500 hover:bg-neutral-800/60 hover:text-neutral-200'
-            }`}
-          >
-            <CalendarIcon className="w-4 h-4" />
-            <span className="text-[8px] font-medium leading-none">Planner</span>
-          </button>
-        )}
-        {!hiddenNavTabs.has('docs') && hasRealWorkspace && (
-          <button
-            onClick={() => setActiveView('docs')}
-            title="Docs"
-            className={`w-10 h-10 rounded flex flex-col items-center justify-center gap-0.5 transition cursor-pointer ${
-              activeView === 'docs' ? 'bg-neutral-800 text-blue-400' : 'text-neutral-500 hover:bg-neutral-800/60 hover:text-neutral-200'
-            }`}
-          >
-            <FileText className="w-4 h-4" />
-            <span className="text-[8px] font-medium leading-none">Docs</span>
-          </button>
-        )}
-        {!hiddenNavTabs.has('office') && hasRealWorkspace && (
-          <button
-            onClick={() => {
-              // Always resets to the team grid, even if Office was already the active tab — same
-              // "click the rail icon to go home" expectation as clicking a nav icon in most apps,
-              // not just a tab switch. Without this, clicking Office while already viewing a
-              // person's page did nothing (setActiveView('office') is a no-op when already there).
-              setActiveView('office');
-              setActiveOfficeUserId(null);
-              setActiveOfficeRoomId(null);
-            }}
-            title="Office"
-            className={`w-10 h-10 rounded flex flex-col items-center justify-center gap-0.5 transition cursor-pointer ${
-              activeView === 'office' ? 'bg-neutral-800 text-blue-400' : 'text-neutral-500 hover:bg-neutral-800/60 hover:text-neutral-200'
-            }`}
-          >
-            <Building2 className="w-4 h-4" />
-            <span className="text-[8px] font-medium leading-none">Office</span>
-          </button>
-        )}
-        {!hiddenNavTabs.has('chat') && (
-          <button
-            onClick={() => setActiveView('chat')}
-            title="Chat"
+            key={tab.id}
+            onClick={tab.onClick}
+            title={tab.label}
             className={`relative w-10 h-10 rounded flex flex-col items-center justify-center gap-0.5 transition cursor-pointer ${
-              activeView === 'chat' ? 'bg-neutral-800 text-blue-400' : 'text-neutral-500 hover:bg-neutral-800/60 hover:text-neutral-200'
+              tab.active ? 'bg-neutral-800 text-blue-400' : 'text-neutral-500 hover:bg-neutral-800/60 hover:text-neutral-200'
             }`}
           >
-            <MessageSquare className="w-4 h-4" />
-            <span className="text-[8px] font-medium leading-none">Chat</span>
-            {chatUnreadCount > 0 && (
+            <tab.icon className="w-4 h-4" />
+            <span className="text-[8px] font-medium leading-none">{tab.label}</span>
+            {!!tab.badge && tab.badge > 0 && (
               <span className="absolute top-0.5 right-1 min-w-[15px] h-[15px] px-1 rounded-full bg-red-500 text-white text-[8px] font-bold flex items-center justify-center leading-none">
-                {chatUnreadCount > 99 ? '99+' : chatUnreadCount}
+                {tab.badge > 99 ? '99+' : tab.badge}
               </span>
             )}
           </button>
-        )}
+        ))}
 
         {/* Pushes Trash/Settings down to the bottom, visually separated from the view-switching
             tabs above — neither is a tab, so they shouldn't sit in the same run as Tasks/Planner/
@@ -2904,7 +2919,7 @@ function PageContent() {
       </nav>
 
       {/* ================= LEFT MENU (SIDEBAR) ================= */}
-      <aside className="w-64 bg-neutral-900/90 border-r border-neutral-800/80 flex flex-col justify-between shrink-0 select-none">
+      <aside className="w-64 bg-neutral-900/90 border-r border-neutral-800/80 hidden md:flex flex-col justify-between shrink-0 select-none">
         <div>
           {/* Persistent "Me" zone — above the workspace switcher, not a nav-rail tab. Avatar
               opens the profile page; the two lists below split what used to be one cross-
@@ -3452,6 +3467,14 @@ function PageContent() {
               )}
             </div>
 
+            {activeView === 'board' && (
+              <button
+                onClick={() => setMobileSpacesOpen(true)}
+                className="md:hidden text-[11px] px-2.5 py-1 rounded border cursor-pointer transition flex items-center gap-1.5 text-neutral-400 border-neutral-800 hover:bg-neutral-800/60"
+              >
+                <ListIcon className="w-3.5 h-3.5" /> Lists
+              </button>
+            )}
             {activeView === 'board' && (
               <button
                 onClick={() => setShowArchived(!showArchived)}
@@ -4064,6 +4087,12 @@ function PageContent() {
         </div>
       </main>
       </div>
+
+      <MobileBottomNav
+        navTabs={visibleNavTabs}
+        menuOpen={mobileMenuOpen}
+        onToggleMenu={() => setMobileMenuOpen((v) => !v)}
+      />
 
       {/* ================= BULK ACTION BAR ================= */}
       {selectedIds.size > 0 && (
@@ -5621,6 +5650,25 @@ function PageContent() {
         open={commandPaletteOpen}
         onClose={() => setCommandPaletteOpen(false)}
         onOpenTask={(id) => setModalTaskStack([id])}
+      />
+
+      <AppLauncherGrid
+        open={mobileMenuOpen}
+        onClose={() => setMobileMenuOpen(false)}
+        navTabs={visibleNavTabs}
+        onOpenSettings={() => setSettingsOpen(true)}
+        onOpenTrash={() => setTrashOpen(true)}
+      />
+      <MobileSpacesSheet
+        open={mobileSpacesOpen}
+        onClose={() => setMobileSpacesOpen(false)}
+        spaces={currentWorkspace?.spaces ?? []}
+        activeSpaceId={activeSpaceId}
+        activeListIds={activeListIds}
+        onSelectList={(space, listId) => {
+          setModalTaskStack([]);
+          handleListClick({ shiftKey: false, ctrlKey: false, metaKey: false } as React.MouseEvent, space, listId);
+        }}
       />
 
       {trashOpen && <TrashPanel onClose={() => setTrashOpen(false)} />}
