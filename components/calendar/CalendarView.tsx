@@ -16,6 +16,7 @@ import {
 } from '../../lib/calendarDates';
 import { assignLanes, clipRangeToWeek, type ClippedSegment, type DragMode, type DragState, type TaskRange } from '../../lib/ganttLayout';
 import { useTaskStore, StatusDef, Task, Event, HierarchyWorkspace } from '../../store/useTaskStore';
+import { useIsMobile } from '../../hooks/useIsMobile';
 import WeekRow, { BAR_GAP, BAR_H, DAY_NUM_H, GUTTER_WIDTH } from './WeekRow';
 import DayTimeline from './DayTimeline';
 
@@ -63,6 +64,15 @@ export default function CalendarView({ tasks, events, statuses, workspaces, show
     setCalendarFocusDate: setFocusDate,
   } = useTaskStore();
   const [weekDrag, setWeekDrag] = useState<DragState | null>(null);
+  const isMobile = useIsMobile();
+
+  // The reference spec (a native Google Calendar widget) only ever has month + day — Week has no
+  // real value on a phone-width screen and the touch-sized grid isn't tuned for it. If the
+  // viewport crosses into mobile while Week is active (e.g. rotating a foldable), fall back to
+  // Month rather than leaving the user stuck on a granularity its own switcher no longer offers.
+  useEffect(() => {
+    if (isMobile && granularity === 'week') setGranularity('month');
+  }, [isMobile, granularity, setGranularity]);
 
   // On-demand Google Calendar pull (backlog #13) — once when Planner is opened, so a change made
   // on the Google side doesn't wait for the next scheduled scripts/syncGoogleCalendar.ts run
@@ -513,7 +523,7 @@ export default function CalendarView({ tasks, events, statuses, workspaces, show
             <span className="text-[9px] text-blue-200/70 font-mono ml-0.5">N</span>
           </button>
           <div className="flex items-center gap-0.5 bg-neutral-900 border border-neutral-800 rounded-md p-0.5">
-            {(['month', 'week', 'day'] as Granularity[]).map((g) => (
+            {(isMobile ? (['month', 'day'] as Granularity[]) : (['month', 'week', 'day'] as Granularity[])).map((g) => (
               <button
                 key={g}
                 onClick={() => setGranularity(g)}
@@ -577,6 +587,7 @@ export default function CalendarView({ tasks, events, statuses, workspaces, show
             eventColorOf={eventColorOf}
             onOpenEvent={onOpenEvent}
             onCommitEventDates={(eventId, startISO, endISO) => updateEvent(eventId, { startDate: startISO, endDate: endISO })}
+            isMobile={isMobile}
           />
         ) : (
           // overflow-x-hidden always — the grid is a 7-column percentage-based layout that should
@@ -611,6 +622,7 @@ export default function CalendarView({ tasks, events, statuses, workspaces, show
                 onDragMove={handleDragMove}
                 onDragEnd={handleDragEnd}
                 onUnpinLane={(taskId) => optimisticSetCalendarLane(taskId, null)}
+                isMobile={isMobile}
               />
             ))}
 

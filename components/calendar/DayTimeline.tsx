@@ -46,6 +46,10 @@ type DayTimelineProps = {
   eventColorOf: (event: Event) => string;
   onOpenEvent: (id: string) => void;
   onCommitEventDates: (eventId: string, startISO: string, endISO: string) => void;
+  // Resize/move-drag handles are mouse-cursor-sized hit targets that don't work on touch — on
+  // mobile every block falls through to a plain tap-to-open instead (see DayTaskBlock/
+  // DayEventBlock below).
+  isMobile: boolean;
 };
 
 export default function DayTimeline({
@@ -58,6 +62,7 @@ export default function DayTimeline({
   eventColorOf,
   onOpenEvent,
   onCommitEventDates,
+  isMobile,
 }: DayTimelineProps) {
   const [drag, setDrag] = useState<DayDragState | null>(null);
   const draggedRef = useRef(false);
@@ -226,6 +231,7 @@ export default function DayTimeline({
                   onMoveInteraction={moveInteraction}
                   onEndInteraction={endInteraction}
                   style={{ top, height, left: `${(col / cols) * 100}%`, width: `${(1 / cols) * 100}%`, paddingRight: cols > 1 ? 2 : 0 }}
+                  isMobile={isMobile}
                 />
               );
             });
@@ -263,9 +269,11 @@ export default function DayTimeline({
                   width: `${(1 / cols) * 100}%`,
                   paddingRight: cols > 1 ? 2 : 0,
                 }}
+                onOpenTask={onOpenTask}
                 onStartInteraction={startInteraction}
                 onMoveInteraction={moveInteraction}
                 onEndInteraction={endInteraction}
+                isMobile={isMobile}
               />
             );
             });
@@ -331,6 +339,7 @@ function DayEventBlock({
   onMoveInteraction,
   onEndInteraction,
   style,
+  isMobile,
 }: {
   event: Event;
   start: Date;
@@ -342,6 +351,7 @@ function DayEventBlock({
   onMoveInteraction: (e: React.PointerEvent, id: string) => void;
   onEndInteraction: (e: React.PointerEvent, id: string, start: Date, end: Date) => void;
   style: React.CSSProperties;
+  isMobile: boolean;
 }) {
   const [hovered, setHovered] = useState(false);
   return (
@@ -371,19 +381,25 @@ function DayEventBlock({
         <span className="truncate">{event.title}</span>
       </button>
       {/* Resize only (stretch/shrink either edge) — no move handler on the body, same
-          deliberate-edit-only reasoning as WeekRow.tsx's EventBar. */}
-      <div
-        onPointerDown={(e) => onStartInteraction(e, event.id, 'resize-start')}
-        onPointerMove={(e) => onMoveInteraction(e, event.id)}
-        onPointerUp={(e) => onEndInteraction(e, event.id, start, end)}
-        className="absolute left-0 right-0 top-0 h-1.5 cursor-ns-resize"
-      />
-      <div
-        onPointerDown={(e) => onStartInteraction(e, event.id, 'resize-end')}
-        onPointerMove={(e) => onMoveInteraction(e, event.id)}
-        onPointerUp={(e) => onEndInteraction(e, event.id, start, end)}
-        className="absolute left-0 right-0 bottom-0 h-1.5 cursor-ns-resize"
-      />
+          deliberate-edit-only reasoning as WeekRow.tsx's EventBar. Skipped on mobile — a 6px-tall
+          edge strip isn't a workable touch target, and the button above already opens the event
+          on tap. */}
+      {!isMobile && (
+        <div
+          onPointerDown={(e) => onStartInteraction(e, event.id, 'resize-start')}
+          onPointerMove={(e) => onMoveInteraction(e, event.id)}
+          onPointerUp={(e) => onEndInteraction(e, event.id, start, end)}
+          className="absolute left-0 right-0 top-0 h-1.5 cursor-ns-resize"
+        />
+      )}
+      {!isMobile && (
+        <div
+          onPointerDown={(e) => onStartInteraction(e, event.id, 'resize-end')}
+          onPointerMove={(e) => onMoveInteraction(e, event.id)}
+          onPointerUp={(e) => onEndInteraction(e, event.id, start, end)}
+          className="absolute left-0 right-0 bottom-0 h-1.5 cursor-ns-resize"
+        />
+      )}
     </div>
   );
 }
@@ -395,9 +411,11 @@ function DayTaskBlock({
   color,
   isDraggingThis,
   style,
+  onOpenTask,
   onStartInteraction,
   onMoveInteraction,
   onEndInteraction,
+  isMobile,
 }: {
   task: Task;
   start: Date;
@@ -405,18 +423,21 @@ function DayTaskBlock({
   color: string;
   isDraggingThis: boolean;
   style: React.CSSProperties;
+  onOpenTask: (id: string) => void;
   onStartInteraction: (e: React.PointerEvent, id: string, mode: DayDragMode) => void;
   onMoveInteraction: (e: React.PointerEvent, id: string) => void;
   onEndInteraction: (e: React.PointerEvent, id: string, start: Date, end: Date) => void;
+  isMobile: boolean;
 }) {
   const [hovered, setHovered] = useState(false);
   const height = typeof style.height === 'number' ? style.height : 0;
   return (
     <div className="absolute group/block" style={style}>
       <div
-        onPointerDown={(e) => onStartInteraction(e, task.id, 'move')}
-        onPointerMove={(e) => onMoveInteraction(e, task.id)}
-        onPointerUp={(e) => onEndInteraction(e, task.id, start, end)}
+        onPointerDown={isMobile ? undefined : (e) => onStartInteraction(e, task.id, 'move')}
+        onPointerMove={isMobile ? undefined : (e) => onMoveInteraction(e, task.id)}
+        onPointerUp={isMobile ? undefined : (e) => onEndInteraction(e, task.id, start, end)}
+        onClick={isMobile ? () => onOpenTask(task.id) : undefined}
         onMouseEnter={() => setHovered(true)}
         onMouseLeave={() => setHovered(false)}
         title={task.title}
@@ -449,18 +470,22 @@ function DayTaskBlock({
             )}
           </span>
         )}
-        <div
-          onPointerDown={(e) => onStartInteraction(e, task.id, 'resize-start')}
-          onPointerMove={(e) => onMoveInteraction(e, task.id)}
-          onPointerUp={(e) => onEndInteraction(e, task.id, start, end)}
-          className="absolute left-0 right-0 top-0 h-1.5 cursor-ns-resize"
-        />
-        <div
-          onPointerDown={(e) => onStartInteraction(e, task.id, 'resize-end')}
-          onPointerMove={(e) => onMoveInteraction(e, task.id)}
-          onPointerUp={(e) => onEndInteraction(e, task.id, start, end)}
-          className="absolute left-0 right-0 bottom-0 h-1.5 cursor-ns-resize"
-        />
+        {!isMobile && (
+          <div
+            onPointerDown={(e) => onStartInteraction(e, task.id, 'resize-start')}
+            onPointerMove={(e) => onMoveInteraction(e, task.id)}
+            onPointerUp={(e) => onEndInteraction(e, task.id, start, end)}
+            className="absolute left-0 right-0 top-0 h-1.5 cursor-ns-resize"
+          />
+        )}
+        {!isMobile && (
+          <div
+            onPointerDown={(e) => onStartInteraction(e, task.id, 'resize-end')}
+            onPointerMove={(e) => onMoveInteraction(e, task.id)}
+            onPointerUp={(e) => onEndInteraction(e, task.id, start, end)}
+            className="absolute left-0 right-0 bottom-0 h-1.5 cursor-ns-resize"
+          />
+        )}
       </div>
     </div>
   );

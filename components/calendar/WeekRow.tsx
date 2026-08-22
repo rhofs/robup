@@ -49,6 +49,9 @@ type WeekRowProps = {
   // use everywhere else in this file.
   onDragEnd: (id: string, mode: DragMode) => void;
   onUnpinLane: (taskId: string) => void;
+  // Resize/move-drag handles are mouse-cursor-sized hit targets that don't work on touch — on
+  // mobile every bar falls through to a plain tap-to-open instead (see TaskBar/EventBar below).
+  isMobile: boolean;
 };
 
 export default function WeekRow({
@@ -73,6 +76,7 @@ export default function WeekRow({
   onDragMove,
   onDragEnd,
   onUnpinLane,
+  isMobile,
 }: WeekRowProps) {
   const pointerDownXYRef = useRef({ x: 0, y: 0 });
   const draggedRef = useRef(false);
@@ -236,6 +240,7 @@ export default function WeekRow({
                   onStartInteraction={startInteraction}
                   onMoveInteraction={moveInteraction}
                   onEndInteraction={endInteraction}
+                  isMobile={isMobile}
                 />
               );
             }
@@ -248,10 +253,12 @@ export default function WeekRow({
                 barStyle={barStyle}
                 color={taskColorOf(task!)}
                 isDraggingThis={activeDrag?.taskId === seg.taskId}
+                onOpenTask={onOpenTask}
                 onStartInteraction={startInteraction}
                 onMoveInteraction={moveInteraction}
                 onEndInteraction={endInteraction}
                 onUnpinLane={onUnpinLane}
+                isMobile={isMobile}
               />
             );
           })}
@@ -284,6 +291,7 @@ function EventBar({
   onStartInteraction,
   onMoveInteraction,
   onEndInteraction,
+  isMobile,
 }: {
   event: Event;
   seg: ClippedSegment;
@@ -294,6 +302,7 @@ function EventBar({
   onStartInteraction: (e: React.PointerEvent, id: string, mode: DragMode) => void;
   onMoveInteraction: (e: React.PointerEvent, id: string) => void;
   onEndInteraction: (e: React.PointerEvent, id: string, mode: DragMode) => void;
+  isMobile: boolean;
 }) {
   const [hovered, setHovered] = useState(false);
   return (
@@ -329,8 +338,9 @@ function EventBar({
       {/* Resizable (stretch/shrink either edge, same gesture as a Task bar) but never draggable
           by the body — an Event's date range is meant to be a deliberate edit, not something that
           drifts from an accidental drag on the whole bar the way a Task's due-date-driven bar
-          does. */}
-      {seg.isStartEdge && (
+          does. Skipped on mobile entirely — a 2px-wide edge strip isn't a workable touch target,
+          and the button above already opens the event on tap. */}
+      {!isMobile && seg.isStartEdge && (
         <div
           onPointerDown={(e) => onStartInteraction(e, event.id, 'resize-start')}
           onPointerMove={(e) => onMoveInteraction(e, event.id)}
@@ -338,7 +348,7 @@ function EventBar({
           className="absolute left-0 top-0 h-full w-2 cursor-ew-resize"
         />
       )}
-      {seg.isEndEdge && (
+      {!isMobile && seg.isEndEdge && (
         <div
           onPointerDown={(e) => onStartInteraction(e, event.id, 'resize-end')}
           onPointerMove={(e) => onMoveInteraction(e, event.id)}
@@ -356,29 +366,36 @@ function TaskBar({
   barStyle,
   color,
   isDraggingThis,
+  onOpenTask,
   onStartInteraction,
   onMoveInteraction,
   onEndInteraction,
   onUnpinLane,
+  isMobile,
 }: {
   task: Task;
   seg: ClippedSegment;
   barStyle: React.CSSProperties;
   color: string;
   isDraggingThis: boolean;
+  onOpenTask: (id: string) => void;
   onStartInteraction: (e: React.PointerEvent, id: string, mode: DragMode) => void;
   onMoveInteraction: (e: React.PointerEvent, id: string) => void;
   onEndInteraction: (e: React.PointerEvent, id: string, mode: DragMode) => void;
   onUnpinLane: (taskId: string) => void;
+  isMobile: boolean;
 }) {
   const [hovered, setHovered] = useState(false);
   const assignees = task.assignees;
   return (
     <div className="absolute pointer-events-auto group/bar" style={{ ...barStyle, opacity: isDraggingThis ? 0.35 : 1 }}>
       <div
-        onPointerDown={(e) => onStartInteraction(e, task.id, 'move')}
-        onPointerMove={(e) => onMoveInteraction(e, task.id)}
-        onPointerUp={(e) => onEndInteraction(e, task.id, 'move')}
+        // Mobile never wires up the move-drag pointer handlers — a bar tap just opens the task,
+        // same as a plain click does on desktop when no actual drag occurred.
+        onPointerDown={isMobile ? undefined : (e) => onStartInteraction(e, task.id, 'move')}
+        onPointerMove={isMobile ? undefined : (e) => onMoveInteraction(e, task.id)}
+        onPointerUp={isMobile ? undefined : (e) => onEndInteraction(e, task.id, 'move')}
+        onClick={isMobile ? () => onOpenTask(task.id) : undefined}
         onMouseEnter={() => setHovered(true)}
         onMouseLeave={() => setHovered(false)}
         title={task.title}
@@ -420,7 +437,7 @@ function TaskBar({
           </span>
         )}
 
-        {seg.isStartEdge && (
+        {!isMobile && seg.isStartEdge && (
           <div
             onPointerDown={(e) => onStartInteraction(e, task.id, 'resize-start')}
             onPointerMove={(e) => onMoveInteraction(e, task.id)}
@@ -428,7 +445,7 @@ function TaskBar({
             className="absolute left-0 top-0 h-full w-2 cursor-ew-resize"
           />
         )}
-        {seg.isEndEdge && (
+        {!isMobile && seg.isEndEdge && (
           <div
             onPointerDown={(e) => onStartInteraction(e, task.id, 'resize-end')}
             onPointerMove={(e) => onMoveInteraction(e, task.id)}

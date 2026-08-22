@@ -3491,7 +3491,7 @@ function PageContent() {
         </header>
 
         <div
-          className={activeView === 'calendar' ? 'flex-1 min-h-0 overflow-hidden p-6 flex flex-col' : 'flex-1 overflow-auto p-6'}
+          className={activeView === 'calendar' ? 'flex-1 min-h-0 overflow-hidden p-2 md:p-6 flex flex-col' : 'flex-1 overflow-auto p-6'}
           onClick={closeAllMenus}
         >
           <div
