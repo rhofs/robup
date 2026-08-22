@@ -2678,7 +2678,11 @@ function PageContent() {
   }
 
   const activeModalTask = activeModalTaskId ? tasks.find((t) => t.id === activeModalTaskId) ?? null : null;
-  const currentSubtasks = activeModalTask ? tasks.filter((t) => t.parentId === activeModalTask.id) : [];
+  // Archived (done) subtasks stay out of the list, same as the main Task list already does for
+  // top-level tasks (filteredTasks' own `!!task.archived === showArchived` filter) — this list had
+  // no such filter at all, so marking a subtask done just left it sitting there, green, forever,
+  // instead of disappearing the way checking off a normal task does.
+  const currentSubtasks = activeModalTask ? tasks.filter((t) => t.parentId === activeModalTask.id && !t.archived) : [];
   const activeComments = activeModalTask ? comments[activeModalTask.id] || [] : [];
   const allListsFlat = workspaces.flatMap((ws) => ws.spaces.flatMap((s) => s.lists.map((l) => ({ ...l, spaceName: s.name }))));
 

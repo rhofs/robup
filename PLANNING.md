@@ -1563,6 +1563,18 @@ Chose *not* to refactor `WeekRow.tsx`'s existing (already-working, already-verif
 
 **Verified**: `npx tsc --noEmit` clean, a real `npm run build` succeeds, scripted login + `GET /` returns 200 with no error-overlay marker. **Not yet visually confirmed** — same caveat as every mobile-gesture/layout fix this session; all six need the user to retest on their phone after deploying, especially the long-press timing (reply/thread in Chat, task context menu) and whether the chevron reveal button and swipe now agree with each other without fighting.
 
+## Today's session (2026-08-22, continued an eighth time) — Fixed: checked-off subtasks never left the subtask list
+
+User reported (both PC and mobile): marking a subtask done just leaves it sitting there, green, instead of disappearing into the archive the way checking off a normal top-level task does.
+
+**Root cause**: `currentSubtasks` (`app/page.tsx`) — the list rendered inside a task's detail modal — was `tasks.filter((t) => t.parentId === activeModalTask.id)`, no `archived` filter at all. The main Task list's own equivalent (`filteredTasks`) has always filtered by `!!task.archived === showArchived`; this parallel list for subtasks never got the same treatment, so "mark as done" (which is genuinely just `optimisticArchiveTask`, the identical action a normal task's done-toggle calls) visually succeeded (the row does turn green — `TaskRow.tsx`'s `showAsDone = task.archived` styling) but the row itself never left the list, since nothing was filtering it out.
+
+**Fix**: one-line filter added — `tasks.filter((t) => t.parentId === activeModalTask.id && !t.archived)`. Checked that nothing else reads `currentSubtasks` in a way this would break (only the "Subtasks (N)" count header and the row map itself use it; the separate entrance-animation-tracking effect for newly-added subtasks recomputes its own id set directly from `tasks`, independent of this list, so it's unaffected).
+
+Scope note: this makes archived subtasks disappear by default, matching the user's ask exactly — it does *not* add a "view archived subtasks" toggle (the main list's own "Archive" pill has no subtask-scoped equivalent). Worth building later if the user ever wants to browse completed subtasks, but not asked for here.
+
+**Verified**: `npx tsc --noEmit` clean, a real `npm run build` succeeds, scripted login + `GET /` returns 200 with no error-overlay marker. This is a pure client-side filter (no API/schema change), so the usual desktop-browser click-through is the real verification — not yet done by the user.
+
 ## Known bugs / things to remember
 
 - **dnd-kit gotcha**: `useDraggable`/`useDroppable` bind to the *nearest ancestor* `DndContext` by React-tree position, not by id-naming intent. Fix: one shared `DndContext` for all sidebar/task dragging, dispatch in `onDragEnd` by inspecting the dragged id's prefix (`task id`, `list-drag:`, `folder-drag:`, `space-drag:`).
