@@ -3,6 +3,7 @@
 import { useRef, useState } from 'react';
 import { CalendarClock } from 'lucide-react';
 import GoogleIcon from '../icons/GoogleIcon';
+import GoogleDashedBorder from '../icons/GoogleDashedBorder';
 import { isSameDay } from '../../lib/calendarDates';
 import { layoutDayColumns } from '../../lib/ganttLayout';
 import { withAlpha } from '../../lib/colorAlpha';
@@ -303,15 +304,16 @@ function AllDayChip({
       title={label}
       // Dashed border + CalendarClock icon for Events, same Task-vs-Event tell as everywhere
       // else in Planner — plain-color alone isn't reliable since either can be any color.
-      className={`w-full text-left truncate text-[11px] font-medium px-2 py-1 rounded-md border cursor-pointer transition-colors flex items-center gap-1 ${
+      className={`relative w-full text-left truncate text-[11px] font-medium px-2 py-1 rounded-md border cursor-pointer transition-colors flex items-center gap-1 ${
         isEvent ? 'border-dashed' : ''
       }`}
       style={{
         backgroundColor: withAlpha(color, hovered ? HOVER_BG_ALPHA : BASE_BG_ALPHA),
-        borderColor: withAlpha(color, hovered ? HOVER_BORDER_ALPHA : BASE_BORDER_ALPHA),
+        borderColor: fromGoogle ? 'transparent' : withAlpha(color, hovered ? HOVER_BORDER_ALPHA : BASE_BORDER_ALPHA),
         color,
       }}
     >
+      {fromGoogle && <GoogleDashedBorder />}
       {isEvent && (fromGoogle ? <GoogleIcon className="w-2.5 h-2.5 shrink-0" /> : <CalendarClock className="w-2.5 h-2.5 shrink-0" />)}
       <span className="truncate">{label}</span>
     </button>
@@ -356,10 +358,11 @@ function DayEventBlock({
         }`}
         style={{
           backgroundColor: withAlpha(color, hovered ? HOVER_BG_ALPHA : BASE_BG_ALPHA),
-          borderColor: withAlpha(color, hovered ? HOVER_BORDER_ALPHA : BASE_BORDER_ALPHA),
+          borderColor: event.importedFromGoogle ? 'transparent' : withAlpha(color, hovered ? HOVER_BORDER_ALPHA : BASE_BORDER_ALPHA),
           color,
         }}
       >
+        {event.importedFromGoogle && <GoogleDashedBorder />}
         {event.importedFromGoogle ? (
           <GoogleIcon className="w-2.5 h-2.5 shrink-0" />
         ) : (

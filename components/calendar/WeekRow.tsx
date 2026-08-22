@@ -3,6 +3,7 @@
 import { useRef, useState } from 'react';
 import { Plus, Pin, CalendarClock } from 'lucide-react';
 import GoogleIcon from '../icons/GoogleIcon';
+import GoogleDashedBorder from '../icons/GoogleDashedBorder';
 import { getISOWeek, isSameDay } from '../../lib/calendarDates';
 import { withAlpha } from '../../lib/colorAlpha';
 import type { ClippedSegment, DragMode, DragState } from '../../lib/ganttLayout';
@@ -310,10 +311,14 @@ function EventBar({
         } ${seg.isEndEdge ? 'rounded-r-md pr-2' : 'pr-1'}`}
         style={{
           backgroundColor: withAlpha(color, hovered ? HOVER_BG_ALPHA : BASE_BG_ALPHA),
-          borderColor: withAlpha(color, hovered ? HOVER_BORDER_ALPHA : BASE_BORDER_ALPHA),
+          // A Google-imported event gets its own 4-color dashed overlay instead (below) — this
+          // element's own border is made transparent rather than removed outright, so the
+          // border-width stays reserved and nothing else in the layout shifts.
+          borderColor: event.importedFromGoogle ? 'transparent' : withAlpha(color, hovered ? HOVER_BORDER_ALPHA : BASE_BORDER_ALPHA),
           color,
         }}
       >
+        {event.importedFromGoogle && <GoogleDashedBorder />}
         {event.importedFromGoogle ? (
           <GoogleIcon className="w-2.5 h-2.5 shrink-0" />
         ) : (

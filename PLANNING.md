@@ -1412,6 +1412,14 @@ User pushed back on the previous entry's scope cut #2 immediately, with a ClickU
 
 **Verified**: `npx tsc --noEmit` clean; re-ran the earlier no-Google-connected regression check after the rewrite — still passes, and the on-demand sync endpoint now correctly returns the new `{created, updated, deleted}` shape. Ran a real `npm run build` before pushing (now a standing habit after the `@types/web-push` deploy break). **Still not verified against a real Google account** — same limitation as before, no browser/OAuth flow available here; the next real click-through should specifically confirm an event created directly in Google Calendar shows up in Siqt's "My tasks" Planner with the Google icon, not just that Siqt→Google pushes work.
 
+## Today's session (2026-08-21, continued a thirteenth time) — Google-colors dashed border on imported events
+
+User asked specifically: a Google-imported Event's dashed border should be in Google's own 4-color "rainbow" (blue/red/yellow/green), not the usual single-color one every other Event gets.
+
+A real multi-color dashed CSS border isn't achievable with `border-color` (one flat color) or `border-image` (ignores both `border-style` and `border-radius` in every browser — tried reasoning through it, not worth the inconsistency). New `components/icons/GoogleDashedBorder.tsx` instead: four separate absolutely-positioned strips (top/right/bottom/left), each its own Google color, each drawn via a `repeating-linear-gradient` along its own axis to get an actual dash pattern — genuinely reliable across browsers, unlike the border-image approach. `rounded-[inherit]` + `overflow-hidden` on the wrapper clips it to whatever radius the parent bar already has, so it doesn't need to know which corners are actually rounded.
+
+Wired into the exact same three surfaces the Google icon already uses (`WeekRow.tsx`'s `EventBar`, `DayTimeline.tsx`'s `DayEventBlock` and `AllDayChip`) — only for `importedFromGoogle` events; the underlying element's own real border is set to `transparent` (not removed — keeps the same border-width reserved so nothing else shifts) so the two don't double up. `npx tsc --noEmit` clean; hit the app afterward with no compile/runtime error. **Not yet seen in a real browser** (no Google-imported event exists to look at without a real connected account either) — worth a visual check once that's possible.
+
 ## Known bugs / things to remember
 
 - **dnd-kit gotcha**: `useDraggable`/`useDroppable` bind to the *nearest ancestor* `DndContext` by React-tree position, not by id-naming intent. Fix: one shared `DndContext` for all sidebar/task dragging, dispatch in `onDragEnd` by inspecting the dragged id's prefix (`task id`, `list-drag:`, `folder-drag:`, `space-drag:`).
