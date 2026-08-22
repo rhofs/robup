@@ -1531,6 +1531,16 @@ User reported (Norwegian): drilling into a Day view on mobile and then swiping b
 
 **Verified**: `npx tsc --noEmit` clean, a real `npm run build` succeeds, scripted login + `GET /` returns 200 with no error-overlay marker. **Not yet visually confirmed** — same caveat as every mobile-gesture fix this session; needs the user to retest on their phone, specifically: (a) does the fix alone resolve it, (b) if not, does tapping "Month" directly (bypassing swipe) also show the bug, which would point at the render/layout path rather than history/URL sync specifically.
 
+## Today's session (2026-08-22, continued a sixth time) — Mobile browser chrome was eating into the app's own height (`h-screen` → `h-dvh`)
+
+User reported having to scroll down to see the mobile bottom nav, correctly guessing it was the browser's own address bar taking up space, and asked whether this is fixable for regular web users too (not just a future installed app).
+
+**Root cause**: the app's root layout div (`app/page.tsx`) used `h-screen` (`height: 100vh`). On mobile Safari/Chrome, `100vh` is sized against the *largest possible* viewport — the one you'd get with the address bar hidden — not the currently-visible one. With the address bar showing (the default, until the user scrolls a scrollable area enough to auto-hide it), the real visible viewport is shorter than `100vh` by exactly the address bar's height, so a `100vh`-tall flex column pushes its last child (the mobile bottom nav) below the actual visible fold.
+
+**Fix**: swapped `h-screen` for `h-dvh` (`height: 100dvh`, Tailwind's dynamic-viewport-height utility, built in since v3.4 and still present in this project's v4) on the root wrapper and the loading-state fallback screen. `dvh` tracks the *actual* visible viewport and updates live as the browser chrome shows/hides — this is a plain CSS fix that works identically for a regular browser tab and an installed PWA, not something that needs the app to be installed to benefit from. Confirmed the utility actually compiled (`h-dvh{height:100dvh}` present in the built CSS bundle) rather than just trusting Tailwind's JIT scanner picked it up.
+
+**Verified**: `npx tsc --noEmit` clean, a real `npm run build` succeeds, scripted login + `GET /` returns 200 with no error-overlay marker, confirmed the compiled CSS actually contains the `dvh` rule. **Not yet visually confirmed** — needs the user to check on their phone (after deploying) that the bottom nav is now visible without scrolling, both with the address bar showing and after it auto-hides on scroll.
+
 ## Known bugs / things to remember
 
 - **dnd-kit gotcha**: `useDraggable`/`useDroppable` bind to the *nearest ancestor* `DndContext` by React-tree position, not by id-naming intent. Fix: one shared `DndContext` for all sidebar/task dragging, dispatch in `onDragEnd` by inspecting the dragged id's prefix (`task id`, `list-drag:`, `folder-drag:`, `space-drag:`).

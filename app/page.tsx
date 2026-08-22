@@ -2666,7 +2666,7 @@ function PageContent() {
 
   if (isLoading) {
     return (
-      <div className="flex h-screen w-screen items-center justify-center bg-neutral-950 text-blue-400 font-mono text-sm">
+      <div className="flex h-dvh w-screen items-center justify-center bg-neutral-950 text-blue-400 font-mono text-sm">
         <div className="flex items-center gap-3">
           <div className="w-5 h-5 border-2 border-blue-500 border-t-transparent rounded-full animate-spin"></div>
           <span>Loading Siqt...</span>
@@ -2717,7 +2717,13 @@ function PageContent() {
         descriptions, comments, etc.) needs its own explicit `select-text` to opt back in, or it
         silently can't be highlighted at all. See ChatPanel.tsx/ChatThreadPanel.tsx's message
         body divs for the pattern. */}
-    <div className="flex flex-col h-screen bg-neutral-950 text-neutral-100 font-sans overflow-hidden select-none">
+    {/* h-dvh, not h-screen (100vh) — on mobile, 100vh is sized against the browser's *largest*
+        possible viewport (address bar hidden), not the currently visible one, so with the
+        address bar showing, a 100vh-tall root pushes its last flex child (the mobile bottom nav)
+        below the actual visible fold, requiring a scroll to reach it. `dvh` tracks the real
+        visible viewport and updates as the browser chrome shows/hides — the standard fix for
+        exactly this class of "have to scroll to see the bottom bar" mobile-web bug. */}
+    <div className="flex flex-col h-dvh bg-neutral-950 text-neutral-100 font-sans overflow-hidden select-none">
       {/* ================= TOP BAR — workspace + search, so the icon rail/sidebar below don't
           have to carry that weight themselves (previously both lived stacked at the very top
           of the sidebar, which read as cramped). ================= */}
