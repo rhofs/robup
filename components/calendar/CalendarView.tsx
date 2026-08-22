@@ -86,7 +86,27 @@ export default function CalendarView({ tasks, events, statuses, workspaces, show
       .catch(() => {});
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
-  const gridContainerRef = useRef<HTMLDivElement>(null);
+  const gridContainerRef = useRef<HTMLDivElement | null>(null);
+  // Mirrors gridContainerRef.current into state, purely so the ResizeObserver effect below can
+  // depend on "the actual DOM node" and re-run when it changes — a plain useRef's own reassignment
+  // is invisible to React's dependency tracking (see gridContainerCallbackRef).
+  const [gridContainerNode, setGridContainerNode] = useState<HTMLDivElement | null>(null);
+  // Month view's grid <div ref={gridContainerRef}> genuinely unmounts (not just hides) every time
+  // granularity flips to 'day' — CalendarView renders `{granularity === 'day' ? <DayTimeline/> :
+  // <div ref={gridContainerRef}>...}`, two different element types in the same ternary slot, so
+  // React tears the whole month-grid div down and mounts a fresh one on the way back. A ref
+  // *object* handles that fine (React just reassigns `.current`), but the effect below used to
+  // only ever run once on CalendarView's own first mount ([] deps) — meaning its ResizeObserver
+  // stayed bound to the very first grid div forever, and never re-attached to the fresh one
+  // created each time you return from Day view to Month view. Once that first div was gone,
+  // `containerHeight` silently stopped updating on resize, and if the fresh div's real height
+  // ever differed from the last measurement (rotation, keyboard, address-bar show/hide), rows
+  // could end up laid out too short for their own content. A callback ref fixes this at the root:
+  // it fires on every mount *and* every unmount, so the effect can depend on the real node.
+  const gridContainerCallbackRef = (node: HTMLDivElement | null) => {
+    gridContainerRef.current = node;
+    setGridContainerNode(node);
+  };
   // "Fit" — Month view only, on by default: the whole month fits the viewport with no vertical
   // scroll, every week forced to the exact same height (containerHeight / weeks.length), rather
   // than the normal fixed-per-lane-cap height that can require scrolling on a 6-week month. Never
@@ -103,14 +123,14 @@ export default function CalendarView({ tasks, events, statuses, workspaces, show
   // viewport regardless of how many events exist.
   const [containerHeight, setContainerHeight] = useState(0);
   useEffect(() => {
-    const el = gridContainerRef.current;
+    const el = gridContainerNode;
     if (!el) return;
     const update = () => setContainerHeight(el.clientHeight);
     update();
     const ro = new ResizeObserver(update);
     ro.observe(el);
     return () => ro.disconnect();
-  }, []);
+  }, [gridContainerNode]);
 
   const today = useMemo(() => startOfDay(new Date()), []);
   const statusColorOf = (name: string) => statuses.find((s) => s.name === name)?.color || '#94a3b8';
@@ -598,7 +618,7 @@ export default function CalendarView({ tasks, events, statuses, workspaces, show
           // widths not landing on exact whole pixels) was enough to surface a horizontal
           // scrollbar along the very bottom of the grid.
           <div
-            ref={gridContainerRef}
+            ref={gridContainerCallbackRef}
             className={`relative h-full overflow-x-hidden ${isFitActive ? 'overflow-y-hidden' : 'overflow-y-auto'}`}
           >
             {weeks.map((weekDays, i) => (
