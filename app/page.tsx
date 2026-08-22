@@ -3983,7 +3983,7 @@ function PageContent() {
             <div className="bg-neutral-900/60 border border-neutral-800/80 rounded overflow-x-auto shadow-sm">
               <div style={{ minWidth: tableMinWidth }}>
               <div
-                className="grid items-center px-4 py-2.5 text-[10px] font-semibold text-neutral-500 uppercase tracking-wider border-b border-neutral-800 bg-neutral-950/40"
+                className="hidden md:grid items-center px-4 py-2.5 text-[10px] font-semibold text-neutral-500 uppercase tracking-wider border-b border-neutral-800 bg-neutral-950/40"
                 style={{ gridTemplateColumns: rowGridTemplate }}
               >
                 <div className="flex items-center">
@@ -5140,7 +5140,7 @@ function PageContent() {
                     <div style={{ minWidth: currentSubtasks.length > 0 ? tableMinWidth : undefined }}>
                     {currentSubtasks.length > 0 && (
                       <div
-                        className="grid items-center px-3 py-1.5 text-[9px] font-semibold text-neutral-500 uppercase tracking-wider border-b border-neutral-800"
+                        className="hidden md:grid items-center px-3 py-1.5 text-[9px] font-semibold text-neutral-500 uppercase tracking-wider border-b border-neutral-800"
                         style={{ gridTemplateColumns: rowGridTemplate }}
                       >
                         <div></div>
