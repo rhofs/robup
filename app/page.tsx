@@ -59,6 +59,7 @@ import {
   ListChecks,
   ClipboardCheck,
   Settings,
+  Hash,
   type LucideIcon,
 } from 'lucide-react';
 import { useTaskStore, HierarchySpace, HierarchyFolder, HierarchyList, HierarchyDocFolder, HierarchyRoom, HierarchyWorkspace, StatusDef, CustomFieldDef, Task, TaskDoc, AppUser } from '../store/useTaskStore';
@@ -101,10 +102,12 @@ import ProfilePage from '../components/ProfilePage';
 import CommandPalette from '../components/CommandPalette';
 import TrashPanel from '../components/TrashPanel';
 import SettingsPanel, { readHiddenNavTabs, readHideWeekNumbers, type NavTabId } from '../components/SettingsPanel';
-import type { NavTab } from '../components/mobile/navTypes';
+import type { NavTab, MenuTile } from '../components/mobile/navTypes';
 import MobileBottomNav from '../components/mobile/MobileBottomNav';
 import AppLauncherGrid from '../components/mobile/AppLauncherGrid';
 import MobileSpacesSheet from '../components/mobile/MobileSpacesSheet';
+import MobileChatSheet from '../components/mobile/MobileChatSheet';
+import { useIsMobile } from '../hooks/useIsMobile';
 import AccessControlPanel from '../components/AccessControlPanel';
 import AccountSettingsPanel from '../components/AccountSettingsPanel';
 import MentionText from '../components/MentionText';
@@ -565,6 +568,7 @@ function PageContent() {
 
   const { currentUserId } = useSessionStore();
   usePresenceConnection(activeWorkspaceId ?? null);
+  const isMobile = useIsMobile();
 
   // Unread badges (Phase 8) — fetched here, not just inside ChatChannelSidebar/DirectMessagesSidebar
   // (which only mount once the user has already navigated into Chat/DMs), so the nav-rail/Me-zone
@@ -719,6 +723,7 @@ function PageContent() {
   const [hiddenNavTabs, setHiddenNavTabs] = useState<Set<NavTabId>>(() => new Set());
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [mobileSpacesOpen, setMobileSpacesOpen] = useState(false);
+  const [mobileChatSheetOpen, setMobileChatSheetOpen] = useState(false);
   const [hideWeekNumbers, setHideWeekNumbers] = useState(false);
   useEffect(() => {
     setHiddenNavTabs(readHiddenNavTabs());
@@ -1219,6 +1224,51 @@ function PageContent() {
     }
     return tabs;
   }, [hiddenNavTabs, hasRealWorkspace, activeView, currentWorkspace, workspaces, chatUnreadCount]);
+
+  // The desktop sidebar's "Me zone" (My tasks/My assigned tasks/Network/Profile) has no mobile
+  // equivalent — it's inside the same hidden-below-md <aside> as the Spaces/Lists tree, and unlike
+  // that tree it isn't reachable through any other mobile surface either. Surfaced as its own
+  // small tile group in the mobile app-launcher grid instead — same MenuTile shape as
+  // visibleNavTabs, just not gated by hiddenNavTabs (none of these are hideable rail tabs).
+  const meNavItems: MenuTile[] = useMemo(
+    () => [
+      {
+        id: 'my-tasks',
+        label: 'My Tasks',
+        icon: ListChecks,
+        onClick: async () => {
+          if (!currentUserId) return;
+          const { workspaceId } = await ensurePersonalWorkspace(currentUserId);
+          setActiveWorkspaceId(workspaceId);
+          setActiveView('board');
+        },
+        active: !!currentWorkspace?.isPersonal && activeView === 'board',
+      },
+      {
+        id: 'mytasks',
+        label: 'Assigned',
+        icon: ClipboardCheck,
+        onClick: () => setActiveView('mytasks'),
+        active: activeView === 'mytasks',
+      },
+      {
+        id: 'directMessages',
+        label: 'Network',
+        icon: MessageCircle,
+        onClick: () => setActiveView('directMessages'),
+        active: activeView === 'directMessages',
+        badge: dmUnreadCount,
+      },
+      {
+        id: 'profile',
+        label: 'Profile',
+        icon: UserCircle,
+        onClick: () => setActiveView('profile'),
+        active: activeView === 'profile',
+      },
+    ],
+    [currentUserId, currentWorkspace, activeView, dmUnreadCount, ensurePersonalWorkspace, setActiveWorkspaceId, setActiveView]
+  );
   // Owner or Admin of the current workspace — gates role management, member role changes, and
   // the "make private" control on Space/Folder/List/Task (server re-checks this independently on
   // every mutating route, this is only for what the UI offers to click).
@@ -2672,7 +2722,7 @@ function PageContent() {
           have to carry that weight themselves (previously both lived stacked at the very top
           of the sidebar, which read as cramped). ================= */}
       <header className="h-14 shrink-0 border-b border-neutral-800/80 bg-neutral-950 flex items-center px-3 gap-4">
-        <div className="flex items-center gap-2 shrink-0 w-64">
+        <div className="flex items-center gap-2 shrink-0 w-32 md:w-64">
           <div className="w-8 h-8 rounded bg-gradient-to-br from-blue-500 to-blue-700 flex items-center justify-center font-black text-white shadow-lg shadow-blue-500/20 shrink-0">
             S
           </div>
@@ -2867,10 +2917,10 @@ function PageContent() {
           >
             <Search className="w-3.5 h-3.5" />
             <span className="flex-1 text-left">Search...</span>
-            <span className="text-[9px] font-mono text-neutral-600">Ctrl+K</span>
+            <span className="hidden md:inline text-[9px] font-mono text-neutral-600">Ctrl+K</span>
           </button>
         </div>
-        <div className="w-64 shrink-0" aria-hidden />
+        <div className="hidden md:block w-64 shrink-0" aria-hidden />
       </header>
 
       <div className="flex flex-1 overflow-hidden">
@@ -3391,8 +3441,11 @@ function PageContent() {
       {/* ================= MAIN AREA ================= */}
       <main className="flex-1 flex flex-col h-full overflow-hidden bg-[#121212] relative">
         <header className="border-b border-neutral-800/80 bg-neutral-900/40 shrink-0">
-          <div className="h-11 px-6 flex items-center justify-between border-b border-neutral-800/40">
-            <div className="flex items-center gap-2 text-xs font-medium">
+          <div className="h-11 px-3 md:px-6 flex items-center justify-between border-b border-neutral-800/40">
+            {/* Hidden on mobile entirely — a breadcrumb reads as unpolished clutter at phone
+                width, and the "Lists"/"Channels"/"Archive" buttons below already tell you where
+                you are well enough without it. Desktop keeps it unchanged. */}
+            <div className="hidden md:flex items-center gap-2 text-xs font-medium">
               {/* Office/Chat already lead with their own icon+label as the breadcrumb's first
                   real segment below (and Office's own click-to-reset behavior lives on that
                   button) — prefixing the same word again here would just recreate the exact
@@ -3467,26 +3520,52 @@ function PageContent() {
               )}
             </div>
 
-            {activeView === 'board' && (
-              <button
-                onClick={() => setMobileSpacesOpen(true)}
-                className="md:hidden text-[11px] px-2.5 py-1 rounded border cursor-pointer transition flex items-center gap-1.5 text-neutral-400 border-neutral-800 hover:bg-neutral-800/60"
-              >
-                <ListIcon className="w-3.5 h-3.5" /> Lists
-              </button>
-            )}
-            {activeView === 'board' && (
-              <button
-                onClick={() => setShowArchived(!showArchived)}
-                className={`text-[11px] px-2.5 py-1 rounded border cursor-pointer transition flex items-center gap-1.5 ${
-                  showArchived
-                    ? 'bg-neutral-800 text-blue-400 border-neutral-700'
-                    : 'text-neutral-400 border-neutral-800 hover:bg-neutral-800/60'
-                }`}
-              >
-                <Archive className="w-3.5 h-3.5" /> {showArchived ? 'Viewing archive' : 'Archive'}
-              </button>
-            )}
+            {/* ml-auto: on desktop this is redundant with the breadcrumb div's own justify-between
+                placement (harmless); on mobile the breadcrumb div above is hidden entirely, and
+                without this these buttons would land at the row's start instead of staying
+                pinned to the right the way they visually always have. */}
+            <div className="flex items-center gap-1.5 ml-auto">
+              {activeView === 'board' && (
+                <button
+                  onClick={() => setMobileSpacesOpen(true)}
+                  className="md:hidden text-[11px] px-2.5 py-1 rounded border cursor-pointer transition flex items-center gap-1.5 text-neutral-400 border-neutral-800 hover:bg-neutral-800/60"
+                >
+                  <ListIcon className="w-3.5 h-3.5" /> Lists
+                </button>
+              )}
+              {activeView === 'board' && (
+                <button
+                  onClick={() => setShowArchived(!showArchived)}
+                  className={`text-[11px] px-2.5 py-1 rounded border cursor-pointer transition flex items-center gap-1.5 ${
+                    showArchived
+                      ? 'bg-neutral-800 text-blue-400 border-neutral-700'
+                      : 'text-neutral-400 border-neutral-800 hover:bg-neutral-800/60'
+                  }`}
+                >
+                  <Archive className="w-3.5 h-3.5" /> {showArchived ? 'Viewing archive' : 'Archive'}
+                </button>
+              )}
+              {/* Chat/Network's own channel-and-DM list lives in the desktop-only sidebar
+                  (ChatChannelSidebar/DirectMessagesSidebar) — hidden below md same as the Spaces/
+                  Lists tree, so mobile needs its own way in. See MobileChatSheet.tsx, which reuses
+                  those exact same components unmodified inside a bottom sheet. */}
+              {activeView === 'chat' && (
+                <button
+                  onClick={() => setMobileChatSheetOpen(true)}
+                  className="md:hidden text-[11px] px-2.5 py-1 rounded border cursor-pointer transition flex items-center gap-1.5 text-neutral-400 border-neutral-800 hover:bg-neutral-800/60"
+                >
+                  <Hash className="w-3.5 h-3.5" /> Channels
+                </button>
+              )}
+              {activeView === 'directMessages' && (
+                <button
+                  onClick={() => setMobileChatSheetOpen(true)}
+                  className="md:hidden text-[11px] px-2.5 py-1 rounded border cursor-pointer transition flex items-center gap-1.5 text-neutral-400 border-neutral-800 hover:bg-neutral-800/60"
+                >
+                  <MessageCircle className="w-3.5 h-3.5" /> Chats
+                </button>
+              )}
+            </div>
           </div>
         </header>
 
@@ -3513,7 +3592,7 @@ function PageContent() {
                       e.stopPropagation();
                       setClearOverdueConfirmOpen(true);
                     }}
-                    className="text-[11px] rounded px-2.5 py-1 flex items-center gap-1 border text-red-400 bg-neutral-900 border-red-500/30 hover:border-red-500/60 cursor-pointer"
+                    className="text-[11px] rounded px-3 py-2 md:px-2.5 md:py-1 flex items-center gap-1 border text-red-400 bg-neutral-900 border-red-500/30 hover:border-red-500/60 cursor-pointer"
                   >
                     Clear overdue ({overdueTasksInView.length})
                   </button>
@@ -3529,7 +3608,7 @@ function PageContent() {
                     }}
                     disabled={!currentSpace}
                     title={!currentSpace ? 'Select a specific Space to customize columns' : ''}
-                    className={`text-[11px] rounded px-2.5 py-1 flex items-center gap-1 border ${
+                    className={`text-[11px] rounded px-3 py-2 md:px-2.5 md:py-1 flex items-center gap-1 border ${
                       currentSpace
                         ? 'text-neutral-300 bg-neutral-900 border-neutral-800 hover:border-neutral-700 cursor-pointer'
                         : 'text-neutral-600 bg-neutral-900/50 border-neutral-800/50 cursor-not-allowed'
@@ -4073,7 +4152,7 @@ function PageContent() {
                   !showArchived && (
                     <button
                       onClick={() => setActiveAdd(true)}
-                      className="w-full text-left px-4 py-2 text-xs font-medium text-neutral-400 hover:bg-neutral-800/40 hover:text-blue-400 transition flex items-center gap-2 cursor-pointer"
+                      className="w-full text-left px-4 py-3.5 md:py-2 text-sm md:text-xs font-medium text-neutral-400 hover:bg-neutral-800/40 hover:text-blue-400 transition flex items-center gap-2 cursor-pointer"
                     >
                       <span className="font-bold text-blue-400">+</span> Add Task
                     </button>
@@ -4971,7 +5050,12 @@ function PageContent() {
             </div>
 
             <div className="flex-1 overflow-hidden flex">
-              <div className={`flex-1 min-w-0 overflow-y-auto p-8 space-y-6 ${showActivityPanel ? 'border-r border-neutral-800' : ''}`}>
+              {/* On mobile, Comments replaces the task view entirely (rather than a cropped
+                  side-by-side 420px panel) — hidden outright here while showActivityPanel is on,
+                  the same toggle button in the header above acts as the "back to task" control
+                  since it just flips showActivityPanel again. Desktop keeps the side-by-side
+                  split unchanged. */}
+              <div className={`flex-1 min-w-0 overflow-y-auto p-8 space-y-6 ${showActivityPanel ? (isMobile ? 'hidden' : 'border-r border-neutral-800') : ''}`}>
                 <div>
                   {editingModalTitle ? (
                     <input
@@ -5298,13 +5382,13 @@ function PageContent() {
               {showActivityPanel && (
               <motion.div
                 key="activity-panel"
-                initial={{ width: 0, opacity: 0 }}
-                animate={{ width: 420, opacity: 1 }}
-                exit={{ width: 0, opacity: 0 }}
+                initial={isMobile ? { opacity: 0 } : { width: 0, opacity: 0 }}
+                animate={isMobile ? { opacity: 1 } : { width: 420, opacity: 1 }}
+                exit={isMobile ? { opacity: 0 } : { width: 0, opacity: 0 }}
                 transition={{ duration: 0.22, ease: 'easeInOut' }}
-                className="shrink-0 overflow-hidden"
+                className={isMobile ? 'w-full h-full overflow-hidden' : 'shrink-0 overflow-hidden'}
               >
-              <div className="w-[420px] h-full flex flex-col overflow-hidden">
+              <div className={`${isMobile ? 'w-full' : 'w-[420px]'} h-full flex flex-col overflow-hidden`}>
                 <div className="px-5 py-3 border-b border-neutral-800 shrink-0">
                   <h4 className="text-xs font-bold text-neutral-300 flex items-center gap-1.5"><MessageSquare className="w-3.5 h-3.5" /> Activity & Comments</h4>
                 </div>
@@ -5656,6 +5740,7 @@ function PageContent() {
         open={mobileMenuOpen}
         onClose={() => setMobileMenuOpen(false)}
         navTabs={visibleNavTabs}
+        meItems={meNavItems}
         onOpenSettings={() => setSettingsOpen(true)}
         onOpenTrash={() => setTrashOpen(true)}
       />
@@ -5669,6 +5754,12 @@ function PageContent() {
           setModalTaskStack([]);
           handleListClick({ shiftKey: false, ctrlKey: false, metaKey: false } as React.MouseEvent, space, listId);
         }}
+      />
+      <MobileChatSheet
+        open={mobileChatSheetOpen}
+        onClose={() => setMobileChatSheetOpen(false)}
+        mode={activeView === 'chat' ? 'chat' : 'directMessages'}
+        workspaceId={activeWorkspaceId}
       />
 
       {trashOpen && <TrashPanel onClose={() => setTrashOpen(false)} />}

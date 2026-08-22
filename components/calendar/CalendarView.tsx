@@ -496,7 +496,10 @@ export default function CalendarView({ tasks, events, statuses, workspaces, show
 
   return (
     <div className="flex flex-col h-full">
-      <div className="flex items-center justify-between px-1 pb-3 shrink-0">
+      {/* Stacks into two rows on mobile (date-nav above, actions below) instead of squeezing both
+          onto one line — at phone width there isn't enough room for justify-between to put real
+          air between "New task" and the month label without shrinking anything. */}
+      <div className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between px-1 pb-3 shrink-0">
         <div className="flex items-center gap-2">
           <button onClick={() => step(-1)} className="p-1.5 rounded text-neutral-400 hover:text-white hover:bg-neutral-800/60 cursor-pointer">
             <ChevronLeft className="w-4 h-4" />
@@ -520,7 +523,7 @@ export default function CalendarView({ tasks, events, statuses, workspaces, show
             className="text-[10px] bg-blue-600 hover:bg-blue-500 text-white pl-2 pr-1.5 py-1 rounded font-medium cursor-pointer flex items-center gap-1"
           >
             <Plus className="w-3 h-3" /> New task
-            <span className="text-[9px] text-blue-200/70 font-mono ml-0.5">N</span>
+            <span className="hidden md:inline text-[9px] text-blue-200/70 font-mono ml-0.5">N</span>
           </button>
           <div className="flex items-center gap-0.5 bg-neutral-900 border border-neutral-800 rounded-md p-0.5">
             {(isMobile ? (['month', 'day'] as Granularity[]) : (['month', 'week', 'day'] as Granularity[])).map((g) => (

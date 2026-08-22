@@ -107,8 +107,20 @@ export default function QuickCreatePopover({
   const canCreate = tab === 'task' ? canCreateTask : canCreateEvent;
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-neutral-950/70 backdrop-blur-xs" onClick={onClose}>
-      <div onClick={(e) => e.stopPropagation()} className="w-[420px] bg-neutral-900 border border-neutral-800 rounded shadow-2xl overflow-hidden">
+    // items-start (not items-center) on mobile, plus the card's own overflow-y-auto/max-height: a
+    // vertically-centered fixed-height modal gets pushed half off-screen by the on-screen keyboard
+    // once a field is focused (the keyboard shrinks the *visual* viewport, but centering happens
+    // against the full layout viewport) — anchoring near the top means the title field (the very
+    // first one) stays visible above the keyboard regardless, and the card can scroll internally
+    // if there's still more content than fits. Desktop keeps the original centered look.
+    <div
+      className="fixed inset-0 z-50 flex items-start md:items-center justify-center bg-neutral-950/70 backdrop-blur-xs overflow-y-auto p-4"
+      onClick={onClose}
+    >
+      <div
+        onClick={(e) => e.stopPropagation()}
+        className="w-full max-w-[420px] my-6 md:my-0 max-h-[85vh] bg-neutral-900 border border-neutral-800 rounded shadow-2xl overflow-y-auto"
+      >
         <div className="px-5 py-4 border-b border-neutral-800 flex items-center justify-between">
           <h3 className="font-bold text-sm text-white">New</h3>
           <button onClick={onClose} className="text-neutral-400 hover:text-white cursor-pointer">

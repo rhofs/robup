@@ -81,6 +81,26 @@ export default function WeekRow({
   const pointerDownXYRef = useRef({ x: 0, y: 0 });
   const draggedRef = useRef(false);
 
+  // Mobile day-cell tap-vs-long-press: a plain tap drills into Day view (onDrillDay), a press-and-
+  // hold (~500ms, cancelled if the finger moves enough that it reads as a scroll instead) creates
+  // a task on that day (onQuickAddDay) — replaces the old hover-revealed "+" corner button, which
+  // on touch was permanently invisible (opacity-0 needs :hover, which touch never triggers) while
+  // still being a real, tappable, easy-to-hit-by-accident target sitting on top of the day-cell
+  // button. One shared timer/ref set at the row level is enough since only one finger interacts
+  // with one cell at a time.
+  const longPressTimerRef = useRef<number | null>(null);
+  const longPressFiredRef = useRef(false);
+  const longPressStartRef = useRef({ x: 0, y: 0 });
+  const LONG_PRESS_MS = 500;
+  const LONG_PRESS_MOVE_TOLERANCE = 8;
+
+  const clearLongPressTimer = () => {
+    if (longPressTimerRef.current !== null) {
+      window.clearTimeout(longPressTimerRef.current);
+      longPressTimerRef.current = null;
+    }
+  };
+
   const visibleSegments = segments.filter((s) => s.lane < maxVisibleLanes);
   const overflowByDay = new Array(7).fill(0);
   segments
@@ -152,7 +172,41 @@ export default function WeekRow({
             return (
               <div key={i} className="relative group/day">
                 <button
-                  onClick={() => onDrillDay(day)}
+                  onClick={() => {
+                    // A long-press that just fired onQuickAddDay still generates a trailing click
+                    // once the finger lifts — swallow exactly that one rather than also drilling
+                    // into Day view right behind it.
+                    if (isMobile && longPressFiredRef.current) {
+                      longPressFiredRef.current = false;
+                      return;
+                    }
+                    onDrillDay(day);
+                  }}
+                  onPointerDown={
+                    isMobile
+                      ? (e) => {
+                          longPressFiredRef.current = false;
+                          longPressStartRef.current = { x: e.clientX, y: e.clientY };
+                          clearLongPressTimer();
+                          longPressTimerRef.current = window.setTimeout(() => {
+                            longPressFiredRef.current = true;
+                            onQuickAddDay(day);
+                          }, LONG_PRESS_MS);
+                        }
+                      : undefined
+                  }
+                  onPointerMove={
+                    isMobile
+                      ? (e) => {
+                          if (longPressTimerRef.current === null) return;
+                          const dx = e.clientX - longPressStartRef.current.x;
+                          const dy = e.clientY - longPressStartRef.current.y;
+                          if (Math.abs(dx) > LONG_PRESS_MOVE_TOLERANCE || Math.abs(dy) > LONG_PRESS_MOVE_TOLERANCE) clearLongPressTimer();
+                        }
+                      : undefined
+                  }
+                  onPointerUp={isMobile ? clearLongPressTimer : undefined}
+                  onPointerLeave={isMobile ? clearLongPressTimer : undefined}
                   // Vertical separators kept, but deliberately faint — the grid should register
                   // subconsciously, not read as a spreadsheet of boxed cells. The week-row
                   // boundary (this same border-b, once per row) stays clearly stronger so weeks
@@ -160,6 +214,7 @@ export default function WeekRow({
                   className={`w-full h-full flex flex-col items-start text-left border-r border-r-neutral-800/[0.12] last:border-r-0 px-2 pt-1 cursor-pointer hover:bg-neutral-800/20 transition ${
                     isLastRow ? '' : 'border-b border-b-neutral-800/50'
                   } ${cellBg}`}
+                  style={isMobile ? { touchAction: 'pan-y' } : undefined}
                 >
                   <span
                     className={`text-[11px] font-mono inline-flex items-center justify-center w-5 h-5 rounded-full ${
@@ -180,8 +235,11 @@ export default function WeekRow({
                   // where adding something new to it belongs. z-10 (matching the overflow chip's
                   // own z-index) so it stays clickable on the rare day that both has overflow and
                   // is being hovered at once, rather than the two silently fighting over the same
-                  // corner.
-                  className="absolute bottom-1 right-1 z-10 w-4 h-4 rounded bg-neutral-800 text-neutral-400 hover:bg-blue-600 hover:text-white flex items-center justify-center opacity-0 group-hover/day:opacity-100 transition cursor-pointer"
+                  // corner. Desktop-only (hidden md:flex) — on mobile this exact "new task" action
+                  // is the day cell's own long-press (above); keeping this small corner button
+                  // there too would just be a second, invisible-until-hover, easy-to-fat-finger
+                  // target overlapping the tap-to-drill area.
+                  className="hidden md:flex absolute bottom-1 right-1 z-10 w-4 h-4 rounded bg-neutral-800 text-neutral-400 hover:bg-blue-600 hover:text-white items-center justify-center opacity-0 group-hover/day:opacity-100 transition cursor-pointer"
                 >
                   <Plus className="w-2.5 h-2.5" />
                 </button>
