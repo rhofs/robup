@@ -90,6 +90,7 @@ import DocsBrowser from '../components/DocsBrowser';
 import DocSubpagesPanel from '../components/DocSubpagesPanel';
 import { getChildDocs } from '../lib/docFolderTree';
 import OfficePage from '../components/OfficePage';
+import ManageableAvatar from '../components/ManageableAvatar';
 import ChatPanel from '../components/ChatPanel';
 import ChatThreadPanel from '../components/ChatThreadPanel';
 import ChatChannelSidebar from '../components/ChatChannelSidebar';
@@ -3077,28 +3078,40 @@ function PageContent() {
                 {users.map((u) => {
                   const count = tasks.filter((t) => !t.archived && t.assignees.some((a) => a.id === u.id)).length;
                   const isActive = activeOfficeUserId === u.id;
+                  const navigateToUser = () => {
+                    setActiveOfficeUserId(u.id);
+                    setActiveOfficeRoomId(null);
+                  };
                   return (
-                    <button
+                    <div
                       key={u.id}
-                      onClick={() => {
-                        setActiveOfficeUserId(u.id);
-                        setActiveOfficeRoomId(null);
-                      }}
-                      className={`w-full text-left px-2.5 py-1.5 rounded text-xs font-medium transition flex items-center justify-between cursor-pointer ${
+                      // A plain <div>, not <button> — ManageableAvatar's own avatar is a <button>
+                      // (right-click/DM/role popover, backlog #9), and nesting a button inside a
+                      // button is both invalid HTML and breaks click handling. Its own onClick
+                      // covers the rest of the row (name/count), same navigation the avatar's own
+                      // onClick already does.
+                      onClick={navigateToUser}
+                      className={`w-full px-2.5 py-1.5 rounded text-xs font-medium transition flex items-center justify-between gap-2 cursor-pointer ${
                         isActive ? 'bg-neutral-800 text-blue-400 font-semibold' : 'text-neutral-300 hover:bg-neutral-800/40'
                       }`}
                     >
-                      <span className="flex items-center gap-2 truncate">
-                        <span
-                          className="w-5 h-5 rounded-full text-[9px] font-bold flex items-center justify-center text-white shrink-0"
-                          style={{ backgroundColor: u.color }}
-                        >
-                          {u.initials}
-                        </span>
+                      <span className="flex items-center gap-2 min-w-0">
+                        {currentWorkspace && (
+                          <ManageableAvatar
+                            user={u}
+                            workspace={currentWorkspace}
+                            currentUserId={currentUserId}
+                            canManage={canManageCurrentWorkspace}
+                            onRequestRemove={(user) => setMemberToRemove(user)}
+                            onStartDM={handleStartDMFromOffice}
+                            onClick={navigateToUser}
+                            size="sm"
+                          />
+                        )}
                         <span className="truncate">{u.name}</span>
                       </span>
                       <span className="text-[10px] text-neutral-500 font-mono shrink-0">{count}</span>
-                    </button>
+                    </div>
                   );
                 })}
               </div>
