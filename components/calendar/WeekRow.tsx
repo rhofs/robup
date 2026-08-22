@@ -2,6 +2,7 @@
 
 import { useRef, useState } from 'react';
 import { Plus, Pin, CalendarClock } from 'lucide-react';
+import GoogleIcon from '../icons/GoogleIcon';
 import { getISOWeek, isSameDay } from '../../lib/calendarDates';
 import { withAlpha } from '../../lib/colorAlpha';
 import type { ClippedSegment, DragMode, DragState } from '../../lib/ganttLayout';
@@ -313,7 +314,11 @@ function EventBar({
           color,
         }}
       >
-        <CalendarClock className="w-2.5 h-2.5 shrink-0" />
+        {event.importedFromGoogle ? (
+          <GoogleIcon className="w-2.5 h-2.5 shrink-0" />
+        ) : (
+          <CalendarClock className="w-2.5 h-2.5 shrink-0" />
+        )}
         <span className="truncate">{event.title}</span>
       </button>
       {/* Resizable (stretch/shrink either edge, same gesture as a Task bar) but never draggable

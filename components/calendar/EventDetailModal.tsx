@@ -7,6 +7,7 @@ import DatePickerPopover from '../DatePickerPopover';
 import FloatingPopover from '../FloatingPopover';
 import ColorSwatchPicker from '../ColorSwatchPicker';
 import EventActivityPanel from './EventActivityPanel';
+import GoogleIcon from '../icons/GoogleIcon';
 
 const EVENT_COLOR_CHOICES = ['#c89642', '#618cd1', '#9a61d1', '#349f7c', '#cd6565', '#31a0b3', '#cb6798', '#8d97a5'];
 
@@ -41,6 +42,7 @@ export default function EventDetailModal({ event, workspaces, users, onClose, on
   if (!event) return null;
 
   const spaces = workspaces.flatMap((w) => w.spaces);
+  const syncOwnerEmail = event.googleSyncOwnerId ? users.find((u) => u.id === event.googleSyncOwnerId)?.googleEmail : null;
   const commitTitle = () => {
     setEditingTitle(false);
     const trimmed = titleDraft.trim();
@@ -51,6 +53,15 @@ export default function EventDetailModal({ event, workspaces, users, onClose, on
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-neutral-950/70 backdrop-blur-xs" onClick={onClose}>
       <div onClick={(e) => e.stopPropagation()} className="w-[420px] bg-neutral-900 border border-neutral-800 rounded shadow-2xl overflow-hidden">
+        {/* Same "where did this come from" tell as the ClickUp reference screenshot (Google icon
+            + "in <account email>") — shown for any event synced to Google, whether it originated
+            there or was pushed out from Siqt, not just imports. */}
+        {syncOwnerEmail && (
+          <div className="px-5 pt-3 flex items-center gap-1.5 text-[10px] text-neutral-500">
+            <GoogleIcon className="w-3 h-3 shrink-0" />
+            <span>{event.importedFromGoogle ? 'Google Calendar event' : 'Synced to Google Calendar'} · in {syncOwnerEmail}</span>
+          </div>
+        )}
         <div className="px-5 py-4 border-b border-neutral-800 flex items-center justify-between">
           {editingTitle ? (
             <input

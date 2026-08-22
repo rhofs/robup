@@ -2,6 +2,7 @@
 
 import { useRef, useState } from 'react';
 import { CalendarClock } from 'lucide-react';
+import GoogleIcon from '../icons/GoogleIcon';
 import { isSameDay } from '../../lib/calendarDates';
 import { layoutDayColumns } from '../../lib/ganttLayout';
 import { withAlpha } from '../../lib/colorAlpha';
@@ -146,7 +147,14 @@ export default function DayTimeline({
             <AllDayChip key={task.id} label={task.title} color={taskColorOf(task)} onClick={() => onOpenTask(task.id)} />
           ))}
           {allDayEvents.map((event) => (
-            <AllDayChip key={event.id} label={event.title} color={eventColorOf(event)} onClick={() => onOpenEvent(event.id)} isEvent />
+            <AllDayChip
+              key={event.id}
+              label={event.title}
+              color={eventColorOf(event)}
+              onClick={() => onOpenEvent(event.id)}
+              isEvent
+              fromGoogle={event.importedFromGoogle}
+            />
           ))}
         </div>
       )}
@@ -273,7 +281,19 @@ export default function DayTimeline({
 // granularity it's viewed at, not switch to a solid white-on-color fill just because it's Day
 // view. Extracted to its own component (rather than inlined in a `.map()`) since the hover state
 // needs a real hook.
-function AllDayChip({ label, color, onClick, isEvent }: { label: string; color: string; onClick: () => void; isEvent?: boolean }) {
+function AllDayChip({
+  label,
+  color,
+  onClick,
+  isEvent,
+  fromGoogle,
+}: {
+  label: string;
+  color: string;
+  onClick: () => void;
+  isEvent?: boolean;
+  fromGoogle?: boolean;
+}) {
   const [hovered, setHovered] = useState(false);
   return (
     <button
@@ -292,7 +312,7 @@ function AllDayChip({ label, color, onClick, isEvent }: { label: string; color: 
         color,
       }}
     >
-      {isEvent && <CalendarClock className="w-2.5 h-2.5 shrink-0" />}
+      {isEvent && (fromGoogle ? <GoogleIcon className="w-2.5 h-2.5 shrink-0" /> : <CalendarClock className="w-2.5 h-2.5 shrink-0" />)}
       <span className="truncate">{label}</span>
     </button>
   );
@@ -340,7 +360,11 @@ function DayEventBlock({
           color,
         }}
       >
-        <CalendarClock className="w-2.5 h-2.5 shrink-0" />
+        {event.importedFromGoogle ? (
+          <GoogleIcon className="w-2.5 h-2.5 shrink-0" />
+        ) : (
+          <CalendarClock className="w-2.5 h-2.5 shrink-0" />
+        )}
         <span className="truncate">{event.title}</span>
       </button>
       {/* Resize only (stretch/shrink either edge) — no move handler on the body, same

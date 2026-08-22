@@ -1,23 +1,21 @@
-import { google, calendar_v3 } from 'googleapis';
+import { calendar_v3, google } from 'googleapis';
 import { prisma } from '@/lib/prisma';
 import { createGoogleOAuthClient } from './oauthClient';
 
-// Google Calendar two-way sync (backlog #13). Two deliberate scope cuts, both worth knowing
-// before extending this:
-// 1. **Polling, not real-time push webhooks.** Google's `events.watch` push-notification channels
-//    need a public HTTPS callback (siqt.no has one now) but also expire (max 7 days for Calendar)
-//    and need active renewal, plus header-signature verification — real infrastructure on top of
-//    what's here. Polling (this file's pullChangesFromGoogle, run on a schedule — see
-//    scripts/syncGoogleCalendar.ts) is simpler and correct, just not instant; a few minutes of
-//    latency on the Google→Siqt direction is the accepted tradeoff.
-// 2. **Never auto-imports a brand-new event created directly on the Google side.** Only Events
-//    that already have a googleEventId (i.e., originated in Siqt) get pulled back — a foreign
-//    Google event with no known googleEventId is skipped, not created as a new Siqt Event, since
-//    that would need picking a target workspace/Space with no natural answer. Two-way sync here
-//    means "edits to a Siqt-created event flow both ways," not "any Google Calendar event
-//    appears in Siqt."
-
-const SIQT_CALENDAR_SUMMARY = 'Siqt';
+// Google Calendar two-way sync (backlog #13). Syncs directly against the user's real *primary*
+// Google Calendar — not a separate dedicated one (an earlier draft of this file used a lazily
+// created "Siqt" secondary calendar; switched after direct user feedback pointing at ClickUp's
+// own Calendar integration, which merges your actual Google Calendar in directly — a Google-
+// native event just shows up, same as any Siqt-created one). One real scope cut remains, worth
+// knowing before extending this further:
+//
+// **Polling, not real-time push webhooks.** Google's `events.watch` push-notification channels
+// need a public HTTPS callback (siqt.no has one now) but also expire (max 7 days for Calendar)
+// and need active renewal, plus header-signature verification — real infrastructure on top of
+// what's here. Polling (this file's pullChangesFromGoogle, run on a schedule — see
+// scripts/syncGoogleCalendar.ts, plus an on-demand call whenever Planner opens) is simpler and
+// correct, just not instant; a few minutes of latency on the Google→Siqt direction is the
+// accepted tradeoff.
 
 function toCalendarClient(refreshToken: string) {
   const oauth2Client = createGoogleOAuthClient();
@@ -31,15 +29,24 @@ async function getConnectedUser(userId: string) {
   return user;
 }
 
-// Get-or-create — every user gets their own dedicated calendar the first time any of their
-// Events needs to sync, never the account's primary calendar (keeps Siqt's events cleanly
-// separate from personal ones, and means deleting/leaving Siqt never touches anything else).
-async function ensureSiqtCalendarId(userId: string, client: calendar_v3.Calendar, existingId: string | null): Promise<string> {
-  if (existingId) return existingId;
-  const created = await client.calendars.insert({ requestBody: { summary: SIQT_CALENDAR_SUMMARY } });
-  const calendarId = created.data.id!;
-  await prisma.user.update({ where: { id: userId }, data: { googleCalendarId: calendarId } });
-  return calendarId;
+// Same find-or-create-by-unique-owner shape as POST /api/workspaces/personal — reused here
+// (not imported from that route, which is Next's own request-handler export, not a plain
+// function) so a Google-native event pulled in for someone who has never once opened "My tasks"
+// still has a real home to land in. A personal workspace is single-member by construction, so
+// there's no ambiguity about who else could see it.
+async function ensurePersonalWorkspaceId(userId: string): Promise<string> {
+  const workspace = await prisma.workspace.upsert({
+    where: { personalOwnerId: userId },
+    update: {},
+    create: {
+      name: 'Personal',
+      isPersonal: true,
+      personalOwnerId: userId,
+      memberships: { create: { userId, role: 'owner' } },
+      spaces: { create: [{ name: 'Personal', lists: { create: [{ name: 'My tasks' }] } }] },
+    },
+  });
+  return workspace.id;
 }
 
 type SiqtEvent = {
@@ -83,7 +90,6 @@ export async function pushEventToGoogle(eventId: string): Promise<void> {
   if (!owner) return;
 
   const client = toCalendarClient(owner.googleRefreshToken!);
-  const calendarId = await ensureSiqtCalendarId(owner.id, client, owner.googleCalendarId);
 
   const attendees = event.assignees
     .map((a) => a.email ?? a.googleEmail)
@@ -100,15 +106,15 @@ export async function pushEventToGoogle(eventId: string): Promise<void> {
 
   try {
     if (event.googleEventId) {
-      await client.events.update({ calendarId, eventId: event.googleEventId, requestBody });
+      await client.events.update({ calendarId: 'primary', eventId: event.googleEventId, requestBody });
     } else {
-      const created = await client.events.insert({ calendarId, requestBody });
+      const created = await client.events.insert({ calendarId: 'primary', requestBody });
       await prisma.event.update({ where: { id: event.id }, data: { googleEventId: created.data.id } });
     }
   } catch (err: any) {
-    // A 404 here means the event was deleted directly on the Google side (or the whole calendar
-    // was) — clear the stale id so the next push just creates a fresh one instead of failing
-    // forever on the same dangling reference.
+    // A 404 here means the event was deleted directly on the Google side — clear the stale id so
+    // the next push just creates a fresh one instead of failing forever on the same dangling
+    // reference.
     if (err?.code === 404 || err?.response?.status === 404) {
       await prisma.event.update({ where: { id: event.id }, data: { googleEventId: null } });
     } else {
@@ -122,10 +128,10 @@ export async function pushEventToGoogle(eventId: string): Promise<void> {
 // (soft or permanent) should mean "gone from the calendar," not "orphaned on Google forever."
 export async function deleteEventFromGoogle(googleSyncOwnerId: string, googleEventId: string): Promise<void> {
   const owner = await getConnectedUser(googleSyncOwnerId);
-  if (!owner?.googleCalendarId) return;
+  if (!owner) return;
   const client = toCalendarClient(owner.googleRefreshToken!);
   try {
-    await client.events.delete({ calendarId: owner.googleCalendarId, eventId: googleEventId });
+    await client.events.delete({ calendarId: 'primary', eventId: googleEventId });
   } catch (err: any) {
     // 404/410 — already gone, nothing to do.
     if (err?.code !== 404 && err?.code !== 410 && err?.response?.status !== 404 && err?.response?.status !== 410) {
@@ -149,28 +155,47 @@ function fromGoogleDateFields(gEvent: calendar_v3.Schema$Event): { startDate: Da
   return { startDate: start, endDate: end, allDay: false };
 }
 
-// Pulls whatever changed on this user's dedicated Siqt calendar since the last call (Google's own
-// incremental-sync cursor, googleCalendarSyncToken) and applies it to whichever Siqt Events we
-// already know about (matched by googleEventId — see this file's own top comment for why a
-// wholly-foreign new Google event is deliberately skipped, not imported).
-export async function pullChangesFromGoogle(userId: string): Promise<{ updated: number; deleted: number }> {
+// A brand-new user's very first sync would otherwise pull in their *entire* Google Calendar
+// history — every event they've ever had, going back years. Bounded to a reasonable rolling
+// window instead: recent past (in case something just got moved) through a year out. Only
+// applies to the initial full sync (no syncToken yet) — once a syncToken exists, Google's own
+// incremental-sync API doesn't accept timeMin/timeMax alongside it (the token already encodes
+// the scope established by that first call), so every later poll just uses the token as-is.
+const INITIAL_SYNC_PAST_DAYS = 30;
+const INITIAL_SYNC_FUTURE_DAYS = 365;
+
+// Pulls whatever changed on this user's real Google Calendar since the last call (Google's own
+// incremental-sync cursor, googleCalendarSyncToken) and applies it: updates/deletes for Events
+// already known (matched by googleEventId — anything Siqt itself pushed), and a real new Siqt
+// Event — landed in the user's personal ("My tasks") workspace, flagged importedFromGoogle — for
+// anything genuinely new on the Google side. "Two-way" here means exactly that: a Google-native
+// event really does show up in Siqt, and a Siqt-native event really does show up in Google.
+export async function pullChangesFromGoogle(userId: string): Promise<{ created: number; updated: number; deleted: number }> {
   const user = await getConnectedUser(userId);
-  if (!user?.googleCalendarId) return { updated: 0, deleted: 0 };
+  if (!user) return { created: 0, updated: 0, deleted: 0 };
 
   const client = toCalendarClient(user.googleRefreshToken!);
+  let created = 0;
   let updated = 0;
   let deleted = 0;
   let pageToken: string | undefined;
   let nextSyncToken: string | undefined;
+  const isInitialSync = !user.googleCalendarSyncToken;
 
   do {
     let page;
     try {
       page = await client.events.list({
-        calendarId: user.googleCalendarId,
+        calendarId: 'primary',
         syncToken: user.googleCalendarSyncToken ?? undefined,
         pageToken,
         showDeleted: true,
+        ...(isInitialSync
+          ? {
+              timeMin: new Date(Date.now() - INITIAL_SYNC_PAST_DAYS * 86400_000).toISOString(),
+              timeMax: new Date(Date.now() + INITIAL_SYNC_FUTURE_DAYS * 86400_000).toISOString(),
+            }
+          : {}),
       });
     } catch (err: any) {
       // A 410 means the stored syncToken itself is no longer valid (too old, or the calendar
@@ -186,7 +211,28 @@ export async function pullChangesFromGoogle(userId: string): Promise<{ updated: 
     for (const gEvent of page.data.items ?? []) {
       if (!gEvent.id) continue;
       const existing = await prisma.event.findUnique({ where: { googleEventId: gEvent.id } });
-      if (!existing) continue; // foreign event, not ours — see this file's top comment.
+
+      if (!existing) {
+        if (gEvent.status === 'cancelled') continue; // never knew about it, nothing to delete
+        const { startDate, endDate, allDay } = fromGoogleDateFields(gEvent);
+        const workspaceId = await ensurePersonalWorkspaceId(userId);
+        await prisma.event.create({
+          data: {
+            title: gEvent.summary || 'Untitled event',
+            description: gEvent.description ?? null,
+            location: gEvent.location ?? null,
+            startDate,
+            endDate,
+            allDay,
+            workspaceId,
+            googleEventId: gEvent.id,
+            googleSyncOwnerId: userId,
+            importedFromGoogle: true,
+          },
+        });
+        created++;
+        continue;
+      }
 
       if (gEvent.status === 'cancelled') {
         await prisma.event.update({ where: { id: existing.id }, data: { deletedAt: new Date() } });
@@ -222,5 +268,5 @@ export async function pullChangesFromGoogle(userId: string): Promise<{ updated: 
   if (nextSyncToken) {
     await prisma.user.update({ where: { id: userId }, data: { googleCalendarSyncToken: nextSyncToken } });
   }
-  return { updated, deleted };
+  return { created, updated, deleted };
 }

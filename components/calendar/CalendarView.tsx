@@ -71,7 +71,7 @@ export default function CalendarView({ tasks, events, statuses, workspaces, show
     fetch('/api/google/calendar/sync', { method: 'POST' })
       .then((res) => (res.ok ? res.json() : null))
       .then((result) => {
-        if (result && (result.updated > 0 || result.deleted > 0)) refetchEvents();
+        if (result && (result.created > 0 || result.updated > 0 || result.deleted > 0)) refetchEvents();
       })
       .catch(() => {});
     // eslint-disable-next-line react-hooks/exhaustive-deps
