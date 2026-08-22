@@ -3,7 +3,7 @@
 import { memo, useEffect, useState } from 'react';
 import { motion } from 'framer-motion';
 import { useDraggable, useDroppable } from '@dnd-kit/core';
-import { Check, Pencil, RefreshCw, MoreHorizontal } from 'lucide-react';
+import { Check, Pencil, RefreshCw, MoreHorizontal, GripVertical } from 'lucide-react';
 import { useTaskStore, StatusDef, CustomFieldDef, Task } from '../store/useTaskStore';
 import { useIsMobile } from '../hooks/useIsMobile';
 import DatePickerPopover from './DatePickerPopover';
@@ -329,11 +329,20 @@ function TaskRowImpl({
     >
       {isMobile ? (
         // ================= MOBILE ROW — swipe left to reveal status/assignee/dates/custom
-        // fields; task name is what you see by default. Whole-row drag-and-drop (dnd-kit) is
-        // deliberately not wired here — the same row can't be both a horizontal swipe target and
-        // a whole-row drag source without the two gestures racing each other; reordering on
-        // mobile is intentionally out of scope for this pass. =================
-        <div className="relative overflow-hidden">
+        // fields; task name is what you see by default. The whole row can't also be a whole-row
+        // drag source the way desktop is — that would race a horizontal swipe on the same
+        // element — so dragging is scoped to a dedicated grip handle instead (see the "drag
+        // handle" pattern in dnd-kit's own docs): `attributes`/`listeners` are spread only onto
+        // the grip, never the row root, and the grip's own pointerdown stops propagation before
+        // it can reach the swipe motion.div's drag-gesture recognizer. `touchAction: 'none'` on
+        // the grip stops the browser's native touch-scroll from competing with dnd-kit's pointer
+        // capture (dnd-kit's own recommendation for touch drag). No TouchSensor needed — dnd-kit's
+        // PointerSensor (already registered as `taskSensors` in app/page.tsx) already handles
+        // touch via the Pointer Events API. =================
+        <div
+          ref={setNodeRef}
+          className={`relative overflow-hidden ${isOver ? 'ring-1 ring-inset ring-neutral-500' : ''} ${isDragging ? 'opacity-40' : ''}`}
+        >
           <div
             className="absolute inset-y-0 right-0 flex items-center gap-2 px-3 overflow-x-auto text-neutral-400 font-mono text-[11px] bg-neutral-900"
             style={{ width: revealWidth }}
@@ -407,6 +416,20 @@ function TaskRowImpl({
                 </>
               )}
             </div>
+            <span
+              {...attributes}
+              {...listeners}
+              onPointerDown={(e) => {
+                e.stopPropagation();
+                listeners?.onPointerDown?.(e);
+              }}
+              onClick={(e) => e.stopPropagation()}
+              title="Drag to move"
+              style={{ touchAction: 'none' }}
+              className="shrink-0 text-neutral-600 cursor-grab active:cursor-grabbing p-1 -mr-1"
+            >
+              <GripVertical className="w-4 h-4" />
+            </span>
           </motion.div>
         </div>
       ) : (

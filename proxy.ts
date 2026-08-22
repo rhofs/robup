@@ -12,5 +12,14 @@ export const config = {
   // app/api/*). Also excludes /login itself to avoid a redirect loop, and /invite — an invite
   // link's whole point is showing "you're invited to X" to someone who doesn't have a session
   // yet, so that page has to be reachable before auth, not gated behind it.
-  matcher: ['/((?!api|login|invite|connect|_next/static|_next/image|favicon.ico).*)'],
+  //
+  // Also excludes the PWA manifest/icon routes (app/manifest.ts, app/icon.tsx, app/apple-icon.tsx,
+  // app/pwa-icon-*/route.tsx) and the push service worker script (public/sw.js) — these are asset-
+  // like, not real pages, and must stay reachable with no session at all: the browser's own
+  // installability check and the tab favicon both need to load on an unauthenticated /login visit
+  // too, and a redirected (HTML) response in place of the real sw.js script fails service worker
+  // registration outright rather than just looking wrong.
+  matcher: [
+    '/((?!api|login|invite|connect|_next/static|_next/image|favicon.ico|manifest.webmanifest|icon|apple-icon|pwa-icon-192|pwa-icon-512|pwa-icon-512-maskable|sw.js).*)',
+  ],
 };

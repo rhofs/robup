@@ -1,8 +1,9 @@
 'use client';
 
 import { AnimatePresence, motion } from 'framer-motion';
-import { Settings, Trash2, X } from 'lucide-react';
+import { Download, Settings, Trash2, X } from 'lucide-react';
 import type { NavTab } from './navTypes';
+import { useInstallPrompt } from '../../hooks/useInstallPrompt';
 
 type Props = {
   open: boolean;
@@ -17,6 +18,10 @@ type Props = {
 // in the bottom nav's 4 fixed slots. Every tile calls a setter the desktop rail already calls;
 // no new state is introduced here.
 export default function AppLauncherGrid({ open, onClose, navTabs, onOpenSettings, onOpenTrash }: Props) {
+  // Only ever a real actionable tile on Chrome/Edge-family browsers that fired
+  // `beforeinstallprompt` (see useInstallPrompt.ts) — iOS has no programmatic install prompt at
+  // all, so it gets a longer text hint in AccountSettingsPanel.tsx instead of a dead tile here.
+  const { canInstall, promptInstall } = useInstallPrompt();
   return (
     <AnimatePresence>
       {open && (
@@ -83,6 +88,18 @@ export default function AppLauncherGrid({ open, onClose, navTabs, onOpenSettings
                 <Trash2 className="w-5 h-5" />
                 <span className="text-[11px] font-medium leading-none">Trash</span>
               </button>
+              {canInstall && (
+                <button
+                  onClick={() => {
+                    promptInstall();
+                    onClose();
+                  }}
+                  className="flex flex-col items-center justify-center gap-1.5 py-3 rounded-lg bg-neutral-800/40 text-neutral-300 cursor-pointer"
+                >
+                  <Download className="w-5 h-5" />
+                  <span className="text-[11px] font-medium leading-none">Install</span>
+                </button>
+              )}
             </div>
           </motion.div>
         </div>
