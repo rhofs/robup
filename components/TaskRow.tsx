@@ -1,9 +1,9 @@
 'use client';
 
 import { memo, useEffect, useState } from 'react';
-import { motion } from 'framer-motion';
+import { AnimatePresence, motion } from 'framer-motion';
 import { useDraggable, useDroppable } from '@dnd-kit/core';
-import { Check, Pencil, RefreshCw, MoreHorizontal, GripVertical, ChevronLeft } from 'lucide-react';
+import { Check, Pencil, RefreshCw, MoreHorizontal, GripVertical, ChevronDown } from 'lucide-react';
 import { useTaskStore, StatusDef, CustomFieldDef, Task } from '../store/useTaskStore';
 import { useIsMobile } from '../hooks/useIsMobile';
 import { useLongPress } from '../hooks/useLongPress';
@@ -34,14 +34,6 @@ type TaskRowProps = {
   navScope: string;
 };
 
-// Mobile's swipe-left-to-reveal panel width, sized to the number of active columns (same
-// visibleColumns/activeColumns list desktop's grid uses) rather than a fixed constant, so the
-// reveal panel never shows more or less than what desktop's own columns represent. Capped so a
-// space with many custom fields still fits on a phone screen — the panel scrolls horizontally
-// past that point instead of growing unbounded.
-const REVEAL_ITEM_WIDTH = 92;
-const REVEAL_MAX_WIDTH = 320;
-
 function TaskRowImpl({
   task,
   onOpen,
@@ -69,12 +61,14 @@ function TaskRowImpl({
 
   const isMobile = useIsMobile();
 
-  const [justToggled, setJustToggled] = useState(false);
   const [statusOpen, setStatusOpen] = useState(false);
   const [assigneeOpen, setAssigneeOpen] = useState(false);
   const [editingTitle, setEditingTitle] = useState(false);
   const [titleDraft, setTitleDraft] = useState(task.title);
-  const [swipeRevealed, setSwipeRevealed] = useState(false);
+  // Mobile only — whether the column fields are expanded below the row. Renamed from an earlier
+  // "swipeRevealed" now that the mobile layout is a vertical accordion, not a horizontal swipe
+  // panel (see the mobile branch's own comment for why that changed).
+  const [columnsExpanded, setColumnsExpanded] = useState(false);
 
   const commitTitle = () => {
     setEditingTitle(false);
@@ -149,7 +143,7 @@ function TaskRowImpl({
     );
   };
 
-  // Shared between the desktop grid cell and the mobile reveal-panel cell for the same column —
+  // Shared between the desktop grid cell and the mobile expanded-row cell for the same column —
   // one FloatingPopover/DatePickerPopover instance per column per render (whichever layout is
   // actually mounted), not two competing instances of the same popover sharing state.
   const renderColumnCell = (col: ColumnDef) => {
@@ -293,13 +287,15 @@ function TaskRowImpl({
         e.stopPropagation();
         onToggleSelect?.();
       }}
-      className={`w-3.5 h-3.5 rounded-xs border flex items-center justify-center cursor-pointer transition shrink-0 ${
+      className={`rounded-xs border flex items-center justify-center cursor-pointer transition shrink-0 ${isMobile ? 'w-4 h-4' : 'w-3.5 h-3.5'} ${
         isSelected
           ? 'bg-blue-500/20 border-blue-500/60 text-blue-400 opacity-100'
-          : 'border-neutral-600 opacity-0 group-hover:opacity-100'
+          : isMobile
+            ? 'border-neutral-600 opacity-100'
+            : 'border-neutral-600 opacity-0 group-hover:opacity-100'
       }`}
     >
-      {isSelected && <Check className="w-2.5 h-2.5" />}
+      {isSelected && <Check className={isMobile ? 'w-3 h-3' : 'w-2.5 h-2.5'} />}
     </button>
   ) : (
     <div></div>
@@ -309,22 +305,16 @@ function TaskRowImpl({
     <button
       onClick={(e) => {
         e.stopPropagation();
-        if (!task.archived) {
-          setJustToggled(true);
-          setTimeout(() => setJustToggled(false), 600);
-        }
         optimisticArchiveTask(task.id, !task.archived);
       }}
       title={task.archived ? 'Restore from archive' : 'Mark as done (archive)'}
-      className={`w-4 h-4 rounded-full border flex items-center justify-center cursor-pointer transition-all duration-300 ease-out active:scale-90 shrink-0 ${
+      className={`rounded-full border flex items-center justify-center cursor-pointer transition-all duration-300 ease-out active:scale-90 shrink-0 ${isMobile ? 'w-5 h-5' : 'w-4 h-4'} ${
         showAsDone ? 'bg-emerald-500 border-emerald-500 text-white' : 'border-neutral-600 hover:border-emerald-400'
-      } ${justToggled ? 'animate-[done-glow_0.6s_ease-out]' : ''}`}
+      }`}
     >
-      {showAsDone && <Check className="w-2.5 h-2.5" />}
+      {showAsDone && <Check className={isMobile ? 'w-3 h-3' : 'w-2.5 h-2.5'} />}
     </button>
   );
-
-  const revealWidth = Math.min(Math.max(columns.length, 1) * REVEAL_ITEM_WIDTH + 48, REVEAL_MAX_WIDTH);
 
   // Mobile-only: press-and-hold the row to open the same context menu desktop gets from a
   // right-click (Open/Rename/Mark done/Delete) — there's no right-click equivalent on touch.
@@ -343,65 +333,35 @@ function TaskRowImpl({
       transition={{ duration: 0.28, ease: 'easeOut' }}
     >
       {isMobile ? (
-        // ================= MOBILE ROW — swipe left to reveal status/assignee/dates/custom
-        // fields; task name is what you see by default. The whole row can't also be a whole-row
-        // drag source the way desktop is — that would race a horizontal swipe on the same
-        // element — so dragging is scoped to a dedicated grip handle instead (see the "drag
-        // handle" pattern in dnd-kit's own docs): `attributes`/`listeners` are spread only onto
-        // the grip, never the row root, and the grip's own pointerdown stops propagation before
-        // it can reach the swipe motion.div's drag-gesture recognizer. `touchAction: 'none'` on
-        // the grip stops the browser's native touch-scroll from competing with dnd-kit's pointer
-        // capture (dnd-kit's own recommendation for touch drag). No TouchSensor needed — dnd-kit's
-        // PointerSensor (already registered as `taskSensors` in app/page.tsx) already handles
-        // touch via the Pointer Events API. =================
+        // ================= MOBILE ROW — tap the chevron to expand the column fields
+        // (status/assignee/dates/custom) vertically below the row, accordion-style. This
+        // replaced an earlier horizontal swipe-to-reveal panel: squeezing status pills, date
+        // pickers, and dropdowns into ~90px-wide chips in a side-scrolling strip was cramped and
+        // fiddly regardless of how it was triggered, and a swipe gesture with no visual affordance
+        // was easy to never discover in the first place. A full-width stacked list gives every
+        // control the same room it has on desktop, one per row instead of squeezed side by side.
+        // Whole-row drag-and-drop is scoped to a dedicated grip handle (dnd-kit's own "drag
+        // handle" pattern) rather than the row itself, so it can't race the row's own tap-to-open.
+        // `touchAction: 'none'` on the grip stops the browser's native touch-scroll from competing
+        // with dnd-kit's pointer capture. No TouchSensor needed — dnd-kit's PointerSensor (already
+        // registered as `taskSensors` in app/page.tsx) already handles touch via the Pointer
+        // Events API. =================
         <div
           ref={setNodeRef}
-          className={`relative overflow-hidden ${isOver ? 'ring-1 ring-inset ring-neutral-500' : ''} ${isDragging ? 'opacity-40' : ''}`}
+          className={`${isOver ? 'ring-1 ring-inset ring-neutral-500' : ''} ${isDragging ? 'opacity-40' : ''}`}
         >
           <div
-            className="absolute inset-y-0 right-0 flex items-center gap-2 px-3 overflow-x-auto text-neutral-400 font-mono text-[11px] bg-neutral-900"
-            style={{ width: revealWidth }}
-            onClick={(e) => e.stopPropagation()}
-          >
-            {columns.map((col) => (
-              <div key={col.key} className="flex flex-col items-center gap-1 shrink-0" style={{ width: REVEAL_ITEM_WIDTH - 8 }}>
-                <span className="text-[9px] text-neutral-600 uppercase tracking-wide truncate max-w-full">{col.label}</span>
-                {renderColumnCell(col)}
-              </div>
-            ))}
-            <button
-              onClick={(e) => {
-                e.stopPropagation();
-                onContextMenu?.(e, task);
-              }}
-              title="More options"
-              className="w-8 h-8 rounded flex items-center justify-center shrink-0 text-neutral-400 cursor-pointer"
-            >
-              <MoreHorizontal className="w-4 h-4" />
-            </button>
-          </div>
-          <motion.div
-            drag="x"
-            dragConstraints={{ left: -revealWidth, right: 0 }}
-            dragElastic={0.06}
-            animate={{ x: swipeRevealed ? -revealWidth : 0 }}
-            transition={{ type: 'tween', duration: 0.2 }}
-            onDragEnd={(_e, info) => setSwipeRevealed(info.offset.x < -revealWidth / 2)}
             onPointerDown={rowLongPress.onPointerDown}
             onPointerMove={rowLongPress.onPointerMove}
             onPointerUp={rowLongPress.onPointerUp}
             onPointerLeave={rowLongPress.onPointerLeave}
             onClick={() => {
               // Swallow the trailing click a long-press produces on release — it already did its
-              // job (opened the context menu); it shouldn't also open/close the row.
+              // job (opened the context menu).
               if (rowLongPress.wasLongPress()) return;
-              if (swipeRevealed) {
-                setSwipeRevealed(false);
-                return;
-              }
               onOpen();
             }}
-            className={`relative z-10 flex items-center gap-3 px-4 py-3 text-xs cursor-pointer bg-neutral-950 ${isSelected ? 'bg-neutral-700/30' : ''}`}
+            className={`flex items-center gap-3 px-4 py-4 text-sm cursor-pointer bg-neutral-950 ${isSelected ? 'bg-neutral-700/30' : ''}`}
           >
             {selectCheckbox}
             {doneToggle}
@@ -420,7 +380,7 @@ function TaskRowImpl({
                       setEditingTitle(false);
                     }
                   }}
-                  className="w-full bg-neutral-900 border border-blue-500 rounded px-1.5 py-0.5 text-neutral-100 focus:outline-none"
+                  className="w-full bg-neutral-900 border border-blue-500 rounded px-2 py-1 text-neutral-100 focus:outline-none"
                 />
               ) : (
                 <>
@@ -433,24 +393,21 @@ function TaskRowImpl({
                     title="Rename"
                     className="text-neutral-500 shrink-0 cursor-pointer"
                   >
-                    <Pencil className="w-3 h-3" />
+                    <Pencil className="w-3.5 h-3.5" />
                   </button>
                 </>
               )}
             </div>
-            {/* Always-visible, plain-tap way to see the columns — swipe still works too, but a
-                gesture with no visual affordance is easy to never discover (or to have fight the
-                list's own vertical scroll on some devices), so this is the reliable primary path,
-                not just a bonus. */}
+            {/* Always-visible, plain-tap way to see the columns. */}
             <button
               onClick={(e) => {
                 e.stopPropagation();
-                setSwipeRevealed((v) => !v);
+                setColumnsExpanded((v) => !v);
               }}
-              title={swipeRevealed ? 'Hide fields' : 'Show fields'}
-              className="shrink-0 text-neutral-500 p-1.5 -mr-1.5 cursor-pointer"
+              title={columnsExpanded ? 'Hide fields' : 'Show fields'}
+              className="shrink-0 text-neutral-500 p-2 -mr-1.5 cursor-pointer"
             >
-              <ChevronLeft className={`w-4 h-4 transition-transform ${swipeRevealed ? 'rotate-180' : ''}`} />
+              <ChevronDown className={`w-5 h-5 transition-transform ${columnsExpanded ? 'rotate-180' : ''}`} />
             </button>
             <span
               {...attributes}
@@ -462,11 +419,43 @@ function TaskRowImpl({
               onClick={(e) => e.stopPropagation()}
               title="Drag to move"
               style={{ touchAction: 'none' }}
-              className="shrink-0 text-neutral-600 cursor-grab active:cursor-grabbing p-1 -mr-1"
+              className="shrink-0 text-neutral-600 cursor-grab active:cursor-grabbing p-2 -mr-1.5"
             >
-              <GripVertical className="w-4 h-4" />
+              <GripVertical className="w-5 h-5" />
             </span>
-          </motion.div>
+          </div>
+          <AnimatePresence initial={false}>
+            {columnsExpanded && (
+              <motion.div
+                initial={{ height: 0, opacity: 0 }}
+                animate={{ height: 'auto', opacity: 1 }}
+                exit={{ height: 0, opacity: 0 }}
+                transition={{ duration: 0.18, ease: 'easeInOut' }}
+                className="overflow-hidden"
+                onClick={(e) => e.stopPropagation()}
+              >
+                <div className="px-4 pb-3 pt-1 flex flex-col gap-2.5 border-t border-neutral-800/60 bg-neutral-900/40">
+                  {columns.map((col) => (
+                    <div key={col.key} className="flex items-center justify-between gap-3">
+                      <span className="text-[10px] text-neutral-500 uppercase tracking-wide shrink-0">{col.label}</span>
+                      <div className="flex justify-end min-w-0">{renderColumnCell(col)}</div>
+                    </div>
+                  ))}
+                  <div className="flex justify-end pt-1 -mr-2">
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        onContextMenu?.(e, task);
+                      }}
+                      className="flex items-center gap-1.5 text-[11px] text-neutral-400 px-2.5 py-1.5 rounded hover:bg-neutral-800/60 cursor-pointer"
+                    >
+                      <MoreHorizontal className="w-3.5 h-3.5" /> More options
+                    </button>
+                  </div>
+                </div>
+              </motion.div>
+            )}
+          </AnimatePresence>
         </div>
       ) : (
         // ================= DESKTOP ROW (unchanged) =================
