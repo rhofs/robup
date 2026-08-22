@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react';
 import { Link2, Check, X, Clock, Search, UserPlus } from 'lucide-react';
 import { useChatStore, type ConnectionRequest, type ConnectionSearchResult } from '../store/useChatStore';
+import { useIsMobile } from '../hooks/useIsMobile';
 import ChatPanel from './ChatPanel';
 import ChatThreadPanel from './ChatThreadPanel';
 
@@ -14,7 +15,8 @@ import ChatThreadPanel from './ChatThreadPanel';
 // the same sidebar-driven navigation every other top-level view already has, instead of its own
 // internal tab strip). See PLANNING.md's Connections session notes for the request/accept pivot
 // (opening the connect link now sends a request, not an instant connection).
-export default function DirectMessagesPage() {
+export default function DirectMessagesPage({ onOpenMobilePicker }: { onOpenMobilePicker?: () => void } = {}) {
+  const isMobile = useIsMobile();
   const {
     connections,
     connectionInvite,
@@ -154,10 +156,12 @@ export default function DirectMessagesPage() {
 
   return (
     <div className="h-[75vh] flex gap-3">
-      <div className="flex-1 min-w-0">
-        <ChatPanel />
+      <div className={`flex-1 min-w-0 ${isMobile && activeThreadRootMessage ? 'hidden' : ''}`}>
+        <ChatPanel onOpenMobilePicker={onOpenMobilePicker} />
       </div>
-      {activeThreadRootMessage && <ChatThreadPanel rootMessage={activeThreadRootMessage} onClose={() => setActiveThreadRootId(null)} />}
+      {activeThreadRootMessage && (
+        <ChatThreadPanel rootMessage={activeThreadRootMessage} onClose={() => setActiveThreadRootId(null)} fullWidth={isMobile} />
+      )}
     </div>
   );
 }

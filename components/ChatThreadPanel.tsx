@@ -9,6 +9,7 @@ import { useChatChannelConnection } from '../lib/collab/useChatChannelConnection
 import { uploadChatFile } from '../lib/uploadChatFile';
 import { formatBytes } from '../lib/formatBytes';
 import { timeLabel, QuotedPreview, MessageActions, AttachmentGrid, ReactionBar, validatePickedFile, type PickedAttachment } from './ChatPanel';
+import { useIsMobile } from '../hooks/useIsMobile';
 
 const COMPOSER_MAX_HEIGHT_PX = 120;
 
@@ -20,12 +21,42 @@ const COMPOSER_MAX_HEIGHT_PX = 120;
 export default function ChatThreadPanel({
   rootMessage,
   onClose,
+  fullWidth = false,
 }: {
   rootMessage: ChatMessage;
   onClose: () => void;
+  // Mobile: replaces the message list entirely (see app/page.tsx and DirectMessagesPage.tsx)
+  // rather than squeezing beside it as a fixed w-80 side panel — the same "cropped on a phone
+  // screen" shape the task modal's Comments panel had before it got this same treatment.
+  fullWidth?: boolean;
 }) {
   const { channelsByWorkspace, dms, threadsByRootId, fetchThread, postThreadReply, deleteMessage, toggleReaction } = useChatStore();
   const currentUserId = useSessionStore((s) => s.currentUserId);
+  const isMobile = useIsMobile();
+  const [heldReplyId, setHeldReplyId] = useState<string | null>(null);
+  const longPressTimerRef = useRef<number | null>(null);
+  const longPressStartRef = useRef({ x: 0, y: 0 });
+  const startReplyLongPress = (id: string) => (e: React.PointerEvent) => {
+    if (!isMobile) return;
+    longPressStartRef.current = { x: e.clientX, y: e.clientY };
+    if (longPressTimerRef.current !== null) window.clearTimeout(longPressTimerRef.current);
+    longPressTimerRef.current = window.setTimeout(() => setHeldReplyId(id), 500);
+  };
+  const moveReplyLongPress = (e: React.PointerEvent) => {
+    if (!isMobile || longPressTimerRef.current === null) return;
+    const dx = e.clientX - longPressStartRef.current.x;
+    const dy = e.clientY - longPressStartRef.current.y;
+    if (Math.abs(dx) > 8 || Math.abs(dy) > 8) {
+      window.clearTimeout(longPressTimerRef.current);
+      longPressTimerRef.current = null;
+    }
+  };
+  const endReplyLongPress = () => {
+    if (longPressTimerRef.current !== null) {
+      window.clearTimeout(longPressTimerRef.current);
+      longPressTimerRef.current = null;
+    }
+  };
   // Both channel types carry `.members` now — same resolution path ChatPanel uses, no more
   // per-workspace lookup.
   const channel =
@@ -167,7 +198,11 @@ export default function ChatThreadPanel({
 
   return (
     <div
-      className="relative flex flex-col h-full w-80 shrink-0 border-l border-neutral-800 pl-3"
+      className={
+        fullWidth
+          ? 'relative flex flex-col h-full w-full'
+          : 'relative flex flex-col h-full w-80 shrink-0 border-l border-neutral-800 pl-3'
+      }
       onDragEnter={handleDragEnter}
       onDragLeave={handleDragLeave}
       onDragOver={handleDragOver}
@@ -190,7 +225,7 @@ export default function ChatThreadPanel({
         </button>
       </div>
 
-      <div className="flex-1 overflow-y-auto space-y-3 pb-2">
+      <div className="flex-1 overflow-y-auto space-y-3 pb-2" onClick={() => setHeldReplyId(null)}>
         {/* Root message, compact — same shape as a "rest of run" row in the main feed. */}
         <div className="flex items-start gap-2">
           {rootMessage.author ? (
@@ -221,7 +256,14 @@ export default function ChatThreadPanel({
 
         {replies.length === 0 && <p className="text-[11px] text-neutral-500">No replies yet.</p>}
         {replies.map((r) => (
-          <div key={r.id} className="group relative flex items-start gap-2 rounded hover:bg-neutral-900/40 py-0.5">
+          <div
+            key={r.id}
+            className={`group relative flex items-start gap-2 rounded hover:bg-neutral-900/40 py-0.5 ${heldReplyId === r.id ? 'bg-neutral-900/40' : ''}`}
+            onPointerDown={startReplyLongPress(r.id)}
+            onPointerMove={moveReplyLongPress}
+            onPointerUp={endReplyLongPress}
+            onPointerLeave={endReplyLongPress}
+          >
             {r.author ? (
               <span
                 className="w-6 h-6 rounded-full text-[9px] font-bold flex items-center justify-center text-white shrink-0"
@@ -250,6 +292,7 @@ export default function ChatThreadPanel({
               onReply={() => setReplyTarget({ id: r.id, authorName: r.author?.name ?? 'Unknown', body: r.body })}
               onDelete={() => handleDelete(r.id)}
               onReact={(emoji) => handleToggleReaction(r.id, emoji)}
+              forceVisible={heldReplyId === r.id}
             />
           </div>
         ))}

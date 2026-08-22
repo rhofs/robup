@@ -107,6 +107,7 @@ import MobileBottomNav from '../components/mobile/MobileBottomNav';
 import AppLauncherGrid from '../components/mobile/AppLauncherGrid';
 import MobileSpacesSheet from '../components/mobile/MobileSpacesSheet';
 import MobileChatSheet from '../components/mobile/MobileChatSheet';
+import MobileCalendarFilterSheet from '../components/mobile/MobileCalendarFilterSheet';
 import { useIsMobile } from '../hooks/useIsMobile';
 import AccessControlPanel from '../components/AccessControlPanel';
 import AccountSettingsPanel from '../components/AccountSettingsPanel';
@@ -724,6 +725,7 @@ function PageContent() {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [mobileSpacesOpen, setMobileSpacesOpen] = useState(false);
   const [mobileChatSheetOpen, setMobileChatSheetOpen] = useState(false);
+  const [mobileCalendarFilterOpen, setMobileCalendarFilterOpen] = useState(false);
   const [hideWeekNumbers, setHideWeekNumbers] = useState(false);
   useEffect(() => {
     setHiddenNavTabs(readHiddenNavTabs());
@@ -3555,10 +3557,13 @@ function PageContent() {
                   (ChatChannelSidebar/DirectMessagesSidebar) — hidden below md same as the Spaces/
                   Lists tree, so mobile needs its own way in. See MobileChatSheet.tsx, which reuses
                   those exact same components unmodified inside a bottom sheet. */}
+              {/* Filled blue, not just outlined-neutral like Lists/Archive — this is the *only*
+                  way into the channel/DM list on mobile (the sidebar it replaces is hidden below
+                  md), so it needs to read as a primary action, not a subtle secondary one. */}
               {activeView === 'chat' && (
                 <button
                   onClick={() => setMobileChatSheetOpen(true)}
-                  className="md:hidden text-[11px] px-2.5 py-1 rounded border cursor-pointer transition flex items-center gap-1.5 text-neutral-400 border-neutral-800 hover:bg-neutral-800/60"
+                  className="md:hidden text-[11px] font-medium px-3 py-1.5 rounded bg-blue-600 hover:bg-blue-500 text-white cursor-pointer transition flex items-center gap-1.5"
                 >
                   <Hash className="w-3.5 h-3.5" /> Channels
                 </button>
@@ -3566,9 +3571,19 @@ function PageContent() {
               {activeView === 'directMessages' && (
                 <button
                   onClick={() => setMobileChatSheetOpen(true)}
-                  className="md:hidden text-[11px] px-2.5 py-1 rounded border cursor-pointer transition flex items-center gap-1.5 text-neutral-400 border-neutral-800 hover:bg-neutral-800/60"
+                  className="md:hidden text-[11px] font-medium px-3 py-1.5 rounded bg-blue-600 hover:bg-blue-500 text-white cursor-pointer transition flex items-center gap-1.5"
                 >
                   <MessageCircle className="w-3.5 h-3.5" /> Chats
+                </button>
+              )}
+              {/* Desktop's per-Space/List calendar-visibility checkboxes live in the sidebar's
+                  FolderTree (hidden below md) — mobile needs its own entry point. */}
+              {activeView === 'calendar' && (
+                <button
+                  onClick={() => setMobileCalendarFilterOpen(true)}
+                  className="md:hidden text-[11px] px-2.5 py-1 rounded border cursor-pointer transition flex items-center gap-1.5 text-neutral-400 border-neutral-800 hover:bg-neutral-800/60"
+                >
+                  <Eye className="w-3.5 h-3.5" /> Filter
                 </button>
               )}
             </div>
@@ -3977,7 +3992,7 @@ function PageContent() {
                 onOpenTask={(id) => setModalTaskStack([id])}
               />
             ) : activeView === 'directMessages' ? (
-              <DirectMessagesPage />
+              <DirectMessagesPage onOpenMobilePicker={() => setMobileChatSheetOpen(true)} />
             ) : activeView === 'profile' ? (
               <ProfilePage
                 currentUser={users.find((u) => u.id === currentUserId) ?? null}
@@ -4008,12 +4023,20 @@ function PageContent() {
                   Pick a workspace to open Chat.
                 </div>
               ) : (
+                // On mobile, an open thread replaces the message list entirely instead of
+                // squeezing beside it — ChatThreadPanel is a fixed w-80 side panel, the same
+                // "cropped on a phone screen" shape as the task modal's Comments panel was before
+                // that got the same full-screen-replace treatment.
                 <div className="h-[75vh] flex gap-3">
-                  <div className="flex-1 min-w-0">
-                    <ChatPanel />
+                  <div className={`flex-1 min-w-0 ${isMobile && activeThreadRootMessage ? 'hidden' : ''}`}>
+                    <ChatPanel onOpenMobilePicker={() => setMobileChatSheetOpen(true)} />
                   </div>
                   {activeThreadRootMessage && (
-                    <ChatThreadPanel rootMessage={activeThreadRootMessage} onClose={() => setActiveThreadRootId(null)} />
+                    <ChatThreadPanel
+                      rootMessage={activeThreadRootMessage}
+                      onClose={() => setActiveThreadRootId(null)}
+                      fullWidth={isMobile}
+                    />
                   )}
                 </div>
               )
@@ -5766,6 +5789,14 @@ function PageContent() {
         onClose={() => setMobileChatSheetOpen(false)}
         mode={activeView === 'chat' ? 'chat' : 'directMessages'}
         workspaceId={activeWorkspaceId}
+      />
+      <MobileCalendarFilterSheet
+        open={mobileCalendarFilterOpen}
+        onClose={() => setMobileCalendarFilterOpen(false)}
+        spaces={currentWorkspace?.spaces ?? []}
+        visibleListIds={calendarVisibleListIds}
+        onToggleList={toggleCalendarList}
+        onToggleSpace={toggleCalendarSpace}
       />
 
       {trashOpen && <TrashPanel onClose={() => setTrashOpen(false)} />}

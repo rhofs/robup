@@ -3,9 +3,10 @@
 import { memo, useEffect, useState } from 'react';
 import { motion } from 'framer-motion';
 import { useDraggable, useDroppable } from '@dnd-kit/core';
-import { Check, Pencil, RefreshCw, MoreHorizontal, GripVertical } from 'lucide-react';
+import { Check, Pencil, RefreshCw, MoreHorizontal, GripVertical, ChevronLeft } from 'lucide-react';
 import { useTaskStore, StatusDef, CustomFieldDef, Task } from '../store/useTaskStore';
 import { useIsMobile } from '../hooks/useIsMobile';
+import { useLongPress } from '../hooks/useLongPress';
 import DatePickerPopover from './DatePickerPopover';
 import FloatingPopover from './FloatingPopover';
 import { startDateColor, dueDateColor, DATE_BADGE_COLOR_HEX, startDateTooltip, dueDateTooltip } from '../lib/dateBadgeColor';
@@ -193,7 +194,7 @@ function TaskRowImpl({
         <FloatingPopover
           open={assigneeOpen}
           onClose={() => setAssigneeOpen(false)}
-          panelClassName="w-44 bg-neutral-900 border border-neutral-800 rounded shadow-xl p-1.5"
+          panelClassName={isMobile ? 'w-56 bg-neutral-900 border border-neutral-800 rounded shadow-xl p-1.5' : 'w-44 bg-neutral-900 border border-neutral-800 rounded shadow-xl p-1.5'}
           anchor={
             <button
               onClick={(e) => {
@@ -224,16 +225,23 @@ function TaskRowImpl({
               <button
                 key={u.id}
                 onClick={() => toggleAssignee(u.id)}
-                className="w-full flex items-center gap-2 text-[11px] text-neutral-300 px-2 py-1 rounded hover:bg-neutral-800/60 cursor-pointer"
+                // Bigger checkbox/row on mobile — this exact list was reported as too fiddly to
+                // tap accurately at the desktop-sized 3.5-unit checkbox.
+                className={`w-full flex items-center gap-2 text-[11px] text-neutral-300 rounded hover:bg-neutral-800/60 cursor-pointer ${
+                  isMobile ? 'px-2 py-2.5' : 'px-2 py-1'
+                }`}
               >
                 <span
-                  className={`w-3.5 h-3.5 rounded border flex items-center justify-center shrink-0 transition ${
+                  className={`rounded border flex items-center justify-center shrink-0 transition ${isMobile ? 'w-5 h-5' : 'w-3.5 h-3.5'} ${
                     checked ? 'bg-blue-500 border-blue-500 text-white' : 'border-neutral-600'
                   }`}
                 >
-                  {checked && <Check className="w-2.5 h-2.5" />}
+                  {checked && <Check className={isMobile ? 'w-3.5 h-3.5' : 'w-2.5 h-2.5'} />}
                 </span>
-                <span className="w-4 h-4 rounded-full text-[8px] font-bold flex items-center justify-center text-white" style={{ backgroundColor: u.color }}>
+                <span
+                  className={`rounded-full font-bold flex items-center justify-center text-white shrink-0 ${isMobile ? 'w-5 h-5 text-[9px]' : 'w-4 h-4 text-[8px]'}`}
+                  style={{ backgroundColor: u.color }}
+                >
                   {u.initials}
                 </span>
                 {u.name}
@@ -318,6 +326,13 @@ function TaskRowImpl({
 
   const revealWidth = Math.min(Math.max(columns.length, 1) * REVEAL_ITEM_WIDTH + 48, REVEAL_MAX_WIDTH);
 
+  // Mobile-only: press-and-hold the row to open the same context menu desktop gets from a
+  // right-click (Open/Rename/Mark done/Delete) — there's no right-click equivalent on touch.
+  const rowLongPress = useLongPress({
+    onLongPress: (e) => onContextMenu?.(e, task),
+    enabled: isMobile,
+  });
+
   return (
     <motion.div
       layout
@@ -372,7 +387,14 @@ function TaskRowImpl({
             animate={{ x: swipeRevealed ? -revealWidth : 0 }}
             transition={{ type: 'tween', duration: 0.2 }}
             onDragEnd={(_e, info) => setSwipeRevealed(info.offset.x < -revealWidth / 2)}
+            onPointerDown={rowLongPress.onPointerDown}
+            onPointerMove={rowLongPress.onPointerMove}
+            onPointerUp={rowLongPress.onPointerUp}
+            onPointerLeave={rowLongPress.onPointerLeave}
             onClick={() => {
+              // Swallow the trailing click a long-press produces on release — it already did its
+              // job (opened the context menu); it shouldn't also open/close the row.
+              if (rowLongPress.wasLongPress()) return;
               if (swipeRevealed) {
                 setSwipeRevealed(false);
                 return;
@@ -416,6 +438,20 @@ function TaskRowImpl({
                 </>
               )}
             </div>
+            {/* Always-visible, plain-tap way to see the columns — swipe still works too, but a
+                gesture with no visual affordance is easy to never discover (or to have fight the
+                list's own vertical scroll on some devices), so this is the reliable primary path,
+                not just a bonus. */}
+            <button
+              onClick={(e) => {
+                e.stopPropagation();
+                setSwipeRevealed((v) => !v);
+              }}
+              title={swipeRevealed ? 'Hide fields' : 'Show fields'}
+              className="shrink-0 text-neutral-500 p-1.5 -mr-1.5 cursor-pointer"
+            >
+              <ChevronLeft className={`w-4 h-4 transition-transform ${swipeRevealed ? 'rotate-180' : ''}`} />
+            </button>
             <span
               {...attributes}
               {...listeners}

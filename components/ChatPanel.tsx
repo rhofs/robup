@@ -10,6 +10,8 @@ import { useChatChannelConnection } from '../lib/collab/useChatChannelConnection
 import { uploadChatFile } from '../lib/uploadChatFile';
 import { formatBytes } from '../lib/formatBytes';
 import FloatingPopover from './FloatingPopover';
+import { useIsMobile } from '../hooks/useIsMobile';
+import { useLongPress } from '../hooks/useLongPress';
 
 const COMPOSER_MAX_HEIGHT_PX = 160;
 
@@ -108,10 +110,41 @@ function groupIntoDays(messages: ChatMessage[]): { label: string; runs: Run[] }[
   return days;
 }
 
-export default function ChatPanel() {
+export default function ChatPanel({ onOpenMobilePicker }: { onOpenMobilePicker?: () => void } = {}) {
   const { channelsByWorkspace, dms, messagesByChannel, activeChannelId, fetchMessages, postMessage, deleteMessage, setActiveThreadRootId, toggleReaction } =
     useChatStore();
   const currentUserId = useSessionStore((s) => s.currentUserId);
+  const isMobile = useIsMobile();
+  // Mobile has no hover, so MessageActions (reply/thread/react/delete — normally hidden
+  // group-hover:flex) is unreachable there without this: press-and-hold a message reveals it for
+  // that one message, tapping the message list anywhere else hides it again.
+  const [heldMessageId, setHeldMessageId] = useState<string | null>(null);
+  // One shared timer (not a hook-per-row, since the number of rows changes) — same long-press
+  // pattern as components/calendar/WeekRow.tsx's day-cell long-press: hold still for 500ms,
+  // cancelled if the finger moves enough to read as a scroll instead.
+  const messageLongPressTimerRef = useRef<number | null>(null);
+  const messageLongPressStartRef = useRef({ x: 0, y: 0 });
+  const startMessageLongPress = (id: string) => (e: React.PointerEvent) => {
+    if (!isMobile) return;
+    messageLongPressStartRef.current = { x: e.clientX, y: e.clientY };
+    if (messageLongPressTimerRef.current !== null) window.clearTimeout(messageLongPressTimerRef.current);
+    messageLongPressTimerRef.current = window.setTimeout(() => setHeldMessageId(id), 500);
+  };
+  const moveMessageLongPress = (e: React.PointerEvent) => {
+    if (!isMobile || messageLongPressTimerRef.current === null) return;
+    const dx = e.clientX - messageLongPressStartRef.current.x;
+    const dy = e.clientY - messageLongPressStartRef.current.y;
+    if (Math.abs(dx) > 8 || Math.abs(dy) > 8) {
+      window.clearTimeout(messageLongPressTimerRef.current);
+      messageLongPressTimerRef.current = null;
+    }
+  };
+  const endMessageLongPress = () => {
+    if (messageLongPressTimerRef.current !== null) {
+      window.clearTimeout(messageLongPressTimerRef.current);
+      messageLongPressTimerRef.current = null;
+    }
+  };
   // Quote-reply target set by clicking a message's Reply action — cleared once actually sent.
   // Carries a plain title/snippet snapshot at click time (not just an id) purely so the composer
   // chip has something to render immediately without an extra lookup.
@@ -285,9 +318,21 @@ export default function ChatPanel() {
   };
 
   if (!activeChannelId) {
+    // The sidebar this used to unconditionally point at is hidden on mobile (see
+    // components/mobile/MobileChatSheet.tsx) — pointing mobile users at it by name left them
+    // stuck with no visible next step at all. onOpenMobilePicker (passed from app/page.tsx) opens
+    // that same sheet directly instead of just describing where it would be on a wider screen.
     return (
-      <div className="flex h-full items-center justify-center text-[12px] text-neutral-500">
-        Pick a channel from the sidebar, or create a new one.
+      <div className="flex h-full flex-col items-center justify-center gap-3 text-[12px] text-neutral-500">
+        <span>{isMobile ? 'Pick a channel or DM to get started.' : 'Pick a channel from the sidebar, or create a new one.'}</span>
+        {isMobile && onOpenMobilePicker && (
+          <button
+            onClick={onOpenMobilePicker}
+            className="text-xs bg-blue-600 hover:bg-blue-500 text-white px-4 py-2 rounded font-medium cursor-pointer"
+          >
+            Choose a conversation
+          </button>
+        )}
       </div>
     );
   }
@@ -308,7 +353,7 @@ export default function ChatPanel() {
           </div>
         </div>
       )}
-      <div className="flex-1 overflow-y-auto px-1 py-3 space-y-4">
+      <div className="flex-1 overflow-y-auto px-1 py-3 space-y-4" onClick={() => setHeldMessageId(null)}>
         {messages.length === 0 && (
           <p className="text-[11px] text-neutral-500 px-2">
             No messages yet {isDM ? `with ${activeChannelLabel}` : `in #${activeChannelLabel}`} — say hello.
@@ -325,7 +370,13 @@ export default function ChatPanel() {
               const first = run.messages[0];
               return (
                 <div key={runIdx} className="space-y-0.5">
-                  <div className="group relative flex items-start gap-2 px-2 rounded hover:bg-neutral-900/40">
+                  <div
+                    className={`group relative flex items-start gap-2 px-2 rounded hover:bg-neutral-900/40 ${heldMessageId === first.id ? 'bg-neutral-900/40' : ''}`}
+                    onPointerDown={startMessageLongPress(first.id)}
+                    onPointerMove={moveMessageLongPress}
+                    onPointerUp={endMessageLongPress}
+                    onPointerLeave={endMessageLongPress}
+                  >
                     {first.author ? (
                       <span
                         className="w-7 h-7 rounded-full text-[10px] font-bold flex items-center justify-center text-white shrink-0"
@@ -364,10 +415,18 @@ export default function ChatPanel() {
                       onDelete={() => handleDelete(first.id)}
                       onOpenThread={() => setActiveThreadRootId(first.id)}
                       onReact={(emoji) => handleToggleReaction(first.id, emoji)}
+                      forceVisible={heldMessageId === first.id}
                     />
                   </div>
                   {run.messages.slice(1).map((m) => (
-                    <div key={m.id} className="group relative flex items-start gap-2 px-2 rounded hover:bg-neutral-900/40">
+                    <div
+                      key={m.id}
+                      className={`group relative flex items-start gap-2 px-2 rounded hover:bg-neutral-900/40 ${heldMessageId === m.id ? 'bg-neutral-900/40' : ''}`}
+                      onPointerDown={startMessageLongPress(m.id)}
+                      onPointerMove={moveMessageLongPress}
+                      onPointerUp={endMessageLongPress}
+                      onPointerLeave={endMessageLongPress}
+                    >
                       <span className="w-7 shrink-0 text-right text-[9px] text-neutral-600 opacity-0 group-hover:opacity-100 transition pt-0.5">
                         {timeLabel(m.createdAt)}
                       </span>
@@ -392,6 +451,7 @@ export default function ChatPanel() {
                         onDelete={() => handleDelete(m.id)}
                         onOpenThread={() => setActiveThreadRootId(m.id)}
                         onReact={(emoji) => handleToggleReaction(m.id, emoji)}
+                        forceVisible={heldMessageId === m.id}
                       />
                     </div>
                   ))}
@@ -581,6 +641,7 @@ export function MessageActions({
   onDelete,
   onOpenThread,
   onReact,
+  forceVisible,
 }: {
   isOwn: boolean;
   onReply: () => void;
@@ -592,10 +653,19 @@ export function MessageActions({
   // myProfile), which shouldn't happen in practice but degrades to "no react button" rather than
   // a broken click instead of crashing.
   onReact?: (emoji: string) => void;
+  // Mobile has no :hover at all — the caller (ChatPanel/ChatThreadPanel) tracks which message is
+  // currently "held" via long-press and passes true for that one message only, standing in for
+  // the group-hover CSS that never triggers on touch.
+  forceVisible?: boolean;
 }) {
   const [pickerOpen, setPickerOpen] = useState(false);
   return (
-    <div className="absolute right-1 top-1 hidden group-hover:flex items-center gap-0.5 bg-neutral-900 border border-neutral-800 rounded shadow-sm px-0.5 py-0.5">
+    <div
+      onClick={(e) => e.stopPropagation()}
+      className={`absolute right-1 top-1 items-center gap-0.5 bg-neutral-900 border border-neutral-800 rounded shadow-sm px-0.5 py-0.5 ${
+        forceVisible ? 'flex' : 'hidden group-hover:flex'
+      }`}
+    >
       {onReact && (
         <FloatingPopover
           open={pickerOpen}
