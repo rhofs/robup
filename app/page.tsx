@@ -1,6 +1,6 @@
 'use client';
 
-import { Suspense, useEffect, useMemo, useRef, useState } from 'react';
+import { Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useRouter, usePathname, useSearchParams } from 'next/navigation';
 import dynamic from 'next/dynamic';
 import { AnimatePresence, motion } from 'framer-motion';
@@ -106,6 +106,7 @@ import CommandPalette from '../components/CommandPalette';
 import TrashPanel from '../components/TrashPanel';
 import SettingsPanel, { readHiddenNavTabs, readHideWeekNumbers, type NavTabId } from '../components/SettingsPanel';
 import type { NavTab, MenuTile } from '../components/mobile/navTypes';
+import { PRIMARY_NAV_TAB_IDS } from '../components/mobile/navTypes';
 import MobileBottomNav from '../components/mobile/MobileBottomNav';
 import AppLauncherGrid from '../components/mobile/AppLauncherGrid';
 import MobileSpacesSheet from '../components/mobile/MobileSpacesSheet';
@@ -730,6 +731,17 @@ function PageContent() {
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [hiddenNavTabs, setHiddenNavTabs] = useState<Set<NavTabId>>(() => new Set());
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  // Whichever grid tile (AppLauncherGrid.tsx) the user last picked — remembered across reloads so
+  // the bottom nav's dynamic 4th slot (MobileBottomNav.tsx) can shortcut straight back to it,
+  // ClickUp-style, instead of always opening the grid. localStorage read is guarded for SSR.
+  const [pinnedMenuTileId, setPinnedMenuTileIdState] = useState<string | null>(() => {
+    if (typeof window === 'undefined') return null;
+    return window.localStorage.getItem('siqt:pinnedMobileMenuTile');
+  });
+  const pinMobileMenuTile = useCallback((id: string) => {
+    setPinnedMenuTileIdState(id);
+    if (typeof window !== 'undefined') window.localStorage.setItem('siqt:pinnedMobileMenuTile', id);
+  }, []);
   const [mobileSpacesOpen, setMobileSpacesOpen] = useState(false);
   const [mobileChatSheetOpen, setMobileChatSheetOpen] = useState(false);
   const [mobileCalendarFilterOpen, setMobileCalendarFilterOpen] = useState(false);
@@ -1303,6 +1315,18 @@ function PageContent() {
     ],
     [currentUserId, currentWorkspace, activeView, setActiveDmTab, ensurePersonalWorkspace, setActiveWorkspaceId, setActiveView]
   );
+
+  // Everything not already pinned to the bottom nav's 3 fixed slots — shared between
+  // MobileBottomNav (to resolve the dynamic 4th slot's icon/label/onClick) and AppLauncherGrid (to
+  // render + highlight it), so both surfaces read the exact same "what's pinnable" list.
+  const mobileGridTabs = useMemo(
+    () => visibleNavTabs.filter((tab) => !PRIMARY_NAV_TAB_IDS.includes(tab.id)),
+    [visibleNavTabs]
+  );
+  const pinnableMobileTiles: MenuTile[] = useMemo(() => [...mobileGridTabs, ...meNavItems], [mobileGridTabs, meNavItems]);
+  const pinnedMobileTile: MenuTile | null =
+    pinnableMobileTiles.find((t) => t.id === pinnedMenuTileId) ?? pinnableMobileTiles[0] ?? null;
+
   // Owner or Admin of the current workspace — gates role management, member role changes, and
   // the "make private" control on Space/Folder/List/Task (server re-checks this independently on
   // every mutating route, this is only for what the UI offers to click).
@@ -4252,8 +4276,10 @@ function PageContent() {
       <MobileBottomNav
         navTabs={visibleNavTabs}
         menuOpen={mobileMenuOpen}
-        onToggleMenu={() => setMobileMenuOpen((v) => !v)}
+        onOpenMenu={() => setMobileMenuOpen(true)}
+        onCloseMenu={() => setMobileMenuOpen(false)}
         onOpenSpaces={() => setMobileSpacesOpen(true)}
+        pinnedTile={pinnedMobileTile}
       />
 
       {/* ================= BULK ACTION BAR ================= */}
@@ -5930,8 +5956,10 @@ function PageContent() {
       <AppLauncherGrid
         open={mobileMenuOpen}
         onClose={() => setMobileMenuOpen(false)}
-        navTabs={visibleNavTabs}
+        contentTiles={mobileGridTabs}
         meItems={meNavItems}
+        pinnedTileId={pinnedMobileTile?.id ?? null}
+        onSelectTile={pinMobileMenuTile}
         onOpenSettings={() => setSettingsOpen(true)}
         onOpenTrash={() => setTrashOpen(true)}
       />

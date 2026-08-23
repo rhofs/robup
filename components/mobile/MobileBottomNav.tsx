@@ -1,31 +1,54 @@
 'use client';
 
-import { LayoutGrid, Menu } from 'lucide-react';
+import { ChevronDown, ChevronUp, LayoutGrid, Menu as MenuIcon } from 'lucide-react';
 import { motion } from 'framer-motion';
-import type { NavTab } from './navTypes';
-
-const PRIMARY_TAB_IDS = ['board', 'calendar', 'chat'] as const;
+import type { NavTab, MenuTile } from './navTypes';
+import { PRIMARY_NAV_TAB_IDS } from './navTypes';
 
 type Props = {
   navTabs: NavTab[];
   menuOpen: boolean;
-  onToggleMenu: () => void;
+  onOpenMenu: () => void;
+  onCloseMenu: () => void;
   // The "board" tab is relabeled "Spaces" here and opens the Spaces sheet instead of jumping
   // straight into the board — mobile-only behavior. visibleNavTabs/its onClick stay untouched
   // for the desktop rail, which still goes straight to the board on click; this only overrides
   // what happens when *this* component renders that one tab.
   onOpenSpaces: () => void;
+  // Whichever tile the user last picked from the app-launcher grid (AppLauncherGrid.tsx) — the
+  // 4th slot renders *that* tile's icon/label instead of a generic "Menu" hamburger, ClickUp-style.
+  // null only before any tile has ever been picked (falls back to a plain Menu icon/label).
+  pinnedTile: MenuTile | null;
 };
 
 // Mobile-only bottom nav (md:hidden) — reads the exact same visibleNavTabs/setActiveView plumbing
 // the desktop icon rail uses (app/page.tsx), just picks 3 of them for fixed slots and adds a
-// 4th "Menu" slot that opens the app-launcher grid instead of switching activeView directly.
+// 4th slot that doubles as a shortcut to the last-picked grid tile AND the grid's opener —
+// matches ClickUp's own mobile nav (the reference the user pointed at): tapping it when you're
+// NOT already on the pinned destination jumps straight there; tapping it while you ARE there (or
+// while the grid is already open) opens/closes the picker grid instead. The small chevron is the
+// only visual "this is also a menu button" cue, also flipping open ClickUp-style.
 // Floating rounded pill (not a flush-edge bar) with a shared-layout "bubble" that slides between
-// tabs on selection — matches the reference (ClickUp's own mobile nav) the user pointed at.
-export default function MobileBottomNav({ navTabs, menuOpen, onToggleMenu, onOpenSpaces }: Props) {
-  const primaryTabs = PRIMARY_TAB_IDS
+// the 3 primary tabs on selection — matches the reference. The 4th slot's own background pill is a
+// *separate* layoutId (see AppLauncherGrid.tsx) so it can morph into the full grid panel instead
+// of sliding like the primary tabs' bubble.
+export default function MobileBottomNav({ navTabs, menuOpen, onOpenMenu, onCloseMenu, onOpenSpaces, pinnedTile }: Props) {
+  const primaryTabs = PRIMARY_NAV_TAB_IDS
     .map((id) => navTabs.find((t) => t.id === id))
     .filter((t): t is NavTab => !!t);
+
+  const handlePinnedTap = () => {
+    if (menuOpen) {
+      onCloseMenu();
+    } else if (pinnedTile && !pinnedTile.active) {
+      pinnedTile.onClick();
+    } else {
+      onOpenMenu();
+    }
+  };
+
+  const PinnedIcon = pinnedTile?.icon ?? MenuIcon;
+  const pinnedActive = menuOpen || !!pinnedTile?.active;
 
   return (
     // relative z-40: MobileSpacesSheet.tsx is deliberately a full-height page rather than a
@@ -67,20 +90,31 @@ export default function MobileBottomNav({ navTabs, menuOpen, onToggleMenu, onOpe
           );
         })}
         <button
-          onClick={onToggleMenu}
+          onClick={handlePinnedTap}
           className={`relative flex flex-col items-center justify-center gap-0.5 px-4 py-2 rounded-full transition cursor-pointer ${
-            menuOpen ? 'text-blue-400' : 'text-neutral-500'
+            pinnedActive ? 'text-blue-400' : 'text-neutral-500'
           }`}
         >
-          {menuOpen && (
+          {/* Only mounted while the grid is closed — AppLauncherGrid.tsx mounts the *other* half
+              of this layoutId pair while open, so framer-motion morphs this small pill directly
+              into the full panel instead of both existing at once (which layoutId can't resolve). */}
+          {!menuOpen && (
             <motion.div
-              layoutId="mobileNavPill"
+              layoutId="mobileMenuMorph"
               className="absolute inset-0 bg-neutral-800 rounded-full -z-10"
-              transition={{ type: 'spring', stiffness: 500, damping: 34 }}
+              transition={{ type: 'spring', stiffness: 380, damping: 32 }}
             />
           )}
-          <Menu className="w-5 h-5" />
-          <span className="text-[10px] font-medium leading-none">Menu</span>
+          <PinnedIcon className="w-5 h-5" />
+          <span className="flex items-center gap-0.5 text-[10px] font-medium leading-none">
+            {pinnedTile?.label ?? 'Menu'}
+            {menuOpen ? <ChevronUp className="w-2.5 h-2.5" /> : <ChevronDown className="w-2.5 h-2.5" />}
+          </span>
+          {!!pinnedTile?.badge && pinnedTile.badge > 0 && (
+            <span className="absolute top-0.5 right-1.5 min-w-[15px] h-[15px] px-1 rounded-full bg-red-500 text-white text-[8px] font-bold flex items-center justify-center leading-none">
+              {pinnedTile.badge > 99 ? '99+' : pinnedTile.badge}
+            </span>
+          )}
         </button>
       </nav>
     </div>

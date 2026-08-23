@@ -25,3 +25,8 @@ export type MenuTile = {
   active: boolean;
   badge?: number;
 };
+
+// The 3 tabs pinned to fixed slots in the bottom pill nav (MobileBottomNav.tsx) — shared with
+// app/page.tsx and AppLauncherGrid.tsx so "everything else" is filtered consistently in one place
+// instead of three separate hardcoded copies of the same 3 ids.
+export const PRIMARY_NAV_TAB_IDS: NavTabId[] = ['board', 'calendar', 'chat'];
