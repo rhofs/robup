@@ -4,6 +4,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { useEditor, EditorContent } from '@tiptap/react';
 import { BubbleMenu } from '@tiptap/react/menus';
 import { HocuspocusProvider } from '@hocuspocus/provider';
+import { collabWsUrl } from '../../lib/collab/collabWsUrl';
 import Document from '@tiptap/extension-document';
 import Paragraph from '@tiptap/extension-paragraph';
 import Text from '@tiptap/extension-text';
@@ -109,7 +110,7 @@ export default function CollabDocEditor({
 
   useEffect(() => {
     const p = new HocuspocusProvider({
-      url: `ws://${window.location.hostname}:1234`,
+      url: collabWsUrl(),
       name: docId,
     });
     setProvider(p);

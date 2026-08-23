@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { HocuspocusProvider } from '@hocuspocus/provider';
 import { chatDocumentName } from './chatRoom';
+import { collabWsUrl } from './collabWsUrl';
 
 // Real-time delivery for Chat (Phase 2) — mirrors usePresenceConnection.ts's exact lifecycle
 // (provider create/destroy lives in a useEffect + useState pair, not useMemo, since a
@@ -22,7 +23,7 @@ export function useChatChannelConnection(channelId: string | null, onSignal: () 
       return;
     }
     const p = new HocuspocusProvider({
-      url: `ws://${window.location.hostname}:1234`,
+      url: collabWsUrl(),
       name: chatDocumentName(channelId),
     });
     setProvider(p);

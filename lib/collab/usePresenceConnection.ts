@@ -4,6 +4,7 @@ import { useTaskStore } from '../../store/useTaskStore';
 import { useSessionStore } from '../../store/useSessionStore';
 import { usePresenceStore } from '../../store/usePresenceStore';
 import { presenceDocumentName } from './presenceRoom';
+import { collabWsUrl } from './collabWsUrl';
 
 // Genuine live "who's online" detection, reusing the same Hocuspocus sidecar already running for
 // Doc collaboration (server/collabServer.ts) — a dedicated awareness-only room, no persisted
@@ -32,7 +33,7 @@ export function usePresenceConnection(workspaceId: string | null): void {
       return;
     }
     const p = new HocuspocusProvider({
-      url: `ws://${window.location.hostname}:1234`,
+      url: collabWsUrl(),
       name: presenceDocumentName(workspaceId),
     });
     setProvider(p);
