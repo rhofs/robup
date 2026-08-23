@@ -28,8 +28,12 @@ export default function MobileBottomNav({ navTabs, menuOpen, onToggleMenu, onOpe
     .filter((t): t is NavTab => !!t);
 
   return (
+    // relative z-40: MobileSpacesSheet.tsx is deliberately a full-height page rather than a
+    // blocking modal (z-30, lower than this), so the nav stays visible/tappable above it —
+    // relative is needed for z-index to apply at all on a non-fixed element, since a bare
+    // z-index is ignored on a statically-positioned one.
     <div
-      className="flex md:hidden justify-center px-3 pt-1.5"
+      className="relative z-40 flex md:hidden justify-center px-3 pt-1.5"
       style={{ paddingBottom: 'calc(env(safe-area-inset-bottom) + 8px)' }}
     >
       <nav className="flex items-center gap-0.5 bg-neutral-900 border border-neutral-800/80 rounded-full px-1.5 py-1.5 shadow-lg shadow-black/30">

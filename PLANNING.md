@@ -1650,6 +1650,16 @@ Following up on the Location field question: user asked about real address autoc
 
 **Verified**: `npx tsc --noEmit` clean, a real `npm run build` succeeds (confirmed `/api/places/autocomplete` in the route list), scripted login + `GET /` returns 200 with no error-overlay marker. Also scripted-tested the route directly: unauthenticated request → 401; authenticated request with no key configured → 200 with `{configured: false, suggestions: []}` exactly as designed. **Not yet tested against the real Google API** — needs the user to finish the Google Cloud setup (enable the API, billing, quota cap, generate+set the key) before the actual suggestion-fetching path can be exercised for real.
 
+## Today's session (2026-08-23, continued a fifth time) — Spaces as a real screen, not a popup; deduped the Menu grid
+
+User feedback after trying the new "Spaces" nav on their phone: tapping it opened "yet another menu" popping up, when they just wanted to land directly on the Spaces list and navigate onward from there. Also asked to drop Tasks/Planner/Chat from the "Menu" grid, since those three already have their own dedicated slots in the bottom pill.
+
+**`MobileSpacesSheet.tsx` redesigned from a partial-height bottom sheet into a full-height page**: opaque background (no dimmed backdrop — nothing to see through anymore), fills the screen from the top down to just above the bottom nav, slides in with a subtle fade instead of sliding up from the bottom edge. Deliberately stops *just above* the nav rather than covering it — `MobileBottomNav.tsx` got `relative z-40` (bumped above this one screen's `z-30`; every other mobile overlay, which are all meant to feel like real modals, stays at their existing `z-50`) so the pill nav stays visible and tappable the whole time this screen is showing — you can jump straight to Planner/Chat/Menu without closing Spaces first, which is what "navigate onward from there" actually needed. Selecting a Space (or "All Tasks") still closes the screen and lands you on that Space's board/Space Home, same as before — only the *browsing* experience changed, not the destination.
+
+**`AppLauncherGrid.tsx`** ("Menu" grid) now filters out `board`/`calendar`/`chat` from the tab tiles it renders — those three are already one tap away via the bottom pill, so showing them a second time here was pure redundancy. Only `docs`/`office` (whichever aren't hidden by workspace admin settings) plus Settings/Trash/Install remain.
+
+**Verified**: `npx tsc --noEmit` clean, a real `npm run build` succeeds, scripted login + `GET /` returns 200 with no error-overlay marker. **Not yet visually confirmed** — z-index stacking across two independently-positioned fixed/relative elements is exactly the kind of thing that can look right in theory and still surprise in a real mobile browser (address-bar show/hide, safe-area insets varying by device) — needs the user's phone before calling this settled.
+
 ## Known bugs / things to remember
 
 - **dnd-kit gotcha**: `useDraggable`/`useDroppable` bind to the *nearest ancestor* `DndContext` by React-tree position, not by id-naming intent. Fix: one shared `DndContext` for all sidebar/task dragging, dispatch in `onDragEnd` by inspecting the dragged id's prefix (`task id`, `list-drag:`, `folder-drag:`, `space-drag:`).

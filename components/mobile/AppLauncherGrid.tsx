@@ -42,17 +42,22 @@ function Tile({ icon: Icon, label, active, badge, onClick }: TileProps) {
   );
 }
 
-// Mobile-only "more" grid (opened from MobileBottomNav's Menu button) — covers everything the
-// desktop icon rail exposes (app/page.tsx's visibleNavTabs) plus Settings/Trash, which don't fit
-// in the bottom nav's 4 fixed slots, plus a "Me" section (My Tasks/Assigned/Network/Profile) that
-// mirrors the desktop sidebar's own Me zone (hidden below md, otherwise unreachable on mobile).
-// Every tile calls a setter the desktop UI already calls elsewhere; no new state is introduced
-// here beyond the install-prompt hook.
+// Ids that already have their own fixed slot in the bottom pill (MobileBottomNav.tsx) — showing
+// them again here too would just be the same three destinations twice.
+const ALREADY_IN_BOTTOM_NAV = new Set(['board', 'calendar', 'chat']);
+
+// Mobile-only "more" grid (opened from MobileBottomNav's Menu button) — covers whatever's left of
+// the desktop icon rail's tabs (app/page.tsx's visibleNavTabs, minus the three already pinned to
+// the bottom nav) plus Settings/Trash, plus a "Me" section (My Tasks/Assigned/Network/Profile)
+// that mirrors the desktop sidebar's own Me zone (hidden below md, otherwise unreachable on
+// mobile). Every tile calls a setter the desktop UI already calls elsewhere; no new state is
+// introduced here beyond the install-prompt hook.
 export default function AppLauncherGrid({ open, onClose, navTabs, meItems, onOpenSettings, onOpenTrash }: Props) {
   // Only ever a real actionable tile on Chrome/Edge-family browsers that fired
   // `beforeinstallprompt` (see useInstallPrompt.ts) — iOS has no programmatic install prompt at
   // all, so it gets a longer text hint in AccountSettingsPanel.tsx instead of a dead tile here.
   const { canInstall, promptInstall } = useInstallPrompt();
+  const gridNavTabs = navTabs.filter((tab) => !ALREADY_IN_BOTTOM_NAV.has(tab.id));
   return (
     <AnimatePresence>
       {open && (
@@ -79,7 +84,7 @@ export default function AppLauncherGrid({ open, onClose, navTabs, meItems, onOpe
               </button>
             </div>
             <div className="grid grid-cols-4 gap-3">
-              {navTabs.map((tab) => (
+              {gridNavTabs.map((tab) => (
                 <Tile
                   key={tab.id}
                   icon={tab.icon}
