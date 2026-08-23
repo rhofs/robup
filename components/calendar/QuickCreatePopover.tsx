@@ -7,6 +7,7 @@ import DatePickerPopover from '../DatePickerPopover';
 import FloatingPopover from '../FloatingPopover';
 import { startDateColor, dueDateColor, DATE_BADGE_COLOR_HEX, startDateTooltip, dueDateTooltip } from '../../lib/dateBadgeColor';
 import { googleMapsSearchUrl } from '../../lib/googleMapsUrl';
+import LocationAutocompleteInput from '../LocationAutocompleteInput';
 
 type QuickCreatePopoverProps = {
   open: boolean;
@@ -286,10 +287,9 @@ export default function QuickCreatePopover({
                 <label className="text-[10px] uppercase tracking-wide text-neutral-500 font-semibold flex items-center gap-1">
                   <MapPin className="w-3 h-3" /> Location
                 </label>
-                <input
-                  type="text"
+                <LocationAutocompleteInput
                   value={eventLocation}
-                  onChange={(e) => setEventLocation(e.target.value)}
+                  onChange={setEventLocation}
                   placeholder="Add a location..."
                   className="w-full bg-neutral-950 border border-neutral-700 rounded px-3 py-2 text-xs text-white focus:outline-none focus:border-blue-500"
                 />

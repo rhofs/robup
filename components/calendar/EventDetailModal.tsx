@@ -9,6 +9,7 @@ import ColorSwatchPicker from '../ColorSwatchPicker';
 import EventActivityPanel from './EventActivityPanel';
 import GoogleIcon from '../icons/GoogleIcon';
 import { googleMapsSearchUrl } from '../../lib/googleMapsUrl';
+import LocationAutocompleteInput from '../LocationAutocompleteInput';
 
 const EVENT_COLOR_CHOICES = ['#c89642', '#618cd1', '#9a61d1', '#349f7c', '#cd6565', '#31a0b3', '#cb6798', '#8d97a5'];
 
@@ -154,10 +155,9 @@ export default function EventDetailModal({ event, workspaces, users, onClose, on
             <label className="text-[10px] uppercase tracking-wide text-neutral-500 font-semibold flex items-center gap-1">
               <MapPin className="w-3 h-3" /> Location
             </label>
-            <input
-              type="text"
+            <LocationAutocompleteInput
               value={event.location ?? ''}
-              onChange={(e) => onUpdate({ location: e.target.value || null })}
+              onChange={(v) => onUpdate({ location: v || null })}
               placeholder="Add a location..."
               className="w-full bg-neutral-950 border border-neutral-700 rounded px-3 py-2 text-xs text-white focus:outline-none focus:border-blue-500"
             />
