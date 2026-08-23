@@ -1587,6 +1587,33 @@ User feedback after the chevron-toggle fix: columns on mobile were "still messed
 
 **Verified**: `npx tsc --noEmit` clean, a real `npm run build` succeeds, scripted login + `GET /` returns 200 with no error-overlay marker. **Not yet visually confirmed** — needs the user's phone, same as every mobile layout/gesture change this session; this one in particular changes the interaction model enough (no more swipe at all) that it's worth a fresh look rather than assuming the previous round's feedback fully carries over.
 
+## Today's session (2026-08-23) — Expert design review: mobile Task cards and Task modal cleanup
+
+User relayed detailed feedback from an outside design expert reviewing the mobile redesign, with reference screenshots. Confirmed with the user first that this whole pass (including the general visual-polish principles in the expert's point 3 — fewer hard borders, more rounded corners, elevation instead of borders) is **mobile-only**, matching the rule the entire mobile-redesign effort has followed all session — desktop is untouched throughout.
+
+### Task list → cards (expert's point 1)
+
+`TaskRow.tsx`'s mobile layout changed again — not just restyled, the interaction model itself changed. The previous pass (last session) already replaced horizontal swipe with a tap-to-expand chevron, but the expert flagged that the underlying idea (fields hidden behind a toggle at all) was still the wrong shape: task apps built for touch show status/assignee/date as compact, always-visible pills, not something you have to reveal first.
+
+- **Metadata is now always visible**, not hidden behind any toggle — a `flex-wrap` row of compact pills sits directly under the title, reusing the exact same `renderColumnCell` popovers/pickers already built (one instance each, not duplicated). Due/start dates get a small calendar icon prefix; status and assignee already render as compact colored pills/avatar circles, so they needed no extra wrapping.
+- **Card, not row**: `rounded-xl`, elevated `bg-neutral-900` background (against the page's darker background) instead of a bordered/square-cornered table row. Cards are gap-separated (`flex flex-col gap-2` at the list-container level in `app/page.tsx`) instead of `divide-y` hairlines.
+- **Title wraps** (no `truncate`) instead of cutting off long titles.
+- **Grip (drag) + More (⋯) both moved to the card's top-right corner**, always visible without needing to reveal anything first — the More button used to live inside the now-removed expand panel.
+- **Rename dropped from an always-visible pencil icon** — it's still reachable via the long-press context menu (which already has "Rename"), one less element competing for space on the card.
+- Removed the whole `columnsExpanded`/`AnimatePresence`-height-animation mechanism from last session — genuinely unnecessary now that nothing needs revealing.
+
+**A real bug found along the way**: even after TaskRow's own mobile layout stopped needing horizontal space, the *list container* in `app/page.tsx` still applied `style={{ minWidth: tableMinWidth }}` — an inline width computed from the desktop grid's column widths — regardless of which TaskRow layout was actually rendering inside it. This alone was still forcing horizontal scroll on mobile even though the visible cards no longer needed it. Fixed: `minWidth` is `undefined` on mobile (both the main list and the subtask list inside the task modal use the same `tableMinWidth`, both fixed), and the outer "table shell" wrapper drops its border/shared-background/`overflow-x-auto` on mobile entirely, since each card now carries its own elevated surface instead of a shared one.
+
+### Task modal cleanup (expert's point 2)
+
+- **UUID hidden from the main view on mobile** (`hidden md:block` on the `ID: {id}` line) — reachable instead via a new "Copy task ID" button in the modal header (`md:hidden`, copies via `navigator.clipboard` + a toast).
+- **Status/Timeframe/Assignees** went from bordered boxes with headers to slim elevated rows (`bg-neutral-900/60 rounded-lg`, no border) on mobile — Timeframe's separate "Start:"/"Due:" sub-rows collapsed into one `19 Aug – 21 Aug` line with a calendar icon; Assignees got a person-icon-led single row. Both reuse the *exact same* `DatePickerPopover`/assignee `FloatingPopover` instances as desktop (shared via a ternary / IIFE returning the same JSX, not duplicated popover state) — only the surrounding container differs between the two breakpoints.
+- **Subtask add input** now starts collapsed to a plain text link ("+ Legg til underoppgave") on mobile, matching the same pattern the main Task list's own "+ Add Task" already uses — expands to the real input + blue "Add" button on tap, collapses back on blur *only* if nothing was typed (so tapping "Add" itself, which blurs the input first, can never race the collapse).
+- **Breadcrumb** ("Space / Task") shrunk and dropped to lower contrast on mobile (`text-[11px] text-neutral-500` vs desktop's `text-xs text-neutral-400`) so the real task title reads as the primary heading.
+- Modal's own corners bumped to `rounded-xl` on mobile (`rounded` on desktop, unchanged) — small, contained instance of the expert's "softer corners" principle rather than a separate global pass.
+
+**Verified**: `npx tsc --noEmit` clean, a real `npm run build` succeeds, scripted login + `GET /` returns 200 with no error-overlay marker. Hit one real syntax bug while building this (a `{/* JSX comment */}` placed directly inside a ternary's parenthesized branch rather than as an actual JSX child — only plain `/* */` is valid in that position, not the `{/* */}` JSX-comment form; the parser error cascaded into several unrelated-looking errors further down the file, worth remembering next time a JSX-comment edit produces confusing downstream syntax errors). **Not yet visually confirmed** — this is the biggest single mobile visual change this session; needs the user's phone (and ideally the same design-review eye that flagged the original issues) before considering it settled.
+
 ## Known bugs / things to remember
 
 - **dnd-kit gotcha**: `useDraggable`/`useDroppable` bind to the *nearest ancestor* `DndContext` by React-tree position, not by id-naming intent. Fix: one shared `DndContext` for all sidebar/task dragging, dispatch in `onDragEnd` by inspecting the dragged id's prefix (`task id`, `list-drag:`, `folder-drag:`, `space-drag:`).

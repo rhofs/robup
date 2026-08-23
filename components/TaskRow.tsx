@@ -1,9 +1,9 @@
 'use client';
 
 import { memo, useEffect, useState } from 'react';
-import { AnimatePresence, motion } from 'framer-motion';
+import { motion } from 'framer-motion';
 import { useDraggable, useDroppable } from '@dnd-kit/core';
-import { Check, Pencil, RefreshCw, MoreHorizontal, GripVertical, ChevronDown } from 'lucide-react';
+import { Check, Pencil, RefreshCw, MoreHorizontal, GripVertical, Calendar } from 'lucide-react';
 import { useTaskStore, StatusDef, CustomFieldDef, Task } from '../store/useTaskStore';
 import { useIsMobile } from '../hooks/useIsMobile';
 import { useLongPress } from '../hooks/useLongPress';
@@ -65,10 +65,6 @@ function TaskRowImpl({
   const [assigneeOpen, setAssigneeOpen] = useState(false);
   const [editingTitle, setEditingTitle] = useState(false);
   const [titleDraft, setTitleDraft] = useState(task.title);
-  // Mobile only — whether the column fields are expanded below the row. Renamed from an earlier
-  // "swipeRevealed" now that the mobile layout is a vertical accordion, not a horizontal swipe
-  // panel (see the mobile branch's own comment for why that changed).
-  const [columnsExpanded, setColumnsExpanded] = useState(false);
 
   const commitTitle = () => {
     setEditingTitle(false);
@@ -333,23 +329,54 @@ function TaskRowImpl({
       transition={{ duration: 0.28, ease: 'easeOut' }}
     >
       {isMobile ? (
-        // ================= MOBILE ROW — tap the chevron to expand the column fields
-        // (status/assignee/dates/custom) vertically below the row, accordion-style. This
-        // replaced an earlier horizontal swipe-to-reveal panel: squeezing status pills, date
-        // pickers, and dropdowns into ~90px-wide chips in a side-scrolling strip was cramped and
-        // fiddly regardless of how it was triggered, and a swipe gesture with no visual affordance
-        // was easy to never discover in the first place. A full-width stacked list gives every
-        // control the same room it has on desktop, one per row instead of squeezed side by side.
-        // Whole-row drag-and-drop is scoped to a dedicated grip handle (dnd-kit's own "drag
-        // handle" pattern) rather than the row itself, so it can't race the row's own tap-to-open.
-        // `touchAction: 'none'` on the grip stops the browser's native touch-scroll from competing
-        // with dnd-kit's pointer capture. No TouchSensor needed — dnd-kit's PointerSensor (already
-        // registered as `taskSensors` in app/page.tsx) already handles touch via the Pointer
-        // Events API. =================
+        // ================= MOBILE ROW — a "card," not a table row: checkbox + title on top
+        // (title wraps instead of truncating), status/assignee/dates/custom fields always visible
+        // underneath as compact wrapped pills instead of hidden behind an expand/swipe gesture —
+        // an expert design pass flagged the earlier accordion-behind-a-chevron approach as still
+        // clumsy, and a permanently-visible metadata row is both simpler and matches how mobile
+        // task apps (and the reference screenshots this was redesigned against) actually look.
+        // Elevated surface (bg-neutral-900 against the page's darker background) with no border
+        // and a soft rounded-xl corner, rather than the hairline-bordered/square-cornered "table
+        // row" look — the flat gap-based card spacing (app/page.tsx's list container) replaces
+        // the old divide-y row separators. Grip (drag) and More (menu) live in the top-right
+        // corner, always reachable without scrolling. Whole-row drag-and-drop is still scoped to
+        // the dedicated grip handle (dnd-kit's own "drag handle" pattern), not the card itself, so
+        // it can't race the card's own tap-to-open; `touchAction: 'none'` on the grip stops the
+        // browser's native touch-scroll from competing with dnd-kit's pointer capture. No
+        // TouchSensor needed — dnd-kit's PointerSensor (already registered as `taskSensors` in
+        // app/page.tsx) already handles touch via the Pointer Events API. =================
         <div
           ref={setNodeRef}
-          className={`${isOver ? 'ring-1 ring-inset ring-neutral-500' : ''} ${isDragging ? 'opacity-40' : ''}`}
+          className={`relative rounded-xl bg-neutral-900 ${isSelected ? 'ring-1 ring-inset ring-blue-500/60' : ''} ${
+            isOver ? 'ring-1 ring-inset ring-neutral-500' : ''
+          } ${isDragging ? 'opacity-40' : ''}`}
         >
+          <div className="absolute top-2 right-2 flex items-center gap-0.5 z-10">
+            <span
+              {...attributes}
+              {...listeners}
+              onPointerDown={(e) => {
+                e.stopPropagation();
+                listeners?.onPointerDown?.(e);
+              }}
+              onClick={(e) => e.stopPropagation()}
+              title="Drag to move"
+              style={{ touchAction: 'none' }}
+              className="shrink-0 text-neutral-600 cursor-grab active:cursor-grabbing p-2"
+            >
+              <GripVertical className="w-4 h-4" />
+            </span>
+            <button
+              onClick={(e) => {
+                e.stopPropagation();
+                onContextMenu?.(e, task);
+              }}
+              title="More options"
+              className="shrink-0 text-neutral-500 p-2 cursor-pointer"
+            >
+              <MoreHorizontal className="w-4 h-4" />
+            </button>
+          </div>
           <div
             onPointerDown={rowLongPress.onPointerDown}
             onPointerMove={rowLongPress.onPointerMove}
@@ -361,11 +388,11 @@ function TaskRowImpl({
               if (rowLongPress.wasLongPress()) return;
               onOpen();
             }}
-            className={`flex items-center gap-3 px-4 py-4 text-sm cursor-pointer bg-neutral-950 ${isSelected ? 'bg-neutral-700/30' : ''}`}
+            className="flex items-start gap-3 px-4 pt-4 pb-2.5 pr-16 text-sm cursor-pointer"
           >
             {selectCheckbox}
             {doneToggle}
-            <div className="font-medium flex-1 min-w-0 flex items-center gap-2 text-neutral-200">
+            <div className="flex-1 min-w-0">
               {editingTitle ? (
                 <input
                   autoFocus
@@ -380,82 +407,26 @@ function TaskRowImpl({
                       setEditingTitle(false);
                     }
                   }}
-                  className="w-full bg-neutral-900 border border-blue-500 rounded px-2 py-1 text-neutral-100 focus:outline-none"
+                  className="w-full bg-neutral-950 border border-blue-500 rounded-lg px-2 py-1 text-neutral-100 focus:outline-none"
                 />
               ) : (
-                <>
-                  <span className="truncate">{task.title}</span>
-                  <button
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      startRename();
-                    }}
-                    title="Rename"
-                    className="text-neutral-500 shrink-0 cursor-pointer"
-                  >
-                    <Pencil className="w-3.5 h-3.5" />
-                  </button>
-                </>
+                // No truncate — a long title wraps onto a second line instead of being cut off.
+                // Renaming moved into the long-press context menu (already has "Rename") rather
+                // than a permanently-visible pencil icon cluttering the title row.
+                <span className="font-medium text-neutral-200 leading-snug break-words">{task.title}</span>
               )}
             </div>
-            {/* Always-visible, plain-tap way to see the columns. */}
-            <button
-              onClick={(e) => {
-                e.stopPropagation();
-                setColumnsExpanded((v) => !v);
-              }}
-              title={columnsExpanded ? 'Hide fields' : 'Show fields'}
-              className="shrink-0 text-neutral-500 p-2 -mr-1.5 cursor-pointer"
-            >
-              <ChevronDown className={`w-5 h-5 transition-transform ${columnsExpanded ? 'rotate-180' : ''}`} />
-            </button>
-            <span
-              {...attributes}
-              {...listeners}
-              onPointerDown={(e) => {
-                e.stopPropagation();
-                listeners?.onPointerDown?.(e);
-              }}
-              onClick={(e) => e.stopPropagation()}
-              title="Drag to move"
-              style={{ touchAction: 'none' }}
-              className="shrink-0 text-neutral-600 cursor-grab active:cursor-grabbing p-2 -mr-1.5"
-            >
-              <GripVertical className="w-5 h-5" />
-            </span>
           </div>
-          <AnimatePresence initial={false}>
-            {columnsExpanded && (
-              <motion.div
-                initial={{ height: 0, opacity: 0 }}
-                animate={{ height: 'auto', opacity: 1 }}
-                exit={{ height: 0, opacity: 0 }}
-                transition={{ duration: 0.18, ease: 'easeInOut' }}
-                className="overflow-hidden"
-                onClick={(e) => e.stopPropagation()}
-              >
-                <div className="px-4 pb-3 pt-1 flex flex-col gap-2.5 border-t border-neutral-800/60 bg-neutral-900/40">
-                  {columns.map((col) => (
-                    <div key={col.key} className="flex items-center justify-between gap-3">
-                      <span className="text-[10px] text-neutral-500 uppercase tracking-wide shrink-0">{col.label}</span>
-                      <div className="flex justify-end min-w-0">{renderColumnCell(col)}</div>
-                    </div>
-                  ))}
-                  <div className="flex justify-end pt-1 -mr-2">
-                    <button
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        onContextMenu?.(e, task);
-                      }}
-                      className="flex items-center gap-1.5 text-[11px] text-neutral-400 px-2.5 py-1.5 rounded hover:bg-neutral-800/60 cursor-pointer"
-                    >
-                      <MoreHorizontal className="w-3.5 h-3.5" /> More options
-                    </button>
-                  </div>
+          {columns.length > 0 && (
+            <div className="flex flex-wrap items-center gap-x-3 gap-y-1.5 px-4 pb-3.5 pl-[52px]" onClick={(e) => e.stopPropagation()}>
+              {columns.map((col) => (
+                <div key={col.key} className="flex items-center gap-1 text-neutral-400">
+                  {(col.kind === 'startDate' || col.kind === 'dueDate') && <Calendar className="w-3 h-3 shrink-0" />}
+                  {renderColumnCell(col)}
                 </div>
-              </motion.div>
-            )}
-          </AnimatePresence>
+              ))}
+            </div>
+          )}
         </div>
       ) : (
         // ================= DESKTOP ROW (unchanged) =================

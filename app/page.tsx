@@ -60,6 +60,7 @@ import {
   ClipboardCheck,
   Settings,
   Hash,
+  Copy,
   type LucideIcon,
 } from 'lucide-react';
 import { useTaskStore, HierarchySpace, HierarchyFolder, HierarchyList, HierarchyDocFolder, HierarchyRoom, HierarchyWorkspace, StatusDef, CustomFieldDef, Task, TaskDoc, AppUser } from '../store/useTaskStore';
@@ -666,6 +667,10 @@ function PageContent() {
 
   const [modalTaskStack, setModalTaskStack] = useState<string[]>([]);
   const [newSubtaskTitle, setNewSubtaskTitle] = useState('');
+  // Mobile only — the subtask input starts collapsed to a discreet text link (matches the main
+  // Task list's own "+ Add Task" pattern) instead of a permanently-visible input + bright blue
+  // "Add" button competing for attention with the task's actual content.
+  const [mobileSubtaskAddOpen, setMobileSubtaskAddOpen] = useState(false);
 
   const [visibleColumns, setVisibleColumns] = useState<string[]>(['status', 'assignee', 'startDate', 'dueDate']);
   const [columnWidths, setColumnWidths] = useState<Record<string, number>>(DEFAULT_COLUMN_WIDTHS);
@@ -4092,8 +4097,13 @@ function PageContent() {
                 onNavigateList={(listId) => setNavigation(currentSpace!.id, [listId])}
               />
             ) : (
-            <div className="bg-neutral-900/60 border border-neutral-800/80 rounded overflow-x-auto shadow-sm">
-              <div style={{ minWidth: tableMinWidth }}>
+            /* On mobile this "table shell" mostly disappears — no border/shared background, no
+               forced min-width (that alone was still causing horizontal scroll even after
+               TaskRow's own mobile layout stopped needing it, since it's an inline style keyed
+               off the desktop grid's column widths regardless of which layout actually renders
+               inside) — each TaskRow.tsx card below carries its own elevated background instead. */
+            <div className={isMobile ? 'rounded' : 'bg-neutral-900/60 border border-neutral-800/80 rounded overflow-x-auto shadow-sm'}>
+              <div style={{ minWidth: isMobile ? undefined : tableMinWidth }}>
               <div
                 className="hidden md:grid items-center px-4 py-2.5 text-[10px] font-semibold text-neutral-500 uppercase tracking-wider border-b border-neutral-800 bg-neutral-950/40"
                 style={{ gridTemplateColumns: rowGridTemplate }}
@@ -4139,7 +4149,7 @@ function PageContent() {
                 <div className="text-right">Action</div>
               </div>
 
-              <div className="divide-y divide-neutral-800/50">
+              <div className={isMobile ? 'flex flex-col gap-2' : 'divide-y divide-neutral-800/50'}>
                 <AnimatePresence mode="popLayout" initial={false} key={taskListNavKey}>
                   {filteredTasks.map((task) => (
                     <TaskRow
@@ -5008,11 +5018,13 @@ function PageContent() {
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             transition={{ duration: 0.15 }}
-            className="w-full max-w-6xl h-[88vh] bg-neutral-900 border border-neutral-800 rounded shadow-2xl overflow-hidden"
+            className="w-full max-w-6xl h-[88vh] bg-neutral-900 border border-neutral-800 rounded-xl md:rounded shadow-2xl overflow-hidden"
           >
           <div className="flex flex-col h-full">
             <div className="px-6 py-4 border-b border-neutral-800 flex items-center justify-between bg-neutral-950/40 shrink-0">
-              <div className="flex items-center gap-2 text-xs text-neutral-400 font-mono overflow-x-auto">
+              {/* Smaller, lower-contrast on mobile — a breadcrumb is orientation, not the main
+                  content, and shouldn't compete with the task title for attention. */}
+              <div className="flex items-center gap-2 text-[11px] text-neutral-500 md:text-xs md:text-neutral-400 font-mono overflow-x-auto">
                 <button onClick={() => setModalTaskStack([])} className="hover:text-blue-400 cursor-pointer shrink-0 inline-flex items-center gap-1.5">
                   {activeSpaceId === 'everything' ? (
                     <>
@@ -5041,6 +5053,18 @@ function PageContent() {
                 })}
               </div>
               <div className="flex items-center gap-2 shrink-0">
+                {/* Mobile-only — the UUID itself is hidden from the main view (see below), so this
+                    is the one place left to grab it if it's ever actually needed. */}
+                <button
+                  onClick={() => {
+                    navigator.clipboard.writeText(activeModalTask.id);
+                    showToast('Task ID copied');
+                  }}
+                  title="Copy task ID"
+                  className="md:hidden text-[11px] px-2.5 py-1 rounded border cursor-pointer transition flex items-center gap-1.5 text-neutral-400 border-neutral-800 hover:bg-neutral-800/60"
+                >
+                  <Copy className="w-3.5 h-3.5" />
+                </button>
                 {canManageCurrentWorkspace && (
                   <button
                     onClick={() =>
@@ -5118,10 +5142,14 @@ function PageContent() {
                       {activeModalTask.title}
                     </h2>
                   )}
-                  <p className="text-[11px] text-neutral-500 font-mono mt-1">ID: {activeModalTask.id}</p>
+                  {/* Hidden on mobile — a raw UUID is pure visual noise for anyone who isn't
+                      debugging; reachable via the header's "Copy task ID" button instead. */}
+                  <p className="hidden md:block text-[11px] text-neutral-500 font-mono mt-1">ID: {activeModalTask.id}</p>
                 </div>
 
-                <div className="flex items-center gap-3 bg-neutral-950/40 p-3 rounded border border-neutral-800">
+                {/* Slim elevated row on mobile instead of a bordered box — same interactive pill
+                    either way, just a lighter-weight container around it. */}
+                <div className={`flex items-center gap-3 rounded-lg ${isMobile ? 'bg-neutral-900/60 px-3 py-2.5' : 'bg-neutral-950/40 p-3 border border-neutral-800'}`}>
                   <span className="text-xs text-neutral-400 font-medium">Status:</span>
                   <FloatingPopover
                     open={modalStatusOpen}
@@ -5253,8 +5281,8 @@ function PageContent() {
                     Subtasks ({currentSubtasks.length})
                   </h3>
 
-                  <div className="bg-neutral-950/40 border border-neutral-800 rounded overflow-x-auto">
-                    <div style={{ minWidth: currentSubtasks.length > 0 ? tableMinWidth : undefined }}>
+                  <div className={isMobile ? '' : 'bg-neutral-950/40 border border-neutral-800 rounded overflow-x-auto'}>
+                    <div style={{ minWidth: isMobile || currentSubtasks.length === 0 ? undefined : tableMinWidth }}>
                     {currentSubtasks.length > 0 && (
                       <div
                         className="hidden md:grid items-center px-3 py-1.5 text-[9px] font-semibold text-neutral-500 uppercase tracking-wider border-b border-neutral-800"
@@ -5275,7 +5303,7 @@ function PageContent() {
                         <div></div>
                       </div>
                     )}
-                    <div className="divide-y divide-neutral-800/50">
+                    <div className={isMobile ? 'flex flex-col gap-2' : 'divide-y divide-neutral-800/50'}>
                       <AnimatePresence mode="popLayout" initial={false}>
                         {currentSubtasks.map((sub) => (
                           <TaskRow
@@ -5295,31 +5323,50 @@ function PageContent() {
                       </AnimatePresence>
                     </div>
                     </div>
-                    <div className="p-2 flex gap-2 items-center bg-neutral-950/60">
-                      <input
-                        type="text"
-                        placeholder="+ Add new subtask..."
-                        value={newSubtaskTitle}
-                        onChange={(e) => setNewSubtaskTitle(e.target.value)}
-                        onKeyDown={(e) => e.key === 'Enter' && handleAddSubtask(activeModalTask)}
-                        className="flex-1 bg-neutral-900 border border-neutral-800 rounded px-3 py-1.5 text-xs text-white focus:outline-none focus:border-blue-500"
-                      />
+                    {isMobile && !mobileSubtaskAddOpen ? (
                       <button
-                        onClick={() => handleAddSubtask(activeModalTask)}
-                        className="bg-blue-600 hover:bg-blue-500 text-white text-xs px-3 py-1.5 rounded font-medium cursor-pointer"
+                        onClick={() => setMobileSubtaskAddOpen(true)}
+                        className="w-full text-left px-3 py-2.5 text-xs text-neutral-500 hover:text-blue-400 cursor-pointer"
                       >
-                        Add
+                        + Legg til underoppgave
                       </button>
-                    </div>
+                    ) : (
+                      <div className="p-2 flex gap-2 items-center bg-neutral-950/60">
+                        <input
+                          type="text"
+                          autoFocus={isMobile}
+                          placeholder="+ Add new subtask..."
+                          value={newSubtaskTitle}
+                          onChange={(e) => setNewSubtaskTitle(e.target.value)}
+                          onKeyDown={(e) => e.key === 'Enter' && handleAddSubtask(activeModalTask)}
+                          // Collapses back to the discreet link on mobile once blurred with
+                          // nothing typed — never mid-typing, and never while there's still text
+                          // to add (so tapping "Add" itself can't race the collapse).
+                          onBlur={() => {
+                            if (isMobile && !newSubtaskTitle.trim()) setMobileSubtaskAddOpen(false);
+                          }}
+                          className="flex-1 bg-neutral-900 border border-neutral-800 rounded px-3 py-1.5 text-xs text-white focus:outline-none focus:border-blue-500"
+                        />
+                        <button
+                          onClick={() => handleAddSubtask(activeModalTask)}
+                          className="bg-blue-600 hover:bg-blue-500 text-white text-xs px-3 py-1.5 rounded font-medium cursor-pointer"
+                        >
+                          Add
+                        </button>
+                      </div>
+                    )}
                   </div>
                 </div>
 
-                <div className="grid grid-cols-2 gap-4">
-                  <div className="bg-neutral-950/40 p-4 rounded border border-neutral-800">
-                    <h4 className="text-[11px] font-bold text-neutral-400 uppercase tracking-wider mb-2">Timeframe</h4>
-                    <div className="space-y-1.5 text-xs font-mono">
-                      <div className="flex items-center justify-between gap-2">
-                        <span className="text-neutral-400 shrink-0">Start:</span>
+                {/* Mobile: two slim icon-led rows instead of two bordered boxes with headers —
+                    same underlying date pickers / assignee popover either way, just a lighter
+                    container. Desktop keeps the original "Timeframe"/"Assignees" boxes. */}
+                <div className={isMobile ? 'flex flex-col gap-2' : 'grid grid-cols-2 gap-4'}>
+                  {isMobile ? (
+                    <div className="flex items-center gap-2.5 bg-neutral-900/60 rounded-lg px-3 py-2.5">
+                      <CalendarIcon className="w-3.5 h-3.5 text-neutral-500 shrink-0" />
+                      <span className="text-xs text-neutral-400 font-medium shrink-0">Dato:</span>
+                      <div className="flex items-center gap-1 text-xs font-mono min-w-0">
                         <DatePickerPopover
                           value={activeModalTask.startDate}
                           onChange={(iso) =>
@@ -5335,9 +5382,7 @@ function PageContent() {
                           })()}
                           tooltip={startDateTooltip(activeModalTask.startDate)}
                         />
-                      </div>
-                      <div className="flex items-center justify-between gap-2">
-                        <span className="text-neutral-400 shrink-0">Due:</span>
+                        <span className="text-neutral-600 shrink-0">–</span>
                         <DatePickerPopover
                           value={activeModalTask.dueDate}
                           onChange={(iso) =>
@@ -5355,59 +5400,114 @@ function PageContent() {
                         />
                       </div>
                     </div>
-                  </div>
-
-                  <div className="bg-neutral-950/40 p-4 rounded border border-neutral-800">
-                    <h4 className="text-[11px] font-bold text-neutral-400 uppercase tracking-wider mb-2">Assignees</h4>
-                    <div className="flex flex-wrap items-center gap-1.5">
-                      {activeModalTask.assignees?.map((a: any) => (
-                        <span key={a.id} className="text-[10px] px-2 py-1 rounded text-white font-semibold" style={{ backgroundColor: a.color }}>
-                          {a.name}
-                        </span>
-                      ))}
-                      <FloatingPopover
-                        open={modalAssigneeOpen}
-                        onClose={() => setModalAssigneeOpen(false)}
-                        panelClassName="w-44 bg-neutral-900 border border-neutral-800 rounded shadow-xl p-1.5"
-                        anchor={
-                          <button
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              setModalAssigneeOpen((o) => !o);
-                            }}
-                            title="Add assignee"
-                            className="w-6 h-6 rounded-full border border-dashed border-neutral-600 text-neutral-500 hover:border-blue-400 hover:text-blue-400 text-xs flex items-center justify-center cursor-pointer"
-                          >
-                            +
-                          </button>
-                        }
-                      >
-                        {users.map((u) => {
-                          const checked = activeModalTask.assignees?.some((a: any) => a.id === u.id) ?? false;
-                          return (
-                            <button
-                              key={u.id}
-                              onClick={() => toggleAssignee(activeModalTask, u.id)}
-                              className="w-full flex items-center gap-2 text-[11px] text-neutral-300 px-2 py-1 rounded hover:bg-neutral-800/60 cursor-pointer"
-                            >
-                              <span
-                                className={`w-3.5 h-3.5 rounded border flex items-center justify-center shrink-0 transition ${
-                                  checked ? 'bg-blue-500 border-blue-500 text-white' : 'border-neutral-600'
-                                }`}
-                              >
-                                {checked && <Check className="w-2.5 h-2.5" />}
-                              </span>
-                              <span className="w-4 h-4 rounded-full text-[8px] font-bold flex items-center justify-center text-white" style={{ backgroundColor: u.color }}>
-                                {u.initials}
-                              </span>
-                              {u.name}
-                            </button>
-                          );
-                        })}
-                        {users.length === 0 && <p className="text-[10px] text-neutral-500 px-2 py-1">No users yet.</p>}
-                      </FloatingPopover>
+                  ) : (
+                    <div className="bg-neutral-950/40 p-4 rounded border border-neutral-800">
+                      <h4 className="text-[11px] font-bold text-neutral-400 uppercase tracking-wider mb-2">Timeframe</h4>
+                      <div className="space-y-1.5 text-xs font-mono">
+                        <div className="flex items-center justify-between gap-2">
+                          <span className="text-neutral-400 shrink-0">Start:</span>
+                          <DatePickerPopover
+                            value={activeModalTask.startDate}
+                            onChange={(iso) =>
+                              optimisticSetDates(
+                                activeModalTask.id,
+                                iso,
+                                activeModalTask.dueDate ? new Date(activeModalTask.dueDate).toISOString() : null
+                              )
+                            }
+                            badgeColorHex={(() => {
+                              const c = startDateColor(activeModalTask.startDate, activeModalTask.dueDate);
+                              return c ? DATE_BADGE_COLOR_HEX[c] : undefined;
+                            })()}
+                            tooltip={startDateTooltip(activeModalTask.startDate)}
+                          />
+                        </div>
+                        <div className="flex items-center justify-between gap-2">
+                          <span className="text-neutral-400 shrink-0">Due:</span>
+                          <DatePickerPopover
+                            value={activeModalTask.dueDate}
+                            onChange={(iso) =>
+                              optimisticSetDates(
+                                activeModalTask.id,
+                                activeModalTask.startDate ? new Date(activeModalTask.startDate).toISOString() : null,
+                                iso
+                              )
+                            }
+                            badgeColorHex={(() => {
+                              const c = dueDateColor(activeModalTask.dueDate);
+                              return c ? DATE_BADGE_COLOR_HEX[c] : undefined;
+                            })()}
+                            tooltip={dueDateTooltip(activeModalTask.dueDate)}
+                          />
+                        </div>
+                      </div>
                     </div>
-                  </div>
+                  )}
+
+                  {(() => {
+                    const assigneeChips = (
+                      <>
+                        {activeModalTask.assignees?.map((a: any) => (
+                          <span key={a.id} className="text-[10px] px-2 py-1 rounded text-white font-semibold" style={{ backgroundColor: a.color }}>
+                            {a.name}
+                          </span>
+                        ))}
+                        <FloatingPopover
+                          open={modalAssigneeOpen}
+                          onClose={() => setModalAssigneeOpen(false)}
+                          panelClassName="w-44 bg-neutral-900 border border-neutral-800 rounded shadow-xl p-1.5"
+                          anchor={
+                            <button
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                setModalAssigneeOpen((o) => !o);
+                              }}
+                              title="Add assignee"
+                              className="w-6 h-6 rounded-full border border-dashed border-neutral-600 text-neutral-500 hover:border-blue-400 hover:text-blue-400 text-xs flex items-center justify-center cursor-pointer"
+                            >
+                              +
+                            </button>
+                          }
+                        >
+                          {users.map((u) => {
+                            const checked = activeModalTask.assignees?.some((a: any) => a.id === u.id) ?? false;
+                            return (
+                              <button
+                                key={u.id}
+                                onClick={() => toggleAssignee(activeModalTask, u.id)}
+                                className="w-full flex items-center gap-2 text-[11px] text-neutral-300 px-2 py-1 rounded hover:bg-neutral-800/60 cursor-pointer"
+                              >
+                                <span
+                                  className={`w-3.5 h-3.5 rounded border flex items-center justify-center shrink-0 transition ${
+                                    checked ? 'bg-blue-500 border-blue-500 text-white' : 'border-neutral-600'
+                                  }`}
+                                >
+                                  {checked && <Check className="w-2.5 h-2.5" />}
+                                </span>
+                                <span className="w-4 h-4 rounded-full text-[8px] font-bold flex items-center justify-center text-white" style={{ backgroundColor: u.color }}>
+                                  {u.initials}
+                                </span>
+                                {u.name}
+                              </button>
+                            );
+                          })}
+                          {users.length === 0 && <p className="text-[10px] text-neutral-500 px-2 py-1">No users yet.</p>}
+                        </FloatingPopover>
+                      </>
+                    );
+                    return isMobile ? (
+                      <div className="flex items-center gap-2.5 bg-neutral-900/60 rounded-lg px-3 py-2.5">
+                        <UserCircle className="w-3.5 h-3.5 text-neutral-500 shrink-0" />
+                        <span className="text-xs text-neutral-400 font-medium shrink-0">Ansvarlig:</span>
+                        <div className="flex flex-wrap items-center gap-1.5 flex-1 min-w-0">{assigneeChips}</div>
+                      </div>
+                    ) : (
+                      <div className="bg-neutral-950/40 p-4 rounded border border-neutral-800">
+                        <h4 className="text-[11px] font-bold text-neutral-400 uppercase tracking-wider mb-2">Assignees</h4>
+                        <div className="flex flex-wrap items-center gap-1.5">{assigneeChips}</div>
+                      </div>
+                    );
+                  })()}
                 </div>
               </div>
 
