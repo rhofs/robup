@@ -1,11 +1,12 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { X, Check } from 'lucide-react';
+import { X, Check, MapPin } from 'lucide-react';
 import { HierarchyWorkspace, AppUser } from '../../store/useTaskStore';
 import DatePickerPopover from '../DatePickerPopover';
 import FloatingPopover from '../FloatingPopover';
 import { startDateColor, dueDateColor, DATE_BADGE_COLOR_HEX, startDateTooltip, dueDateTooltip } from '../../lib/dateBadgeColor';
+import { googleMapsSearchUrl } from '../../lib/googleMapsUrl';
 
 type QuickCreatePopoverProps = {
   open: boolean;
@@ -23,13 +24,16 @@ type QuickCreatePopoverProps = {
     spaceId: string | null;
     workspaceId: string;
     assigneeIds: string[];
+    location: string | null;
   }) => void;
 };
 
 // Replaces the old CreateTaskModal — same Task-creation fields, plus a genuinely new Event
 // concept per the ClickUp-style "New" popover reference. Deliberately not the full reference (no
-// Focus time/OOO tabs, video call, location, recurrence, visibility icons — none of that maps to
-// anything this app can actually do today; see PLANNING.md for the scoping decision).
+// Focus time/OOO tabs, video call, recurrence, visibility icons — none of that maps to anything
+// this app can actually do today; see PLANNING.md for the scoping decision). Location *does* now
+// map to something (Event.location already existed for Google Calendar sync, just wasn't exposed
+// here) — see the Location field below.
 // Event is the DEFAULT tab, Task secondary — this popover only ever opens from the Planner/
 // Calendar view (its one render site is app/page.tsx, triggered by the "+ New task" header
 // button and a day cell's hover "+"), where creating a calendar event is the more natural
@@ -58,6 +62,7 @@ export default function QuickCreatePopover({
   const [eventStart, setEventStart] = useState<string | null>(defaultStartDate);
   const [eventEnd, setEventEnd] = useState<string | null>(defaultStartDate);
   const [allDay, setAllDay] = useState(true);
+  const [eventLocation, setEventLocation] = useState('');
   const [assigneeIds, setAssigneeIds] = useState<string[]>([]);
   const [assigneePickerOpen, setAssigneePickerOpen] = useState(false);
 
@@ -73,6 +78,7 @@ export default function QuickCreatePopover({
       setEventStart(defaultStartDate);
       setEventEnd(defaultStartDate);
       setAllDay(true);
+      setEventLocation('');
       setAssigneeIds([]);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -99,6 +105,7 @@ export default function QuickCreatePopover({
         spaceId: eventSpaceId || null,
         workspaceId: activeWorkspaceId,
         assigneeIds,
+        location: eventLocation.trim() || null,
       });
     }
     onClose();
@@ -274,6 +281,30 @@ export default function QuickCreatePopover({
                 </span>
                 All day
               </button>
+
+              <div className="space-y-1.5">
+                <label className="text-[10px] uppercase tracking-wide text-neutral-500 font-semibold flex items-center gap-1">
+                  <MapPin className="w-3 h-3" /> Location
+                </label>
+                <input
+                  type="text"
+                  value={eventLocation}
+                  onChange={(e) => setEventLocation(e.target.value)}
+                  placeholder="Add a location..."
+                  className="w-full bg-neutral-950 border border-neutral-700 rounded px-3 py-2 text-xs text-white focus:outline-none focus:border-blue-500"
+                />
+                {eventLocation.trim() && (
+                  <a
+                    href={googleMapsSearchUrl(eventLocation.trim())}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    onClick={(e) => e.stopPropagation()}
+                    className="inline-flex items-center gap-1 text-[10px] text-blue-400 hover:text-blue-300"
+                  >
+                    <MapPin className="w-2.5 h-2.5" /> View on Google Maps
+                  </a>
+                )}
+              </div>
 
               <div className="space-y-1.5">
                 <label className="text-[10px] uppercase tracking-wide text-neutral-500 font-semibold">Attendees</label>

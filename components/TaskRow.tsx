@@ -417,16 +417,33 @@ function TaskRowImpl({
               )}
             </div>
           </div>
-          {columns.length > 0 && (
-            <div className="flex flex-wrap items-center gap-x-3 gap-y-1.5 px-4 pb-3.5 pl-[52px]" onClick={(e) => e.stopPropagation()}>
-              {columns.map((col) => (
-                <div key={col.key} className="flex items-center gap-1 text-neutral-400">
-                  {(col.kind === 'startDate' || col.kind === 'dueDate') && <Calendar className="w-3 h-3 shrink-0" />}
-                  {renderColumnCell(col)}
+          {columns.length > 0 &&
+            (() => {
+              // Start/due render as one combined "19 Aug – 21 Aug" pill instead of two separate
+              // wrap-eligible chips — as two independent flex-wrap items they could each land on
+              // a different line depending on how the row wraps, reading as a confusing diagonal
+              // pair instead of a single date range.
+              const startCol = columns.find((c) => c.kind === 'startDate');
+              const dueCol = columns.find((c) => c.kind === 'dueDate');
+              const otherCols = columns.filter((c) => c.kind !== 'startDate' && c.kind !== 'dueDate');
+              return (
+                <div className="flex flex-wrap items-center gap-x-3 gap-y-1.5 px-4 pb-3.5 pl-[52px]" onClick={(e) => e.stopPropagation()}>
+                  {(startCol || dueCol) && (
+                    <div className="flex items-center gap-1 text-neutral-400 shrink-0">
+                      <Calendar className="w-3 h-3 shrink-0" />
+                      {startCol && renderColumnCell(startCol)}
+                      {startCol && dueCol && <span className="text-neutral-600">–</span>}
+                      {dueCol && renderColumnCell(dueCol)}
+                    </div>
+                  )}
+                  {otherCols.map((col) => (
+                    <div key={col.key} className="flex items-center gap-1 text-neutral-400">
+                      {renderColumnCell(col)}
+                    </div>
+                  ))}
                 </div>
-              ))}
-            </div>
-          )}
+              );
+            })()}
         </div>
       ) : (
         // ================= DESKTOP ROW (unchanged) =================

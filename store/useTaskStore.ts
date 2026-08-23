@@ -292,6 +292,7 @@ interface TaskStore {
     color?: string | null;
     workspaceId: string;
     assigneeIds?: string[];
+    location?: string | null;
     id?: string;
   }) => Promise<Event | null>;
   updateEvent: (

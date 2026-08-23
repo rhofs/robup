@@ -832,6 +832,23 @@ function PageContent() {
     }
   };
 
+  // "Move to..." (task context menu) — unlike moveTaskToList's other callers (drag-and-drop onto
+  // a List/Folder/Space), this one can target a task that's currently a subtask. Explicitly
+  // choosing a destination list means the user is treating it as an independent item from here
+  // on, not still nested under its old parent — so this also clears parentId first (only when the
+  // task actually has one; a no-op for an already-top-level task). Both changes are wrapped in one
+  // transaction() so Ctrl+Z undoes them together, not one at a time. (If moveTaskToList hits a
+  // custom-field conflict and defers to a user prompt instead of moving synchronously, the two
+  // changes land as separate undo steps instead — a rare edge case, not worth more complexity to
+  // avoid.)
+  const moveTaskToListAndUnparent = (taskId: string, targetListId: string) => {
+    const task = tasks.find((t) => t.id === taskId);
+    useHistoryStore.getState().transaction('Move task', () => {
+      if (task?.parentId) optimisticSetParent(taskId, null);
+      moveTaskToList(taskId, targetListId);
+    });
+  };
+
   const resolveFieldConflictByCreating = async () => {
     if (!fieldConflictPrompt) return;
     const { taskId, targetListId, spaceId, conflictingFields } = fieldConflictPrompt;
@@ -1573,10 +1590,22 @@ function PageContent() {
     setTaskMenu(null);
   };
 
+  // A raw click/long-press coordinate alone can place a fixed-position menu partway or fully off
+  // the viewport edge — especially on a narrow phone screen, where a tap near an edge (e.g. the
+  // task card's own top-right "more" button) is common, not a rare case. Clamped to stay fully
+  // on-screen with an 8px margin; height is an estimate since actual menu height depends on which
+  // items render (a task with no archive option is shorter, etc.) — better to slightly
+  // over-reserve space than let the menu clip.
+  const clampMenuPosition = (x: number, y: number, width: number, height: number) => ({
+    x: Math.max(8, Math.min(x, window.innerWidth - width - 8)),
+    y: Math.max(8, Math.min(y, window.innerHeight - height - 8)),
+  });
+
   const openTaskMenu = (e: React.MouseEvent, task: Task) => {
     e.preventDefault();
     e.stopPropagation();
-    setTaskMenu({ x: e.clientX, y: e.clientY, task });
+    const { x, y } = clampMenuPosition(e.clientX, e.clientY, 192, 230);
+    setTaskMenu({ x, y, task });
   };
 
   const openSpaceMenu = (e: React.MouseEvent, space: HierarchySpace) => {
@@ -4283,6 +4312,24 @@ function PageContent() {
             </button>
             <button
               onClick={() => {
+                // Same picker the drag-and-drop "dropped on a Folder/Space with several Lists"
+                // flow already uses (taskListPicker) — offered here as a direct, no-drag way to
+                // move a task to any List, which also happens to be the easiest way to pull a
+                // subtask back out to the top level (moveTaskToListAndUnparent clears its
+                // parentId too) after an accidental drag-onto-another-task nest.
+                const options = workspaces
+                  .flatMap((w) => w.spaces)
+                  .flatMap((s) => s.lists.filter((l) => !l.archived).map((l) => ({ id: l.id, label: `${s.name} / ${listPathLabel(s, l.id)}` })));
+                const { x, y } = clampMenuPosition(taskMenu.x, taskMenu.y, 224, 288);
+                setTaskListPicker({ x, y, taskId: taskMenu.task.id, options });
+                setTaskMenu(null);
+              }}
+              className="w-full text-left px-3 py-1.5 text-xs text-neutral-300 hover:bg-neutral-800/60 cursor-pointer flex items-center gap-2"
+            >
+              <FolderInput className="w-3.5 h-3.5" /> Move to...
+            </button>
+            <button
+              onClick={() => {
                 handleArchiveClick(taskMenu.task);
                 setTaskMenu(null);
               }}
@@ -4555,7 +4602,7 @@ function PageContent() {
               <button
                 key={opt.id}
                 onClick={() => {
-                  moveTaskToList(taskListPicker.taskId, opt.id);
+                  moveTaskToListAndUnparent(taskListPicker.taskId, opt.id);
                   setTaskListPicker(null);
                 }}
                 className="w-full text-left px-3 py-1.5 text-xs text-neutral-300 hover:bg-neutral-800/60 cursor-pointer truncate"
@@ -5625,8 +5672,8 @@ function PageContent() {
         onCreateTask={({ title, spaceId, listId, startDate, dueDate }) => {
           optimisticCreateTask(title, listId, spaceId, null, startDate, dueDate);
         }}
-        onCreateEvent={({ title, startDate, endDate, allDay, spaceId, workspaceId, assigneeIds }) => {
-          optimisticCreateEvent({ title, startDate, endDate, allDay, spaceId, workspaceId, assigneeIds });
+        onCreateEvent={({ title, startDate, endDate, allDay, spaceId, workspaceId, assigneeIds, location }) => {
+          optimisticCreateEvent({ title, startDate, endDate, allDay, spaceId, workspaceId, assigneeIds, location });
         }}
       />
 

@@ -8,6 +8,7 @@ import FloatingPopover from '../FloatingPopover';
 import ColorSwatchPicker from '../ColorSwatchPicker';
 import EventActivityPanel from './EventActivityPanel';
 import GoogleIcon from '../icons/GoogleIcon';
+import { googleMapsSearchUrl } from '../../lib/googleMapsUrl';
 
 const EVENT_COLOR_CHOICES = ['#c89642', '#618cd1', '#9a61d1', '#349f7c', '#cd6565', '#31a0b3', '#cb6798', '#8d97a5'];
 
@@ -160,6 +161,16 @@ export default function EventDetailModal({ event, workspaces, users, onClose, on
               placeholder="Add a location..."
               className="w-full bg-neutral-950 border border-neutral-700 rounded px-3 py-2 text-xs text-white focus:outline-none focus:border-blue-500"
             />
+            {event.location && (
+              <a
+                href={googleMapsSearchUrl(event.location)}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="inline-flex items-center gap-1 text-[10px] text-blue-400 hover:text-blue-300"
+              >
+                <MapPin className="w-2.5 h-2.5" /> View on Google Maps
+              </a>
+            )}
           </div>
 
           <div className="space-y-1.5">
