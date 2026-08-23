@@ -61,6 +61,8 @@ import {
   Settings,
   Hash,
   Copy,
+  LayoutGrid,
+  Users,
   type LucideIcon,
 } from 'lucide-react';
 import { useTaskStore, HierarchySpace, HierarchyFolder, HierarchyList, HierarchyDocFolder, HierarchyRoom, HierarchyWorkspace, StatusDef, CustomFieldDef, Task, TaskDoc, AppUser } from '../store/useTaskStore';
@@ -1276,12 +1278,20 @@ function PageContent() {
         active: activeView === 'mytasks',
       },
       {
+        // "Chats" (the bottom-nav tab) already covers DMs and rooms — this entry point's only
+        // real job is Connections (find people, connect link, requests), so it jumps straight to
+        // that sub-view instead of DirectMessagesPage's default 'chats' tab, which would just be
+        // a redundant second way to reach the same conversations. Also sidesteps the whole
+        // "no channel picked yet" empty state that view has (fixed last round, but simply not
+        // relevant here since Connections doesn't need an active channel at all).
         id: 'directMessages',
-        label: 'Network',
-        icon: MessageCircle,
-        onClick: () => setActiveView('directMessages'),
+        label: 'Connections',
+        icon: Users,
+        onClick: () => {
+          setActiveDmTab('connections');
+          setActiveView('directMessages');
+        },
         active: activeView === 'directMessages',
-        badge: dmUnreadCount,
       },
       {
         id: 'profile',
@@ -1291,7 +1301,7 @@ function PageContent() {
         active: activeView === 'profile',
       },
     ],
-    [currentUserId, currentWorkspace, activeView, dmUnreadCount, ensurePersonalWorkspace, setActiveWorkspaceId, setActiveView]
+    [currentUserId, currentWorkspace, activeView, setActiveDmTab, ensurePersonalWorkspace, setActiveWorkspaceId, setActiveView]
   );
   // Owner or Admin of the current workspace — gates role management, member role changes, and
   // the "make private" control on Space/Folder/List/Task (server re-checks this independently on
@@ -3576,7 +3586,7 @@ function PageContent() {
                   onClick={() => setMobileSpacesOpen(true)}
                   className="md:hidden text-[11px] px-2.5 py-1 rounded border cursor-pointer transition flex items-center gap-1.5 text-neutral-400 border-neutral-800 hover:bg-neutral-800/60"
                 >
-                  <ListIcon className="w-3.5 h-3.5" /> Lists
+                  <LayoutGrid className="w-3.5 h-3.5" /> Spaces
                 </button>
               )}
               {activeView === 'board' && (
@@ -4243,6 +4253,7 @@ function PageContent() {
         navTabs={visibleNavTabs}
         menuOpen={mobileMenuOpen}
         onToggleMenu={() => setMobileMenuOpen((v) => !v)}
+        onOpenSpaces={() => setMobileSpacesOpen(true)}
       />
 
       {/* ================= BULK ACTION BAR ================= */}
@@ -5927,12 +5938,13 @@ function PageContent() {
       <MobileSpacesSheet
         open={mobileSpacesOpen}
         onClose={() => setMobileSpacesOpen(false)}
+        workspaceName={currentWorkspace?.name ?? 'Workspace'}
         spaces={currentWorkspace?.spaces ?? []}
         activeSpaceId={activeSpaceId}
-        activeListIds={activeListIds}
-        onSelectList={(space, listId) => {
+        onSelectSpace={(spaceId) => {
           setModalTaskStack([]);
-          handleListClick({ shiftKey: false, ctrlKey: false, metaKey: false } as React.MouseEvent, space, listId);
+          setNavigation(spaceId, []);
+          setActiveView('board');
         }}
       />
       <MobileChatSheet

@@ -1,26 +1,27 @@
 'use client';
 
 import { AnimatePresence, motion } from 'framer-motion';
-import { X } from 'lucide-react';
+import { ChevronRight, Globe, X } from 'lucide-react';
 import type { HierarchySpace } from '../../store/useTaskStore';
-import { getOrderedListIds } from '../../lib/folderTree';
+import { FOLDER_ICON_MAP } from '../FolderTree';
 
 type Props = {
   open: boolean;
   onClose: () => void;
+  workspaceName: string;
   spaces: HierarchySpace[];
   activeSpaceId: string;
-  activeListIds: Set<string>;
-  onSelectList: (space: HierarchySpace, listId: string) => void;
+  onSelectSpace: (spaceId: string) => void;
 };
 
-// Mobile-only Spaces/Lists switcher — stands in for the desktop sidebar's always-visible
-// FolderTree (components/FolderTree.tsx), which is hidden below md. Deliberately a flat list
-// (space -> its lists, ordered via the same getOrderedListIds used for desktop shift-click range
-// selection) rather than the full folder-nesting UI FolderTree renders — folder nesting isn't
-// needed for "pick a list to view on my phone," and reusing FolderTree as-is here would drag in
-// its drag-and-drop/context-menu/rename wiring, none of which apply to a tap-to-navigate sheet.
-export default function MobileSpacesSheet({ open, onClose, spaces, activeSpaceId, activeListIds, onSelectList }: Props) {
+// Mobile Spaces landing — reachable from the bottom nav's "Spaces" tab (see MobileBottomNav.tsx)
+// and the board view's own header button. Deliberately a flat list of Spaces only (no inline
+// Folder/List drill-down like the old version of this sheet had) — tapping a Space lands on its
+// own Space Home (SpaceHome.tsx, already an existing desktop feature: a browsable page of that
+// Space's Lists), which already covers "now show me this Space's Lists" without this sheet also
+// needing to duplicate that UI. Matches the reference (ClickUp's own mobile Spaces list, complete
+// with colored icon badges) the user pointed at more directly than the previous combined version.
+export default function MobileSpacesSheet({ open, onClose, workspaceName, spaces, activeSpaceId, onSelectSpace }: Props) {
   return (
     <AnimatePresence>
       {open && (
@@ -37,46 +38,59 @@ export default function MobileSpacesSheet({ open, onClose, spaces, activeSpaceId
             animate={{ y: 0 }}
             exit={{ y: '100%' }}
             transition={{ type: 'tween', duration: 0.2 }}
-            className="relative bg-neutral-900 border-t border-neutral-800/80 rounded-t-2xl px-4 pt-3 max-h-[75vh] flex flex-col"
+            className="relative bg-neutral-900 border-t border-neutral-800/80 rounded-t-2xl px-3 pt-3 max-h-[75vh] flex flex-col"
             style={{ paddingBottom: 'calc(env(safe-area-inset-bottom) + 16px)' }}
           >
-            <div className="flex items-center justify-between mb-3 shrink-0">
-              <span className="text-sm font-medium text-neutral-300">Spaces & Lists</span>
+            <div className="flex items-center justify-between mb-2 px-1 shrink-0">
+              <span className="text-sm font-medium text-neutral-300">Spaces</span>
               <button onClick={onClose} className="text-neutral-500 hover:text-neutral-200 cursor-pointer p-1">
                 <X className="w-4 h-4" />
               </button>
             </div>
-            <div className="overflow-y-auto pb-2">
+            <div className="overflow-y-auto pb-2 space-y-0.5">
+              <button
+                onClick={() => {
+                  onSelectSpace('everything');
+                  onClose();
+                }}
+                className={`w-full flex items-center gap-3 px-2 py-2.5 rounded-lg text-left transition cursor-pointer ${
+                  activeSpaceId === 'everything' ? 'bg-neutral-800' : 'hover:bg-neutral-800/60'
+                }`}
+              >
+                <span className="w-8 h-8 rounded-lg bg-neutral-700 flex items-center justify-center shrink-0">
+                  <Globe className="w-4 h-4 text-white" />
+                </span>
+                <span className="min-w-0 flex-1">
+                  <span className="block text-sm text-neutral-200 truncate">
+                    All Tasks <span className="text-neutral-500 font-normal">– {workspaceName}</span>
+                  </span>
+                </span>
+                <ChevronRight className="w-4 h-4 text-neutral-600 shrink-0" />
+              </button>
+
               {spaces.map((space) => {
-                const orderedListIds = getOrderedListIds(space).filter((id) => !space.lists.find((l) => l.id === id)?.archived);
+                const Icon = space.icon ? FOLDER_ICON_MAP[space.icon] : null;
                 return (
-                  <div key={space.id} className="mb-3">
-                    <div className="flex items-center gap-2 px-1 py-1.5 text-[13px] font-medium" style={{ color: space.textColor ?? undefined }}>
-                      <span className="w-2 h-2 rounded-full shrink-0" style={{ backgroundColor: space.color }} />
-                      {space.name}
-                    </div>
-                    <div className="flex flex-col gap-0.5">
-                      {orderedListIds.map((listId) => {
-                        const list = space.lists.find((l) => l.id === listId);
-                        if (!list) return null;
-                        const active = activeSpaceId === space.id && activeListIds.has(list.id);
-                        return (
-                          <button
-                            key={list.id}
-                            onClick={() => {
-                              onSelectList(space, list.id);
-                              onClose();
-                            }}
-                            className={`text-left pl-6 pr-2 py-2 rounded text-[13px] transition cursor-pointer ${
-                              active ? 'bg-neutral-800 text-blue-400' : 'text-neutral-300 hover:bg-neutral-800/60'
-                            }`}
-                          >
-                            {list.name}
-                          </button>
-                        );
-                      })}
-                    </div>
-                  </div>
+                  <button
+                    key={space.id}
+                    onClick={() => {
+                      onSelectSpace(space.id);
+                      onClose();
+                    }}
+                    className={`w-full flex items-center gap-3 px-2 py-2.5 rounded-lg text-left transition cursor-pointer ${
+                      activeSpaceId === space.id ? 'bg-neutral-800' : 'hover:bg-neutral-800/60'
+                    }`}
+                  >
+                    <span className="w-8 h-8 rounded-lg flex items-center justify-center shrink-0" style={{ backgroundColor: space.color || '#6366f1' }}>
+                      {Icon ? (
+                        <Icon className="w-4 h-4 text-white" />
+                      ) : (
+                        <span className="text-white text-xs font-bold">{space.name.slice(0, 1).toUpperCase()}</span>
+                      )}
+                    </span>
+                    <span className="min-w-0 flex-1 text-sm text-neutral-200 truncate">{space.name}</span>
+                    <ChevronRight className="w-4 h-4 text-neutral-600 shrink-0" />
+                  </button>
                 );
               })}
             </div>
