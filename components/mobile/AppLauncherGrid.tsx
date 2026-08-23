@@ -54,10 +54,12 @@ function Tile({ icon: Icon, label, selected, badge, onClick }: TileProps) {
 // pins it (onSelectTile) so it becomes the nav's shortcut going forward; the currently-pinned tile
 // gets a highlighted ring, matching the reference screenshot's bordered "selected" tile.
 //
-// Grows directly out of that nav button rather than sliding up as a bottom sheet: the panel shares
-// a framer-motion layoutId ("mobileMenuMorph") with the button's own background pill (only one of
-// the two is ever mounted at a time), so opening/closing reads as one pill expanding into a
-// rounded-rectangle panel and back — a real container-transform, not two independent animations.
+// A plain scale+fade grow from the bottom (transformOrigin: 'bottom center'), same recipe as every
+// other mobile overlay in this app (MobileSpacesSheet, MobileCalendarFilterSheet) — deliberately
+// *not* a shared layoutId morph with the nav button's own pill: that version relied on framer-motion
+// FLIPping one element across two separate component trees in a single commit, which turned out to
+// just snap with no visible animation at all on a real device instead of the intended grow-effect.
+// This single self-contained motion.div is simpler and guaranteed to actually animate.
 export default function AppLauncherGrid({
   open,
   onClose,
@@ -87,64 +89,60 @@ export default function AppLauncherGrid({
             onClick={onClose}
           />
           <motion.div
-            layoutId="mobileMenuMorph"
-            transition={{ type: 'spring', stiffness: 380, damping: 32 }}
+            initial={{ opacity: 0, scale: 0.85 }}
+            animate={{ opacity: 1, scale: 1 }}
+            exit={{ opacity: 0, scale: 0.85 }}
+            transition={{ duration: 0.14, ease: 'easeOut' }}
+            style={{ transformOrigin: 'bottom center', bottom: 'calc(4.75rem + env(safe-area-inset-bottom) + 8px)' }}
             className="absolute inset-x-3 bg-neutral-900 border border-neutral-800/80 rounded-2xl shadow-2xl shadow-black/40 px-3 pt-4 pb-2 max-h-[60vh] overflow-y-auto"
-            style={{ bottom: 'calc(4.75rem + env(safe-area-inset-bottom) + 8px)' }}
           >
-            <motion.div
-              initial={{ opacity: 0, scale: 0.85 }}
-              animate={{ opacity: 1, scale: 1 }}
-              transition={{ duration: 0.16, delay: 0.05 }}
-            >
-              <div className="grid grid-cols-3 gap-4">
-                {pinnableTiles.map((tile) => (
-                  <Tile
-                    key={tile.id}
-                    icon={tile.icon}
-                    label={tile.label}
-                    badge={tile.badge}
-                    selected={tile.id === pinnedTileId}
-                    onClick={() => {
-                      onSelectTile(tile.id);
-                      tile.onClick();
-                      onClose();
-                    }}
-                  />
-                ))}
-              </div>
-
-              <div className="h-px bg-neutral-800/70 my-4" />
-
-              <div className="grid grid-cols-3 gap-4 pb-2">
+            <div className="grid grid-cols-3 gap-4">
+              {pinnableTiles.map((tile) => (
                 <Tile
-                  icon={Settings}
-                  label="Settings"
+                  key={tile.id}
+                  icon={tile.icon}
+                  label={tile.label}
+                  badge={tile.badge}
+                  selected={tile.id === pinnedTileId}
                   onClick={() => {
-                    onOpenSettings();
+                    onSelectTile(tile.id);
+                    tile.onClick();
                     onClose();
                   }}
                 />
+              ))}
+            </div>
+
+            <div className="h-px bg-neutral-800/70 my-4" />
+
+            <div className="grid grid-cols-3 gap-4 pb-2">
+              <Tile
+                icon={Settings}
+                label="Settings"
+                onClick={() => {
+                  onOpenSettings();
+                  onClose();
+                }}
+              />
+              <Tile
+                icon={Trash2}
+                label="Trash"
+                onClick={() => {
+                  onOpenTrash();
+                  onClose();
+                }}
+              />
+              {canInstall && (
                 <Tile
-                  icon={Trash2}
-                  label="Trash"
+                  icon={Download}
+                  label="Install"
                   onClick={() => {
-                    onOpenTrash();
+                    promptInstall();
                     onClose();
                   }}
                 />
-                {canInstall && (
-                  <Tile
-                    icon={Download}
-                    label="Install"
-                    onClick={() => {
-                      promptInstall();
-                      onClose();
-                    }}
-                  />
-                )}
-              </div>
-            </motion.div>
+              )}
+            </div>
           </motion.div>
         </div>
       )}

@@ -1,7 +1,7 @@
 'use client';
 
 import { ChevronDown, ChevronUp, LayoutGrid, Menu as MenuIcon } from 'lucide-react';
-import { motion } from 'framer-motion';
+import { AnimatePresence, motion } from 'framer-motion';
 import type { NavTab, MenuTile } from './navTypes';
 import { PRIMARY_NAV_TAB_IDS } from './navTypes';
 
@@ -29,9 +29,9 @@ type Props = {
 // while the grid is already open) opens/closes the picker grid instead. The small chevron is the
 // only visual "this is also a menu button" cue, also flipping open ClickUp-style.
 // Floating rounded pill (not a flush-edge bar) with a shared-layout "bubble" that slides between
-// the 3 primary tabs on selection — matches the reference. The 4th slot's own background pill is a
-// *separate* layoutId (see AppLauncherGrid.tsx) so it can morph into the full grid panel instead
-// of sliding like the primary tabs' bubble.
+// the 3 primary tabs on selection — matches the reference. The 4th slot's own highlight is a plain
+// framer-motion opacity fade (not a shared layoutId with the grid panel — see AppLauncherGrid.tsx
+// for why that turned out to be the wrong tool here).
 export default function MobileBottomNav({ navTabs, menuOpen, onOpenMenu, onCloseMenu, onOpenSpaces, pinnedTile }: Props) {
   const primaryTabs = PRIMARY_NAV_TAB_IDS
     .map((id) => navTabs.find((t) => t.id === id))
@@ -95,16 +95,17 @@ export default function MobileBottomNav({ navTabs, menuOpen, onOpenMenu, onClose
             pinnedActive ? 'text-blue-400' : 'text-neutral-500'
           }`}
         >
-          {/* Only mounted while the grid is closed — AppLauncherGrid.tsx mounts the *other* half
-              of this layoutId pair while open, so framer-motion morphs this small pill directly
-              into the full panel instead of both existing at once (which layoutId can't resolve). */}
-          {!menuOpen && (
-            <motion.div
-              layoutId="mobileMenuMorph"
-              className="absolute inset-0 bg-neutral-800 rounded-full -z-10"
-              transition={{ type: 'spring', stiffness: 380, damping: 32 }}
-            />
-          )}
+          <AnimatePresence>
+            {pinnedActive && (
+              <motion.div
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                exit={{ opacity: 0 }}
+                transition={{ duration: 0.12 }}
+                className="absolute inset-0 bg-neutral-800 rounded-full -z-10"
+              />
+            )}
+          </AnimatePresence>
           <PinnedIcon className="w-5 h-5" />
           <span className="flex items-center gap-0.5 text-[10px] font-medium leading-none">
             {pinnedTile?.label ?? 'Menu'}
