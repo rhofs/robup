@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { HocuspocusProvider } from '@hocuspocus/provider';
 import { chatDocumentName } from './chatRoom';
-import { collabWsUrl } from './collabWsUrl';
+import { collabWsUrl, isCollabRealtimeEnabled } from './collabWsUrl';
 
 // Real-time delivery for Chat (Phase 2) — mirrors usePresenceConnection.ts's exact lifecycle
 // (provider create/destroy lives in a useEffect + useState pair, not useMemo, since a
@@ -18,7 +18,7 @@ export function useChatChannelConnection(channelId: string | null, onSignal: () 
   const [provider, setProvider] = useState<HocuspocusProvider | null>(null);
 
   useEffect(() => {
-    if (!channelId) {
+    if (!channelId || !isCollabRealtimeEnabled()) {
       setProvider(null);
       return;
     }

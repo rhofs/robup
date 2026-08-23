@@ -4,7 +4,7 @@ import { useTaskStore } from '../../store/useTaskStore';
 import { useSessionStore } from '../../store/useSessionStore';
 import { usePresenceStore } from '../../store/usePresenceStore';
 import { presenceDocumentName } from './presenceRoom';
-import { collabWsUrl } from './collabWsUrl';
+import { collabWsUrl, isCollabRealtimeEnabled } from './collabWsUrl';
 
 // Genuine live "who's online" detection, reusing the same Hocuspocus sidecar already running for
 // Doc collaboration (server/collabServer.ts) — a dedicated awareness-only room, no persisted
@@ -28,7 +28,7 @@ export function usePresenceConnection(workspaceId: string | null): void {
   const [provider, setProvider] = useState<HocuspocusProvider | null>(null);
 
   useEffect(() => {
-    if (!workspaceId) {
+    if (!workspaceId || !isCollabRealtimeEnabled()) {
       setProvider(null);
       return;
     }
