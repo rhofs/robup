@@ -196,6 +196,7 @@ export default function ChatPanel({ onOpenMobilePicker }: { onOpenMobilePicker?:
   const activeChannelLabel = isDM ? dmLabel : activeChannel?.name;
   const messages = activeChannelId ? messagesByChannel[activeChannelId] || [] : [];
   const days = groupIntoDays(messages);
+  const myProfile = currentUserId ? membersById.get(currentUserId) ?? null : null;
 
   useEffect(() => {
     if (activeChannelId) fetchMessages(activeChannelId);
@@ -215,7 +216,23 @@ export default function ChatPanel({ onOpenMobilePicker }: { onOpenMobilePicker?:
   const onRealtimeSignal = useCallback(() => {
     if (activeChannelId) fetchMessages(activeChannelId);
   }, [activeChannelId, fetchMessages]);
-  useChatChannelConnection(activeChannelId, onRealtimeSignal);
+  const { typingUsers, notifyTyping } = useChatChannelConnection(
+    activeChannelId,
+    onRealtimeSignal,
+    myProfile ? { id: myProfile.id, name: myProfile.name } : null
+  );
+  // Throttled, not one ping per keystroke — Slack/Discord-style "still actively typing" pings
+  // roughly every couple seconds while composing, not a flood. Each recipient's own
+  // TYPING_EXPIRY_MS (useChatChannelConnection.ts) clears the indicator if pings actually stop.
+  const lastTypingPingRef = useRef(0);
+  const handleDraftChange = (value: string) => {
+    setDraft(value);
+    const now = Date.now();
+    if (value.trim() && now - lastTypingPingRef.current > 2000) {
+      lastTypingPingRef.current = now;
+      notifyTyping();
+    }
+  };
 
   const processPickedFile = (file: File) => {
     setAttachmentError(null);
@@ -308,9 +325,6 @@ export default function ChatPanel({ onOpenMobilePicker }: { onOpenMobilePicker?:
   // name/color can safely stay live since User rows aren't hard-deleted the way a message is.
   const resolveAuthorName = (authorId: string | null) => (authorId ? membersById.get(authorId)?.name ?? 'Someone' : 'Someone');
 
-  // Own profile, resolved the same way as any other member — needed so toggleReaction can render
-  // an optimistic reaction immediately (before the server response comes back with the real row).
-  const myProfile = currentUserId ? membersById.get(currentUserId) ?? null : null;
   const handleToggleReaction = (messageId: string, emoji: string) => {
     if (!activeChannelId || !myProfile) return;
     toggleReaction(activeChannelId, messageId, emoji, myProfile);
@@ -461,6 +475,16 @@ export default function ChatPanel({ onOpenMobilePicker }: { onOpenMobilePicker?:
         ))}
       </div>
 
+      {typingUsers.length > 0 && (
+        <div className="px-1 pt-1 text-[11px] text-neutral-500 italic truncate">
+          {typingUsers.length === 1
+            ? `${typingUsers[0].name} is typing…`
+            : typingUsers.length === 2
+              ? `${typingUsers[0].name} and ${typingUsers[1].name} are typing…`
+              : `${typingUsers.length} people are typing…`}
+        </div>
+      )}
+
       {replyTarget && (
         <div className="flex items-center gap-2 mt-2 px-2.5 py-1.5 rounded-t-xl border border-b-0 border-neutral-800 bg-neutral-900/80">
           <Reply className="w-3 h-3 shrink-0 text-neutral-500" />
@@ -510,7 +534,7 @@ export default function ChatPanel({ onOpenMobilePicker }: { onOpenMobilePicker?:
         <textarea
           ref={textareaRef}
           value={draft}
-          onChange={(e) => setDraft(e.target.value)}
+          onChange={(e) => handleDraftChange(e.target.value)}
           onKeyDown={(e) => {
             if (e.key === 'Enter' && !e.shiftKey) {
               e.preventDefault();

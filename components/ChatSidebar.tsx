@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useMemo, useState } from 'react';
-import { Hash, MessageCircle, Pencil, Plus, Check } from 'lucide-react';
+import { Hash, MessageCircle, Pencil, Plus, Check, Bell, BellOff } from 'lucide-react';
 import { useChatStore, type ChatChannel, type Connection } from '../store/useChatStore';
 import { useSessionStore } from '../store/useSessionStore';
 import FloatingPopover from './FloatingPopover';
@@ -34,6 +34,7 @@ export default function ChatSidebar({ workspaceId }: ChatSidebarProps) {
     fetchDMs,
     fetchConnections,
     createOrOpenDM,
+    toggleChannelMute,
   } = useChatStore();
   const currentUserId = useSessionStore((s) => s.currentUserId);
   const channels = workspaceId ? channelsByWorkspace[workspaceId] || [] : [];
@@ -126,10 +127,10 @@ export default function ChatSidebar({ workspaceId }: ChatSidebarProps) {
                 }}
               />
             ) : (
-              <div key={c.id} className="group relative">
+              <div key={c.id} className={`group relative ${c.muted ? 'opacity-60' : ''}`}>
                 <button
                   onClick={() => setActiveChannelId(c.id)}
-                  className={`w-full text-left py-1.5 pr-6 rounded text-xs font-medium transition flex items-center gap-1.5 cursor-pointer border-l-2 ${
+                  className={`w-full text-left py-1.5 pr-11 rounded text-xs font-medium transition flex items-center gap-1.5 cursor-pointer border-l-2 ${
                     activeChannelId === c.id
                       ? 'bg-neutral-800 text-white border-blue-500 pl-2'
                       : 'text-neutral-400 hover:bg-neutral-800/40 hover:text-neutral-200 border-transparent pl-2.5'
@@ -143,6 +144,7 @@ export default function ChatSidebar({ workspaceId }: ChatSidebarProps) {
                     </span>
                   )}
                 </button>
+                <MuteToggleButton muted={!!c.muted} onToggle={() => toggleChannelMute(c.id, !c.muted)} className="right-6" />
                 <button
                   onClick={(e) => {
                     e.stopPropagation();
@@ -179,10 +181,10 @@ export default function ChatSidebar({ workspaceId }: ChatSidebarProps) {
             const others = (dm.members ?? []).map((m) => m.user).filter((u) => u.id !== currentUserId);
             const label = others.map((u) => u.name).join(', ') || 'Just you';
             return (
+              <div key={dm.id} className={`group relative ${dm.muted ? 'opacity-60' : ''}`}>
               <button
-                key={dm.id}
                 onClick={() => setActiveChannelId(dm.id)}
-                className={`w-full text-left py-1.5 px-2 rounded text-xs font-medium transition flex items-center gap-1.5 cursor-pointer border-l-2 ${
+                className={`w-full text-left py-1.5 pl-2 pr-6 rounded text-xs font-medium transition flex items-center gap-1.5 cursor-pointer border-l-2 ${
                   activeChannelId === dm.id
                     ? 'bg-neutral-800 text-white border-blue-500'
                     : 'text-neutral-400 hover:bg-neutral-800/40 hover:text-neutral-200 border-transparent'
@@ -201,16 +203,39 @@ export default function ChatSidebar({ workspaceId }: ChatSidebarProps) {
                 </span>
                 <span className="truncate flex-1">{label}</span>
                 {!!dm.unreadCount && (
-                  <span className="shrink-0 min-w-[16px] h-4 px-1 rounded-full bg-red-500 text-white text-[9px] font-bold flex items-center justify-center leading-none">
+                  <span className="shrink-0 min-w-[16px] h-4 px-1 rounded-full bg-red-500 text-white text-[9px] font-bold flex items-center justify-center leading-none group-hover:opacity-0 transition">
                     {dm.unreadCount > 99 ? '99+' : dm.unreadCount}
                   </span>
                 )}
               </button>
+              <MuteToggleButton muted={!!dm.muted} onToggle={() => toggleChannelMute(dm.id, !dm.muted)} className="right-1" />
+              </div>
             );
           })}
         </div>
       )}
     </div>
+  );
+}
+
+// Shared by both channel and DM rows (backlog #6, mute). Visible on hover when unmuted (matching
+// the channel row's rename pencil), but stays visible even without hovering once actually muted —
+// the row's own dimmed opacity (set by the caller) already signals "muted" at a glance, and this
+// icon is what explains why plus how to undo it.
+function MuteToggleButton({ muted, onToggle, className }: { muted: boolean; onToggle: () => void; className: string }) {
+  return (
+    <button
+      onClick={(e) => {
+        e.stopPropagation();
+        onToggle();
+      }}
+      title={muted ? 'Unmute' : 'Mute'}
+      className={`absolute ${className} top-1/2 -translate-y-1/2 transition text-neutral-500 hover:text-blue-400 cursor-pointer ${
+        muted ? 'opacity-100' : 'opacity-0 group-hover:opacity-100'
+      }`}
+    >
+      {muted ? <BellOff className="w-3 h-3" /> : <Bell className="w-3 h-3" />}
+    </button>
   );
 }
 

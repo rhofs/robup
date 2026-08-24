@@ -734,6 +734,11 @@ model ChatChannelMember {
   lastReadMessageId String?   @map("last_read_message_id")
   lastReadAt        DateTime? @map("last_read_at")
 
+  // Per-member, per-channel mute (backlog #6) — a muted channel/DM still receives and stores
+  // messages normally for everyone else; it only suppresses *this* member's own unread badge
+  // (lib/chatUnread.ts) and push notifications (app/api/channels/[id]/messages/route.ts's POST).
+  muted Boolean @default(false)
+
   joinedAt DateTime @default(now()) @map("joined_at")
 
   @@unique([channelId, userId])

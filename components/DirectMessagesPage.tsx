@@ -3,6 +3,10 @@
 import { useEffect, useState } from 'react';
 import { Link2, Check, X, Clock, Search, UserPlus } from 'lucide-react';
 import { useChatStore, type ConnectionRequest, type ConnectionSearchResult } from '../store/useChatStore';
+import { useTaskStore } from '../store/useTaskStore';
+import { useSessionStore } from '../store/useSessionStore';
+import ConnectionAvatarMenu from './ConnectionAvatarMenu';
+import ViewProfileModal from './ViewProfileModal';
 
 // Top-level, workspace-agnostic "Me zone" destination — the connect-link, incoming/outgoing
 // connection requests, and the connections list (people you can message regardless of whether you
@@ -25,12 +29,30 @@ export default function DirectMessagesPage() {
     declineConnectionRequest,
     searchUsersToConnect,
     sendConnectionRequestTo,
+    createOrOpenDM,
+    setActiveChannelId,
+    setActiveChatSidebarTab,
   } = useChatStore();
+  const setActiveView = useTaskStore((s) => s.setActiveView);
+  const currentUserId = useSessionStore((s) => s.currentUserId);
   const [copied, setCopied] = useState(false);
+  const [viewingProfileId, setViewingProfileId] = useState<string | null>(null);
 
   useEffect(() => {
     fetchConnectionInvite();
   }, [fetchConnectionInvite]);
+
+  // Same createOrOpenDM + setActiveChannelId + setActiveChatSidebarTab shape
+  // app/page.tsx's handleStartDMFromOffice uses for the identical "jump straight into the
+  // conversation" action from Office.
+  const handleStartDM = async (targetUserId: string) => {
+    if (!currentUserId || targetUserId === currentUserId) return;
+    const dm = await createOrOpenDM([currentUserId, targetUserId]);
+    if (!dm) return;
+    setActiveChannelId(dm.id);
+    setActiveChatSidebarTab('dms');
+    setActiveView('chat');
+  };
 
   const copyLink = async () => {
     if (!connectionInvite) return;
@@ -123,13 +145,8 @@ export default function DirectMessagesPage() {
           <div className="space-y-0.5">
             {connections.map((c) => (
               <div key={c.id} className="flex items-center gap-2.5 px-2 py-1.5 rounded hover:bg-neutral-900/40">
-                <span
-                  className="w-7 h-7 rounded-full text-[10px] font-bold flex items-center justify-center text-white shrink-0"
-                  style={{ backgroundColor: c.color }}
-                >
-                  {c.initials}
-                </span>
-                <div className="min-w-0 flex-1">
+                <ConnectionAvatarMenu user={c} onViewProfile={() => setViewingProfileId(c.id)} onStartDM={() => handleStartDM(c.id)} />
+                <div className="min-w-0 flex-1 cursor-pointer" onClick={() => setViewingProfileId(c.id)}>
                   <div className="text-xs text-neutral-200 truncate">{c.name}</div>
                   <div className="text-[10px] text-neutral-500">{c.source === 'connection' ? 'Connected directly' : 'Coworker'}</div>
                 </div>
@@ -138,6 +155,7 @@ export default function DirectMessagesPage() {
           </div>
         </div>
       </div>
+      <ViewProfileModal userId={viewingProfileId} onClose={() => setViewingProfileId(null)} onStartDM={handleStartDM} />
     </div>
   );
 }

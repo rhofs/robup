@@ -28,6 +28,10 @@ export type ChatChannel = {
   // unread badges) — POST create-channel/create-DM responses don't compute it (a freshly created
   // channel has nothing unread yet), so those call sites set it to 0 locally instead.
   unreadCount?: number;
+  // Caller's own mute state (backlog #6) — same "only present on the GET list responses" caveat
+  // as unreadCount above (a freshly created channel/DM is never muted, so create responses default
+  // it to false locally instead of expecting the server to compute it).
+  muted?: boolean;
 };
 
 export type Connection = ChatDMMember & { source: 'connection' | 'workspace' };
@@ -115,6 +119,10 @@ interface ChatStore {
     opts: { name: string; topic?: string; isPrivate?: boolean; accessEntries?: { type: 'user' | 'role'; id: string }[]; taskId?: string; spaceId?: string }
   ) => Promise<ChatChannel | null>;
   renameChannel: (workspaceId: string, channelId: string, name: string) => Promise<void>;
+  // Works for both a real channel (patches channelsByWorkspace) and a DM/group (patches the flat
+  // dms list) — same shared-route shape as ensureChannelAccess itself, one PATCH regardless of
+  // which kind of ChatChannel this id resolves to server-side.
+  toggleChannelMute: (channelId: string, muted: boolean) => Promise<void>;
   fetchDMs: () => Promise<void>;
   // Find-or-create — one other person reopens the same 1:1 conversation every time (server-side
   // dmKey dedupe); two or more always makes a genuinely new group, never deduped.
@@ -211,7 +219,7 @@ export const useChatStore = create<ChatStore>((set, get) => ({
       body: JSON.stringify(opts),
     });
     if (!res.ok) return null;
-    const channel: ChatChannel = { ...(await res.json()), unreadCount: 0 };
+    const channel: ChatChannel = { ...(await res.json()), unreadCount: 0, muted: false };
     set((state) => ({
       channelsByWorkspace: {
         ...state.channelsByWorkspace,
@@ -235,6 +243,25 @@ export const useChatStore = create<ChatStore>((set, get) => ({
     });
   },
 
+  toggleChannelMute: async (channelId, muted) => {
+    // Optimistic — patch whichever list actually has this id (a real channel lives in
+    // channelsByWorkspace, a DM/group in the flat dms list; harmless no-op map on the other one).
+    set((state) => ({
+      channelsByWorkspace: Object.fromEntries(
+        Object.entries(state.channelsByWorkspace).map(([wsId, channels]) => [
+          wsId,
+          channels.map((c) => (c.id === channelId ? { ...c, muted } : c)),
+        ])
+      ),
+      dms: state.dms.map((d) => (d.id === channelId ? { ...d, muted } : d)),
+    }));
+    await fetch(`/api/channels/${channelId}/mute`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ muted }),
+    });
+  },
+
   fetchDMs: async () => {
     const res = await fetch('/api/dms');
     if (!res.ok) return;
@@ -253,11 +280,11 @@ export const useChatStore = create<ChatStore>((set, get) => ({
     set((state) => {
       // A 1:1 re-open returns the same id as one already in the list — replace it in place
       // (picks up any member changes) rather than appending a duplicate row. This route's own
-      // response never computes unreadCount (unlike GET /api/dms), so a re-open keeps whatever
-      // the existing local entry already had (real, possibly nonzero) rather than resetting it —
-      // only a genuinely brand-new DM defaults to 0 (nothing could be unread in it yet).
+      // response never computes unreadCount/muted (unlike GET /api/dms), so a re-open keeps
+      // whatever the existing local entry already had (real, possibly nonzero/muted) rather than
+      // resetting it — only a genuinely brand-new DM defaults to unmuted/0 unread.
       const existing = state.dms.find((d) => d.id === dm.id);
-      const merged: ChatChannel = { ...dm, unreadCount: existing?.unreadCount ?? 0 };
+      const merged: ChatChannel = { ...dm, unreadCount: existing?.unreadCount ?? 0, muted: existing?.muted ?? false };
       const next = existing ? state.dms.map((d) => (d.id === dm.id ? merged : d)) : [merged, ...state.dms];
       return { dms: next };
     });

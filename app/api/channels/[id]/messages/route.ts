@@ -104,11 +104,14 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
   // whoever's currently looking at ChatPanel. sendPushToUser is a no-op if VAPID isn't configured
   // and never throws, so this can't affect the response either way.
   prisma.chatChannelMember
-    .findMany({ where: { channelId, userId: { not: userId } }, select: { userId: true } })
+    .findMany({ where: { channelId, userId: { not: userId } }, select: { userId: true, muted: true } })
     .then((members) => {
       const title = channel.type === 'dm' || channel.type === 'group_dm' ? (message.author?.name ?? 'Someone') : `#${channel.name}`;
       const body = message.body?.trim() || (attachment ? '📎 Attachment' : '');
       for (const m of members) {
+        // Muted (backlog #6) — the message still lands and stores normally, this member just
+        // doesn't get pinged about it. Matches the unread-badge skip in lib/chatUnread.ts.
+        if (m.muted) continue;
         sendPushToUser(m.userId, { title, body, url: '/' }).catch(() => {});
       }
     })
