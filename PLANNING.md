@@ -1963,6 +1963,21 @@ Immediate follow-up to the previous entry's `pinnedActive` color fix: tapping th
 
 `npx tsc --noEmit -p .` and `npm run build` both clean.
 
+## Checkpoint — end of day, 2026-08-25
+
+Everything below is committed and pushed to `origin/main` (latest: `b0acb64`). Nothing has been confirmed working on a real device yet for anything from `2e7ccb6` onward (the mobile-focused run) — all of it compiled/built clean and got a real `npm run dev` boot check, but this session had no browser/device tool, so the visual/interaction behavior itself is unverified. **Next session should start with a Reinstall + a pass through this list on an actual phone**, roughly in the order it was built:
+
+- Collab WebSocket auth fix (`c81bdcd`) — Docs' amber "Not connected" banner should stay gone, not flicker.
+- Chat/Connections sidebar unification (`59a7069`) + the render-loop fix (`37879c9`) — sending a DM should no longer crash the page.
+- Connections profile view/DM, typing indicator, mute (`d338d37`).
+- Desktop Task modal redesign (`eef4e2a`) — the flattened Documents/Subtasks/Timeframe/Assignees layout.
+- Docs subpages panel no longer lingering after leaving Docs (`aaba465`).
+- Mobile: SpaceHome flat list + Chat composer no longer needing a scroll (`2e7ccb6`).
+- Mobile Docs: subpages bottom sheet + "All docs" back button (`769d9dd`, `c4d764d`).
+- Mobile Spaces rebuilt as an inline-expanding tree, desktop "Tasks" → "Spaces" rename, and the two `pinnedTile`/`spacesOpen` bottom-nav bugs (`cba1b8c`, `b0acb64`) — this is the newest, least-tested piece; worth the most scrutiny.
+
+**Still open, not started**: real email invites (backlog item 3 from the 2026-08-25 feedback batch) — needs the user to pick an email provider before any code can be written. Everything else from that batch (profile view/DM on Connections, typing indicator, mute, invite-visibility) shipped this session.
+
 ## Known bugs / things to remember
 
 - **A Zustand selector that constructs a new object/array literal inline (instead of returning a reference already stable in the store) can cause an infinite React render loop, not just wasted re-renders.** Zustand's hook (built on `useSyncExternalStore`) re-invokes the selector on every store update and compares the result by reference; a selector that never returns a stable reference makes React conclude the snapshot is perpetually "unstable." Hit this in `app/page.tsx`'s `activeChatChannelLabel` (built `{kind, text}` inline) — reproduced live as "This page couldn't load" every time a DM was opened, diagnosed from a repeating `up`/`ud` React-internals stack in the browser console. Fix: select a plain reference (`.find()`'s result, or `null`) and derive anything object-shaped in a downstream `useMemo` instead.
