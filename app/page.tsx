@@ -691,10 +691,11 @@ function PageContent() {
 
   const [modalTaskStack, setModalTaskStack] = useState<string[]>([]);
   const [newSubtaskTitle, setNewSubtaskTitle] = useState('');
-  // Mobile only — the subtask input starts collapsed to a discreet text link (matches the main
-  // Task list's own "+ Add Task" pattern) instead of a permanently-visible input + bright blue
-  // "Add" button competing for attention with the task's actual content.
-  const [mobileSubtaskAddOpen, setMobileSubtaskAddOpen] = useState(false);
+  // Starts collapsed to a discreet text link on both mobile and desktop now (an expert design
+  // review flagged the desktop input's permanently-visible dark box + bright blue "Add" button as
+  // competing for attention with the task's own content) — matches the main Task list's own
+  // "+ Add Task" pattern.
+  const [subtaskAddOpen, setSubtaskAddOpen] = useState(false);
 
   const [visibleColumns, setVisibleColumns] = useState<string[]>(['status', 'assignee', 'startDate', 'dueDate']);
   const [columnWidths, setColumnWidths] = useState<Record<string, number>>(DEFAULT_COLUMN_WIDTHS);
@@ -5263,221 +5264,53 @@ function PageContent() {
                   <p className="hidden md:block text-[11px] text-neutral-500 font-mono mt-1">ID: {activeModalTask.id}</p>
                 </div>
 
-                {/* Slim elevated row on mobile instead of a bordered box — same interactive pill
-                    either way, just a lighter-weight container around it. */}
-                <div className={`flex items-center gap-3 rounded-lg ${isMobile ? 'bg-neutral-900/60 px-3 py-2.5' : 'bg-neutral-950/40 p-3 border border-neutral-800'}`}>
-                  <span className="text-xs text-neutral-400 font-medium">Status:</span>
-                  <FloatingPopover
-                    open={modalStatusOpen}
-                    onClose={() => setModalStatusOpen(false)}
-                    panelClassName="w-40 bg-neutral-900 border border-neutral-800 rounded shadow-xl p-1.5"
-                    anchor={
-                      <button
-                        onClick={() => setModalStatusOpen((o) => !o)}
-                        className="text-xs font-semibold px-3 py-1 rounded border cursor-pointer inline-flex items-center gap-1.5"
-                        style={{
-                          color: statusColor(activeModalTask.status),
-                          borderColor: statusColor(activeModalTask.status) + '55',
-                          backgroundColor: statusColor(activeModalTask.status) + '20',
-                        }}
-                      >
-                        {activeModalTask.status} <RefreshCw className="w-3 h-3" />
-                      </button>
-                    }
-                  >
-                    {statuses.map((s) => (
-                      <button
-                        key={s.id}
-                        onClick={() => {
-                          optimisticMoveTask(activeModalTask.id, s.name);
-                          setModalStatusOpen(false);
-                        }}
-                        className="w-full flex items-center gap-2 text-[11px] text-neutral-300 px-2 py-1 rounded hover:bg-neutral-800/60 cursor-pointer"
-                      >
-                        <span className="w-2.5 h-2.5 rounded-full" style={{ backgroundColor: s.color }}></span>
-                        {s.name}
-                      </button>
-                    ))}
-                  </FloatingPopover>
-                </div>
-
-                {/* Docs — multiple named documents, live collaborative editing */}
-                <div className="space-y-2 pt-4 border-t border-neutral-800">
-                  <div className="flex items-center justify-between">
-                    <h3 className="text-xs font-bold text-neutral-400 uppercase tracking-wider flex items-center gap-1.5"><FileText className="w-3.5 h-3.5" /> Documents</h3>
-                  </div>
-                  <div className="bg-neutral-950/40 border border-neutral-800 rounded overflow-hidden">
-                    <div className="flex items-center gap-1.5 px-3 py-2 border-b border-neutral-800 overflow-x-auto">
-                      <DndContext sensors={docSensors} collisionDetection={closestCenter} onDragEnd={handleDocDragEnd}>
-                        <SortableContext items={activeTaskDocs.map((d) => d.id)} strategy={horizontalListSortingStrategy}>
-                          {activeTaskDocs.map((d) => (
-                            <DocTab
-                              key={d.id}
-                              doc={d}
-                              isActive={activeDocId === d.id}
-                              onSelect={() => setActiveDocId(d.id)}
-                              onDelete={() => setDocToDelete({ id: d.id, title: d.title || 'Untitled' })}
-                              onUnlink={
-                                activeModalTaskId
-                                  ? () => {
-                                      setDocTaskLink(d.id, null);
-                                      if (activeDocId === d.id) setActiveDocId(null);
-                                    }
-                                  : undefined
-                              }
-                            />
-                          ))}
-                        </SortableContext>
-                      </DndContext>
-                      <button onClick={handleNewDoc} className="text-[11px] text-blue-400 px-2.5 py-1 rounded hover:bg-neutral-800/60 cursor-pointer shrink-0">
-                        + New
-                      </button>
-                      {linkableSpaceDocs.length > 0 && (
-                        <FloatingPopover
-                          open={linkDocOpen}
-                          onClose={() => setLinkDocOpen(false)}
-                          panelClassName="w-52 max-h-64 overflow-y-auto bg-neutral-900 border border-neutral-800 rounded shadow-xl py-1"
-                          anchor={
-                            <button
-                              onClick={() => setLinkDocOpen((o) => !o)}
-                              className="text-[11px] text-neutral-400 hover:text-blue-400 px-2.5 py-1 rounded hover:bg-neutral-800/60 cursor-pointer shrink-0 flex items-center gap-1"
-                            >
-                              <Link2 className="w-3 h-3" /> Link existing
-                            </button>
-                          }
-                        >
-                          <div className="text-[10px] uppercase tracking-wide text-neutral-500 px-3 py-1">From this Space's Docs</div>
-                          {linkableSpaceDocs.map((d) => (
-                            <button
-                              key={d.id}
-                              onClick={() => {
-                                if (activeModalTaskId) setDocTaskLink(d.id, activeModalTaskId);
-                                setLinkDocOpen(false);
-                              }}
-                              className="w-full text-left px-3 py-1.5 text-xs text-neutral-300 hover:bg-neutral-800/60 cursor-pointer truncate"
-                            >
-                              {d.title || 'Untitled'}
-                            </button>
-                          ))}
-                        </FloatingPopover>
-                      )}
-                    </div>
-
-                    {activeDocId ? (
-                      <div className="p-3 space-y-2">
-                        <div className="flex items-center gap-2">
-                          <input
-                            value={activeTaskDocs.find((d) => d.id === activeDocId)?.title || ''}
-                            onChange={(e) => activeModalTaskId && updateDoc(activeDocId, activeModalTaskId, { title: e.target.value })}
-                            onFocus={captureDocEditBaseline}
-                            onBlur={() => commitDocEditActivity()}
-                            className="flex-1 min-w-0 bg-transparent text-sm font-semibold text-white focus:outline-none"
-                            placeholder="Document title"
-                          />
-                          <DocExportMenu docId={activeDocId} onToast={showToast} />
-                        </div>
-                        <CollabDocEditor
-                          key={activeDocId}
-                          docId={activeDocId}
-                          onJump={jumpToMention}
-                          placeholder="Write notes, specs, anything..."
-                          className="min-h-[8em] text-xs text-neutral-300"
-                          onEditorFocus={captureDocEditBaseline}
-                          onEditorBlur={commitDocEditActivity}
-                        />
-                      </div>
-                    ) : (
-                      <p className="text-[11px] text-neutral-500 p-4">No documents yet — press "+ New" to add one.</p>
-                    )}
-                  </div>
-                </div>
-
-                <div className="space-y-2 pt-4 border-t border-neutral-800">
-                  <h3 className="text-xs font-bold text-neutral-400 uppercase tracking-wider">
-                    Subtasks ({currentSubtasks.length})
-                  </h3>
-
-                  <div className={isMobile ? '' : 'bg-neutral-950/40 border border-neutral-800 rounded overflow-x-auto'}>
-                    <div style={{ minWidth: isMobile || currentSubtasks.length === 0 ? undefined : tableMinWidth }}>
-                    {currentSubtasks.length > 0 && (
-                      <div
-                        className="hidden md:grid items-center px-3 py-1.5 text-[9px] font-semibold text-neutral-500 uppercase tracking-wider border-b border-neutral-800"
-                        style={{ gridTemplateColumns: rowGridTemplate }}
-                      >
-                        <div></div>
-                        <div></div>
-                        <div className="relative pr-2">
-                          Name
-                          <ColumnResizeHandle onResize={(d) => resizeColumn('name', d)} onReset={() => resetColumnWidth('name')} />
-                        </div>
-                        {activeColumns.map((col) => (
-                          <div key={col.key} className="relative text-center">
-                            {col.label}
-                            <ColumnResizeHandle onResize={(d) => resizeColumn(col.key, d)} onReset={() => resetColumnWidth(col.key)} />
-                          </div>
-                        ))}
-                        <div></div>
-                      </div>
-                    )}
-                    <div className={isMobile ? 'flex flex-col gap-2' : 'divide-y divide-neutral-800/50'}>
-                      <AnimatePresence mode="popLayout" initial={false}>
-                        {currentSubtasks.map((sub) => (
-                          <TaskRow
-                            key={sub._localId || sub.id}
-                            task={sub as Task}
-                            navScope={`subtasks-${activeModalTask.id}`}
-                            onOpen={() => setModalTaskStack([...modalTaskStack, sub.id])}
-                            columns={activeColumns}
-                            gridTemplate={rowGridTemplate}
-                            statuses={statuses}
-                            onContextMenu={openTaskMenu}
-                            autoFocusRename={renamingTaskId === sub.id}
-                            onRenameHandled={() => setRenamingTaskId(null)}
-                            animateEntrance={justAddedSubtaskIds.has(sub._localId || sub.id)}
-                          />
-                        ))}
-                      </AnimatePresence>
-                    </div>
-                    </div>
-                    {isMobile && !mobileSubtaskAddOpen ? (
-                      <button
-                        onClick={() => setMobileSubtaskAddOpen(true)}
-                        className="w-full text-left px-3 py-2.5 text-xs text-neutral-500 hover:text-blue-400 cursor-pointer"
-                      >
-                        + Legg til underoppgave
-                      </button>
-                    ) : (
-                      <div className="p-2 flex gap-2 items-center bg-neutral-950/60">
-                        <input
-                          type="text"
-                          autoFocus={isMobile}
-                          placeholder="+ Add new subtask..."
-                          value={newSubtaskTitle}
-                          onChange={(e) => setNewSubtaskTitle(e.target.value)}
-                          onKeyDown={(e) => e.key === 'Enter' && handleAddSubtask(activeModalTask)}
-                          // Collapses back to the discreet link on mobile once blurred with
-                          // nothing typed — never mid-typing, and never while there's still text
-                          // to add (so tapping "Add" itself can't race the collapse).
-                          onBlur={() => {
-                            if (isMobile && !newSubtaskTitle.trim()) setMobileSubtaskAddOpen(false);
-                          }}
-                          className="flex-1 bg-neutral-900 border border-neutral-800 rounded px-3 py-1.5 text-xs text-white focus:outline-none focus:border-blue-500"
-                        />
+                {/* Compact metadata bar — Status, Dates, Assignees together right under the
+                    title. An expert design review flagged the old layout: Status alone up top in
+                    its own bordered box, Timeframe/Assignees each in their own near-empty
+                    bordered box all the way down at the bottom (after Documents/Subtasks) —
+                    scattered and boxy compared to ClickUp's compact icon-led row. Desktop: one
+                    flat row, small icon-led groups, no borders — a thin vertical divider between
+                    groups is enough structure on its own. Mobile keeps its existing pill-per-row
+                    shape, just moved up here from the bottom. */}
+                <div className={isMobile ? 'flex flex-col gap-2' : 'flex flex-wrap items-center gap-x-4 gap-y-2'}>
+                  <div className={isMobile ? 'flex items-center gap-2.5 bg-neutral-900/60 rounded-lg px-3 py-2.5' : 'flex items-center gap-1.5'}>
+                    {isMobile && <span className="text-xs text-neutral-400 font-medium shrink-0">Status:</span>}
+                    <FloatingPopover
+                      open={modalStatusOpen}
+                      onClose={() => setModalStatusOpen(false)}
+                      panelClassName="w-40 bg-neutral-900 border border-neutral-800 rounded shadow-xl p-1.5"
+                      anchor={
                         <button
-                          onClick={() => handleAddSubtask(activeModalTask)}
-                          className="bg-blue-600 hover:bg-blue-500 text-white text-xs px-3 py-1.5 rounded font-medium cursor-pointer"
+                          onClick={() => setModalStatusOpen((o) => !o)}
+                          className="text-xs font-semibold px-3 py-1 rounded border cursor-pointer inline-flex items-center gap-1.5"
+                          style={{
+                            color: statusColor(activeModalTask.status),
+                            borderColor: statusColor(activeModalTask.status) + '55',
+                            backgroundColor: statusColor(activeModalTask.status) + '20',
+                          }}
                         >
-                          Add
+                          {activeModalTask.status} <RefreshCw className="w-3 h-3" />
                         </button>
-                      </div>
-                    )}
+                      }
+                    >
+                      {statuses.map((s) => (
+                        <button
+                          key={s.id}
+                          onClick={() => {
+                            optimisticMoveTask(activeModalTask.id, s.name);
+                            setModalStatusOpen(false);
+                          }}
+                          className="w-full flex items-center gap-2 text-[11px] text-neutral-300 px-2 py-1 rounded hover:bg-neutral-800/60 cursor-pointer"
+                        >
+                          <span className="w-2.5 h-2.5 rounded-full" style={{ backgroundColor: s.color }}></span>
+                          {s.name}
+                        </button>
+                      ))}
+                    </FloatingPopover>
                   </div>
-                </div>
 
-                {/* Mobile: two slim icon-led rows instead of two bordered boxes with headers —
-                    same underlying date pickers / assignee popover either way, just a lighter
-                    container. Desktop keeps the original "Timeframe"/"Assignees" boxes. */}
-                <div className={isMobile ? 'flex flex-col gap-2' : 'grid grid-cols-2 gap-4'}>
+                  {!isMobile && <span className="w-px h-4 bg-neutral-800" />}
+
                   {isMobile ? (
                     <div className="flex items-center gap-2.5 bg-neutral-900/60 rounded-lg px-3 py-2.5">
                       <CalendarIcon className="w-3.5 h-3.5 text-neutral-500 shrink-0" />
@@ -5517,48 +5350,43 @@ function PageContent() {
                       </div>
                     </div>
                   ) : (
-                    <div className="bg-neutral-950/40 p-4 rounded border border-neutral-800">
-                      <h4 className="text-[11px] font-bold text-neutral-400 uppercase tracking-wider mb-2">Timeframe</h4>
-                      <div className="space-y-1.5 text-xs font-mono">
-                        <div className="flex items-center justify-between gap-2">
-                          <span className="text-neutral-400 shrink-0">Start:</span>
-                          <DatePickerPopover
-                            value={activeModalTask.startDate}
-                            onChange={(iso) =>
-                              optimisticSetDates(
-                                activeModalTask.id,
-                                iso,
-                                activeModalTask.dueDate ? new Date(activeModalTask.dueDate).toISOString() : null
-                              )
-                            }
-                            badgeColorHex={(() => {
-                              const c = startDateColor(activeModalTask.startDate, activeModalTask.dueDate);
-                              return c ? DATE_BADGE_COLOR_HEX[c] : undefined;
-                            })()}
-                            tooltip={startDateTooltip(activeModalTask.startDate)}
-                          />
-                        </div>
-                        <div className="flex items-center justify-between gap-2">
-                          <span className="text-neutral-400 shrink-0">Due:</span>
-                          <DatePickerPopover
-                            value={activeModalTask.dueDate}
-                            onChange={(iso) =>
-                              optimisticSetDates(
-                                activeModalTask.id,
-                                activeModalTask.startDate ? new Date(activeModalTask.startDate).toISOString() : null,
-                                iso
-                              )
-                            }
-                            badgeColorHex={(() => {
-                              const c = dueDateColor(activeModalTask.dueDate);
-                              return c ? DATE_BADGE_COLOR_HEX[c] : undefined;
-                            })()}
-                            tooltip={dueDateTooltip(activeModalTask.dueDate)}
-                          />
-                        </div>
-                      </div>
+                    <div className="flex items-center gap-1.5 text-xs font-mono">
+                      <CalendarIcon className="w-3.5 h-3.5 text-neutral-500 shrink-0" />
+                      <DatePickerPopover
+                        value={activeModalTask.startDate}
+                        onChange={(iso) =>
+                          optimisticSetDates(
+                            activeModalTask.id,
+                            iso,
+                            activeModalTask.dueDate ? new Date(activeModalTask.dueDate).toISOString() : null
+                          )
+                        }
+                        badgeColorHex={(() => {
+                          const c = startDateColor(activeModalTask.startDate, activeModalTask.dueDate);
+                          return c ? DATE_BADGE_COLOR_HEX[c] : undefined;
+                        })()}
+                        tooltip={startDateTooltip(activeModalTask.startDate)}
+                      />
+                      <span className="text-neutral-600">–</span>
+                      <DatePickerPopover
+                        value={activeModalTask.dueDate}
+                        onChange={(iso) =>
+                          optimisticSetDates(
+                            activeModalTask.id,
+                            activeModalTask.startDate ? new Date(activeModalTask.startDate).toISOString() : null,
+                            iso
+                          )
+                        }
+                        badgeColorHex={(() => {
+                          const c = dueDateColor(activeModalTask.dueDate);
+                          return c ? DATE_BADGE_COLOR_HEX[c] : undefined;
+                        })()}
+                        tooltip={dueDateTooltip(activeModalTask.dueDate)}
+                      />
                     </div>
                   )}
+
+                  {!isMobile && <span className="w-px h-4 bg-neutral-800" />}
 
                   {(() => {
                     const assigneeChips = (
@@ -5618,13 +5446,191 @@ function PageContent() {
                         <div className="flex flex-wrap items-center gap-1.5 flex-1 min-w-0">{assigneeChips}</div>
                       </div>
                     ) : (
-                      <div className="bg-neutral-950/40 p-4 rounded border border-neutral-800">
-                        <h4 className="text-[11px] font-bold text-neutral-400 uppercase tracking-wider mb-2">Assignees</h4>
+                      <div className="flex items-center gap-1.5">
+                        <UserCircle className="w-3.5 h-3.5 text-neutral-500 shrink-0" />
                         <div className="flex flex-wrap items-center gap-1.5">{assigneeChips}</div>
                       </div>
                     );
                   })()}
                 </div>
+
+                {/* Docs — multiple named documents, live collaborative editing */}
+                <div className="space-y-2 pt-4 border-t border-neutral-800">
+                  <h3 className="text-xs font-medium text-neutral-500 flex items-center gap-1.5"><FileText className="w-3.5 h-3.5" /> Documents</h3>
+                  <div>
+                    <div className="flex items-center gap-1.5 pb-2 border-b border-neutral-800/80 overflow-x-auto">
+                      <DndContext sensors={docSensors} collisionDetection={closestCenter} onDragEnd={handleDocDragEnd}>
+                        <SortableContext items={activeTaskDocs.map((d) => d.id)} strategy={horizontalListSortingStrategy}>
+                          {activeTaskDocs.map((d) => (
+                            <DocTab
+                              key={d.id}
+                              doc={d}
+                              isActive={activeDocId === d.id}
+                              onSelect={() => setActiveDocId(d.id)}
+                              onDelete={() => setDocToDelete({ id: d.id, title: d.title || 'Untitled' })}
+                              onUnlink={
+                                activeModalTaskId
+                                  ? () => {
+                                      setDocTaskLink(d.id, null);
+                                      if (activeDocId === d.id) setActiveDocId(null);
+                                    }
+                                  : undefined
+                              }
+                            />
+                          ))}
+                        </SortableContext>
+                      </DndContext>
+                      <button onClick={handleNewDoc} className="text-[11px] text-blue-400 px-2.5 py-1 rounded hover:bg-neutral-800/60 cursor-pointer shrink-0">
+                        + New
+                      </button>
+                      {linkableSpaceDocs.length > 0 && (
+                        <FloatingPopover
+                          open={linkDocOpen}
+                          onClose={() => setLinkDocOpen(false)}
+                          panelClassName="w-52 max-h-64 overflow-y-auto bg-neutral-900 border border-neutral-800 rounded shadow-xl py-1"
+                          anchor={
+                            <button
+                              onClick={() => setLinkDocOpen((o) => !o)}
+                              className="text-[11px] text-neutral-400 hover:text-blue-400 px-2.5 py-1 rounded hover:bg-neutral-800/60 cursor-pointer shrink-0 flex items-center gap-1"
+                            >
+                              <Link2 className="w-3 h-3" /> Link existing
+                            </button>
+                          }
+                        >
+                          <div className="text-[10px] uppercase tracking-wide text-neutral-500 px-3 py-1">From this Space's Docs</div>
+                          {linkableSpaceDocs.map((d) => (
+                            <button
+                              key={d.id}
+                              onClick={() => {
+                                if (activeModalTaskId) setDocTaskLink(d.id, activeModalTaskId);
+                                setLinkDocOpen(false);
+                              }}
+                              className="w-full text-left px-3 py-1.5 text-xs text-neutral-300 hover:bg-neutral-800/60 cursor-pointer truncate"
+                            >
+                              {d.title || 'Untitled'}
+                            </button>
+                          ))}
+                        </FloatingPopover>
+                      )}
+                    </div>
+
+                    {activeDocId ? (
+                      <div className="pt-3 space-y-2">
+                        <div className="flex items-center gap-2">
+                          <input
+                            value={activeTaskDocs.find((d) => d.id === activeDocId)?.title || ''}
+                            onChange={(e) => activeModalTaskId && updateDoc(activeDocId, activeModalTaskId, { title: e.target.value })}
+                            onFocus={captureDocEditBaseline}
+                            onBlur={() => commitDocEditActivity()}
+                            className="flex-1 min-w-0 bg-transparent text-sm font-semibold text-white focus:outline-none"
+                            placeholder="Document title"
+                          />
+                          <DocExportMenu docId={activeDocId} onToast={showToast} />
+                        </div>
+                        <CollabDocEditor
+                          key={activeDocId}
+                          docId={activeDocId}
+                          onJump={jumpToMention}
+                          placeholder="Write notes, specs, anything..."
+                          className="min-h-[8em] text-xs text-neutral-300"
+                          onEditorFocus={captureDocEditBaseline}
+                          onEditorBlur={commitDocEditActivity}
+                        />
+                      </div>
+                    ) : (
+                      <p className="text-[11px] text-neutral-500 py-4">No documents yet — press "+ New" to add one.</p>
+                    )}
+                  </div>
+                </div>
+
+                <div className="space-y-2 pt-4 border-t border-neutral-800">
+                  <h3 className="text-xs font-medium text-neutral-500">
+                    Subtasks ({currentSubtasks.length})
+                  </h3>
+
+                  <div className={isMobile ? '' : 'overflow-x-auto'}>
+                    <div style={{ minWidth: isMobile || currentSubtasks.length === 0 ? undefined : tableMinWidth }}>
+                    {currentSubtasks.length > 0 && (
+                      <div
+                        className="hidden md:grid items-center px-3 py-1.5 text-[9px] font-semibold text-neutral-500 uppercase tracking-wider border-b border-neutral-800"
+                        style={{ gridTemplateColumns: rowGridTemplate }}
+                      >
+                        <div></div>
+                        <div></div>
+                        <div className="relative pr-2">
+                          Name
+                          <ColumnResizeHandle onResize={(d) => resizeColumn('name', d)} onReset={() => resetColumnWidth('name')} />
+                        </div>
+                        {activeColumns.map((col) => (
+                          <div key={col.key} className="relative text-center">
+                            {col.label}
+                            <ColumnResizeHandle onResize={(d) => resizeColumn(col.key, d)} onReset={() => resetColumnWidth(col.key)} />
+                          </div>
+                        ))}
+                        <div></div>
+                      </div>
+                    )}
+                    <div className={isMobile ? 'flex flex-col gap-2' : ''}>
+                      <AnimatePresence mode="popLayout" initial={false}>
+                        {currentSubtasks.map((sub) => (
+                          <TaskRow
+                            key={sub._localId || sub.id}
+                            task={sub as Task}
+                            navScope={`subtasks-${activeModalTask.id}`}
+                            onOpen={() => setModalTaskStack([...modalTaskStack, sub.id])}
+                            columns={activeColumns}
+                            gridTemplate={rowGridTemplate}
+                            statuses={statuses}
+                            onContextMenu={openTaskMenu}
+                            autoFocusRename={renamingTaskId === sub.id}
+                            onRenameHandled={() => setRenamingTaskId(null)}
+                            animateEntrance={justAddedSubtaskIds.has(sub._localId || sub.id)}
+                          />
+                        ))}
+                      </AnimatePresence>
+                    </div>
+                    </div>
+                    {!subtaskAddOpen ? (
+                      <button
+                        onClick={() => setSubtaskAddOpen(true)}
+                        className="w-full text-left px-1 py-2 text-xs text-neutral-500 hover:text-blue-400 cursor-pointer"
+                      >
+                        {isMobile ? '+ Legg til underoppgave' : '+ Add subtask'}
+                      </button>
+                    ) : (
+                      <div className="flex gap-2 items-center pt-1">
+                        <input
+                          type="text"
+                          autoFocus
+                          placeholder="Subtask name..."
+                          value={newSubtaskTitle}
+                          onChange={(e) => setNewSubtaskTitle(e.target.value)}
+                          onKeyDown={(e) => {
+                            if (e.key === 'Enter') handleAddSubtask(activeModalTask);
+                            if (e.key === 'Escape') {
+                              setNewSubtaskTitle('');
+                              setSubtaskAddOpen(false);
+                            }
+                          }}
+                          // Collapses back to the discreet link once blurred with nothing typed —
+                          // never mid-typing, and never while there's still text to add (so
+                          // clicking "Add" itself can't race the collapse).
+                          onBlur={() => {
+                            if (!newSubtaskTitle.trim()) setSubtaskAddOpen(false);
+                          }}
+                          className="flex-1 bg-transparent border-b border-neutral-700 focus:border-blue-500 px-1 py-1.5 text-xs text-white focus:outline-none"
+                        />
+                        <button
+                          onClick={() => handleAddSubtask(activeModalTask)}
+                          className="text-xs font-medium text-blue-400 hover:text-blue-300 cursor-pointer px-1 shrink-0"
+                        >
+                          Add
+                        </button>
+                      </div>
+                    )}
+                  </div>
+                </div>
+
               </div>
 
               <AnimatePresence initial={false}>
