@@ -3543,7 +3543,17 @@ function PageContent() {
 
       </aside>
 
-      {currentSpace && activeStandaloneDoc && docBookRoot && docBookHasPages && (
+      {/* activeStandaloneDocId (lib/navUrl.ts) deliberately isn't cleared on a plain nav-rail
+          switch — it's part of Docs' own back/forward-navigable state, same as activeSpaceId is
+          for Tasks, so returning to Docs later still shows what was open. But that means this
+          panel needs its own explicit activeView check, not just "is some standalone doc still
+          set" — without it, the subpages tree for whatever doc was last open in Docs kept
+          rendering as its own sidebar column no matter which nav-rail tab was actually active
+          (reported live: opening a multi-page doc, then switching to Chat, left the doc's page
+          list lingering next to the Chat sidebar). Matches the same (activeView === 'board' ||
+          activeView === 'docs') convention already used elsewhere in this file for when a
+          standalone doc is actually being shown. */}
+      {(activeView === 'board' || activeView === 'docs') && currentSpace && activeStandaloneDoc && docBookRoot && docBookHasPages && (
         <DocSubpagesPanel
           space={currentSpace}
           rootDoc={docBookRoot}

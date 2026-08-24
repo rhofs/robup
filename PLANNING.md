@@ -1909,6 +1909,16 @@ User relayed a detailed external design critique (5 concrete points) of the desk
 
 `npx tsc --noEmit -p .` and `npm run build` both clean; also started the real `npm run dev` process and confirmed `/login` still serves 200 with no runtime errors. **Not visually verified in a real browser** — no browser automation tool available this session (matches this session's established constraint for every other Docs/Chat UI change). Flagged to the user to look at it themselves and report back before considering this done.
 
+## Today's session (2026-08-25, continued a ninth time) — A multi-page Doc's subpages panel lingered in the sidebar after navigating away to Chat
+
+Live report with a screenshot: opening a Doc with subpages, then switching to the Chat nav-rail tab, left the Doc's own subpages column ("TEST DOC" / "Test doc" with its expand chevron) rendered as its own sidebar column right next to the Chat sidebar — clearly stale, unrelated to what was actually on screen.
+
+**Cause**: `app/page.tsx` renders `<DocSubpagesPanel>` as its own top-level sidebar column, gated only on `currentSpace && activeStandaloneDoc && docBookRoot && docBookHasPages` — no `activeView` check at all. `activeStandaloneDocId` (the thing `activeStandaloneDoc` is derived from) is deliberately *not* cleared on a plain nav-rail switch — it's part of Docs' own back/forward-navigable state (`lib/navUrl.ts`), the same way `activeSpaceId` persists for Tasks, so returning to Docs later still shows what was open. That's correct for the URL/state layer, but this one render site never accounted for it: as long as *any* multi-page doc had ever been opened in Docs during the session, its subpages panel kept rendering regardless of which tab was actually active.
+
+**Fix**: added `(activeView === 'board' || activeView === 'docs') &&` to the panel's render condition — the exact same convention already used elsewhere in this file (e.g. the `pageWidth === 'full'` width check, the doc-header/editor area itself) for "is a standalone doc actually being shown right now."
+
+`npx tsc --noEmit -p .` and `npm run build` both clean. Not visually re-verified in a real browser (no browser tool available this session) — flagged to the user to confirm the panel now disappears when leaving Docs.
+
 ## Known bugs / things to remember
 
 - **A Zustand selector that constructs a new object/array literal inline (instead of returning a reference already stable in the store) can cause an infinite React render loop, not just wasted re-renders.** Zustand's hook (built on `useSyncExternalStore`) re-invokes the selector on every store update and compares the result by reference; a selector that never returns a stable reference makes React conclude the snapshot is perpetually "unstable." Hit this in `app/page.tsx`'s `activeChatChannelLabel` (built `{kind, text}` inline) — reproduced live as "This page couldn't load" every time a DM was opened, diagnosed from a repeating `up`/`ud` React-internals stack in the browser console. Fix: select a plain reference (`.find()`'s result, or `null`) and derive anything object-shaped in a downstream `useMemo` instead.
