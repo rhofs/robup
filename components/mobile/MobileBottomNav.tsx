@@ -87,7 +87,7 @@ export default function MobileBottomNav({ navTabs, menuOpen, onOpenMenu, onClose
               {active && (
                 <motion.div
                   layoutId="mobileNavPill"
-                  className="absolute inset-0 bg-neutral-800 rounded-full -z-10"
+                  className="absolute inset-0 bg-blue-500/15 ring-1 ring-inset ring-blue-500/30 rounded-full -z-10"
                   transition={{ type: 'spring', stiffness: 500, damping: 34 }}
                 />
               )}

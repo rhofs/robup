@@ -1758,6 +1758,14 @@ User reported two things after the morph re-add: (1) the "grow from the button" 
 
 **Verified** (the tab-highlight fix only): `npx tsc --noEmit` clean, `npm run build` succeeds, scripted login + `GET /` returns 200 with no error-overlay marker.
 
+## Today's session (2026-08-24, continued a fourth time) — Clarified: the popup morph is fine, what needed animating was the active-tab pill highlight itself
+
+Follow-up clarified the previous report entirely: the grid popup's own grow/fade animation is working well and shouldn't be touched. What the user actually wants animated (matching the ClickUp reference) is the **active-tab indicator** on the 3 primary nav tabs — instead of just the label text hard-cutting to blue, a pill-shaped background should visibly mark "this tab is active" and slide/pop in. That mechanism (`layoutId="mobileNavPill"`) was already built, but its fill was `bg-neutral-800` against a `bg-neutral-900` nav bar — a ~1-shade difference in dark mode, easy to read as "nothing happened, just the text changed color" even if the pill and its slide animation were technically working the whole time.
+
+**Fix**: `components/mobile/MobileBottomNav.tsx`'s 3 primary tabs now use `bg-blue-500/15 ring-1 ring-inset ring-blue-500/30` for the active pill instead of `bg-neutral-800` — a clearly visible tinted pill matching the existing blue active-text accent, rather than a low-contrast gray that blended into the bar. The 4th (Menu) button's own pill was deliberately left untouched (still `bg-neutral-800`) since it's the same element that morphs into the grid panel — the user explicitly asked not to touch that animation, and changing its resting color risks an inconsistent color jump partway through the morph.
+
+**Verified**: `npx tsc --noEmit` clean, `npm run build` succeeds, scripted login + `GET /` returns 200 with no error-overlay marker. **Not yet visually confirmed on-device.**
+
 ## Known bugs / things to remember
 
 - **dnd-kit gotcha**: `useDraggable`/`useDroppable` bind to the *nearest ancestor* `DndContext` by React-tree position, not by id-naming intent. Fix: one shared `DndContext` for all sidebar/task dragging, dispatch in `onDragEnd` by inspecting the dragged id's prefix (`task id`, `list-drag:`, `folder-drag:`, `space-drag:`).
