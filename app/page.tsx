@@ -3706,12 +3706,16 @@ function PageContent() {
         </header>
 
         <div
-          className={activeView === 'calendar' ? 'flex-1 min-h-0 overflow-hidden p-2 md:p-6 flex flex-col' : 'flex-1 overflow-auto p-6'}
+          className={
+            activeView === 'calendar' || activeView === 'chat'
+              ? 'flex-1 min-h-0 overflow-hidden p-2 md:p-6 flex flex-col'
+              : 'flex-1 overflow-auto p-6'
+          }
           onClick={closeAllMenus}
         >
           <div
             className={
-              activeView === 'calendar'
+              activeView === 'calendar' || activeView === 'chat'
                 ? 'flex-1 min-h-0 flex flex-col'
                 : (activeView === 'board' || activeView === 'docs') && activeStandaloneDoc?.pageWidth === 'full'
                 ? 'w-full space-y-2'
@@ -4137,12 +4141,22 @@ function PageContent() {
               // ChatPanel itself already renders a "pick a channel or DM" empty state when nothing
               // is selected, which correctly covers "no workspace + no channel" too.
               //
+              // flex-1 min-h-0, not a hardcoded h-[75vh] — a fixed vh fraction doesn't know how
+              // much of the viewport the header/mobile-bottom-nav/safe-area already ate, so on
+              // mobile it routinely overflowed the space actually available, leaving the composer
+              // below the fold until the *outer* page was scrolled down first (reported live: "må
+              // scrolle ned for å skrive"). The parent chain above (this content wrapper, and its
+              // own wrapper two levels up) now gets the same flex-1/min-h-0 treatment already used
+              // for Calendar for exactly this reason, so ChatPanel's own internal `flex flex-col
+              // h-full` (message list scrolls, composer stays pinned below it) resolves against a
+              // real, correctly-bounded height instead of an unconstrained block ancestor.
+              //
               // On mobile, an open thread replaces the message list entirely instead of squeezing
               // beside it — ChatThreadPanel is a fixed w-80 side panel, the same "cropped on a
               // phone screen" shape as the task modal's Comments panel was before that got the
               // same full-screen-replace treatment.
-              <div className="h-[75vh] flex gap-3">
-                <div className={`flex-1 min-w-0 ${isMobile && activeThreadRootMessage ? 'hidden' : ''}`}>
+              <div className="flex-1 min-h-0 flex gap-3">
+                <div className={`flex-1 min-w-0 min-h-0 ${isMobile && activeThreadRootMessage ? 'hidden' : ''}`}>
                   <ChatPanel onOpenMobilePicker={() => setMobileChatSheetOpen(true)} />
                 </div>
                 {activeThreadRootMessage && (

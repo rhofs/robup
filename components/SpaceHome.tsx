@@ -12,6 +12,7 @@ import {
 import { useTaskStore, HierarchySpace, Task } from '../store/useTaskStore';
 import { getChildFolders, getListsIn } from '../lib/folderTree';
 import { FOLDER_ICON_MAP } from './FolderTree';
+import { useIsMobile } from '../hooks/useIsMobile';
 
 type SpaceHomeProps = {
   space: HierarchySpace;
@@ -21,6 +22,7 @@ type SpaceHomeProps = {
 
 export default function SpaceHome({ space, tasks, onNavigateList }: SpaceHomeProps) {
   const { updateSpace } = useTaskStore();
+  const isMobile = useIsMobile();
 
   const [browsePath, setBrowsePath] = useState<string | null>(null);
   const breadcrumb = useMemo(() => {
@@ -65,6 +67,61 @@ export default function SpaceHome({ space, tasks, onNavigateList }: SpaceHomePro
         {childFolders.length === 0 && childLists.length === 0 ? (
           <div className="text-[11px] text-neutral-500 px-1 py-4 text-center border border-dashed border-neutral-800 rounded">
             Nothing in here yet.
+          </div>
+        ) : isMobile ? (
+          // Flat, full-width rows instead of the desktop card grid — a 3-per-row card grid at
+          // phone width crams a name/icon/count into a cramped square and, worse, a folder row
+          // looks visually identical to a List row even though tapping one drills further into
+          // this same screen while the other navigates away entirely to the List itself. A plain
+          // list (chevron only on Folders, matching MobileSpacesSheet.tsx's own drill-down
+          // convention for the exact same "this expands vs. this navigates" distinction) reads as
+          // one predictable action per row instead.
+          <div className="space-y-0.5">
+            {childFolders.map((folder) => {
+              const subFolderCount = getChildFolders(space, folder.id).length;
+              const subListCount = getListsIn(space, folder.id).length;
+              const CustomIcon = folder.icon ? FOLDER_ICON_MAP[folder.icon] : null;
+              const Icon = CustomIcon || FolderIconLucide;
+              return (
+                <button
+                  key={folder.id}
+                  onClick={() => setBrowsePath(folder.id)}
+                  className="w-full flex items-center gap-3 px-2 py-2.5 rounded-lg text-left transition cursor-pointer hover:bg-neutral-800/60"
+                >
+                  <span className="w-8 h-8 rounded-lg bg-neutral-800 flex items-center justify-center shrink-0">
+                    <Icon className="w-4 h-4" style={{ color: folder.color || undefined }} />
+                  </span>
+                  <span className="min-w-0 flex-1">
+                    <span className="block text-sm text-neutral-200 truncate">{folder.name}</span>
+                    <span className="block text-[11px] text-neutral-500 font-mono">
+                      {subFolderCount > 0 ? `${subFolderCount} folders, ` : ''}
+                      {subListCount} lists
+                    </span>
+                  </span>
+                  <ChevronRight className="w-4 h-4 text-neutral-600 shrink-0" />
+                </button>
+              );
+            })}
+            {childLists.map((list) => {
+              const count = tasks.filter((t) => t.listId === list.id && t.parentId === null && !t.archived).length;
+              const CustomIcon = list.icon ? FOLDER_ICON_MAP[list.icon] : null;
+              const Icon = CustomIcon || ListIcon;
+              return (
+                <button
+                  key={list.id}
+                  onClick={() => onNavigateList(list.id)}
+                  className="w-full flex items-center gap-3 px-2 py-2.5 rounded-lg text-left transition cursor-pointer hover:bg-neutral-800/60"
+                >
+                  <span className="w-8 h-8 rounded-lg bg-neutral-800 flex items-center justify-center shrink-0">
+                    <Icon className="w-4 h-4" style={{ color: list.color || undefined }} />
+                  </span>
+                  <span className="min-w-0 flex-1">
+                    <span className="block text-sm text-neutral-200 truncate">{list.name}</span>
+                    <span className="block text-[11px] text-neutral-500 font-mono">{count} tasks</span>
+                  </span>
+                </button>
+              );
+            })}
           </div>
         ) : (
           <div className="grid grid-cols-3 gap-2">
