@@ -109,6 +109,7 @@ import MobileBottomNav from '../components/mobile/MobileBottomNav';
 import AppLauncherGrid from '../components/mobile/AppLauncherGrid';
 import MobileSpacesSheet from '../components/mobile/MobileSpacesSheet';
 import MobileChatSheet from '../components/mobile/MobileChatSheet';
+import MobileDocPagesSheet from '../components/mobile/MobileDocPagesSheet';
 import MobileCalendarFilterSheet from '../components/mobile/MobileCalendarFilterSheet';
 import { useIsMobile } from '../hooks/useIsMobile';
 import AccessControlPanel from '../components/AccessControlPanel';
@@ -767,6 +768,7 @@ function PageContent() {
   const [mobileSpacesOpen, setMobileSpacesOpen] = useState(false);
   const [mobileChatSheetOpen, setMobileChatSheetOpen] = useState(false);
   const [mobileCalendarFilterOpen, setMobileCalendarFilterOpen] = useState(false);
+  const [mobileDocPagesOpen, setMobileDocPagesOpen] = useState(false);
   // The real bug behind "tapping a different nav button does nothing": none of these mobile-only
   // overlay screens had any reason to close themselves when the user tapped a *different* nav
   // destination instead of picking something from inside them — Spaces (or the Menu grid, or the
@@ -3554,18 +3556,20 @@ function PageContent() {
           activeView === 'docs') convention already used elsewhere in this file for when a
           standalone doc is actually being shown. */}
       {(activeView === 'board' || activeView === 'docs') && currentSpace && activeStandaloneDoc && docBookRoot && docBookHasPages && (
-        <DocSubpagesPanel
-          space={currentSpace}
-          rootDoc={docBookRoot}
-          activeDocId={activeStandaloneDoc.id}
-          members={users}
-          onOpenDoc={(docId) => setDocsNavigation(activeDocFolderId, docId)}
-          onAddPage={(parentId) => createSpaceDoc(currentSpace.id, null, { parentId })}
-          onDocContextMenu={(e, doc) => openDocMenu(e, doc, currentSpace.id)}
-          renameDocId={renameDocId}
-          onRenameDocHandled={() => setRenameDocId(null)}
-          docDropIndicator={docDropIndicator}
-        />
+        <aside className="w-56 bg-neutral-900/60 border-r border-neutral-800/80 shrink-0 overflow-y-auto select-none hidden md:block">
+          <DocSubpagesPanel
+            space={currentSpace}
+            rootDoc={docBookRoot}
+            activeDocId={activeStandaloneDoc.id}
+            members={users}
+            onOpenDoc={(docId) => setDocsNavigation(activeDocFolderId, docId)}
+            onAddPage={(parentId) => createSpaceDoc(currentSpace.id, null, { parentId })}
+            onDocContextMenu={(e, doc) => openDocMenu(e, doc, currentSpace.id)}
+            renameDocId={renameDocId}
+            onRenameDocHandled={() => setRenameDocId(null)}
+            docDropIndicator={docDropIndicator}
+          />
+        </aside>
       )}
 
       {/* ================= MAIN AREA ================= */}
@@ -3689,6 +3693,19 @@ function PageContent() {
                   className="md:hidden text-[11px] font-medium px-3 py-1.5 rounded bg-blue-600 hover:bg-blue-500 text-white cursor-pointer transition flex items-center gap-1.5"
                 >
                   <MessageCircle className="w-3.5 h-3.5" /> Chat
+                </button>
+              )}
+              {/* DocSubpagesPanel (a real 224px sidebar column) is hidden below md same as the
+                  Spaces/Lists tree — on a phone-width screen it left barely any room for the
+                  actual doc editor (reported live: "jeg ser kun 1 av docsene... feltet jeg skal
+                  skrive i er croppa vekk"). Only shown when that panel would actually have
+                  something to show (mirrors its own desktop render gate exactly). */}
+              {activeView === 'docs' && activeStandaloneDoc && docBookHasPages && (
+                <button
+                  onClick={() => setMobileDocPagesOpen(true)}
+                  className="md:hidden text-[11px] px-2.5 py-1 rounded border cursor-pointer transition flex items-center gap-1.5 text-neutral-400 border-neutral-800 hover:bg-neutral-800/60"
+                >
+                  <FileText className="w-3.5 h-3.5" /> Pages
                 </button>
               )}
               {/* Desktop's per-Space/List calendar-visibility checkboxes live in the sidebar's
@@ -6043,6 +6060,22 @@ function PageContent() {
         onClose={() => setMobileChatSheetOpen(false)}
         workspaceId={activeWorkspaceId}
       />
+      {currentSpace && activeStandaloneDoc && docBookRoot && docBookHasPages && (
+        <MobileDocPagesSheet
+          open={mobileDocPagesOpen}
+          onClose={() => setMobileDocPagesOpen(false)}
+          space={currentSpace}
+          rootDoc={docBookRoot}
+          activeDocId={activeStandaloneDoc.id}
+          members={users}
+          onOpenDoc={(docId) => setDocsNavigation(activeDocFolderId, docId)}
+          onAddPage={(parentId) => createSpaceDoc(currentSpace.id, null, { parentId })}
+          onDocContextMenu={(e, doc) => openDocMenu(e, doc, currentSpace.id)}
+          renameDocId={renameDocId}
+          onRenameDocHandled={() => setRenameDocId(null)}
+          docDropIndicator={docDropIndicator}
+        />
+      )}
       <MobileCalendarFilterSheet
         open={mobileCalendarFilterOpen}
         onClose={() => setMobileCalendarFilterOpen(false)}

@@ -41,8 +41,12 @@ export default function DocSubpagesPanel({
 }: DocSubpagesPanelProps) {
   const membersById = new Map(members.map((m) => [m.id, m]));
 
+  // No fixed width/border of its own — those are desktop-column concerns (the caller wraps this
+  // in its own `<aside>` for that, see app/page.tsx), since this same component is also reused
+  // full-width inside a mobile bottom sheet (MobileDocPagesSheet.tsx) where a hardcoded w-56
+  // would just float as a narrow column instead of filling the sheet.
   return (
-    <aside className="w-56 bg-neutral-900/60 border-r border-neutral-800/80 shrink-0 overflow-y-auto select-none">
+    <div className="select-none">
       <div className="px-3 pt-3 pb-2 flex items-center justify-between">
         <div className="text-[10px] uppercase tracking-wide text-neutral-500 truncate" title={rootDoc.title}>
           {rootDoc.title || 'Untitled'}
@@ -69,7 +73,7 @@ export default function DocSubpagesPanel({
           docDropIndicator={docDropIndicator}
         />
       </div>
-    </aside>
+    </div>
   );
 }
 
