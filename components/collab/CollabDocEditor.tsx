@@ -107,11 +107,20 @@ export default function CollabDocEditor({
   // connections and orphaned one — edits went into a Y.Doc whose connection had already been
   // discarded, so they never reached the server and the debounced persist never fired).
   const [provider, setProvider] = useState<HocuspocusProvider | null>(null);
+  // Real connection state, not a guess — production currently has no TLS termination in front of
+  // the collab port at all (see collabWsUrl.ts's own top comment), so every edit here silently
+  // never reaches the server: nothing is actually saved, it only exists in this tab's in-memory
+  // Y.Doc until the component unmounts. 'disconnected' specifically (not 'connecting', which is
+  // the normal brief state on first load) drives a visible warning below rather than losing
+  // someone's work with zero indication anything was wrong.
+  const [wsStatus, setWsStatus] = useState<'connecting' | 'connected' | 'disconnected'>('connecting');
 
   useEffect(() => {
+    setWsStatus('connecting');
     const p = new HocuspocusProvider({
       url: collabWsUrl(),
       name: docId,
+      onStatus: ({ status }) => setWsStatus(status),
     });
     setProvider(p);
     return () => {
@@ -249,6 +258,12 @@ export default function CollabDocEditor({
   return (
     <div className={`flex items-start gap-3 ${className ?? ''}`}>
       <div className="flex-1 min-w-0">
+        {wsStatus === 'disconnected' && (
+          <div className="mb-2 px-2.5 py-1.5 rounded border border-amber-500/30 bg-amber-500/10 text-amber-300 text-[11px] flex items-center gap-1.5">
+            <span className="w-1.5 h-1.5 rounded-full bg-amber-400 shrink-0" />
+            Not connected — changes here aren&apos;t being saved right now. Copy your text somewhere safe before leaving this page.
+          </div>
+        )}
         {provider && <PresenceBar provider={provider} />}
         {editor && (
           <BubbleMenu editor={editor} shouldShow={({ from, to }) => from !== to}>
