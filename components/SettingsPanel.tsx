@@ -14,7 +14,7 @@ const HIDDEN_NAV_TABS_STORAGE_KEY = 'siqt.hiddenNavTabs';
 export type NavTabId = 'board' | 'calendar' | 'docs' | 'office' | 'chat';
 
 const NAV_TABS: { id: NavTabId; label: string }[] = [
-  { id: 'board', label: 'Tasks' },
+  { id: 'board', label: 'Spaces' },
   { id: 'calendar', label: 'Planner' },
   { id: 'docs', label: 'Docs' },
   { id: 'office', label: 'Office' },

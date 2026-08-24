@@ -1,9 +1,11 @@
 'use client';
 
+import { useState } from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
-import { ChevronRight, Globe, X } from 'lucide-react';
+import { ChevronRight, ChevronDown, Globe, X, Folder as FolderIconLucide, List as ListIconLucide, FileText } from 'lucide-react';
 import type { HierarchySpace } from '../../store/useTaskStore';
 import { FOLDER_ICON_MAP } from '../FolderTree';
+import { getChildFolders, getListsIn, getBoardDocsIn } from '../../lib/folderTree';
 
 type Props = {
   open: boolean;
@@ -12,6 +14,8 @@ type Props = {
   spaces: HierarchySpace[];
   activeSpaceId: string;
   onSelectSpace: (spaceId: string) => void;
+  onSelectList: (spaceId: string, listId: string) => void;
+  onSelectDoc: (spaceId: string, docId: string) => void;
 };
 
 // Mobile Spaces landing — reachable from the bottom nav's "Spaces" tab (see MobileBottomNav.tsx)
@@ -21,11 +25,47 @@ type Props = {
 // wherever you were. Stops just above the bottom nav (z-index below MobileBottomNav's, which is
 // deliberately bumped above every *other* mobile overlay only for this one) so the nav pill stays
 // visible and tappable the whole time — you can jump straight to Planner/Chat/Menu without first
-// closing this. Deliberately a flat list of Spaces only (no inline Folder/List drill-down like an
-// earlier version of this sheet had) — tapping a Space lands on its own Space Home (SpaceHome.tsx,
-// already an existing desktop feature: a browsable page of that Space's Lists), which already
-// covers "now show me this Space's Lists" without this screen also needing to duplicate that UI.
-export default function MobileSpacesSheet({ open, onClose, workspaceName, spaces, activeSpaceId, onSelectSpace }: Props) {
+// closing this.
+//
+// A real inline-expanding tree now (Space > Folder > List/Doc, recursively), not a flat list that
+// hands off to a separate SpaceHome card-grid screen — an earlier version did that, and it read as
+// exactly the "this looks like it should expand right here, but instead takes me somewhere else"
+// complaint that came back from real usage. Tapping a Space/Folder row toggles it open in place
+// (matching what its own chevron visually promises); only Lists and Docs (the actual leaf
+// destinations — a Folder has never been independently "openable" anywhere else in this app
+// either, see SpaceHome.tsx's own folder-is-purely-organizational precedent) close the sheet and
+// navigate. Docs alongside Lists at each level mirrors FolderTree.tsx's own desktop behavior
+// exactly (a Folder in the Tasks-tab tree can hold both — lib/folderTree.ts's getBoardDocsIn is a
+// second, independent axis from the standalone Docs tab's own folder tree).
+export default function MobileSpacesSheet({
+  open,
+  onClose,
+  workspaceName,
+  spaces,
+  activeSpaceId,
+  onSelectSpace,
+  onSelectList,
+  onSelectDoc,
+}: Props) {
+  const [expandedSpaceIds, setExpandedSpaceIds] = useState<Set<string>>(new Set());
+  const [expandedFolderIds, setExpandedFolderIds] = useState<Set<string>>(new Set());
+
+  const toggleSpace = (spaceId: string) =>
+    setExpandedSpaceIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(spaceId)) next.delete(spaceId);
+      else next.add(spaceId);
+      return next;
+    });
+
+  const toggleFolder = (folderId: string) =>
+    setExpandedFolderIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(folderId)) next.delete(folderId);
+      else next.add(folderId);
+      return next;
+    });
+
   return (
     <AnimatePresence>
       {open && (
@@ -61,37 +101,147 @@ export default function MobileSpacesSheet({ open, onClose, workspaceName, spaces
                   All Tasks <span className="text-neutral-500 font-normal">– {workspaceName}</span>
                 </span>
               </span>
-              <ChevronRight className="w-4 h-4 text-neutral-600 shrink-0" />
             </button>
 
             {spaces.map((space) => {
               const Icon = space.icon ? FOLDER_ICON_MAP[space.icon] : null;
+              const isExpanded = expandedSpaceIds.has(space.id);
               return (
-                <button
-                  key={space.id}
-                  onClick={() => {
-                    onSelectSpace(space.id);
-                    onClose();
-                  }}
-                  className={`w-full flex items-center gap-3 px-2 py-2.5 rounded-lg text-left transition cursor-pointer ${
-                    activeSpaceId === space.id ? 'bg-neutral-800' : 'hover:bg-neutral-800/60'
-                  }`}
-                >
-                  <span className="w-8 h-8 rounded-lg flex items-center justify-center shrink-0" style={{ backgroundColor: space.color || '#6366f1' }}>
-                    {Icon ? (
-                      <Icon className="w-4 h-4 text-white" />
+                <div key={space.id}>
+                  <button
+                    onClick={() => toggleSpace(space.id)}
+                    className={`w-full flex items-center gap-3 px-2 py-2.5 rounded-lg text-left transition cursor-pointer ${
+                      activeSpaceId === space.id ? 'bg-neutral-800' : 'hover:bg-neutral-800/60'
+                    }`}
+                  >
+                    <span className="w-8 h-8 rounded-lg flex items-center justify-center shrink-0" style={{ backgroundColor: space.color || '#6366f1' }}>
+                      {Icon ? (
+                        <Icon className="w-4 h-4 text-white" />
+                      ) : (
+                        <span className="text-white text-xs font-bold">{space.name.slice(0, 1).toUpperCase()}</span>
+                      )}
+                    </span>
+                    <span className="min-w-0 flex-1 text-sm text-neutral-200 truncate">{space.name}</span>
+                    {isExpanded ? (
+                      <ChevronDown className="w-4 h-4 text-neutral-600 shrink-0" />
                     ) : (
-                      <span className="text-white text-xs font-bold">{space.name.slice(0, 1).toUpperCase()}</span>
+                      <ChevronRight className="w-4 h-4 text-neutral-600 shrink-0" />
                     )}
-                  </span>
-                  <span className="min-w-0 flex-1 text-sm text-neutral-200 truncate">{space.name}</span>
-                  <ChevronRight className="w-4 h-4 text-neutral-600 shrink-0" />
-                </button>
+                  </button>
+                  {isExpanded && (
+                    <SpaceContents
+                      space={space}
+                      folderId={null}
+                      depth={1}
+                      expandedFolderIds={expandedFolderIds}
+                      onToggleFolder={toggleFolder}
+                      onSelectList={(listId) => {
+                        onSelectList(space.id, listId);
+                        onClose();
+                      }}
+                      onSelectDoc={(docId) => {
+                        onSelectDoc(space.id, docId);
+                        onClose();
+                      }}
+                    />
+                  )}
+                </div>
               );
             })}
           </div>
         </motion.div>
       )}
     </AnimatePresence>
+  );
+}
+
+// Recursive — renders one Folder level's own child Folders (each independently expandable) plus
+// its Lists/Docs (leaf rows), sorted together by `order` same as the desktop sidebar interleaves
+// them.
+function SpaceContents({
+  space,
+  folderId,
+  depth,
+  expandedFolderIds,
+  onToggleFolder,
+  onSelectList,
+  onSelectDoc,
+}: {
+  space: HierarchySpace;
+  folderId: string | null;
+  depth: number;
+  expandedFolderIds: Set<string>;
+  onToggleFolder: (folderId: string) => void;
+  onSelectList: (listId: string) => void;
+  onSelectDoc: (docId: string) => void;
+}) {
+  const childFolders = getChildFolders(space, folderId);
+  const leaves = [
+    ...getListsIn(space, folderId).map((l) => ({ kind: 'list' as const, id: l.id, name: l.name, color: l.color, icon: l.icon, order: l.order })),
+    ...getBoardDocsIn(space, folderId).map((d) => ({
+      kind: 'doc' as const,
+      id: d.id,
+      name: d.title || 'Untitled',
+      color: d.textColor || d.color,
+      icon: null as string | null,
+      order: d.order,
+    })),
+  ].sort((a, b) => a.order - b.order);
+
+  if (childFolders.length === 0 && leaves.length === 0) {
+    return <p className="text-[11px] text-neutral-600 italic px-2 py-1.5" style={{ paddingLeft: 12 + depth * 20 }}>Empty</p>;
+  }
+
+  return (
+    <>
+      {childFolders.map((folder) => {
+        const CustomIcon = folder.icon ? FOLDER_ICON_MAP[folder.icon] : null;
+        const FIcon = CustomIcon || FolderIconLucide;
+        const isExpanded = expandedFolderIds.has(folder.id);
+        return (
+          <div key={folder.id}>
+            <button
+              onClick={() => onToggleFolder(folder.id)}
+              className="w-full flex items-center gap-2 py-2 rounded-lg text-left transition cursor-pointer hover:bg-neutral-800/60"
+              style={{ paddingLeft: 8 + depth * 20, paddingRight: 8 }}
+            >
+              <FIcon className="w-4 h-4 shrink-0" style={{ color: folder.color || undefined }} />
+              <span className="min-w-0 flex-1 text-[13px] text-neutral-300 truncate">{folder.name}</span>
+              {isExpanded ? (
+                <ChevronDown className="w-3.5 h-3.5 text-neutral-600 shrink-0" />
+              ) : (
+                <ChevronRight className="w-3.5 h-3.5 text-neutral-600 shrink-0" />
+              )}
+            </button>
+            {isExpanded && (
+              <SpaceContents
+                space={space}
+                folderId={folder.id}
+                depth={depth + 1}
+                expandedFolderIds={expandedFolderIds}
+                onToggleFolder={onToggleFolder}
+                onSelectList={onSelectList}
+                onSelectDoc={onSelectDoc}
+              />
+            )}
+          </div>
+        );
+      })}
+      {leaves.map((leaf) => {
+        const CustomIcon = leaf.icon ? FOLDER_ICON_MAP[leaf.icon] : null;
+        const LIcon = CustomIcon || (leaf.kind === 'doc' ? FileText : ListIconLucide);
+        return (
+          <button
+            key={leaf.id}
+            onClick={() => (leaf.kind === 'list' ? onSelectList(leaf.id) : onSelectDoc(leaf.id))}
+            className="w-full flex items-center gap-2 py-2 rounded-lg text-left transition cursor-pointer hover:bg-neutral-800/60"
+            style={{ paddingLeft: 8 + depth * 20, paddingRight: 8 }}
+          >
+            <LIcon className="w-3.5 h-3.5 shrink-0" style={{ color: leaf.color || undefined }} />
+            <span className="min-w-0 flex-1 text-[13px] text-neutral-400 truncate">{leaf.name}</span>
+          </button>
+        );
+      })}
+    </>
   );
 }

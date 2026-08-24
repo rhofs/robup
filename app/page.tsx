@@ -665,7 +665,7 @@ function PageContent() {
   // already shown up in the header's own workspace switcher (top-left). Now reflects whichever
   // view is actually active instead, matching the nav-rail's own labels.
   const BREADCRUMB_VIEW_LABEL: Record<typeof activeView, string> = {
-    board: 'Tasks',
+    board: 'Spaces',
     calendar: 'Planner',
     docs: 'Docs',
     office: 'Office',
@@ -1263,7 +1263,10 @@ function PageContent() {
     if (!hiddenNavTabs.has('board') && hasRealWorkspace) {
       tabs.push({
         id: 'board',
-        label: 'Tasks',
+        // "Spaces," not "Tasks" — a Space also holds Docs/Folders/Lists, not just tasks (mobile's
+        // bottom nav already independently relabels this same tab "Spaces" for the same reason;
+        // this brings desktop in line with it, per explicit user feedback: "Docs er ikke tasks").
+        label: 'Spaces',
         icon: ListIcon,
         onClick: handleTasksNavClick,
         active: activeView === 'board' && !currentWorkspace?.isPersonal,
@@ -6069,6 +6072,17 @@ function PageContent() {
         onSelectSpace={(spaceId) => {
           setModalTaskStack([]);
           setNavigation(spaceId, []);
+          setActiveView('board');
+        }}
+        onSelectList={(spaceId, listId) => {
+          setModalTaskStack([]);
+          setNavigation(spaceId, [listId]);
+          setActiveView('board');
+        }}
+        onSelectDoc={(spaceId, docId) => {
+          setModalTaskStack([]);
+          setNavigation(spaceId, []);
+          setDocsNavigation(null, docId);
           setActiveView('board');
         }}
       />
