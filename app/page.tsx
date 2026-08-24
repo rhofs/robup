@@ -4292,6 +4292,7 @@ function PageContent() {
         onOpenMenu={() => setMobileMenuOpen(true)}
         onCloseMenu={() => setMobileMenuOpen(false)}
         onOpenSpaces={() => setMobileSpacesOpen(true)}
+        spacesOpen={mobileSpacesOpen}
         pinnedTile={pinnedMobileTile}
       />
 

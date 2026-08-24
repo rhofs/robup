@@ -1730,6 +1730,14 @@ User sent a screenshot of desktop Chrome's mobile-emulated DevTools: Network tab
 
 **Verified**: `npx tsc --noEmit` clean, `npm run build` succeeds, scripted login + `GET /` returns 200 with no error-overlay marker. **Not yet confirmed on-device** — but this time the failure mode is fully understood and reproduced (not guessed at from code alone), so confidence is much higher than the last two attempts. Still worth a real retest before calling it closed.
 
+## Today's session (2026-08-24, continued) — Nav taps confirmed working; the Spaces button's own highlight was the next real gap
+
+With the overlay-close bug fixed, the user confirmed taps work again — but noticed the "Spaces" nav button never lights up (blue/highlighted) at all, even while actively browsing the Spaces screen. Root cause: `MobileBottomNav.tsx`'s Spaces slot calls `onOpenSpaces` (just opens `MobileSpacesSheet`) instead of `tab.onClick` (`setActiveView('board')`) — so the tab's own `active` flag, derived from `activeView === 'board'`, never becomes true just from opening the sheet; it only ever did once a specific Space was actually picked. Fixed by passing `mobileSpacesOpen` down as a new `spacesOpen` prop and OR-ing it into that one tab's active/highlight state (`tab.active || spacesOpen`) — every other tab's logic is untouched.
+
+Also hit a real environment issue on resuming after a PC crash: `npm run build` failed with `Debug Failure. Expected .../.tsbuildinfo === ...\.tsbuildinfo` (a path-casing mismatch) — TypeScript's incremental build cache left in a corrupted/partial state by the crash. Fixed by deleting `.next/cache` and rebuilding clean; worth remembering as the first thing to try if a build fails with a `.tsbuildinfo`/incremental-cache-shaped error right after an unclean shutdown.
+
+**Verified**: `npx tsc --noEmit` clean, `npm run build` succeeds (after the cache clear), scripted login + `GET /` returns 200 with no error-overlay marker. **Not yet visually confirmed on-device.**
+
 ## Known bugs / things to remember
 
 - **dnd-kit gotcha**: `useDraggable`/`useDroppable` bind to the *nearest ancestor* `DndContext` by React-tree position, not by id-naming intent. Fix: one shared `DndContext` for all sidebar/task dragging, dispatch in `onDragEnd` by inspecting the dragged id's prefix (`task id`, `list-drag:`, `folder-drag:`, `space-drag:`).

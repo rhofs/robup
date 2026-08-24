@@ -15,6 +15,11 @@ type Props = {
   // for the desktop rail, which still goes straight to the board on click; this only overrides
   // what happens when *this* component renders that one tab.
   onOpenSpaces: () => void;
+  // Opening Spaces never sets activeView itself (only actually picking a Space does — see
+  // MobileSpacesSheet.tsx), so the tab's own `active` flag (derived from activeView) stays false
+  // the whole time you're just browsing it. Passed in separately so the button can still light up
+  // while the sheet is open, not only once you've landed on a board.
+  spacesOpen: boolean;
   // Whichever tile the user last picked from the app-launcher grid (AppLauncherGrid.tsx) — the
   // 4th slot renders *that* tile's icon/label instead of a generic "Menu" hamburger, ClickUp-style.
   // null only before any tile has ever been picked (falls back to a plain Menu icon/label).
@@ -32,7 +37,7 @@ type Props = {
 // the 3 primary tabs on selection — matches the reference. The 4th slot's own highlight is a plain
 // framer-motion opacity fade (not a shared layoutId with the grid panel — see AppLauncherGrid.tsx
 // for why that turned out to be the wrong tool here).
-export default function MobileBottomNav({ navTabs, menuOpen, onOpenMenu, onCloseMenu, onOpenSpaces, pinnedTile }: Props) {
+export default function MobileBottomNav({ navTabs, menuOpen, onOpenMenu, onCloseMenu, onOpenSpaces, spacesOpen, pinnedTile }: Props) {
   const primaryTabs = PRIMARY_NAV_TAB_IDS
     .map((id) => navTabs.find((t) => t.id === id))
     .filter((t): t is NavTab => !!t);
@@ -64,15 +69,16 @@ export default function MobileBottomNav({ navTabs, menuOpen, onOpenMenu, onClose
           const isSpaces = tab.id === 'board';
           const Icon = isSpaces ? LayoutGrid : tab.icon;
           const label = isSpaces ? 'Spaces' : tab.label;
+          const active = isSpaces ? tab.active || spacesOpen : tab.active;
           return (
             <button
               key={tab.id}
               onClick={isSpaces ? onOpenSpaces : tab.onClick}
               className={`relative flex flex-col items-center justify-center gap-0.5 px-4 py-2 rounded-full transition cursor-pointer ${
-                tab.active ? 'text-blue-400' : 'text-neutral-500'
+                active ? 'text-blue-400' : 'text-neutral-500'
               }`}
             >
-              {tab.active && (
+              {active && (
                 <motion.div
                   layoutId="mobileNavPill"
                   className="absolute inset-0 bg-neutral-800 rounded-full -z-10"
