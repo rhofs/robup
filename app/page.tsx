@@ -59,7 +59,6 @@ import {
   ListChecks,
   ClipboardCheck,
   Settings,
-  Hash,
   Copy,
   LayoutGrid,
   Users,
@@ -97,10 +96,9 @@ import OfficePage from '../components/OfficePage';
 import ManageableAvatar from '../components/ManageableAvatar';
 import ChatPanel from '../components/ChatPanel';
 import ChatThreadPanel from '../components/ChatThreadPanel';
-import ChatChannelSidebar from '../components/ChatChannelSidebar';
+import ChatSidebar from '../components/ChatSidebar';
 import MyTasksPage from '../components/MyTasksPage';
 import DirectMessagesPage from '../components/DirectMessagesPage';
-import DirectMessagesSidebar from '../components/DirectMessagesSidebar';
 import ProfilePage from '../components/ProfilePage';
 import CommandPalette from '../components/CommandPalette';
 import TrashPanel from '../components/TrashPanel';
@@ -575,31 +573,30 @@ function PageContent() {
   usePresenceConnection(activeWorkspaceId ?? null);
   const isMobile = useIsMobile();
 
-  // Unread badges (Phase 8) — fetched here, not just inside ChatChannelSidebar/DirectMessagesSidebar
-  // (which only mount once the user has already navigated into Chat/DMs), so the nav-rail/Me-zone
-  // badges below can show *before* the user opens either. No global "anything changed anywhere"
-  // broadcast room exists (the real-time signal is per-channel, only for whatever's open in
-  // ChatPanel) — a 30s poll is the pragmatic, no-new-infrastructure way to keep these reasonably
-  // fresh otherwise.
+  // Unread badges (Phase 8) — fetched here, not just inside ChatSidebar (which only mounts once
+  // the user has already navigated into Chat), so the nav-rail/Me-zone badges below can show
+  // *before* the user opens it. No global "anything changed anywhere" broadcast room exists (the
+  // real-time signal is per-channel, only for whatever's open in ChatPanel) — a 30s poll is the
+  // pragmatic, no-new-infrastructure way to keep these reasonably fresh otherwise.
   const chatChannelsByWorkspace = useChatStore((s) => s.channelsByWorkspace);
   const chatDms = useChatStore((s) => s.dms);
   const fetchChatChannels = useChatStore((s) => s.fetchChannels);
   const fetchChatDMs = useChatStore((s) => s.fetchDMs);
   const createOrOpenDM = useChatStore((s) => s.createOrOpenDM);
   const setActiveChatChannelId = useChatStore((s) => s.setActiveChannelId);
-  const setActiveDmTab = useChatStore((s) => s.setActiveDmTab);
+  const setActiveChatSidebarTab = useChatStore((s) => s.setActiveChatSidebarTab);
 
   // "Send DM" from ManageableAvatar (Office, backlog #9) — jumps straight into the real
-  // conversation instead of just navigating to Direct Messages and leaving the user to find/start
-  // it themselves. Same createOrOpenDM + setActiveChannelId/setActiveDmTab shape
-  // DirectMessagesSidebar.tsx's own "start a new chat" flow already uses.
+  // conversation instead of just navigating to Chat and leaving the user to find/start it
+  // themselves. Same createOrOpenDM + setActiveChannelId + setActiveChatSidebarTab shape
+  // ChatSidebar.tsx's own "start a new chat" flow already uses.
   const handleStartDMFromOffice = async (targetUserId: string) => {
     if (!currentUserId || targetUserId === currentUserId) return;
     const dm = await createOrOpenDM([currentUserId, targetUserId]);
     if (!dm) return;
     setActiveChatChannelId(dm.id);
-    setActiveDmTab('chats');
-    setActiveView('directMessages');
+    setActiveChatSidebarTab('dms');
+    setActiveView('chat');
   };
   useEffect(() => {
     fetchChatDMs();
@@ -610,11 +607,13 @@ function PageContent() {
     }, 30000);
     return () => clearInterval(interval);
   }, [activeWorkspaceId, fetchChatDMs, fetchChatChannels]);
-  const chatUnreadCount = useMemo(
-    () => (activeWorkspaceId ? (chatChannelsByWorkspace[activeWorkspaceId] || []).reduce((sum, c) => sum + (c.unreadCount || 0), 0) : 0),
-    [chatChannelsByWorkspace, activeWorkspaceId]
-  );
-  const dmUnreadCount = useMemo(() => chatDms.reduce((sum, d) => sum + (d.unreadCount || 0), 0), [chatDms]);
+  // Channels (current workspace) + DMs (all, workspace-agnostic) — both now live under the one
+  // Chat nav-rail tab (components/ChatSidebar.tsx's Channels/DMs toggle), so one combined badge.
+  const chatUnreadCount = useMemo(() => {
+    const channelsUnread = activeWorkspaceId ? (chatChannelsByWorkspace[activeWorkspaceId] || []).reduce((sum, c) => sum + (c.unreadCount || 0), 0) : 0;
+    const dmsUnread = chatDms.reduce((sum, d) => sum + (d.unreadCount || 0), 0);
+    return channelsUnread + dmsUnread;
+  }, [chatChannelsByWorkspace, activeWorkspaceId, chatDms]);
 
   // Same "fetch eagerly + 30s poll" shape as the chat unread badges just above — a workspace
   // invite (backlog #8) should be noticeable in the switcher without having to already be
@@ -625,17 +624,20 @@ function PageContent() {
     return () => clearInterval(interval);
   }, [fetchMemberInvites]);
 
-  // Just for the breadcrumb's "/ #channel-name" segment — the channel list/messages themselves
-  // live inside ChatChannelSidebar/ChatPanel, which read the rest of useChatStore directly. This
-  // per-workspace 'chat' view only ever selects a real channel now — DMs/group chats moved to
-  // their own top-level "Direct Messages" destination (DirectMessagesPage.tsx), which doesn't use
-  // this breadcrumb at all.
-  const activeChatChannel = useChatStore((s) => {
+  // Just for the breadcrumb's "/ #channel-name" or "/ Someone" segment — the channel/DM list and
+  // messages themselves live inside ChatSidebar/ChatPanel, which read the rest of useChatStore
+  // directly. Checks real channels (current workspace) and DMs (flat, workspace-agnostic) since
+  // both now share the one 'chat' view.
+  const activeChatChannelLabel = useChatStore((s) => {
     const id = s.activeChannelId;
-    if (!id || !activeWorkspaceId) return null;
-    return (s.channelsByWorkspace[activeWorkspaceId] || []).find((c) => c.id === id) ?? null;
+    if (!id) return null;
+    const channel = activeWorkspaceId ? (s.channelsByWorkspace[activeWorkspaceId] || []).find((c) => c.id === id) : null;
+    if (channel) return { kind: 'channel' as const, text: channel.name ?? '' };
+    const dm = s.dms.find((d) => d.id === id);
+    if (!dm) return null;
+    const others = (dm.members ?? []).map((m) => m.user).filter((u) => u.id !== currentUserId);
+    return { kind: 'dm' as const, text: others.map((u) => u.name).join(', ') || 'Just you' };
   });
-  const activeChatChannelName = activeChatChannel?.name ?? null;
 
   // Breadcrumb's own first segment — used to just say the literal word "Workspace" regardless of
   // which tab was open, which read as redundant/confusing once the actual workspace name is
@@ -648,7 +650,7 @@ function PageContent() {
     office: 'Office',
     chat: 'Chat',
     mytasks: 'My assigned tasks',
-    directMessages: 'Direct Messages',
+    directMessages: 'Connections',
     profile: 'Profile',
   };
   const breadcrumbViewLabel = BREADCRUMB_VIEW_LABEL[activeView];
@@ -1311,19 +1313,12 @@ function PageContent() {
         active: activeView === 'mytasks',
       },
       {
-        // "Chats" (the bottom-nav tab) already covers DMs and rooms — this entry point's only
-        // real job is Connections (find people, connect link, requests), so it jumps straight to
-        // that sub-view instead of DirectMessagesPage's default 'chats' tab, which would just be
-        // a redundant second way to reach the same conversations. Also sidesteps the whole
-        // "no channel picked yet" empty state that view has (fixed last round, but simply not
-        // relevant here since Connections doesn't need an active channel at all).
+        // Chat (the bottom-nav tab) already covers channels and DMs — this entry point's only
+        // real job is Connections (find people, connect link, requests).
         id: 'directMessages',
         label: 'Connections',
         icon: Users,
-        onClick: () => {
-          setActiveDmTab('connections');
-          setActiveView('directMessages');
-        },
+        onClick: () => setActiveView('directMessages'),
         active: activeView === 'directMessages',
       },
       {
@@ -1334,7 +1329,7 @@ function PageContent() {
         active: activeView === 'profile',
       },
     ],
-    [currentUserId, currentWorkspace, activeView, setActiveDmTab, ensurePersonalWorkspace, setActiveWorkspaceId, setActiveView]
+    [currentUserId, currentWorkspace, activeView, ensurePersonalWorkspace, setActiveWorkspaceId, setActiveView]
   );
 
   // Everything not already pinned to the bottom nav's 3 fixed slots — shared between
@@ -3216,12 +3211,7 @@ function PageContent() {
                       activeView === 'directMessages' ? 'bg-neutral-800 text-blue-400' : 'text-neutral-400 hover:bg-neutral-800/40 hover:text-neutral-200'
                     }`}
                   >
-                    <MessageCircle className="w-3 h-3" /> Network
-                    {dmUnreadCount > 0 && (
-                      <span className="ml-auto min-w-[16px] h-4 px-1 rounded-full bg-red-500 text-white text-[9px] font-bold flex items-center justify-center leading-none">
-                        {dmUnreadCount > 99 ? '99+' : dmUnreadCount}
-                      </span>
-                    )}
+                    <MessageCircle className="w-3 h-3" /> Connections
                   </button>
                 </div>
               );
@@ -3293,9 +3283,7 @@ function PageContent() {
                 })}
               </div>
             ) : activeView === 'chat' ? (
-              <ChatChannelSidebar workspaceId={activeWorkspaceId} />
-            ) : activeView === 'directMessages' ? (
-              <DirectMessagesSidebar />
+              <ChatSidebar workspaceId={activeWorkspaceId} />
             ) : (
             <div className="space-y-3">
               <div className="flex items-center justify-between px-2">
@@ -3598,13 +3586,15 @@ function PageContent() {
                 </>
               ) : activeView === 'chat' ? (
                 <>
-                  <span className={`flex items-center gap-1.5 ${activeChatChannelName ? 'text-neutral-500' : 'text-blue-400 font-semibold'}`}>
+                  <span className={`flex items-center gap-1.5 ${activeChatChannelLabel ? 'text-neutral-500' : 'text-blue-400 font-semibold'}`}>
                     <MessageSquare className="w-3.5 h-3.5" /> Chat
                   </span>
-                  {activeChatChannelName && (
+                  {activeChatChannelLabel && (
                     <>
                       <span className="text-neutral-600">/</span>
-                      <span className="text-neutral-300 font-semibold">#{activeChatChannelName}</span>
+                      <span className="text-neutral-300 font-semibold">
+                        {activeChatChannelLabel.kind === 'channel' ? `#${activeChatChannelLabel.text}` : activeChatChannelLabel.text}
+                      </span>
                     </>
                   )}
                 </>
@@ -3657,27 +3647,18 @@ function PageContent() {
                   <Archive className="w-3.5 h-3.5" /> {showArchived ? 'Viewing archive' : 'Archive'}
                 </button>
               )}
-              {/* Chat/Network's own channel-and-DM list lives in the desktop-only sidebar
-                  (ChatChannelSidebar/DirectMessagesSidebar) — hidden below md same as the Spaces/
-                  Lists tree, so mobile needs its own way in. See MobileChatSheet.tsx, which reuses
-                  those exact same components unmodified inside a bottom sheet. */}
-              {/* Filled blue, not just outlined-neutral like Lists/Archive — this is the *only*
-                  way into the channel/DM list on mobile (the sidebar it replaces is hidden below
-                  md), so it needs to read as a primary action, not a subtle secondary one. */}
+              {/* Chat's own channel-and-DM list lives in the desktop-only sidebar (ChatSidebar) —
+                  hidden below md same as the Spaces/Lists tree, so mobile needs its own way in.
+                  See MobileChatSheet.tsx, which reuses that exact same component unmodified
+                  inside a bottom sheet. Filled blue, not just outlined-neutral like Lists/Archive
+                  — this is the *only* way into the channel/DM list on mobile, so it needs to read
+                  as a primary action, not a subtle secondary one. */}
               {activeView === 'chat' && (
                 <button
                   onClick={() => setMobileChatSheetOpen(true)}
                   className="md:hidden text-[11px] font-medium px-3 py-1.5 rounded bg-blue-600 hover:bg-blue-500 text-white cursor-pointer transition flex items-center gap-1.5"
                 >
-                  <Hash className="w-3.5 h-3.5" /> Channels
-                </button>
-              )}
-              {activeView === 'directMessages' && (
-                <button
-                  onClick={() => setMobileChatSheetOpen(true)}
-                  className="md:hidden text-[11px] font-medium px-3 py-1.5 rounded bg-blue-600 hover:bg-blue-500 text-white cursor-pointer transition flex items-center gap-1.5"
-                >
-                  <MessageCircle className="w-3.5 h-3.5" /> Chats
+                  <MessageCircle className="w-3.5 h-3.5" /> Chat
                 </button>
               )}
               {/* Desktop's per-Space/List calendar-visibility checkboxes live in the sidebar's
@@ -4096,7 +4077,7 @@ function PageContent() {
                 onOpenTask={(id) => setModalTaskStack([id])}
               />
             ) : activeView === 'directMessages' ? (
-              <DirectMessagesPage onOpenMobilePicker={() => setMobileChatSheetOpen(true)} />
+              <DirectMessagesPage />
             ) : activeView === 'profile' ? (
               <ProfilePage
                 currentUser={users.find((u) => u.id === currentUserId) ?? null}
@@ -4122,28 +4103,26 @@ function PageContent() {
                 onStartDM={handleStartDMFromOffice}
               />
             ) : activeView === 'chat' ? (
-              !activeWorkspaceId ? (
-                <div className="text-[11px] text-neutral-500 px-1 py-8 text-center border border-dashed border-neutral-800 rounded">
-                  Pick a workspace to open Chat.
+              // No workspace-level gate here — DMs are workspace-agnostic (Connections work), and
+              // ChatPanel itself already renders a "pick a channel or DM" empty state when nothing
+              // is selected, which correctly covers "no workspace + no channel" too.
+              //
+              // On mobile, an open thread replaces the message list entirely instead of squeezing
+              // beside it — ChatThreadPanel is a fixed w-80 side panel, the same "cropped on a
+              // phone screen" shape as the task modal's Comments panel was before that got the
+              // same full-screen-replace treatment.
+              <div className="h-[75vh] flex gap-3">
+                <div className={`flex-1 min-w-0 ${isMobile && activeThreadRootMessage ? 'hidden' : ''}`}>
+                  <ChatPanel onOpenMobilePicker={() => setMobileChatSheetOpen(true)} />
                 </div>
-              ) : (
-                // On mobile, an open thread replaces the message list entirely instead of
-                // squeezing beside it — ChatThreadPanel is a fixed w-80 side panel, the same
-                // "cropped on a phone screen" shape as the task modal's Comments panel was before
-                // that got the same full-screen-replace treatment.
-                <div className="h-[75vh] flex gap-3">
-                  <div className={`flex-1 min-w-0 ${isMobile && activeThreadRootMessage ? 'hidden' : ''}`}>
-                    <ChatPanel onOpenMobilePicker={() => setMobileChatSheetOpen(true)} />
-                  </div>
-                  {activeThreadRootMessage && (
-                    <ChatThreadPanel
-                      rootMessage={activeThreadRootMessage}
-                      onClose={() => setActiveThreadRootId(null)}
-                      fullWidth={isMobile}
-                    />
-                  )}
-                </div>
-              )
+                {activeThreadRootMessage && (
+                  <ChatThreadPanel
+                    rootMessage={activeThreadRootMessage}
+                    onClose={() => setActiveThreadRootId(null)}
+                    fullWidth={isMobile}
+                  />
+                )}
+              </div>
             ) : activeView === 'docs' ? (
               !currentSpace ? (
                 <div className="text-[11px] text-neutral-500 px-1 py-8 text-center border border-dashed border-neutral-800 rounded">
@@ -6013,7 +5992,6 @@ function PageContent() {
       <MobileChatSheet
         open={mobileChatSheetOpen}
         onClose={() => setMobileChatSheetOpen(false)}
-        mode={activeView === 'chat' ? 'chat' : 'directMessages'}
         workspaceId={activeWorkspaceId}
       />
       <MobileCalendarFilterSheet

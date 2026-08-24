@@ -102,13 +102,13 @@ interface ChatStore {
   activeThreadRootId: string | null;
   setActiveThreadRootId: (id: string | null) => void;
   // Which of the Direct Messages Me-zone destination's two sub-views is showing — Chats (DM/group
-  // list + ChatPanel) or Connections (connect link, requests, connections list). Shared between
-  // DirectMessagesSidebar (which swaps into the main `<aside>` while activeView ===
-  // 'directMessages', same pattern ChatChannelSidebar uses for 'chat') and DirectMessagesPage
-  // (the content pane), same "lives in the store so two separate components stay in sync without
-  // prop drilling" reasoning as activeChannelId above.
-  activeDmTab: 'chats' | 'connections';
-  setActiveDmTab: (tab: 'chats' | 'connections') => void;
+  // Which half of the unified Chat sidebar (components/ChatSidebar.tsx) is showing — Channels or
+  // Direct Messages sit in one sidebar now, not two separate top-level destinations (see
+  // PLANNING.md's 2026-08-25 Chat/Connections unification). Lives in the store, not local
+  // component state, for the same reason activeChannelId does: ManageableAvatar's "Send DM"
+  // (app/page.tsx's handleStartDMFromOffice) needs to switch this from outside the sidebar itself.
+  activeChatSidebarTab: 'channels' | 'dms';
+  setActiveChatSidebarTab: (tab: 'channels' | 'dms') => void;
   fetchChannels: (workspaceId: string) => Promise<void>;
   createChannel: (
     workspaceId: string,
@@ -191,11 +191,11 @@ export const useChatStore = create<ChatStore>((set, get) => ({
   threadsByRootId: {},
   activeChannelId: null,
   activeThreadRootId: null,
-  activeDmTab: 'chats',
+  activeChatSidebarTab: 'channels',
 
   setActiveChannelId: (id) => set({ activeChannelId: id, activeThreadRootId: null }),
   setActiveThreadRootId: (id) => set({ activeThreadRootId: id }),
-  setActiveDmTab: (tab) => set({ activeDmTab: tab }),
+  setActiveChatSidebarTab: (tab) => set({ activeChatSidebarTab: tab }),
 
   fetchChannels: async (workspaceId) => {
     const res = await fetch(`/api/workspaces/${workspaceId}/channels`);

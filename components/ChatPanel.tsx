@@ -16,8 +16,7 @@ import { useLongPress } from '../hooks/useLongPress';
 const COMPOSER_MAX_HEIGHT_PX = 160;
 
 // Flat message feed for whichever channel is currently selected via useChatStore's shared
-// activeChannelId — used both by the per-workspace 'chat' view (channel picked from
-// ChatChannelSidebar) and DirectMessagesPage (DM/group picked from its own list). Real-time
+// activeChannelId — a channel or DM/group picked from the unified ChatSidebar. Real-time
 // delivery (Phase 2, see PLANNING.md's "Planned: Discord/Slack-style chat" section) via
 // useChatChannelConnection — the manual refresh button stays as a fallback for a signal missed
 // during a brief disconnect.
