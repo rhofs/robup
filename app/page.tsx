@@ -2845,6 +2845,17 @@ function PageContent() {
                     {currentWorkspace?.name ?? 'No workspace'}
                   </h1>
                 </div>
+                {/* Pending workspace invites (backlog #8) previously had zero visible signal outside
+                    this popover's own contents — genuinely invisible unless someone thought to open
+                    it. Same badge convention as the Chat/Network unread counts above. */}
+                {memberInvitesIncoming.length > 0 && (
+                  <span
+                    title={`${memberInvitesIncoming.length} pending workspace invite${memberInvitesIncoming.length === 1 ? '' : 's'}`}
+                    className="shrink-0 min-w-[16px] h-4 px-1 rounded-full bg-red-500 text-white text-[9px] font-bold flex items-center justify-center leading-none"
+                  >
+                    {memberInvitesIncoming.length > 99 ? '99+' : memberInvitesIncoming.length}
+                  </span>
+                )}
                 <ChevronDown className="w-3.5 h-3.5 text-neutral-500 group-hover:text-neutral-300 shrink-0" />
               </button>
             }
