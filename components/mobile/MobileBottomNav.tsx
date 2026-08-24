@@ -54,11 +54,22 @@ export default function MobileBottomNav({ navTabs, menuOpen, onOpenMenu, onClose
     .map((id) => navTabs.find((t) => t.id === id))
     .filter((t): t is NavTab => !!t);
 
+  // Same !spacesOpen guard primaryTabs' own `active` already applies (see its comment above) —
+  // opening Spaces never changes activeView (only actually picking a Space does), so whatever tab
+  // was active before stays "true" underneath the whole time Spaces is open. Used for both the
+  // pinned slot's color AND its tap behavior below — without this guard, the *tap* bug was worse
+  // than just a cosmetic color glitch: handlePinnedTap's own "is the pinned tile already where I
+  // am" check read this same stale true, so tapping Menu from Spaces skipped the shortcut-navigate
+  // entirely and opened the grid on the very first tap every time (reported live: happened from
+  // Spaces specifically, never from Planner/Chat — because only Spaces leaves activeView
+  // unchanged underneath it).
+  const pinnedIsCurrentDestination = !!pinnedTile?.active && !spacesOpen;
+
   const handlePinnedTap = () => {
     onNavigate();
     if (menuOpen) {
       onCloseMenu();
-    } else if (pinnedTile && !pinnedTile.active) {
+    } else if (pinnedTile && !pinnedIsCurrentDestination) {
       pinnedTile.onClick();
     } else {
       onOpenMenu();
@@ -66,15 +77,7 @@ export default function MobileBottomNav({ navTabs, menuOpen, onOpenMenu, onClose
   };
 
   const PinnedIcon = pinnedTile?.icon ?? MenuIcon;
-  // Same !spacesOpen guard primaryTabs' own `active` already applies (see its comment above) —
-  // opening Spaces never changes activeView (only actually picking a Space does), so whatever tab
-  // was active before stays "true" underneath the whole time Spaces is open. Without this guard
-  // here too, the pinned slot kept its blue color the entire time (reported live: switching from
-  // the grid menu to Spaces moved the sliding pill correctly, but the menu button's own text
-  // stayed blue until navigating to a tab that *does* change activeView, like Planner or Chat) —
-  // the pill and this button's color are two independent visual signals, and only the pill was
-  // ever guarded against this.
-  const pinnedActive = menuOpen || (!!pinnedTile?.active && !spacesOpen);
+  const pinnedActive = menuOpen || pinnedIsCurrentDestination;
 
   return (
     // relative z-40: MobileSpacesSheet.tsx is deliberately a full-height page rather than a

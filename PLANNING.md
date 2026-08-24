@@ -1957,6 +1957,12 @@ Three items from a live feedback round:
 
 `npx tsc --noEmit -p .`, `npm run build`, and a real `npm run dev` boot all clean. Not visually re-verified in a real browser/device — no browser tool available this session, and item 2 in particular is a genuinely new interaction pattern worth the user trying firsthand.
 
+## Today's session (2026-08-25, continued a fourteenth time) — The same stale-activeView bug also broke the Menu button's tap behavior, not just its color
+
+Immediate follow-up to the previous entry's `pinnedActive` color fix: tapping the bottom nav's Menu button from Spaces opened the popup grid on the very first tap every time, but worked correctly (shortcut-navigates to the pinned tile) from every other screen. The color fix only touched `pinnedActive` (display); `handlePinnedTap`'s own "is the pinned tile already where I am" check (`pinnedTile && !pinnedTile.active`) had the identical unguarded read of `pinnedTile.active`, which stays stale-true the whole time Spaces is open (opening Spaces never changes `activeView`). That falsely satisfied "you're already on the pinned destination," skipping the shortcut-navigate branch and falling straight to `onOpenMenu()` — exactly why it only ever happened from Spaces. Factored both call sites onto one shared `pinnedIsCurrentDestination = !!pinnedTile?.active && !spacesOpen`.
+
+`npx tsc --noEmit -p .` and `npm run build` both clean.
+
 ## Known bugs / things to remember
 
 - **A Zustand selector that constructs a new object/array literal inline (instead of returning a reference already stable in the store) can cause an infinite React render loop, not just wasted re-renders.** Zustand's hook (built on `useSyncExternalStore`) re-invokes the selector on every store update and compares the result by reference; a selector that never returns a stable reference makes React conclude the snapshot is perpetually "unstable." Hit this in `app/page.tsx`'s `activeChatChannelLabel` (built `{kind, text}` inline) — reproduced live as "This page couldn't load" every time a DM was opened, diagnosed from a repeating `up`/`ud` React-internals stack in the browser console. Fix: select a plain reference (`.find()`'s result, or `null`) and derive anything object-shaped in a downstream `useMemo` instead.
