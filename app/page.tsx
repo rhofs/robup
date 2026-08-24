@@ -745,6 +745,19 @@ function PageContent() {
   const [mobileSpacesOpen, setMobileSpacesOpen] = useState(false);
   const [mobileChatSheetOpen, setMobileChatSheetOpen] = useState(false);
   const [mobileCalendarFilterOpen, setMobileCalendarFilterOpen] = useState(false);
+  // The real bug behind "tapping a different nav button does nothing": none of these mobile-only
+  // overlay screens had any reason to close themselves when the user tapped a *different* nav
+  // destination instead of picking something from inside them — Spaces (or the Menu grid, or the
+  // Chat/Planner filter sheets) just stayed visually on top forever after being opened once,
+  // silently masking every subsequent tap even though `activeView` (and the URL) really was
+  // switching correctly underneath the whole time. Closing all of them on any view change is the
+  // fix — a genuine navigation away from wherever they're relevant should always win.
+  useEffect(() => {
+    setMobileSpacesOpen(false);
+    setMobileMenuOpen(false);
+    setMobileChatSheetOpen(false);
+    setMobileCalendarFilterOpen(false);
+  }, [activeView]);
   const [hideWeekNumbers, setHideWeekNumbers] = useState(false);
   useEffect(() => {
     setHiddenNavTabs(readHiddenNavTabs());
