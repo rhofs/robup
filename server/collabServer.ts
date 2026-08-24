@@ -79,7 +79,21 @@ const server = new Server({
       return;
     }
 
-    const token = await getToken({ req: { headers: requestHeaders }, secret: process.env.AUTH_SECRET, secureCookie: false });
+    // Auth.js only sets the `__Secure-` cookie-name prefix when it thinks the site is on HTTPS
+    // (true in production, `siqt.no`; false in local dev, plain `http://localhost`) — getToken's
+    // `secureCookie` option has to match that or it looks up the wrong cookie name entirely and
+    // silently finds nothing. A hardcoded `secureCookie: false` here worked fine against every
+    // local/dev test (including the http-proxy verification done for the /collab routing fix —
+    // that ran over plain HTTP), but meant every real production connection carried a valid
+    // `__Secure-authjs.session-token` cookie that this lookup could never find, since it was only
+    // ever checking for the unprefixed name — silently rejecting *every* authenticated user with
+    // "no valid session", not just genuinely logged-out ones. That produced exactly the
+    // connect→auth-fail→reconnect loop (HocuspocusProvider auto-reconnects by default) the flicker
+    // report showed. Fixed by detecting which cookie is actually present on this specific request,
+    // rather than assuming one environment.
+    const cookieHeader = new Headers(requestHeaders).get('cookie') ?? '';
+    const secureCookie = cookieHeader.includes('__Secure-authjs.session-token=');
+    const token = await getToken({ req: { headers: requestHeaders }, secret: process.env.AUTH_SECRET, secureCookie });
     const userId = token?.sub;
     if (!userId) throw new Error('Unauthorized: no valid session');
 
