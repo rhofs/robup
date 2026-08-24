@@ -1937,6 +1937,14 @@ Live report right after the DocSubpagesPanel gating fix two entries up: on mobil
 
 `npx tsc --noEmit -p .`, `npm run build`, and a real `npm run dev` boot (curled `/login` → 200) all clean. Not visually re-verified in a real browser/device — no browser tool available this session. Flagged to the user to confirm on their phone: opening a multi-page doc should now show the editor at full width with a "Pages" button to reach the page list, not a cropped editor squeezed beside an always-visible page column.
 
+## Today's session (2026-08-25, continued a twelfth time) — A second Doc "actually missing" on mobile: not a data bug, a missing way back to the Docs browser
+
+Follow-up live report right after the DocSubpagesPanel mobile fix: with two top-level docs ("Test doc," which has a subpage, and "Enda en doc da"), mobile only ever showed the first one. Not a data/filtering bug — `DocsBrowser.tsx` (the folder/doc card grid, unchanged, no device branching) lists both correctly. The real gap: once a specific Doc is open, desktop always has `DocFolderTree` (the main sidebar, hidden below md) sitting right there to jump to any other Doc/Folder at a glance — mobile has no equivalent at all. The only way back to the browser grid was a small breadcrumb link (the current Space's name, buried in a `text-[11px]` row next to the "+ Add page"/export/link controls) — technically present and functionally identical on both platforms, but easy to miss entirely on a cramped phone screen. Once a user opened "Test doc," there was no obvious way back to discover "Enda en doc da" existed at all.
+
+**Fix**: a new, prominent `md:hidden` "← All docs" row at the top of the open-doc view, reusing the exact same `setDocsNavigation(docBreadcrumb.folderChain[0]?.id ?? null, null)` handler the small breadcrumb link already had — no new navigation semantics, just a much more discoverable entry point back to the same destination.
+
+`npx tsc --noEmit -p .`, `npm run build`, and a real `npm run dev` boot all clean. Not visually re-verified in a real browser/device.
+
 ## Known bugs / things to remember
 
 - **A Zustand selector that constructs a new object/array literal inline (instead of returning a reference already stable in the store) can cause an infinite React render loop, not just wasted re-renders.** Zustand's hook (built on `useSyncExternalStore`) re-invokes the selector on every store update and compares the result by reference; a selector that never returns a stable reference makes React conclude the snapshot is perpetually "unstable." Hit this in `app/page.tsx`'s `activeChatChannelLabel` (built `{kind, text}` inline) — reproduced live as "This page couldn't load" every time a DM was opened, diagnosed from a repeating `up`/`ud` React-internals stack in the browser console. Fix: select a plain reference (`.find()`'s result, or `null`) and derive anything object-shaped in a downstream `useMemo` instead.

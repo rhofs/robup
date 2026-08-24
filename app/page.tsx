@@ -47,6 +47,7 @@ import {
   ChevronDown,
   Lock,
   ChevronRight,
+  ChevronLeft,
   GripVertical,
   CornerDownRight,
   CornerUpLeft,
@@ -3845,6 +3846,22 @@ function PageContent() {
 
             {activeStandaloneDoc && currentSpace && (activeView === 'board' || activeView === 'docs') ? (
               <div className="w-full space-y-2">
+                {/* Desktop always has DocFolderTree (the main sidebar, hidden below md) sitting
+                    right there to jump to any other Doc/Folder at a glance — mobile has no
+                    equivalent, so the small breadcrumb link below (easy to miss next to "+ Add
+                    page"/export/link controls on a cramped screen) was the *only* way back to the
+                    Docs browser grid. Reported live as a doc "actually missing" on mobile — it
+                    wasn't gone, just not reachable in an obvious way once a different doc/folder
+                    is open. Same handler the breadcrumb's own Space-name segment already uses,
+                    just promoted to its own prominent, always-visible mobile-only row. */}
+                {activeView === 'docs' && (
+                  <button
+                    onClick={() => setDocsNavigation(docBreadcrumb.folderChain[0]?.id ?? null, null)}
+                    className="md:hidden flex items-center gap-1.5 text-xs text-neutral-400 hover:text-blue-400 cursor-pointer -ml-1 mb-1"
+                  >
+                    <ChevronLeft className="w-3.5 h-3.5" /> All docs
+                  </button>
+                )}
                 {!docBookHasPages && (
                   <button
                     onClick={() => createSpaceDoc(currentSpace.id, null, { parentId: activeStandaloneDoc.id })}
