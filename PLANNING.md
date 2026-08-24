@@ -1776,6 +1776,18 @@ User reported the pill still didn't appear at all after the contrast fix, plus a
 
 **Verified**: `npx tsc --noEmit` clean, `npm run build` succeeds, scripted login + `GET /` returns 200 with no error-overlay marker. **Not yet visually confirmed on-device** — this is now the third fix in this saga aimed at the same family of "mobile overlay state vs. activeView" bugs; worth a thorough real-device pass (rapid taps in varied orders, specifically starting and ending on Spaces) before considering this settled.
 
+## Today's session (2026-08-24, continued a sixth time) — Found why the active-tab pill was truly invisible: a negative z-index escaping to the wrong stacking context, plus LAN dev testing set up for faster iteration
+
+User set up local LAN testing this round (`npm run dev` + `http://192.168.1.51.nip.io:3000` on their phone, already configured earlier in the project via `AUTH_URL`) to iterate faster than a full Pterodactyl redeploy each time — hit PowerShell's default script-execution restriction (`npm.ps1 cannot be loaded because running scripts is disabled`) first, fixed globally with `Set-ExecutionPolicy -Scope CurrentUser -ExecutionPolicy RemoteSigned` (persists across terminal sessions, no admin rights needed).
+
+**Real root cause of the "invisible pill" found**: `-z-10` on the pill (used to tuck it behind its button's own icon/label) doesn't mean "one layer behind this element" — a negative z-index escapes to the *nearest ancestor that actually establishes a stacking context*. The button itself (`position: relative`, no explicit z-index) does **not** establish one on its own, so the negative z-index escaped all the way up to the outer wrapper (`relative z-40`) several levels up — meaning the pill was rendering **behind the entire nav bar's own opaque background**, correctly present in the DOM the whole time but completely invisible. Fixed by adding `z-0` to each button (giving it, combined with its existing `position: relative`, its own local stacking context), scoping the `-z-10` pill correctly to just that button's own content. Also dropped the pill's border/ring per request, keeping just the tinted fill.
+
+**Also surfaced a real design tradeoff, not yet resolved**: switching between one of the 3 primary tabs and the 4th (pinned/dynamic) slot is a hard cut, not a slide — because the pinned slot's pill deliberately uses a *separate* `layoutId` (shared with the grid panel for the morph animation, which the user explicitly confirmed works well and asked not to touch) rather than joining the primary tabs' shared sliding group. Unifying all 4 into one continuous slide would mean one element trying to serve two different shared-layout roles at once (slide-among-tabs vs. grow-into-panel), risking visual conflicts between the two. Recommended keeping this as-is (fade only for the 4th slot) rather than risk the already-approved morph; **awaiting the user's decision**.
+
+**Also clarified a false alarm**: user reported the fix worked locally but reverted after a production redeploy — turned out to simply be that the z-index fix hadn't been pushed to git yet at that point, so Pterodactyl's pull picked up the previous (still-broken) commit. Not a real dev-vs-production discrepancy.
+
+**Verified**: `npx tsc --noEmit` clean, `npm run build` succeeds, scripted login + `GET /` returns 200 with no error-overlay marker.
+
 ## Known bugs / things to remember
 
 - **dnd-kit gotcha**: `useDraggable`/`useDroppable` bind to the *nearest ancestor* `DndContext` by React-tree position, not by id-naming intent. Fix: one shared `DndContext` for all sidebar/task dragging, dispatch in `onDragEnd` by inspecting the dragged id's prefix (`task id`, `list-drag:`, `folder-drag:`, `space-drag:`).

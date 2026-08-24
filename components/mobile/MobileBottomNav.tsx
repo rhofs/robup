@@ -92,14 +92,21 @@ export default function MobileBottomNav({ navTabs, menuOpen, onOpenMenu, onClose
                 onNavigate();
                 (isSpaces ? onOpenSpaces : tab.onClick)();
               }}
-              className={`relative flex flex-col items-center justify-center gap-0.5 px-4 py-2 rounded-full transition cursor-pointer ${
+              className={`relative z-0 flex flex-col items-center justify-center gap-0.5 px-4 py-2 rounded-full transition cursor-pointer ${
                 active ? 'text-blue-400' : 'text-neutral-500'
               }`}
             >
+              {/* z-0 on the button (above) + -z-10 here is deliberate, not decorative: a negative
+                  z-index escapes to the nearest ancestor that actually establishes a stacking
+                  context, not just "one layer behind this element's own siblings." Without z-0 on
+                  the button, that ancestor was the outer z-40 wrapper several levels up — meaning
+                  this pill painted behind the *entire nav bar's own opaque background*, rendering
+                  correctly in the DOM but completely invisible. z-0 scopes the negative z-index to
+                  just this button, putting the pill behind its own icon/label as intended. */}
               {active && (
                 <motion.div
                   layoutId="mobileNavPill"
-                  className="absolute inset-0 bg-blue-500/15 ring-1 ring-inset ring-blue-500/30 rounded-full -z-10"
+                  className="absolute inset-0 bg-blue-500/15 rounded-full -z-10"
                   transition={{ type: 'spring', stiffness: 500, damping: 34 }}
                 />
               )}
@@ -115,7 +122,7 @@ export default function MobileBottomNav({ navTabs, menuOpen, onOpenMenu, onClose
         })}
         <button
           onClick={handlePinnedTap}
-          className={`relative flex flex-col items-center justify-center gap-0.5 px-4 py-2 rounded-full transition cursor-pointer ${
+          className={`relative z-0 flex flex-col items-center justify-center gap-0.5 px-4 py-2 rounded-full transition cursor-pointer ${
             pinnedActive ? 'text-blue-400' : 'text-neutral-500'
           }`}
         >
