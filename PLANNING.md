@@ -1748,6 +1748,16 @@ With nav taps confirmed working, the user asked to pick the pill-to-panel morph 
 
 **Verified**: `npx tsc --noEmit` clean, `npm run build` succeeds, scripted login + `GET /` returns 200 with no error-overlay marker. **Not yet visually confirmed on-device** — this is a genuinely new attempt at real shared-layout animation in this app (distinct from the already-working `mobileNavPill` bubble slide, which only ever slides a same-shaped pill between siblings, never changes shape/border-radius) — needs the user's phone to confirm the corner-radius interpolation and overall feel actually reads as smooth "growing from the button," not just that it doesn't crash.
 
+## Today's session (2026-08-24, continued a third time) — Two Spaces/Planner tabs lighting up at once, and the morph animation reported as not visible at all
+
+User reported two things after the morph re-add: (1) the "grow from the button" animation doesn't visibly happen at all, and (2) going from Planner to Spaces leaves **both** tabs highlighted blue at once (Chat still behaves correctly — only Chat lights up when active).
+
+**(2) is a real, understood regression from earlier today's Spaces-highlight fix**: opening Spaces only sets `mobileSpacesOpen`, never `activeView` — so whatever tab was genuinely active before (e.g. Planner) stays "true" underneath the whole time you're just browsing Spaces, and now Spaces *also* lights up via the `spacesOpen` OR-condition added earlier today. Fixed with a `!spacesOpen` guard on every *other* tab's active state (`components/mobile/MobileBottomNav.tsx`) — the Spaces screen visually covers everything while open, so nothing else should read as active at the same time.
+
+**(1) is still unresolved and needs more diagnosis before a 4th blind attempt.** Two attempts at a shared-`layoutId` container-transform between the nav button's pill and the grid panel have now both failed to produce a visible animation on a real device, despite the second attempt following framer-motion's own documented pattern for this (two independently-`AnimatePresence`-wrapped instances sharing one id, gated so only one is ever mounted at a time). Rather than guess a third implementation blind, next step is to ask the user a narrower diagnostic question: does the grid panel appear with *any* animation at all (a fade, a pop), or does it snap into existence with literally zero transition? That distinguishes "the shared-layout FLIP specifically isn't triggering" (opacity/scale still plays) from "something more fundamental is preventing any animation on this element" — worth checking directly rather than continuing to reason about it from code alone, since the last two rounds of guessing from code both turned out to explain the wrong bug.
+
+**Verified** (the tab-highlight fix only): `npx tsc --noEmit` clean, `npm run build` succeeds, scripted login + `GET /` returns 200 with no error-overlay marker.
+
 ## Known bugs / things to remember
 
 - **dnd-kit gotcha**: `useDraggable`/`useDroppable` bind to the *nearest ancestor* `DndContext` by React-tree position, not by id-naming intent. Fix: one shared `DndContext` for all sidebar/task dragging, dispatch in `onDragEnd` by inspecting the dragged id's prefix (`task id`, `list-drag:`, `folder-drag:`, `space-drag:`).

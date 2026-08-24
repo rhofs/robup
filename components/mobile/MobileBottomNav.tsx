@@ -71,7 +71,11 @@ export default function MobileBottomNav({ navTabs, menuOpen, onOpenMenu, onClose
           const isSpaces = tab.id === 'board';
           const Icon = isSpaces ? LayoutGrid : tab.icon;
           const label = isSpaces ? 'Spaces' : tab.label;
-          const active = isSpaces ? tab.active || spacesOpen : tab.active;
+          // Opening Spaces doesn't change activeView, so whatever tab was active before stays
+          // "true" underneath — without the `!spacesOpen` guard here, that stale tab and Spaces
+          // would both light up at once. The Spaces screen visually covers everything while open,
+          // so nothing else should read as active at the same time.
+          const active = isSpaces ? tab.active || spacesOpen : tab.active && !spacesOpen;
           return (
             <button
               key={tab.id}
