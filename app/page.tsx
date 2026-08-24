@@ -750,14 +750,22 @@ function PageContent() {
   // destination instead of picking something from inside them — Spaces (or the Menu grid, or the
   // Chat/Planner filter sheets) just stayed visually on top forever after being opened once,
   // silently masking every subsequent tap even though `activeView` (and the URL) really was
-  // switching correctly underneath the whole time. Closing all of them on any view change is the
-  // fix — a genuine navigation away from wherever they're relevant should always win.
-  useEffect(() => {
+  // switching correctly underneath the whole time.
+  const closeMobileOverlays = useCallback(() => {
     setMobileSpacesOpen(false);
     setMobileMenuOpen(false);
     setMobileChatSheetOpen(false);
     setMobileCalendarFilterOpen(false);
-  }, [activeView]);
+  }, []);
+  // Backstop for activeView changes that don't go through one of the nav's own tap handlers below
+  // (e.g. a deep link, or opening a task from search) — MobileBottomNav/AppLauncherGrid also call
+  // closeMobileOverlays() directly at the moment of every nav tap, which is the actual fix: this
+  // effect alone isn't enough on its own, since it only fires when activeView's *value* changes —
+  // re-tapping a destination you were already on before opening Spaces (activeView never changes)
+  // silently skipped it, leaving Spaces stuck open exactly when the tap should have closed it.
+  useEffect(() => {
+    closeMobileOverlays();
+  }, [activeView, closeMobileOverlays]);
   const [hideWeekNumbers, setHideWeekNumbers] = useState(false);
   useEffect(() => {
     setHiddenNavTabs(readHiddenNavTabs());
@@ -4294,6 +4302,7 @@ function PageContent() {
         onOpenSpaces={() => setMobileSpacesOpen(true)}
         spacesOpen={mobileSpacesOpen}
         pinnedTile={pinnedMobileTile}
+        onNavigate={closeMobileOverlays}
       />
 
       {/* ================= BULK ACTION BAR ================= */}
@@ -5976,6 +5985,7 @@ function PageContent() {
         onSelectTile={pinMobileMenuTile}
         onOpenSettings={() => setSettingsOpen(true)}
         onOpenTrash={() => setTrashOpen(true)}
+        onNavigate={closeMobileOverlays}
       />
       <MobileSpacesSheet
         open={mobileSpacesOpen}

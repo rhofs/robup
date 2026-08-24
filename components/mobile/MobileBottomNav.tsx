@@ -24,6 +24,14 @@ type Props = {
   // 4th slot renders *that* tile's icon/label instead of a generic "Menu" hamburger, ClickUp-style.
   // null only before any tile has ever been picked (falls back to a plain Menu icon/label).
   pinnedTile: MenuTile | null;
+  // Closes every mobile-only overlay screen (Spaces, the grid, the Chat/Planner filter sheets).
+  // Called explicitly at the start of every tap here, not left to a `useEffect` keyed on
+  // activeView alone — re-tapping a destination you were already on before opening Spaces (e.g.
+  // Planner → open Spaces to browse → tap Planner again) never actually changes activeView's
+  // *value*, so an effect watching only that would silently never fire, leaving Spaces stuck open
+  // and reading as "the tap did nothing." Calling this directly guarantees a clean slate regardless
+  // of whether the destination happens to match what's already active.
+  onNavigate: () => void;
 };
 
 // Mobile-only bottom nav (md:hidden) — reads the exact same visibleNavTabs/setActiveView plumbing
@@ -39,12 +47,13 @@ type Props = {
 // (AppLauncherGrid.tsx) — only one of the two is ever mounted at a time (this pill while the grid
 // is closed, the panel while it's open), so framer-motion grows the small pill directly into the
 // full panel and back instead of two independent, unrelated animations.
-export default function MobileBottomNav({ navTabs, menuOpen, onOpenMenu, onCloseMenu, onOpenSpaces, spacesOpen, pinnedTile }: Props) {
+export default function MobileBottomNav({ navTabs, menuOpen, onOpenMenu, onCloseMenu, onOpenSpaces, spacesOpen, pinnedTile, onNavigate }: Props) {
   const primaryTabs = PRIMARY_NAV_TAB_IDS
     .map((id) => navTabs.find((t) => t.id === id))
     .filter((t): t is NavTab => !!t);
 
   const handlePinnedTap = () => {
+    onNavigate();
     if (menuOpen) {
       onCloseMenu();
     } else if (pinnedTile && !pinnedTile.active) {
@@ -79,7 +88,10 @@ export default function MobileBottomNav({ navTabs, menuOpen, onOpenMenu, onClose
           return (
             <button
               key={tab.id}
-              onClick={isSpaces ? onOpenSpaces : tab.onClick}
+              onClick={() => {
+                onNavigate();
+                (isSpaces ? onOpenSpaces : tab.onClick)();
+              }}
               className={`relative flex flex-col items-center justify-center gap-0.5 px-4 py-2 rounded-full transition cursor-pointer ${
                 active ? 'text-blue-400' : 'text-neutral-500'
               }`}

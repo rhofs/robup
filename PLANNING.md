@@ -1766,6 +1766,16 @@ Follow-up clarified the previous report entirely: the grid popup's own grow/fade
 
 **Verified**: `npx tsc --noEmit` clean, `npm run build` succeeds, scripted login + `GET /` returns 200 with no error-overlay marker. **Not yet visually confirmed on-device.**
 
+## Today's session (2026-08-24, continued a fifth time) — Found the real reason the pill "never" showed: navigating away from Spaces silently failed whenever the destination was already the active view underneath
+
+User reported the pill still didn't appear at all after the contrast fix, plus a genuinely new, inconsistent bug: going from Spaces to Planner sometimes just doesn't work, but a few extra taps elsewhere (Chat → Spaces → Planner) can suddenly make it work again — and going from "My Tasks" (a Menu-grid tile) to Spaces could leave both lit blue. All symptoms specifically involved Spaces, never the other 3 destinations directly.
+
+**Root cause**: the auto-close effect added earlier today (`useEffect(() => { setMobileSpacesOpen(false); ... }, [activeView])`) only fires when `activeView`'s *value* actually changes. Opening Spaces never touches `activeView` at all — so if you were already on Planner, opened Spaces to browse, then tapped Planner again to go back, `activeView` was `'calendar'` both before and after that tap: no value change, so the effect never re-ran, and the Spaces sheet stayed stuck open — reading as "the tap did nothing." Going through Chat first works because that *does* change `activeView` (`'calendar'` → `'chat'` → `'calendar'`), so the effect correctly fires and closes Spaces. This also explains the "invisible pill" report from the previous round: if a tap sometimes silently fails to actually switch `activeView`, there's nothing for the active-tab pill to animate to — no bug in the pill itself, just nothing ever triggering it.
+
+**Fix**: added an explicit `closeMobileOverlays` callback in `app/page.tsx`, threaded into `MobileBottomNav.tsx` and `AppLauncherGrid.tsx` as a new `onNavigate` prop, called directly at the *start* of every nav-triggering tap (primary tabs, the pinned 4th-slot button, every grid tile) — not left to the reactive effect alone, which is kept only as a backstop for `activeView` changes that don't go through one of these tap handlers (e.g. a deep link). This guarantees a clean overlay-closed state on every deliberate navigation regardless of whether the destination happens to match what's already active underneath.
+
+**Verified**: `npx tsc --noEmit` clean, `npm run build` succeeds, scripted login + `GET /` returns 200 with no error-overlay marker. **Not yet visually confirmed on-device** — this is now the third fix in this saga aimed at the same family of "mobile overlay state vs. activeView" bugs; worth a thorough real-device pass (rapid taps in varied orders, specifically starting and ending on Spaces) before considering this settled.
+
 ## Known bugs / things to remember
 
 - **dnd-kit gotcha**: `useDraggable`/`useDroppable` bind to the *nearest ancestor* `DndContext` by React-tree position, not by id-naming intent. Fix: one shared `DndContext` for all sidebar/task dragging, dispatch in `onDragEnd` by inspecting the dragged id's prefix (`task id`, `list-drag:`, `folder-drag:`, `space-drag:`).

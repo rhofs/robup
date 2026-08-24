@@ -18,6 +18,11 @@ type Props = {
   onSelectTile: (id: string) => void;
   onOpenSettings: () => void;
   onOpenTrash: () => void;
+  // Closes every other mobile-only overlay (Spaces, the Chat/Planner filter sheets) — called
+  // alongside onClose() on every tile pick, since Spaces can be left open underneath the grid (the
+  // pinned nav button can open this grid while Spaces is still open) and a tile here always means
+  // "go somewhere else now."
+  onNavigate: () => void;
 };
 
 type TileProps = {
@@ -70,6 +75,7 @@ export default function AppLauncherGrid({
   onSelectTile,
   onOpenSettings,
   onOpenTrash,
+  onNavigate,
 }: Props) {
   // Only ever a real actionable tile on Chrome/Edge-family browsers that fired
   // `beforeinstallprompt` (see useInstallPrompt.ts) — iOS has no programmatic install prompt at
@@ -112,6 +118,7 @@ export default function AppLauncherGrid({
                     badge={tile.badge}
                     selected={tile.id === pinnedTileId}
                     onClick={() => {
+                      onNavigate();
                       onSelectTile(tile.id);
                       tile.onClick();
                       onClose();
