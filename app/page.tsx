@@ -628,16 +628,35 @@ function PageContent() {
   // messages themselves live inside ChatSidebar/ChatPanel, which read the rest of useChatStore
   // directly. Checks real channels (current workspace) and DMs (flat, workspace-agnostic) since
   // both now share the one 'chat' view.
-  const activeChatChannelLabel = useChatStore((s) => {
+  //
+  // Split into two steps deliberately — a real, previously-shipped infinite-render-loop bug lived
+  // here: the Zustand selector used to build the {kind, text} object directly inline, which
+  // constructs a brand-new object on literally every store read (not just when the active
+  // channel/DM actually changes). Zustand's hook re-invokes the selector on every store update
+  // (the 30s chat-unread poll above alone guarantees a few per minute) and compares the result by
+  // reference — a selector that never returns a stable reference makes React's
+  // useSyncExternalStore conclude the snapshot is perpetually "unstable," which manifests as an
+  // uncatchable render loop (repeating update/dispatch frames in the console, the tab hanging or
+  // showing a generic browser error page — reported live as "This page couldn't load" every time
+  // a DM was opened). Fix: the selector itself returns a stable reference pulled straight from the
+  // store's own arrays (.find() on an unchanged array element is reference-stable across
+  // re-renders, same safe shape the old channel-only version of this selector already had) — the
+  // {kind, text} object is now built in a separate useMemo, which only ever runs when that
+  // reference (or currentUserId) actually changes.
+  const activeChatEntity = useChatStore((s) => {
     const id = s.activeChannelId;
     if (!id) return null;
     const channel = activeWorkspaceId ? (s.channelsByWorkspace[activeWorkspaceId] || []).find((c) => c.id === id) : null;
-    if (channel) return { kind: 'channel' as const, text: channel.name ?? '' };
-    const dm = s.dms.find((d) => d.id === id);
-    if (!dm) return null;
-    const others = (dm.members ?? []).map((m) => m.user).filter((u) => u.id !== currentUserId);
-    return { kind: 'dm' as const, text: others.map((u) => u.name).join(', ') || 'Just you' };
+    return channel ?? s.dms.find((d) => d.id === id) ?? null;
   });
+  const activeChatChannelLabel = useMemo(() => {
+    if (!activeChatEntity) return null;
+    if (activeChatEntity.type !== 'dm' && activeChatEntity.type !== 'group_dm') {
+      return { kind: 'channel' as const, text: activeChatEntity.name ?? '' };
+    }
+    const others = (activeChatEntity.members ?? []).map((m) => m.user).filter((u) => u.id !== currentUserId);
+    return { kind: 'dm' as const, text: others.map((u) => u.name).join(', ') || 'Just you' };
+  }, [activeChatEntity, currentUserId]);
 
   // Breadcrumb's own first segment — used to just say the literal word "Workspace" regardless of
   // which tab was open, which read as redundant/confusing once the actual workspace name is
