@@ -33,10 +33,12 @@ type Props = {
 // NOT already on the pinned destination jumps straight there; tapping it while you ARE there (or
 // while the grid is already open) opens/closes the picker grid instead. The small chevron is the
 // only visual "this is also a menu button" cue, also flipping open ClickUp-style.
-// Floating rounded pill (not a flush-edge bar) with a shared-layout "bubble" that slides between
-// the 3 primary tabs on selection — matches the reference. The 4th slot's own highlight is a plain
-// framer-motion opacity fade (not a shared layoutId with the grid panel — see AppLauncherGrid.tsx
-// for why that turned out to be the wrong tool here).
+// Floating rounded pill (not a flush-edge bar). The 3 primary tabs share a sliding "bubble"
+// (`layoutId="mobileNavPill"`) that moves between them on selection. The 4th slot's own background
+// pill shares a *separate* `layoutId` ("mobileMenuMorph") with the grid panel itself
+// (AppLauncherGrid.tsx) — only one of the two is ever mounted at a time (this pill while the grid
+// is closed, the panel while it's open), so framer-motion grows the small pill directly into the
+// full panel and back instead of two independent, unrelated animations.
 export default function MobileBottomNav({ navTabs, menuOpen, onOpenMenu, onCloseMenu, onOpenSpaces, spacesOpen, pinnedTile }: Props) {
   const primaryTabs = PRIMARY_NAV_TAB_IDS
     .map((id) => navTabs.find((t) => t.id === id))
@@ -102,12 +104,13 @@ export default function MobileBottomNav({ navTabs, menuOpen, onOpenMenu, onClose
           }`}
         >
           <AnimatePresence>
-            {pinnedActive && (
+            {!menuOpen && pinnedActive && (
               <motion.div
+                layoutId="mobileMenuMorph"
                 initial={{ opacity: 0 }}
                 animate={{ opacity: 1 }}
                 exit={{ opacity: 0 }}
-                transition={{ duration: 0.12 }}
+                transition={{ layout: { type: 'spring', stiffness: 380, damping: 30, mass: 0.9 }, opacity: { duration: 0.12 } }}
                 className="absolute inset-0 bg-neutral-800 rounded-full -z-10"
               />
             )}
