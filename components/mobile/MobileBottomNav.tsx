@@ -41,12 +41,14 @@ type Props = {
 // NOT already on the pinned destination jumps straight there; tapping it while you ARE there (or
 // while the grid is already open) opens/closes the picker grid instead. The small chevron is the
 // only visual "this is also a menu button" cue, also flipping open ClickUp-style.
-// Floating rounded pill (not a flush-edge bar). The 3 primary tabs share a sliding "bubble"
-// (`layoutId="mobileNavPill"`) that moves between them on selection. The 4th slot's own background
-// pill shares a *separate* `layoutId` ("mobileMenuMorph") with the grid panel itself
-// (AppLauncherGrid.tsx) — only one of the two is ever mounted at a time (this pill while the grid
-// is closed, the panel while it's open), so framer-motion grows the small pill directly into the
-// full panel and back instead of two independent, unrelated animations.
+// Floating rounded pill (not a flush-edge bar). All 4 slots share one sliding "bubble"
+// (`layoutId="mobileNavPill"`) that moves between whichever is active, including the 4th
+// (dynamic) slot — so switching to/from it slides like the other 3, not a hard cut. That 4th
+// slot *also* carries a second, invisible `layoutId="mobileMenuMorph"` anchor (opacity 0, purely
+// for position/size tracking) shared with the grid panel itself (AppLauncherGrid.tsx) — only one
+// of {this anchor, the panel} is ever mounted at a time, so framer-motion grows the panel directly
+// out of this button's geometry when the grid opens. Two separate shared identities stacked in the
+// same spot: one purely for color/sliding, one purely for the popup's own grow-animation.
 export default function MobileBottomNav({ navTabs, menuOpen, onOpenMenu, onCloseMenu, onOpenSpaces, spacesOpen, pinnedTile, onNavigate }: Props) {
   const primaryTabs = PRIMARY_NAV_TAB_IDS
     .map((id) => navTabs.find((t) => t.id === id))
@@ -126,15 +128,19 @@ export default function MobileBottomNav({ navTabs, menuOpen, onOpenMenu, onClose
             pinnedActive ? 'text-blue-400' : 'text-neutral-500'
           }`}
         >
+          {/* Invisible — exists purely so the grid panel (AppLauncherGrid.tsx) has this button's
+              exact position/size to FLIP from when it opens, via the shared layoutId. The
+              *visible* highlight color comes from the mobileNavPill pill right below instead,
+              which is what lets this button join the other 3 tabs' continuous sliding animation
+              rather than being a disconnected hard cut — two separate layoutId identities
+              occupying the same spot, one purely for geometry, one purely for color. */}
+          {!menuOpen && <motion.div layoutId="mobileMenuMorph" style={{ opacity: 0 }} className="absolute inset-0 rounded-full -z-10" />}
           <AnimatePresence>
             {!menuOpen && pinnedActive && (
               <motion.div
-                layoutId="mobileMenuMorph"
-                initial={{ opacity: 0 }}
-                animate={{ opacity: 1 }}
-                exit={{ opacity: 0 }}
-                transition={{ layout: { type: 'spring', stiffness: 380, damping: 30, mass: 0.9 }, opacity: { duration: 0.12 } }}
-                className="absolute inset-0 bg-neutral-800 rounded-full -z-10"
+                layoutId="mobileNavPill"
+                className="absolute inset-0 bg-blue-500/15 rounded-full -z-10"
+                transition={{ type: 'spring', stiffness: 500, damping: 34 }}
               />
             )}
           </AnimatePresence>

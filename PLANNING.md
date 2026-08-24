@@ -1788,6 +1788,12 @@ User set up local LAN testing this round (`npm run dev` + `http://192.168.1.51.n
 
 **Verified**: `npx tsc --noEmit` clean, `npm run build` succeeds, scripted login + `GET /` returns 200 with no error-overlay marker.
 
+## Today's session (2026-08-24, continued a seventh time) — Unified the active-tab pill across all 4 nav slots, confirmed working via local LAN testing
+
+User confirmed the pill worked on the 3 primary tabs but hard-cut (no slide) to/from the 4th (dynamic) slot — asked if it could join the same animation. Resolved by splitting the 4th slot's background into two separate, stacked `layoutId`-tracked elements instead of one dual-purpose one: an **invisible** anchor (`layoutId="mobileMenuMorph"`, `opacity: 0`) that exists purely so the grid panel (`AppLauncherGrid.tsx`) still has this button's exact position/size to grow from when it opens, and a **visible** pill (`layoutId="mobileNavPill"`, same blue tint/spring as the other 3) that now joins their shared sliding group. One element can't serve two different shared-layout identities at once (slide-with-tabs vs. grow-into-panel), but two elements occupying the same spot — one purely for geometry, one purely for color — can each do their own job independently without conflicting.
+
+**Confirmed working** via the LAN dev-testing setup from earlier this session (`npm run dev` + phone on `http://192.168.1.51.nip.io:3000`) before pushing — first genuinely on-device-confirmed fix in this whole multi-round mobile-nav saga, rather than shipped on faith. `npx tsc --noEmit` / `npm run build` / scripted smoke check all clean as usual.
+
 ## Known bugs / things to remember
 
 - **dnd-kit gotcha**: `useDraggable`/`useDroppable` bind to the *nearest ancestor* `DndContext` by React-tree position, not by id-naming intent. Fix: one shared `DndContext` for all sidebar/task dragging, dispatch in `onDragEnd` by inspecting the dragged id's prefix (`task id`, `list-drag:`, `folder-drag:`, `space-drag:`).
