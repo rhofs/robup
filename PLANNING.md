@@ -1963,6 +1963,14 @@ Immediate follow-up to the previous entry's `pinnedActive` color fix: tapping th
 
 `npx tsc --noEmit -p .` and `npm run build` both clean.
 
+## Today's session (2026-08-25, continued a fifteenth time) — Mobile Spaces opened showing only the personal workspace
+
+Live report: tapping Spaces on mobile only ever showed "Personal" (the auto-created single-space personal workspace behind "My tasks"), not the real team workspace's actual Spaces. Confirmed the exact same fallback desktop's own Tasks/Spaces rail icon already has (`handleTasksNavClick`, `app/page.tsx`: if `currentWorkspace?.isPersonal`, switch `activeWorkspaceId` to the first non-personal workspace before switching view) was never applied to the mobile bottom nav's own Spaces button — `MobileBottomNav.tsx`'s `onOpenSpaces` just called `setMobileSpacesOpen(true)` directly, so if `activeWorkspaceId` was still pointed at the personal workspace (e.g. landed there via "My Tasks"), the Spaces sheet rendered `currentWorkspace.spaces` for the *personal* workspace — which is just the one bare space every personal workspace auto-gets, nothing else. Applied the identical fallback to the mobile `onOpenSpaces` handler.
+
+Not addressed (not what was reported): switching between *multiple* real, non-personal workspaces on mobile — there's no mobile equivalent of the desktop workspace switcher dropdown at all currently. This fix only makes Spaces correctly fall back to *a* real workspace instead of Personal; if the user has more than one real workspace and wants to choose between them on mobile, that's a separate, currently-unbuilt feature.
+
+`npx tsc --noEmit -p .`, `npm run build`, and a real `npm run dev` boot all clean.
+
 ## Checkpoint — end of day, 2026-08-25
 
 Everything below is committed and pushed to `origin/main` (latest: `b0acb64`). Nothing has been confirmed working on a real device yet for anything from `2e7ccb6` onward (the mobile-focused run) — all of it compiled/built clean and got a real `npm run dev` boot check, but this session had no browser/device tool, so the visual/interaction behavior itself is unverified. **Next session should start with a Reinstall + a pass through this list on an actual phone**, roughly in the order it was built:

@@ -4370,7 +4370,18 @@ function PageContent() {
         menuOpen={mobileMenuOpen}
         onOpenMenu={() => setMobileMenuOpen(true)}
         onCloseMenu={() => setMobileMenuOpen(false)}
-        onOpenSpaces={() => setMobileSpacesOpen(true)}
+        onOpenSpaces={() => {
+          // Same fallback handleTasksNavClick already applies for the desktop rail's Tasks/Spaces
+          // icon — without it, opening the mobile Spaces sheet while activeWorkspaceId was still
+          // the personal workspace (e.g. landed there via "My Tasks") only ever showed that
+          // workspace's own single auto-created space (just "My tasks"), never the real team
+          // workspace's actual Spaces. Reported live as "trykker Spaces, ser bare Personal."
+          if (currentWorkspace?.isPersonal) {
+            const fallback = workspaces.find((w) => !w.isPersonal);
+            if (fallback) setActiveWorkspaceId(fallback.id);
+          }
+          setMobileSpacesOpen(true);
+        }}
         spacesOpen={mobileSpacesOpen}
         pinnedTile={pinnedMobileTile}
         onNavigate={closeMobileOverlays}
