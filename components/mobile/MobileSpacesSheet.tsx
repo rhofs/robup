@@ -6,6 +6,7 @@ import { ChevronRight, ChevronDown, Globe, X, Folder as FolderIconLucide, List a
 import type { HierarchySpace } from '../../store/useTaskStore';
 import { FOLDER_ICON_MAP } from '../FolderTree';
 import { getChildFolders, getListsIn, getBoardDocsIn } from '../../lib/folderTree';
+import { getChildDocFolders, getSpaceDocsIn } from '../../lib/docFolderTree';
 
 type Props = {
   open: boolean;
@@ -16,6 +17,12 @@ type Props = {
   onSelectSpace: (spaceId: string) => void;
   onSelectList: (spaceId: string, listId: string) => void;
   onSelectDoc: (spaceId: string, docId: string) => void;
+  // Opens a Doc from the *standalone* Docs tab tree (folderId/DocFolder axis — see
+  // lib/docFolderTree.ts), not the Tasks-tab board-folder axis onSelectDoc above already covers.
+  // Kept as its own callback (with the doc's own folderId, unlike onSelectDoc) since the caller
+  // (app/page.tsx) needs the real folderId to correctly seed Docs-tab breadcrumb navigation —
+  // board-folder docs have no meaningful folderId to seed it with, this axis does.
+  onSelectSpaceDoc: (spaceId: string, docId: string, folderId: string | null) => void;
 };
 
 // Mobile Spaces landing — reachable from the bottom nav's "Spaces" tab (see MobileBottomNav.tsx)
@@ -46,9 +53,17 @@ export default function MobileSpacesSheet({
   onSelectSpace,
   onSelectList,
   onSelectDoc,
+  onSelectSpaceDoc,
 }: Props) {
   const [expandedSpaceIds, setExpandedSpaceIds] = useState<Set<string>>(new Set());
   const [expandedFolderIds, setExpandedFolderIds] = useState<Set<string>>(new Set());
+  // Whether each Space's own "Docs" pseudo-row (the standalone Docs-tab tree, a completely
+  // separate axis from the Task-Folder tree above it) is expanded — and, once it is, which of its
+  // own DocFolders are. Two more sets rather than reusing expandedFolderIds/expandedSpaceIds: a
+  // Task Folder and a DocFolder can legitimately share an id-lookalike coincidence is impossible
+  // (real uuids), but conceptually they're different trees and deserve independent expand state.
+  const [expandedDocsSpaceIds, setExpandedDocsSpaceIds] = useState<Set<string>>(new Set());
+  const [expandedDocFolderIds, setExpandedDocFolderIds] = useState<Set<string>>(new Set());
 
   const toggleSpace = (spaceId: string) =>
     setExpandedSpaceIds((prev) => {
@@ -60,6 +75,22 @@ export default function MobileSpacesSheet({
 
   const toggleFolder = (folderId: string) =>
     setExpandedFolderIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(folderId)) next.delete(folderId);
+      else next.add(folderId);
+      return next;
+    });
+
+  const toggleDocsSpace = (spaceId: string) =>
+    setExpandedDocsSpaceIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(spaceId)) next.delete(spaceId);
+      else next.add(spaceId);
+      return next;
+    });
+
+  const toggleDocFolder = (folderId: string) =>
+    setExpandedDocFolderIds((prev) => {
       const next = new Set(prev);
       if (next.has(folderId)) next.delete(folderId);
       else next.add(folderId);
@@ -129,21 +160,53 @@ export default function MobileSpacesSheet({
                     )}
                   </button>
                   {isExpanded && (
-                    <SpaceContents
-                      space={space}
-                      folderId={null}
-                      depth={1}
-                      expandedFolderIds={expandedFolderIds}
-                      onToggleFolder={toggleFolder}
-                      onSelectList={(listId) => {
-                        onSelectList(space.id, listId);
-                        onClose();
-                      }}
-                      onSelectDoc={(docId) => {
-                        onSelectDoc(space.id, docId);
-                        onClose();
-                      }}
-                    />
+                    <>
+                      <SpaceContents
+                        space={space}
+                        folderId={null}
+                        depth={1}
+                        expandedFolderIds={expandedFolderIds}
+                        onToggleFolder={toggleFolder}
+                        onSelectList={(listId) => {
+                          onSelectList(space.id, listId);
+                          onClose();
+                        }}
+                        onSelectDoc={(docId) => {
+                          onSelectDoc(space.id, docId);
+                          onClose();
+                        }}
+                      />
+                      {/* Docs — a completely separate tree from the Task Folders above (the
+                          standalone Docs-tab's own DocFolder/Doc axis, lib/docFolderTree.ts), not
+                          nested under any Task Folder. Own top-level toggle row so it reads as its
+                          own section rather than one more Task Folder. */}
+                      <button
+                        onClick={() => toggleDocsSpace(space.id)}
+                        className="w-full flex items-center gap-2 py-2 rounded-lg text-left transition cursor-pointer hover:bg-neutral-800/60"
+                        style={{ paddingLeft: 28, paddingRight: 8 }}
+                      >
+                        <FileText className="w-4 h-4 shrink-0 text-neutral-400" />
+                        <span className="min-w-0 flex-1 text-[13px] text-neutral-300 truncate">Docs</span>
+                        {expandedDocsSpaceIds.has(space.id) ? (
+                          <ChevronDown className="w-3.5 h-3.5 text-neutral-600 shrink-0" />
+                        ) : (
+                          <ChevronRight className="w-3.5 h-3.5 text-neutral-600 shrink-0" />
+                        )}
+                      </button>
+                      {expandedDocsSpaceIds.has(space.id) && (
+                        <DocFolderContents
+                          space={space}
+                          folderId={null}
+                          depth={2}
+                          expandedDocFolderIds={expandedDocFolderIds}
+                          onToggleDocFolder={toggleDocFolder}
+                          onSelectDoc={(docId, docFolderId) => {
+                            onSelectSpaceDoc(space.id, docId, docFolderId);
+                            onClose();
+                          }}
+                        />
+                      )}
+                    </>
                   )}
                 </div>
               );
@@ -242,6 +305,77 @@ function SpaceContents({
           </button>
         );
       })}
+    </>
+  );
+}
+
+// Recursive — the standalone Docs-tab's own DocFolder/Doc tree (lib/docFolderTree.ts), a genuinely
+// separate axis from SpaceContents' Task-Folder tree above. Same expand-in-place shape.
+function DocFolderContents({
+  space,
+  folderId,
+  depth,
+  expandedDocFolderIds,
+  onToggleDocFolder,
+  onSelectDoc,
+}: {
+  space: HierarchySpace;
+  folderId: string | null;
+  depth: number;
+  expandedDocFolderIds: Set<string>;
+  onToggleDocFolder: (folderId: string) => void;
+  onSelectDoc: (docId: string, docFolderId: string | null) => void;
+}) {
+  const childDocFolders = getChildDocFolders(space, folderId);
+  const docs = getSpaceDocsIn(space, folderId);
+
+  if (childDocFolders.length === 0 && docs.length === 0) {
+    return <p className="text-[11px] text-neutral-600 italic px-2 py-1.5" style={{ paddingLeft: 12 + depth * 20 }}>Empty</p>;
+  }
+
+  return (
+    <>
+      {childDocFolders.map((folder) => {
+        const isExpanded = expandedDocFolderIds.has(folder.id);
+        return (
+          <div key={folder.id}>
+            <button
+              onClick={() => onToggleDocFolder(folder.id)}
+              className="w-full flex items-center gap-2 py-2 rounded-lg text-left transition cursor-pointer hover:bg-neutral-800/60"
+              style={{ paddingLeft: 8 + depth * 20, paddingRight: 8 }}
+            >
+              <FolderIconLucide className="w-4 h-4 shrink-0" style={{ color: folder.color || undefined }} />
+              <span className="min-w-0 flex-1 text-[13px] text-neutral-300 truncate">{folder.name}</span>
+              {isExpanded ? (
+                <ChevronDown className="w-3.5 h-3.5 text-neutral-600 shrink-0" />
+              ) : (
+                <ChevronRight className="w-3.5 h-3.5 text-neutral-600 shrink-0" />
+              )}
+            </button>
+            {isExpanded && (
+              <DocFolderContents
+                space={space}
+                folderId={folder.id}
+                depth={depth + 1}
+                expandedDocFolderIds={expandedDocFolderIds}
+                onToggleDocFolder={onToggleDocFolder}
+                onSelectDoc={onSelectDoc}
+              />
+            )}
+          </div>
+        );
+      })}
+      {docs.map((doc) => (
+        <button
+          key={doc.id}
+          onClick={() => onSelectDoc(doc.id, folderId)}
+          className="w-full flex items-center gap-2 py-2 rounded-lg text-left transition cursor-pointer hover:bg-neutral-800/60"
+          style={{ paddingLeft: 8 + depth * 20, paddingRight: 8 }}
+        >
+          <FileText className="w-3.5 h-3.5 shrink-0" style={{ color: doc.textColor || doc.color || undefined }} />
+          <span className="min-w-0 flex-1 text-[13px] text-neutral-400 truncate">{doc.title || 'Untitled'}</span>
+        </button>
+      ))}
     </>
   );
 }

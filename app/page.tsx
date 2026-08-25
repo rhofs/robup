@@ -2904,13 +2904,11 @@ function PageContent() {
           have to carry that weight themselves (previously both lived stacked at the very top
           of the sidebar, which read as cramped). ================= */}
       <header className="h-14 shrink-0 border-b border-neutral-800/80 bg-neutral-950 flex items-center px-3 gap-4">
-        {/* flex-1 min-w-0 on mobile (not a fixed w-32) — a long workspace name (e.g. "New Game
-            Media") left only ~70px of actual text space once the logo/chevron were subtracted
-            from a rigid 128px box, and truncate's ellipsis inside that little room read as the
-            name visually spilling over the search bar below it. Growing to fill the row (search
-            shrinks to an icon-only button on mobile, see below) gives it real room; desktop keeps
-            its unchanged fixed w-64 alongside the full search bar. */}
-        <div className="flex items-center gap-2 min-w-0 flex-1 md:flex-none md:shrink-0 md:w-64">
+        {/* Workspace name/switcher is desktop-only now — mobile switches workspace from the
+            popup menu's own "Workspace" section (AppLauncherGrid.tsx) instead, per explicit
+            feedback that having it in both places (top bar AND the popup) was one too many. The
+            "S" brand mark stays visible on mobile as a plain (non-interactive) logo. */}
+        <div className="flex items-center gap-2 shrink-0 md:w-64">
           <div className="w-8 h-8 rounded bg-gradient-to-br from-blue-500 to-blue-700 flex items-center justify-center font-black text-white shadow-lg shadow-blue-500/20 shrink-0">
             S
           </div>
@@ -2924,7 +2922,7 @@ function PageContent() {
             anchor={
               <button
                 onClick={() => setWorkspaceSwitcherOpen((o) => !o)}
-                className="min-w-0 flex-1 flex items-center justify-between gap-1 cursor-pointer group"
+                className="hidden md:flex min-w-0 flex-1 items-center justify-between gap-1 cursor-pointer group"
                 title="Switch workspace"
               >
                 <div className="min-w-0 text-left">
@@ -6162,6 +6160,12 @@ function PageContent() {
           setNavigation(spaceId, []);
           setDocsNavigation(null, docId);
           setActiveView('board');
+        }}
+        onSelectSpaceDoc={(spaceId, docId, folderId) => {
+          setModalTaskStack([]);
+          setNavigation(spaceId, []);
+          setDocsNavigation(folderId, docId);
+          setActiveView('docs');
         }}
       />
       <MobileChatSheet

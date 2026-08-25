@@ -2007,6 +2007,15 @@ Five items from a live feedback round, two of which turned out to be the same re
 
 `npx tsc --noEmit -p .`, `npm run build`, and a real `npm run dev` boot all clean. Not visually re-verified in a real browser/device.
 
+## Today's session (2026-08-25, continued a nineteenth time) — Mobile header decluttered further, and the standalone Docs tree now reachable from the mobile Spaces sheet
+
+Two items:
+
+1. **Workspace name/switcher removed from the mobile top bar.** Now that yesterday's mobile popup menu has its own "Workspace" section, having the switcher in both places was one too many per explicit feedback — the desktop-only `hidden md:flex` treatment now applies to the switcher button itself (the "S" brand mark stays visible on mobile as plain, non-interactive branding; the header row otherwise just has the search icon).
+2. **Docs now reachable from the mobile Spaces tree — they weren't before.** Two sessions ago the tree gained Docs support, but only via `lib/folderTree.ts`'s `getBoardDocsIn` — the Tasks-tab sidebar's own boardFolderId axis, which is a real but rarely-used feature (most people's actual docs live in the *standalone* Docs tab's own `DocFolder`/`folderId` tree instead, which the mobile tree never touched at all). Added a new "📄 Docs" pseudo-row inside each expanded Space (a sibling of the Task-Folder tree, not nested under it — the two are genuinely independent axes, matching desktop's own Tasks-tab vs. Docs-tab split), backed by a new recursive `DocFolderContents` (mirrors `SpaceContents`'s shape exactly, but reads `lib/docFolderTree.ts`'s `getChildDocFolders`/`getSpaceDocsIn`). Selecting a doc here calls the new `onSelectSpaceDoc(spaceId, docId, folderId)` — distinct from the existing board-folder `onSelectDoc`, since this axis needs to seed `setDocsNavigation` with the doc's real `folderId` (a board-folder doc has none) and lands on `activeView: 'docs'` specifically rather than `'board'`.
+
+`npx tsc --noEmit -p .`, `npm run build`, and a real `npm run dev` boot all clean. Not visually re-verified in a real browser/device.
+
 ## Checkpoint — end of day, 2026-08-25
 
 Everything below is committed and pushed to `origin/main` (latest: `b0acb64`). Nothing has been confirmed working on a real device yet for anything from `2e7ccb6` onward (the mobile-focused run) — all of it compiled/built clean and got a real `npm run dev` boot check, but this session had no browser/device tool, so the visual/interaction behavior itself is unverified. **Next session should start with a Reinstall + a pass through this list on an actual phone**, roughly in the order it was built:
