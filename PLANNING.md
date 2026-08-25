@@ -2026,6 +2026,20 @@ User flagged three things; a quick clarifying round resolved two without any cod
 
 `npx tsc --noEmit -p .`, `npm run build`, and a real `npm run dev` boot all clean.
 
+## Today's session (2026-08-25, continued a twenty-first time) — "My Tasks" skips its pointless middle screen, mobile can finally create Spaces/Folders/Lists, haptic taps, and a 30s poll so Calendar stops needing a manual refresh
+
+Four items from a live feedback round:
+
+1. **"My Tasks" landed on a card you had to tap into, not the tasks themselves.** Both the mobile grid tile and the desktop sidebar's "My tasks" button only ever called `setActiveWorkspaceId(personalWorkspaceId)` — `setActiveWorkspaceId`'s own logic auto-selects that workspace's first (and, structurally, only) Space, landing on `SpaceHome` with exactly one thing to pick, every time. `ensurePersonalWorkspace` already returns the auto-created `spaceId`/`listId` directly (it always has, unused until now) — both call sites now also call `setNavigation(spaceId, [listId])`, skipping straight to the actual tasks.
+
+2. **Mobile could browse Spaces/Folders/Lists but never create one.** The desktop sidebar's "+" buttons all live in a `hidden md:flex` `<aside>`, with nothing standing in for them anywhere reachable on mobile. `MobileSpacesSheet.tsx` gained a "+ New Space" header button (inline name input, same shape as the mobile "+ Add Task" row) and, at every level of the expandable tree, a compact "+ Folder / + List" quick-add pair (new `NewFolderOrListRow`) — calls `createSpace`/`createFolder`/`createList` directly via `useTaskStore()`, same self-contained pattern `FolderTree.tsx`'s own create buttons already use rather than threading through `app/page.tsx` as props. Task creation itself needed no fix — the "+ Add Task" row was already mobile-visible once inside a List, which item 1's fix now makes reachable in one tap instead of two.
+
+3. **Haptic feedback**: answered directly — yes, possible without a native app via the Web Vibration API (`navigator.vibrate`), but Safari/iOS has never implemented it at all (a WebKit platform limitation, not a permission or a bug), so it only actually fires on Chrome/Android. New `lib/haptics.ts`'s `hapticTap()` is a safe no-op everywhere unsupported. Wired into the primary mobile navigation surfaces: `MobileBottomNav.tsx`'s tab buttons and pinned-menu button, `AppLauncherGrid.tsx`'s tiles and new Workspace rows — the "menu buttons" the ask was specifically about, not an exhaustive pass over every button in the app.
+
+4. **Calendar/Tasks needed a manual page refresh to see a change made on another device** — reported live (added something on mobile, had to refresh on PC). Unlike Chat (a Hocuspocus room) or Docs (live collaborative editing), Tasks/Events have no real-time push at all — plain fetch-once. Added a 30s poll (same "no new infrastructure" shape already established for the Chat-unread and member-invite polls two sessions ago), scoped to `activeView === 'board' || 'calendar'` specifically rather than always-on, since a full task/event refetch is heavier than those two small badge queries and is only worth the traffic while actually looking at data that could go stale.
+
+`npx tsc --noEmit -p .`, `npm run build`, and a real `npm run dev` boot all clean. Not visually re-verified in a real browser/device.
+
 ## Checkpoint — end of day, 2026-08-25
 
 Everything below is committed and pushed to `origin/main` (latest: `b0acb64`). Nothing has been confirmed working on a real device yet for anything from `2e7ccb6` onward (the mobile-focused run) — all of it compiled/built clean and got a real `npm run dev` boot check, but this session had no browser/device tool, so the visual/interaction behavior itself is unverified. **Next session should start with a Reinstall + a pass through this list on an actual phone**, roughly in the order it was built:

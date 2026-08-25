@@ -594,6 +594,8 @@ function PageContent() {
     fetchMemberInvites,
     acceptMemberInvite,
     declineMemberInvite,
+    refetchTasks,
+    refetchEvents,
     ensurePersonalWorkspace,
     updateSpace,
     reorderSpace,
@@ -682,6 +684,22 @@ function PageContent() {
     const interval = setInterval(fetchMemberInvites, 30000);
     return () => clearInterval(interval);
   }, [fetchMemberInvites]);
+
+  // Same "poll every 30s, no new infrastructure" shape as the two above — Tasks/Events have no
+  // real-time push at all (unlike Chat's Hocuspocus room or Docs' collaborative editing), so a
+  // change made on one device/tab was never reflected on another until a manual page reload.
+  // Reported live: added something on mobile, had to refresh on PC to see it in the calendar.
+  // Scoped to 'board'/'calendar' specifically (not always-on like the two polls above) since a
+  // full task/event refetch is heavier than a small unread-count query — only worth the traffic
+  // while actually looking at data that could go stale.
+  useEffect(() => {
+    if (activeView !== 'board' && activeView !== 'calendar') return;
+    const interval = setInterval(() => {
+      refetchTasks();
+      refetchEvents();
+    }, 30000);
+    return () => clearInterval(interval);
+  }, [activeView, refetchTasks, refetchEvents]);
 
   // Just for the breadcrumb's "/ #channel-name" or "/ Someone" segment — the channel/DM list and
   // messages themselves live inside ChatSidebar/ChatPanel, which read the rest of useChatStore
@@ -1386,8 +1404,15 @@ function PageContent() {
         icon: ListChecks,
         onClick: async () => {
           if (!currentUserId) return;
-          const { workspaceId } = await ensurePersonalWorkspace(currentUserId);
+          // The personal workspace always has exactly one Space and one List (see
+          // ensurePersonalWorkspace's own return shape) — selecting just the workspace left
+          // activeSpaceId pointed at that Space with no List chosen, landing on SpaceHome (a
+          // "pick a List" screen with, structurally, only ever one thing to pick). Reported live
+          // as "a card I have to tap into, then it opens a new window" — selecting the List
+          // directly skips that pointless middle step and lands straight on the actual tasks.
+          const { workspaceId, spaceId, listId } = await ensurePersonalWorkspace(currentUserId);
           setActiveWorkspaceId(workspaceId);
+          setNavigation(spaceId, [listId]);
           setActiveView('board');
         },
         active: !!currentWorkspace?.isPersonal && activeView === 'board',
@@ -3270,8 +3295,13 @@ function PageContent() {
                     // reusing it this way is what makes the personal Space/List tree "just work."
                     onClick={async () => {
                       if (!currentUserId) return;
-                      const { workspaceId } = await ensurePersonalWorkspace(currentUserId);
+                      // Same fix as the mobile "My Tasks" tile (app/page.tsx's meNavItems) —
+                      // selecting just the workspace left activeSpaceId pointed at its one
+                      // auto-created Space with no List chosen, landing on SpaceHome instead of
+                      // the tasks themselves. Selecting the List directly skips that.
+                      const { workspaceId, spaceId, listId } = await ensurePersonalWorkspace(currentUserId);
                       setActiveWorkspaceId(workspaceId);
+                      setNavigation(spaceId, [listId]);
                       setActiveView('board');
                     }}
                     className={`w-full text-left px-2 py-1.5 rounded text-[11px] cursor-pointer flex items-center gap-1.5 transition ${
@@ -6161,6 +6191,7 @@ function PageContent() {
         open={mobileSpacesOpen}
         onClose={() => setMobileSpacesOpen(false)}
         workspaceName={currentWorkspace?.name ?? 'Workspace'}
+        workspaceId={currentWorkspace?.id ?? null}
         spaces={currentWorkspace?.spaces ?? []}
         activeSpaceId={activeSpaceId}
         onSelectSpace={(spaceId) => {

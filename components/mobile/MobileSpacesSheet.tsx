@@ -2,8 +2,8 @@
 
 import { useState } from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
-import { ChevronRight, ChevronDown, Globe, X, Folder as FolderIconLucide, List as ListIconLucide, FileText } from 'lucide-react';
-import type { HierarchySpace } from '../../store/useTaskStore';
+import { ChevronRight, ChevronDown, Globe, X, Plus, Folder as FolderIconLucide, List as ListIconLucide, FileText } from 'lucide-react';
+import { useTaskStore, type HierarchySpace } from '../../store/useTaskStore';
 import { FOLDER_ICON_MAP } from '../FolderTree';
 import { getChildFolders, getListsIn, getBoardDocsIn } from '../../lib/folderTree';
 import { getChildDocFolders, getSpaceDocsIn } from '../../lib/docFolderTree';
@@ -12,6 +12,11 @@ type Props = {
   open: boolean;
   onClose: () => void;
   workspaceName: string;
+  // Needed for "+ New Space" (createSpace itself, called directly via useTaskStore below like
+  // FolderTree.tsx's own create-Folder/List already does, needs a workspaceId to attach to) — the
+  // desktop sidebar's own "+" buttons live in a `hidden md:flex` <aside>, with nothing standing in
+  // for them anywhere reachable on mobile before this.
+  workspaceId: string | null;
   spaces: HierarchySpace[];
   activeSpaceId: string;
   onSelectSpace: (spaceId: string) => void;
@@ -48,6 +53,7 @@ export default function MobileSpacesSheet({
   open,
   onClose,
   workspaceName,
+  workspaceId,
   spaces,
   activeSpaceId,
   onSelectSpace,
@@ -55,6 +61,17 @@ export default function MobileSpacesSheet({
   onSelectDoc,
   onSelectSpaceDoc,
 }: Props) {
+  // Called directly via the store, same as FolderTree.tsx's own create-Folder/List/Space
+  // buttons already do — no need to thread these through app/page.tsx as props.
+  const { createSpace, createFolder, createList } = useTaskStore();
+  const [creatingSpace, setCreatingSpace] = useState(false);
+  const [newSpaceDraft, setNewSpaceDraft] = useState('');
+  const commitNewSpace = () => {
+    const trimmed = newSpaceDraft.trim();
+    if (trimmed && workspaceId) createSpace(workspaceId, trimmed);
+    setNewSpaceDraft('');
+    setCreatingSpace(false);
+  };
   const [expandedSpaceIds, setExpandedSpaceIds] = useState<Set<string>>(new Set());
   const [expandedFolderIds, setExpandedFolderIds] = useState<Set<string>>(new Set());
   // Whether each Space's own "Docs" pseudo-row (the standalone Docs-tab tree, a completely
@@ -110,10 +127,45 @@ export default function MobileSpacesSheet({
         >
           <div className="flex items-center justify-between px-4 py-3 border-b border-neutral-800/60 shrink-0">
             <span className="text-base font-semibold text-white">Spaces</span>
-            <button onClick={onClose} className="text-neutral-500 hover:text-neutral-200 cursor-pointer p-1">
-              <X className="w-4.5 h-4.5" />
-            </button>
+            <div className="flex items-center gap-1">
+              {workspaceId && (
+                <button
+                  onClick={() => setCreatingSpace((o) => !o)}
+                  title="New space"
+                  className="text-neutral-500 hover:text-neutral-200 cursor-pointer p-1"
+                >
+                  <Plus className="w-4.5 h-4.5" />
+                </button>
+              )}
+              <button onClick={onClose} className="text-neutral-500 hover:text-neutral-200 cursor-pointer p-1">
+                <X className="w-4.5 h-4.5" />
+              </button>
+            </div>
           </div>
+          {creatingSpace && workspaceId && (
+            <div className="flex items-center gap-2 px-4 py-2.5 border-b border-neutral-800/60 shrink-0 bg-neutral-900/40">
+              <input
+                autoFocus
+                value={newSpaceDraft}
+                onChange={(e) => setNewSpaceDraft(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') commitNewSpace();
+                  if (e.key === 'Escape') {
+                    setNewSpaceDraft('');
+                    setCreatingSpace(false);
+                  }
+                }}
+                placeholder="Space name..."
+                className="flex-1 bg-neutral-950 border border-blue-500 rounded px-3 py-1.5 text-sm text-white focus:outline-none"
+              />
+              <button
+                onClick={commitNewSpace}
+                className="bg-blue-600 hover:bg-blue-500 text-white text-xs px-3 py-1.5 rounded font-medium cursor-pointer shrink-0"
+              >
+                Add
+              </button>
+            </div>
+          )}
           <div className="flex-1 overflow-y-auto px-3 py-2 space-y-0.5">
             <button
               onClick={() => {
@@ -175,6 +227,8 @@ export default function MobileSpacesSheet({
                           onSelectDoc(space.id, docId);
                           onClose();
                         }}
+                        onCreateFolder={(name, parentId) => createFolder(space.id, name, parentId)}
+                        onCreateList={(name, folderId) => createList(space.id, name, folderId)}
                       />
                       {/* Docs — a completely separate tree from the Task Folders above (the
                           standalone Docs-tab's own DocFolder/Doc axis, lib/docFolderTree.ts), not
@@ -229,6 +283,8 @@ function SpaceContents({
   onToggleFolder,
   onSelectList,
   onSelectDoc,
+  onCreateFolder,
+  onCreateList,
 }: {
   space: HierarchySpace;
   folderId: string | null;
@@ -237,6 +293,8 @@ function SpaceContents({
   onToggleFolder: (folderId: string) => void;
   onSelectList: (listId: string) => void;
   onSelectDoc: (docId: string) => void;
+  onCreateFolder: (name: string, parentId: string | null) => void;
+  onCreateList: (name: string, folderId: string | null) => void;
 }) {
   const childFolders = getChildFolders(space, folderId);
   const leaves = [
@@ -250,10 +308,6 @@ function SpaceContents({
       order: d.order,
     })),
   ].sort((a, b) => a.order - b.order);
-
-  if (childFolders.length === 0 && leaves.length === 0) {
-    return <p className="text-[11px] text-neutral-600 italic px-2 py-1.5" style={{ paddingLeft: 12 + depth * 20 }}>Empty</p>;
-  }
 
   return (
     <>
@@ -285,6 +339,8 @@ function SpaceContents({
                 onToggleFolder={onToggleFolder}
                 onSelectList={onSelectList}
                 onSelectDoc={onSelectDoc}
+                onCreateFolder={onCreateFolder}
+                onCreateList={onCreateList}
               />
             )}
           </div>
@@ -305,7 +361,76 @@ function SpaceContents({
           </button>
         );
       })}
+      <NewFolderOrListRow
+        depth={depth}
+        onCreateFolder={(name) => onCreateFolder(name, folderId)}
+        onCreateList={(name) => onCreateList(name, folderId)}
+      />
     </>
+  );
+}
+
+// Compact "+ Folder" / "+ List" quick-add pair at the end of each SpaceContents level — the
+// desktop sidebar's own equivalent inline-add buttons live in a hidden-below-md <aside>, with
+// nothing standing in for them on mobile before this.
+function NewFolderOrListRow({
+  depth,
+  onCreateFolder,
+  onCreateList,
+}: {
+  depth: number;
+  onCreateFolder: (name: string) => void;
+  onCreateList: (name: string) => void;
+}) {
+  const [mode, setMode] = useState<'folder' | 'list' | null>(null);
+  const [draft, setDraft] = useState('');
+
+  const commit = () => {
+    const trimmed = draft.trim();
+    if (trimmed) (mode === 'folder' ? onCreateFolder : onCreateList)(trimmed);
+    setDraft('');
+    setMode(null);
+  };
+
+  if (mode) {
+    return (
+      <div className="flex items-center gap-1.5 py-1" style={{ paddingLeft: 8 + depth * 20, paddingRight: 8 }}>
+        <input
+          autoFocus
+          value={draft}
+          onChange={(e) => setDraft(e.target.value)}
+          onKeyDown={(e) => {
+            if (e.key === 'Enter') commit();
+            if (e.key === 'Escape') {
+              setDraft('');
+              setMode(null);
+            }
+          }}
+          placeholder={mode === 'folder' ? 'Folder name...' : 'List name...'}
+          className="flex-1 min-w-0 bg-neutral-950 border border-blue-500 rounded px-2 py-1 text-[13px] text-white focus:outline-none"
+        />
+        <button onClick={commit} className="text-[11px] bg-blue-600 hover:bg-blue-500 text-white px-2 py-1 rounded font-medium cursor-pointer shrink-0">
+          Add
+        </button>
+      </div>
+    );
+  }
+
+  return (
+    <div className="flex items-center gap-3 py-1.5" style={{ paddingLeft: 8 + depth * 20, paddingRight: 8 }}>
+      <button
+        onClick={() => setMode('folder')}
+        className="flex items-center gap-1 text-[12px] text-neutral-500 hover:text-blue-400 cursor-pointer"
+      >
+        <Plus className="w-3 h-3" /> Folder
+      </button>
+      <button
+        onClick={() => setMode('list')}
+        className="flex items-center gap-1 text-[12px] text-neutral-500 hover:text-blue-400 cursor-pointer"
+      >
+        <Plus className="w-3 h-3" /> List
+      </button>
+    </div>
   );
 }
 

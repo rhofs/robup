@@ -4,6 +4,7 @@ import { ChevronDown, ChevronUp, LayoutGrid, Menu as MenuIcon } from 'lucide-rea
 import { AnimatePresence, motion } from 'framer-motion';
 import type { NavTab, MenuTile } from './navTypes';
 import { PRIMARY_NAV_TAB_IDS } from './navTypes';
+import { hapticTap } from '../../lib/haptics';
 
 type Props = {
   navTabs: NavTab[];
@@ -66,6 +67,7 @@ export default function MobileBottomNav({ navTabs, menuOpen, onOpenMenu, onClose
   const pinnedIsCurrentDestination = !!pinnedTile?.active && !spacesOpen;
 
   const handlePinnedTap = () => {
+    hapticTap();
     onNavigate();
     if (menuOpen) {
       onCloseMenu();
@@ -102,6 +104,7 @@ export default function MobileBottomNav({ navTabs, menuOpen, onOpenMenu, onClose
             <button
               key={tab.id}
               onClick={() => {
+                hapticTap();
                 onNavigate();
                 (isSpaces ? onOpenSpaces : tab.onClick)();
               }}

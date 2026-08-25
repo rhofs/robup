@@ -6,6 +6,7 @@ import type { LucideIcon } from 'lucide-react';
 import type { MenuTile } from './navTypes';
 import type { HierarchyWorkspace } from '../../store/useTaskStore';
 import { useInstallPrompt } from '../../hooks/useInstallPrompt';
+import { hapticTap } from '../../lib/haptics';
 
 type Props = {
   open: boolean;
@@ -44,7 +45,13 @@ type TileProps = {
 
 function Tile({ icon: Icon, label, selected, badge, onClick }: TileProps) {
   return (
-    <button onClick={onClick} className="flex flex-col items-center gap-1.5 cursor-pointer">
+    <button
+      onClick={() => {
+        hapticTap();
+        onClick();
+      }}
+      className="flex flex-col items-center gap-1.5 cursor-pointer"
+    >
       <span
         className={`relative w-14 h-14 rounded-2xl flex items-center justify-center transition ${
           selected ? 'bg-neutral-800 ring-2 ring-blue-500' : 'bg-neutral-800/60'
@@ -135,6 +142,7 @@ export default function AppLauncherGrid({
                         <button
                           key={ws.id}
                           onClick={() => {
+                            hapticTap();
                             onNavigate();
                             onSelectWorkspace(ws.id);
                             onClose();
