@@ -87,8 +87,8 @@ export default function MobileBottomNav({ navTabs, menuOpen, onOpenMenu, onClose
     // relative is needed for z-index to apply at all on a non-fixed element, since a bare
     // z-index is ignored on a statically-positioned one.
     <div
-      className="relative z-40 flex md:hidden justify-center px-3 pt-1.5"
-      style={{ paddingBottom: 'calc(env(safe-area-inset-bottom) + 8px)' }}
+      className="relative z-40 flex md:hidden justify-center px-3 pt-4"
+      style={{ paddingBottom: 'calc(env(safe-area-inset-bottom) + 16px)' }}
     >
       <nav className="flex items-center gap-0.5 bg-neutral-900 border border-neutral-800/80 rounded-full px-1.5 py-1.5 shadow-lg shadow-black/30">
         {primaryTabs.map((tab) => {

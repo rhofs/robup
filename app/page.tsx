@@ -27,6 +27,7 @@ import {
   UserCircle,
   LogOut,
   Archive,
+  ArrowLeft,
   Plus,
   Pencil,
   Trash2,
@@ -61,7 +62,6 @@ import {
   ClipboardCheck,
   Settings,
   Copy,
-  LayoutGrid,
   Users,
   type LucideIcon,
 } from 'lucide-react';
@@ -843,6 +843,11 @@ function PageContent() {
     if (typeof window !== 'undefined') window.localStorage.setItem('siqt:pinnedMobileMenuTile', id);
   }, []);
   const [mobileSpacesOpen, setMobileSpacesOpen] = useState(false);
+  // "My Tasks"'s own tree browser (mirrors MobileSpacesSheet exactly, just fed the personal
+  // workspace's data instead of the real one) — a separate open-state from mobileSpacesOpen so
+  // browsing it never lights up the bottom nav's "Spaces" tab (that tab's own `spacesOpen` prop
+  // only ever reads mobileSpacesOpen).
+  const [mobilePersonalSpacesOpen, setMobilePersonalSpacesOpen] = useState(false);
   const [mobileChatSheetOpen, setMobileChatSheetOpen] = useState(false);
   const [mobileCalendarFilterOpen, setMobileCalendarFilterOpen] = useState(false);
   const [mobileDocPagesOpen, setMobileDocPagesOpen] = useState(false);
@@ -854,6 +859,7 @@ function PageContent() {
   // switching correctly underneath the whole time.
   const closeMobileOverlays = useCallback(() => {
     setMobileSpacesOpen(false);
+    setMobilePersonalSpacesOpen(false);
     setMobileMenuOpen(false);
     setMobileChatSheetOpen(false);
     setMobileCalendarFilterOpen(false);
@@ -867,6 +873,16 @@ function PageContent() {
   useEffect(() => {
     closeMobileOverlays();
   }, [activeView, closeMobileOverlays]);
+  // Remembers whichever List was last viewed *while the personal workspace was active* — so
+  // "My Tasks" can jump straight back there next time instead of always reopening the tree picker.
+  // Declared here (state only); the tracking effect lives further down, after currentWorkspace is
+  // computed, since it reads that value. Deliberately 'board' only, not 'docs' too — the generic
+  // standalone Docs *tab* (an entirely separate destination, visibleNavTabs' own 'docs' item) also
+  // sets activeView to 'docs' without switching away from whatever workspace was already active, so
+  // this had no way to tell "genuinely browsing a personal Doc" apart from "on the unrelated Docs
+  // tab while the personal workspace just happens to still be active" — reported live as My Tasks
+  // always landing on an empty "Personal — Nothing in here yet" Docs screen instead of a list.
+  const [lastPersonalNav, setLastPersonalNav] = useState<{ spaceId: string; listIds: string[] } | null>(null);
   const [hideWeekNumbers, setHideWeekNumbers] = useState(false);
   useEffect(() => {
     setHiddenNavTabs(readHiddenNavTabs());
@@ -1298,12 +1314,30 @@ function PageContent() {
     () => workspaces.find((w) => w.id === activeWorkspaceId) ?? workspaces.find((w) => !w.isPersonal),
     [workspaces, activeWorkspaceId]
   );
+  // Tracking half of lastPersonalNav (state declared earlier, before currentWorkspace existed) — a
+  // plain snapshot-on-every-relevant-render effect rather than capturing it manually inside each of
+  // MobilePersonalSpacesSheet's own onSelect* callbacks, so it stays correct regardless of *how* the
+  // user got there (the tree, a task-modal deep link, browser back/forward) — anything that's ever
+  // true for "I'm looking at personal content right now" should count.
+  useEffect(() => {
+    if (currentWorkspace?.isPersonal && activeView === 'board' && activeSpaceId !== 'everything') {
+      setLastPersonalNav({ spaceId: activeSpaceId, listIds: [...activeListIds] });
+    }
+  }, [currentWorkspace, activeView, activeSpaceId, activeListIds]);
+  // Mobile-only header title (replaces the generic "S" logo — see the header's own comment) — same
+  // per-view labels the breadcrumb already uses, except "board" splits on whether the personal
+  // workspace is active, since "Spaces" and "My Tasks" are genuinely different destinations that
+  // happen to share one activeView value.
+  const mobileHeaderTitle = activeView === 'board' && currentWorkspace?.isPersonal ? 'My Tasks' : breadcrumbViewLabel;
   // Gates the Tasks/Planner/Docs/Office nav tabs — before creating/joining a real workspace,
   // those tabs have nothing to show (every Space/List lives under a real workspace, never the
   // personal one), so showing them just to render empty is more confusing than hiding them until
   // there's something behind them. My tasks/Network/Chat aren't gated by this — they're
   // cross-workspace by design.
   const hasRealWorkspace = useMemo(() => workspaces.some((w) => !w.isPersonal), [workspaces]);
+  // MobilePersonalSpacesSheet's own data source — a plain find (not useMemo) since `workspaces`
+  // already changes identity on every relevant update and this isn't hot-path.
+  const personalWorkspace = workspaces.find((w) => w.isPersonal);
 
   // Shared with the mobile bottom nav / app-launcher grid (components/mobile/*) so both surfaces
   // drive the exact same setters as the desktop icon rail — see handleTasksNavClick below and the
@@ -1322,6 +1356,21 @@ function PageContent() {
       if (fallback) setActiveWorkspaceId(fallback.id);
     }
     setActiveView('board');
+  };
+
+  // Opens the mobile Spaces sheet, switching off the personal workspace first if that's still
+  // active (e.g. arrived here via "My Tasks") — same fallback logic as handleTasksNavClick just
+  // above, extracted into one function so every entry point to the sheet applies it identically.
+  // Originally duplicated inline at each call site; one of them (the board view's own in-header
+  // "Spaces" button) was missed when the fallback was first added, which is exactly how "Spaces
+  // shows Personal, and the nav pill lights up too" resurfaced from a second, forgotten call site
+  // rather than a real regression in the already-fixed one.
+  const openMobileSpaces = () => {
+    if (currentWorkspace?.isPersonal) {
+      const fallback = workspaces.find((w) => w.id === lastRealWorkspaceId) ?? workspaces.find((w) => !w.isPersonal);
+      if (fallback) setActiveWorkspaceId(fallback.id);
+    }
+    setMobileSpacesOpen(true);
   };
 
   const handleOfficeNavClick = () => {
@@ -1403,19 +1452,44 @@ function PageContent() {
         label: 'My Tasks',
         icon: ListChecks,
         onClick: async () => {
-          if (!currentUserId) return;
-          // The personal workspace always has exactly one Space and one List (see
-          // ensurePersonalWorkspace's own return shape) — selecting just the workspace left
-          // activeSpaceId pointed at that Space with no List chosen, landing on SpaceHome (a
-          // "pick a List" screen with, structurally, only ever one thing to pick). Reported live
-          // as "a card I have to tap into, then it opens a new window" — selecting the List
-          // directly skips that pointless middle step and lands straight on the actual tasks.
-          const { workspaceId, spaceId, listId } = await ensurePersonalWorkspace(currentUserId);
-          setActiveWorkspaceId(workspaceId);
-          setNavigation(spaceId, [listId]);
-          setActiveView('board');
+          if (!currentUserId) {
+            showToast('Signed-out session — try reloading the page.');
+            return;
+          }
+          try {
+            // ensurePersonalWorkspace makes a real POST round-trip every time — harmless (the
+            // route is an idempotent upsert) but a real, noticeable delay on every tap once the
+            // workspace already exists. Skip it once `workspaces` already has one; only fall back
+            // to the async ensure-and-create path the very first time (or a stale local list).
+            const known = workspaces.find((w) => w.isPersonal)?.id;
+            const workspaceId = known ?? (await ensurePersonalWorkspace(currentUserId)).workspaceId;
+            setActiveWorkspaceId(workspaceId);
+            // Land back on whatever List was last viewed under the personal workspace, same as
+            // any other nav destination remembering where you left off — only fall back to the
+            // tree browser (MobilePersonalSpacesSheet) the very first time this session.
+            if (lastPersonalNav) {
+              setModalTaskStack([]);
+              setNavigation(lastPersonalNav.spaceId, lastPersonalNav.listIds);
+              setActiveView('board');
+            } else {
+              setMobilePersonalSpacesOpen(true);
+            }
+          } catch (err) {
+            // A failed ensurePersonalWorkspace() previously left this tap looking like it did
+            // absolutely nothing — the whole async body just stopped at the rejected await, with
+            // nothing surfacing it. Now it's at least visible instead of a silent dead tap.
+            showToast(`Couldn't open My Tasks: ${err instanceof Error ? err.message : 'unknown error'}`);
+          }
         },
-        active: !!currentWorkspace?.isPersonal && activeView === 'board',
+        // Deliberately 'board' only, not 'docs' too — see lastPersonalNav's own comment above for
+        // why 'docs' can't be attributed to My Tasks specifically (the standalone Docs tab shares
+        // that same activeView value regardless of which workspace happens to be active).
+        // `|| mobilePersonalSpacesOpen`: opening the tree itself doesn't set activeView to 'board'
+        // (only actually picking something in it does — same reason the primary Spaces tab's own
+        // `active` needed `|| spacesOpen`), so without this the pinned button read as "not active"
+        // — no blue highlight, and the very next tap tried to navigate again instead of opening the
+        // switcher grid — the whole time you were legitimately looking at My Tasks's own screen.
+        active: !!currentWorkspace?.isPersonal && (activeView === 'board' || mobilePersonalSpacesOpen),
       },
       {
         id: 'mytasks',
@@ -1441,7 +1515,7 @@ function PageContent() {
         active: activeView === 'profile',
       },
     ],
-    [currentUserId, currentWorkspace, activeView, ensurePersonalWorkspace, setActiveWorkspaceId, setActiveView]
+    [currentUserId, currentWorkspace, activeView, workspaces, lastPersonalNav, mobilePersonalSpacesOpen, ensurePersonalWorkspace, setActiveWorkspaceId, setActiveView]
   );
 
   // Everything not already pinned to the bottom nav's 3 fixed slots — shared between
@@ -2931,15 +3005,19 @@ function PageContent() {
       {/* ================= TOP BAR — workspace + search, so the icon rail/sidebar below don't
           have to carry that weight themselves (previously both lived stacked at the very top
           of the sidebar, which read as cramped). ================= */}
-      <header className="h-14 shrink-0 border-b border-neutral-800/80 bg-neutral-950 flex items-center px-3 gap-4">
+      <header className="h-14 shrink-0 border-b-0 md:border-b border-neutral-800/80 bg-neutral-950 flex items-center px-3 gap-4">
         {/* Workspace name/switcher is desktop-only now — mobile switches workspace from the
             popup menu's own "Workspace" section (AppLauncherGrid.tsx) instead, per explicit
             feedback that having it in both places (top bar AND the popup) was one too many. The
-            "S" brand mark stays visible on mobile as a plain (non-interactive) logo. */}
+            "S" brand mark itself is desktop-only too now — mobile shows the current view's own
+            name instead ("Planner"/"Chat"/"My Tasks"/etc, same labels the breadcrumb already
+            uses), matching MobileSpacesSheet's own title-on-the-left header shape so every mobile
+            screen's top bar reads consistently instead of a plain logo everywhere except Spaces. */}
         <div className="flex items-center gap-2 shrink-0 md:w-64">
-          <div className="w-8 h-8 rounded bg-gradient-to-br from-blue-500 to-blue-700 flex items-center justify-center font-black text-white shadow-lg shadow-blue-500/20 shrink-0">
+          <div className="hidden md:flex w-8 h-8 rounded bg-gradient-to-br from-blue-500 to-blue-700 items-center justify-center font-black text-white shadow-lg shadow-blue-500/20 shrink-0">
             S
           </div>
+          <span className="md:hidden text-lg font-semibold text-white shrink-0">{mobileHeaderTitle}</span>
           <FloatingPopover
             open={workspaceSwitcherOpen}
             onClose={() => {
@@ -3120,18 +3198,10 @@ function PageContent() {
             )}
           </FloatingPopover>
         </div>
-        {/* Icon-only on mobile, not the full "Search..." bar — that bar used to take flex-1 of an
-            already-cramped row, squeezing the workspace-name column down to the point its own
-            truncated text visually spilled over this bar. The workspace name gets flex-1 instead
-            now (see its own comment above); a small fixed icon button costs this row almost
-            nothing regardless of how long the workspace name is. */}
-        <button
-          onClick={() => setCommandPaletteOpen(true)}
-          className="md:hidden shrink-0 w-9 h-9 rounded flex items-center justify-center text-neutral-500 hover:text-neutral-300 hover:bg-neutral-900/60 cursor-pointer"
-          title="Search"
-        >
-          <Search className="w-4 h-4" />
-        </button>
+        {/* Mobile's own search pill moved down into the per-view header row below (same row as
+            the back button/Spaces/Archive/Chat/Pages buttons) so it sits in one consistent spot
+            across every view instead of sharing this title row — this row is title-only on
+            mobile now, matching how plain it reads on desktop next to the workspace switcher. */}
         <div className="hidden md:flex flex-1 justify-center">
           <button
             onClick={() => setCommandPaletteOpen(true)}
@@ -3672,8 +3742,64 @@ function PageContent() {
 
       {/* ================= MAIN AREA ================= */}
       <main className="flex-1 flex flex-col h-full overflow-hidden bg-[#121212] relative">
-        <header className="border-b border-neutral-800/80 bg-neutral-900/40 shrink-0">
-          <div className="h-11 px-3 md:px-6 flex items-center justify-between border-b border-neutral-800/40">
+        {/* Mobile: no border framing this row at all, and the same bg-neutral-950 as the title bar
+            above — reads as one continuous header block instead of two visually distinct bands.
+            Desktop keeps its original border+lighter-bg treatment unchanged. */}
+        <header className="border-b-0 md:border-b border-neutral-800/80 bg-neutral-950 md:bg-neutral-900/40 shrink-0">
+          {/* md:h-11 + md:py-0 restore the original fixed-height compact desktop row exactly —
+              mobile instead sizes naturally off its own padding (pt-2 pb-3, a bit more room below
+              the search pill than above it) so the now-taller/rounder search bar has real
+              breathing room instead of being squeezed into a height tuned for the old shorter one. */}
+          <div className="md:h-11 pt-2 pb-3 md:py-0 px-3 md:px-6 flex items-center gap-2 justify-between border-b-0 md:border-b border-neutral-800/40">
+            {/* Mobile-only — the Spaces/Personal-Spaces tree sheets are the *only* way to reach a
+                specific List or Doc on mobile (the desktop sidebar is hidden below md), and neither
+                sheet stays mounted once you've navigated in, so there was previously no way back at
+                all short of the bottom nav's own Spaces/Menu buttons ("jeg havner inn på lista...
+                men det er ingen vei tilbake"). Reopens whichever sheet is contextually correct —
+                Personal for "My Tasks," the real one otherwise — rather than a browser-style
+                back-in-history, since that tree's own expand-state is local to the sheet component
+                anyway (it remounts fresh either way; matching *which* workspace's tree reopens is
+                what actually matters here). */}
+            {/* Fixed-width slot, always present on mobile whether or not the button inside it
+                actually renders — without this, the search bar sat one flex position earlier on
+                Planner/Chat (no Back button) than on Board/Docs (Back button present), so it
+                visibly shifted left/right depending on which screen you were on. Reserving the
+                width unconditionally keeps the search bar's own position identical everywhere. */}
+            <div className="md:hidden w-7 h-7 shrink-0 flex items-center justify-center">
+              {(activeView === 'board' || activeView === 'docs') && (
+                <button
+                  onClick={() => {
+                    if (currentWorkspace?.isPersonal) {
+                      // Pressing Back here is a deliberate "I want the overview now, not a specific
+                      // list" signal — without clearing this, lastPersonalNav kept remembering
+                      // whatever list was last active underneath (Back only opens a sheet *on top*,
+                      // it never touches activeSpaceId/activeListIds), so returning to My Tasks
+                      // later jumped straight back into the list you'd just backed out of, not the
+                      // overview you were actually looking at when you switched away.
+                      setLastPersonalNav(null);
+                      setMobilePersonalSpacesOpen(true);
+                    } else {
+                      setMobileSpacesOpen(true);
+                    }
+                  }}
+                  title="Back"
+                  className="p-1.5 rounded text-neutral-400 hover:text-white hover:bg-neutral-800/60 cursor-pointer"
+                >
+                  <ArrowLeft className="w-4 h-4" />
+                </button>
+              )}
+            </div>
+            {/* The mobile search pill lives here — this per-view row — for every view, not the
+                title row above, so it's in one consistent spot regardless of which screen is
+                showing (the title row's own height/content varies less predictably per view than
+                this row, which already always hosts view-specific controls). */}
+            <button
+              onClick={() => setCommandPaletteOpen(true)}
+              className="md:hidden flex-1 min-w-0 mx-1 flex items-center gap-1.5 bg-neutral-900/60 border border-neutral-800/80 rounded-full px-3 py-2.5 text-neutral-500 hover:border-neutral-700 hover:text-neutral-300 cursor-pointer"
+            >
+              <Search className="w-3.5 h-3.5 shrink-0" />
+              <span className="text-[11px] truncate">Search...</span>
+            </button>
             {/* Hidden on mobile entirely — a breadcrumb reads as unpolished clutter at phone
                 width, and the "Lists"/"Channels"/"Archive" buttons below already tell you where
                 you are well enough without it. Desktop keeps it unchanged. */}
@@ -3759,18 +3885,17 @@ function PageContent() {
                 without this these buttons would land at the row's start instead of staying
                 pinned to the right the way they visually always have. */}
             <div className="flex items-center gap-1.5 ml-auto">
-              {activeView === 'board' && (
-                <button
-                  onClick={() => setMobileSpacesOpen(true)}
-                  className="md:hidden text-[11px] px-2.5 py-1 rounded border cursor-pointer transition flex items-center gap-1.5 text-neutral-400 border-neutral-800 hover:bg-neutral-800/60"
-                >
-                  <LayoutGrid className="w-3.5 h-3.5" /> Spaces
-                </button>
-              )}
+              {/* Removed on mobile — redundant with the bottom nav's own "Spaces" tab and the new
+                  Back button (both reach the exact same sheet). Desktop never had this button at
+                  all (it was already md:hidden), so nothing changes there. */}
+              {/* Desktop-only now — moved into the mobile Menu popup instead (AppLauncherGrid.tsx),
+                  next to Settings/Trash, since it was showing up "under My Tasks" specifically
+                  confusingly (this row is shared by every activeView === 'board' screen, personal
+                  workspace included) for a toggle that's really a utility action, not a per-view one. */}
               {activeView === 'board' && (
                 <button
                   onClick={() => setShowArchived(!showArchived)}
-                  className={`text-[11px] px-2.5 py-1 rounded border cursor-pointer transition flex items-center gap-1.5 ${
+                  className={`hidden md:flex text-[11px] px-2.5 py-1 rounded border cursor-pointer transition items-center gap-1.5 ${
                     showArchived
                       ? 'bg-neutral-800 text-blue-400 border-neutral-700'
                       : 'text-neutral-400 border-neutral-800 hover:bg-neutral-800/60'
@@ -3804,16 +3929,6 @@ function PageContent() {
                   className="md:hidden text-[11px] px-2.5 py-1 rounded border cursor-pointer transition flex items-center gap-1.5 text-neutral-400 border-neutral-800 hover:bg-neutral-800/60"
                 >
                   <FileText className="w-3.5 h-3.5" /> Pages
-                </button>
-              )}
-              {/* Desktop's per-Space/List calendar-visibility checkboxes live in the sidebar's
-                  FolderTree (hidden below md) — mobile needs its own entry point. */}
-              {activeView === 'calendar' && (
-                <button
-                  onClick={() => setMobileCalendarFilterOpen(true)}
-                  className="md:hidden text-[11px] px-2.5 py-1 rounded border cursor-pointer transition flex items-center gap-1.5 text-neutral-400 border-neutral-800 hover:bg-neutral-800/60"
-                >
-                  <Eye className="w-3.5 h-3.5" /> Filter
                 </button>
               )}
             </div>
@@ -4342,6 +4457,7 @@ function PageContent() {
                     setCreateTaskDefaultDate(date.toISOString());
                     setCreateTaskOpen(true);
                   }}
+                  onOpenFilter={() => setMobileCalendarFilterOpen(true)}
                 />
               </div>
             ) : showingSpaceHome ? (
@@ -4469,21 +4585,7 @@ function PageContent() {
         menuOpen={mobileMenuOpen}
         onOpenMenu={() => setMobileMenuOpen(true)}
         onCloseMenu={() => setMobileMenuOpen(false)}
-        onOpenSpaces={() => {
-          // Same fallback handleTasksNavClick already applies for the desktop rail's Tasks/Spaces
-          // icon — without it, opening the mobile Spaces sheet while activeWorkspaceId was still
-          // the personal workspace (e.g. landed there via "My Tasks") only ever showed that
-          // workspace's own single auto-created space (just "My tasks"), never the real team
-          // workspace's actual Spaces. Reported live as "trykker Spaces, ser bare Personal," then
-          // (after adding just the !w.isPersonal fallback) "NGM -> My Tasks -> Spaces lands on
-          // CRRM Media" for a user in more than one real workspace — lastRealWorkspaceId (the one
-          // actually last selected) fixes both.
-          if (currentWorkspace?.isPersonal) {
-            const fallback = workspaces.find((w) => w.id === lastRealWorkspaceId) ?? workspaces.find((w) => !w.isPersonal);
-            if (fallback) setActiveWorkspaceId(fallback.id);
-          }
-          setMobileSpacesOpen(true);
-        }}
+        onOpenSpaces={openMobileSpaces}
         spacesOpen={mobileSpacesOpen}
         pinnedTile={pinnedMobileTile}
         onNavigate={closeMobileOverlays}
@@ -6182,6 +6284,8 @@ function PageContent() {
         onSelectTile={pinMobileMenuTile}
         onOpenSettings={() => setSettingsOpen(true)}
         onOpenTrash={() => setTrashOpen(true)}
+        showArchived={showArchived}
+        onToggleArchive={() => setShowArchived(!showArchived)}
         onNavigate={closeMobileOverlays}
         realWorkspaces={workspaces.filter((w) => !w.isPersonal)}
         activeWorkspaceId={activeWorkspaceId}
@@ -6190,9 +6294,48 @@ function PageContent() {
       <MobileSpacesSheet
         open={mobileSpacesOpen}
         onClose={() => setMobileSpacesOpen(false)}
+        title="Spaces"
+        onOpenSearch={() => setCommandPaletteOpen(true)}
         workspaceName={currentWorkspace?.name ?? 'Workspace'}
         workspaceId={currentWorkspace?.id ?? null}
         spaces={currentWorkspace?.spaces ?? []}
+        activeSpaceId={activeSpaceId}
+        onSelectSpace={(spaceId) => {
+          setModalTaskStack([]);
+          setNavigation(spaceId, []);
+          setActiveView('board');
+        }}
+        onSelectList={(spaceId, listId) => {
+          setModalTaskStack([]);
+          setNavigation(spaceId, [listId]);
+          setActiveView('board');
+        }}
+        onSelectDoc={(spaceId, docId) => {
+          setModalTaskStack([]);
+          setNavigation(spaceId, []);
+          setDocsNavigation(null, docId);
+          setActiveView('board');
+        }}
+        onSelectSpaceDoc={(spaceId, docId, folderId) => {
+          setModalTaskStack([]);
+          setNavigation(spaceId, []);
+          setDocsNavigation(folderId, docId);
+          setActiveView('docs');
+        }}
+      />
+      {/* "My Tasks"'s own tree browser — literally the same MobileSpacesSheet component, just
+          fed the personal workspace's own data instead of the real one, per the explicit ask for
+          this to have "samme oppbygning som Spaces." Its own onSelect* callbacks are identical to
+          the real sheet's above except they don't need any workspace-switching logic (My Tasks
+          already switched activeWorkspaceId to the personal one before opening this). */}
+      <MobileSpacesSheet
+        open={mobilePersonalSpacesOpen}
+        onClose={() => setMobilePersonalSpacesOpen(false)}
+        title="Personal Spaces"
+        onOpenSearch={() => setCommandPaletteOpen(true)}
+        workspaceName="Personal"
+        workspaceId={personalWorkspace?.id ?? null}
+        spaces={personalWorkspace?.spaces ?? []}
         activeSpaceId={activeSpaceId}
         onSelectSpace={(spaceId) => {
           setModalTaskStack([]);

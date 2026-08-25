@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { ChevronLeft, ChevronRight, Maximize2, Plus } from 'lucide-react';
+import { ChevronLeft, ChevronRight, Eye, Maximize2, Plus } from 'lucide-react';
 import {
   addDays,
   chunkIntoWeeks,
@@ -50,9 +50,14 @@ type CalendarViewProps = {
   onOpenTask: (id: string) => void;
   onOpenEvent: (id: string) => void;
   onRequestCreateTask: (date: Date) => void;
+  // Opens the mobile-only Space/List calendar-visibility picker (MobileCalendarFilterSheet.tsx,
+  // mounted in app/page.tsx) — lives in this component's own toolbar row (next to New task/
+  // Month/Day) rather than a separate header bar above it, so it's grouped with the other
+  // view-specific actions instead of floating alone up top.
+  onOpenFilter: () => void;
 };
 
-export default function CalendarView({ tasks, events, statuses, workspaces, showWeekNumbers, onOpenTask, onOpenEvent, onRequestCreateTask }: CalendarViewProps) {
+export default function CalendarView({ tasks, events, statuses, workspaces, showWeekNumbers, onOpenTask, onOpenEvent, onRequestCreateTask, onOpenFilter }: CalendarViewProps) {
   const {
     optimisticSetDates,
     optimisticSetCalendarLane,
@@ -519,7 +524,7 @@ export default function CalendarView({ tasks, events, statuses, workspaces, show
       {/* Stacks into two rows on mobile (date-nav above, actions below) instead of squeezing both
           onto one line — at phone width there isn't enough room for justify-between to put real
           air between "New task" and the month label without shrinking anything. */}
-      <div className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between px-1 pb-3 shrink-0">
+      <div className="flex flex-col gap-1.5 md:gap-2 md:flex-row md:items-center md:justify-between px-1 pb-2 md:pb-3 shrink-0">
         <div className="flex items-center gap-2">
           <button onClick={() => step(-1)} className="p-1.5 rounded text-neutral-400 hover:text-white hover:bg-neutral-800/60 cursor-pointer">
             <ChevronLeft className="w-4 h-4" />
@@ -558,11 +563,26 @@ export default function CalendarView({ tasks, events, statuses, workspaces, show
               </button>
             ))}
           </div>
+          {/* Mobile-only — desktop's own Space/List tree (hidden below md) already has this via its
+              per-row calendar-visibility checkboxes, so this button would be pure duplication
+              there. Lives here instead of a separate header bar above, grouped with the other
+              view-specific actions. */}
+          <button
+            onClick={onOpenFilter}
+            title="Filter Spaces & Lists"
+            className="md:hidden p-1.5 rounded-md border border-neutral-800 bg-neutral-900 text-neutral-400 hover:text-neutral-200 cursor-pointer"
+          >
+            <Eye className="w-3.5 h-3.5" />
+          </button>
+          {/* Desktop-only — reported live as doing "basically nothing" on mobile: Fit mode's whole
+              point is trading lane-count for row-height on a large viewport, which barely matters
+              on an already-cramped phone-width grid, and the button itself was extra visual weight
+              in a toolbar that already reads as busy on mobile. */}
           {granularity === 'month' && (
             <button
               onClick={() => setFitMode((v) => !v)}
               title="Fit calendar to screen"
-              className={`p-1.5 rounded-md border transition cursor-pointer ${
+              className={`hidden md:flex p-1.5 rounded-md border transition cursor-pointer ${
                 fitMode ? 'bg-neutral-800 border-neutral-700 text-blue-400' : 'bg-neutral-900 border-neutral-800 text-neutral-400 hover:text-neutral-200'
               }`}
             >
@@ -598,7 +618,10 @@ export default function CalendarView({ tasks, events, statuses, workspaces, show
         </div>
       )}
 
-      <div className="flex-1 min-h-0 bg-neutral-900/60 border border-neutral-800/80 rounded overflow-hidden">
+      {/* Lighter border/bg on mobile specifically ("den er litt tung" — the boxed-in look reads
+          heavier on a narrow screen where it spans edge-to-edge than on desktop where it's one
+          panel among several). Desktop keeps the original weight unchanged. */}
+      <div className="flex-1 min-h-0 bg-neutral-900/40 md:bg-neutral-900/60 border border-neutral-800/50 md:border-neutral-800/80 rounded overflow-hidden">
         {granularity === 'day' ? (
           <DayTimeline
             day={focusDate}

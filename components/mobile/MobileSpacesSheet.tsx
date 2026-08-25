@@ -1,8 +1,7 @@
 'use client';
 
 import { useState } from 'react';
-import { AnimatePresence, motion } from 'framer-motion';
-import { ChevronRight, ChevronDown, Globe, X, Plus, Folder as FolderIconLucide, List as ListIconLucide, FileText } from 'lucide-react';
+import { ChevronRight, ChevronDown, Globe, Search, X, Plus, Folder as FolderIconLucide, List as ListIconLucide, FileText } from 'lucide-react';
 import { useTaskStore, type HierarchySpace } from '../../store/useTaskStore';
 import { FOLDER_ICON_MAP } from '../FolderTree';
 import { getChildFolders, getListsIn, getBoardDocsIn } from '../../lib/folderTree';
@@ -11,6 +10,14 @@ import { getChildDocFolders, getSpaceDocsIn } from '../../lib/docFolderTree';
 type Props = {
   open: boolean;
   onClose: () => void;
+  // Header title — "Spaces" for the real tree, "Personal Spaces" for My Tasks's own instance of
+  // this same component (see app/page.tsx). Kept separate from workspaceName below since that's
+  // used for the "All Tasks – {workspaceName}" row's own label, a different piece of text.
+  title: string;
+  // Opens the shared command palette (Ctrl+K search) — same control, same visual treatment, as the
+  // global mobile header's own search pill (app/page.tsx), so the search affordance sits in a
+  // consistent spot regardless of which mobile screen is showing.
+  onOpenSearch: () => void;
   workspaceName: string;
   // Needed for "+ New Space" (createSpace itself, called directly via useTaskStore below like
   // FolderTree.tsx's own create-Folder/List already does, needs a workspaceId to attach to) — the
@@ -52,6 +59,8 @@ type Props = {
 export default function MobileSpacesSheet({
   open,
   onClose,
+  title,
+  onOpenSearch,
   workspaceName,
   workspaceId,
   spaces,
@@ -114,19 +123,25 @@ export default function MobileSpacesSheet({
       return next;
     });
 
+  // No entrance/exit animation at all now — a plain opacity fade (there used to be a y-slide too)
+  // still read as a "blink" next to Planner/Chat's own per-view header, which has zero animation
+  // since it's just always part of the page rather than a newly-mounted overlay. Appearing/
+  // disappearing instantly, same as those, is what actually matches "feels the same as the other
+  // tabs" rather than a fade that's merely shorter/simpler than the last one.
   return (
-    <AnimatePresence>
+    <>
       {open && (
-        <motion.div
-          initial={{ opacity: 0, y: 12 }}
-          animate={{ opacity: 1, y: 0 }}
-          exit={{ opacity: 0, y: 12 }}
-          transition={{ duration: 0.15 }}
+        <div
           className="fixed inset-x-0 top-0 z-30 md:hidden bg-neutral-950 flex flex-col"
           style={{ bottom: 'calc(4.75rem + env(safe-area-inset-bottom))' }}
         >
-          <div className="flex items-center justify-between px-4 py-3 border-b border-neutral-800/60 shrink-0">
-            <span className="text-base font-semibold text-white">Spaces</span>
+          {/* h-14, matching the global mobile header's own fixed height exactly (app/page.tsx) —
+              this row used to size itself from py-3 + the title text's line-height, which came out
+              a few px shorter, pushing the search row (and everything in it) up slightly compared
+              to Planner/Chat, where that taller h-14 global header sits above their own search row
+              instead of this shorter title row. */}
+          <div className="h-14 flex items-center justify-between px-4 shrink-0">
+            <span className="text-lg font-semibold text-white">{title}</span>
             <div className="flex items-center gap-1">
               {workspaceId && (
                 <button
@@ -141,6 +156,29 @@ export default function MobileSpacesSheet({
                 <X className="w-4.5 h-4.5" />
               </button>
             </div>
+          </div>
+          {/* Search moved to its own row below the title — matches the same "search sits in the
+              row right under the title" spot every other mobile screen now uses (app/page.tsx's
+              per-view header), rather than sharing the title's own row. No border, and no bg of
+              its own either — reads as one continuous block with the title row above, same as
+              that other header.
+              Structurally identical to that other row now (px-3 row padding, an empty w-7
+              reserved slot, gap-2, then the search button with flex-1 + mx-1) rather than a
+              differently-shaped "w-full against px-4 padding" version — two different sizing
+              mechanisms that were each individually reasonable still didn't reliably land on the
+              exact same pixel position, since app/page.tsx's own row shifts its search bar right
+              by the reserved back-button slot's width, which this row wasn't accounting for at
+              all. Matching the structure exactly, not just eyeballing similar padding numbers,
+              guarantees the same position regardless of which spacing values change later. */}
+          <div className="px-3 pt-2 pb-3 shrink-0 flex items-center gap-2">
+            <div className="w-7 h-7 shrink-0" aria-hidden />
+            <button
+              onClick={onOpenSearch}
+              className="flex-1 min-w-0 mx-1 flex items-center gap-1.5 bg-neutral-900/60 border border-neutral-800/80 rounded-full px-3 py-2.5 text-neutral-500 hover:border-neutral-700 hover:text-neutral-300 cursor-pointer"
+            >
+              <Search className="w-3.5 h-3.5 shrink-0" />
+              <span className="text-[11px] truncate">Search...</span>
+            </button>
           </div>
           {creatingSpace && workspaceId && (
             <div className="flex items-center gap-2 px-4 py-2.5 border-b border-neutral-800/60 shrink-0 bg-neutral-900/40">
@@ -266,9 +304,9 @@ export default function MobileSpacesSheet({
               );
             })}
           </div>
-        </motion.div>
+        </div>
       )}
-    </AnimatePresence>
+    </>
   );
 }
 

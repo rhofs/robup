@@ -1,7 +1,7 @@
 'use client';
 
 import { AnimatePresence, motion } from 'framer-motion';
-import { Check, Download, Settings, Trash2 } from 'lucide-react';
+import { Archive, Check, Download, Settings, Trash2 } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
 import type { MenuTile } from './navTypes';
 import type { HierarchyWorkspace } from '../../store/useTaskStore';
@@ -20,6 +20,12 @@ type Props = {
   onSelectTile: (id: string) => void;
   onOpenSettings: () => void;
   onOpenTrash: () => void;
+  // Moved here from the board view's own per-view header — that row is shared by every
+  // activeView === 'board' screen (personal workspace included), so it read as confusingly
+  // out-of-place ("under My Tasks") for what's really a utility toggle, not a per-view action.
+  // Desktop's own Archive button (same header, unaffected) stays exactly where it was.
+  showArchived: boolean;
+  onToggleArchive: () => void;
   // Closes every other mobile-only overlay (Spaces, the Chat/Planner filter sheets) — called
   // alongside onClose() on every tile pick, since Spaces can be left open underneath the grid (the
   // pinned nav button can open this grid while Spaces is still open) and a tile here always means
@@ -91,6 +97,8 @@ export default function AppLauncherGrid({
   onSelectTile,
   onOpenSettings,
   onOpenTrash,
+  showArchived,
+  onToggleArchive,
   onNavigate,
   realWorkspaces,
   activeWorkspaceId,
@@ -198,6 +206,15 @@ export default function AppLauncherGrid({
                   label="Trash"
                   onClick={() => {
                     onOpenTrash();
+                    onClose();
+                  }}
+                />
+                <Tile
+                  icon={Archive}
+                  label={showArchived ? 'Viewing archive' : 'Archive'}
+                  selected={showArchived}
+                  onClick={() => {
+                    onToggleArchive();
                     onClose();
                   }}
                 />
