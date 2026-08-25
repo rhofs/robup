@@ -2040,20 +2040,25 @@ Four items from a live feedback round:
 
 `npx tsc --noEmit -p .`, `npm run build`, and a real `npm run dev` boot all clean. Not visually re-verified in a real browser/device.
 
-## Checkpoint — end of day, 2026-08-25
+## Checkpoint — 2026-08-25, updated (latest: `9260c59`)
 
-Everything below is committed and pushed to `origin/main` (latest: `b0acb64`). Nothing has been confirmed working on a real device yet for anything from `2e7ccb6` onward (the mobile-focused run) — all of it compiled/built clean and got a real `npm run dev` boot check, but this session had no browser/device tool, so the visual/interaction behavior itself is unverified. **Next session should start with a Reinstall + a pass through this list on an actual phone**, roughly in the order it was built:
+Everything below is committed and pushed to `origin/main`. Nothing across this entire 2026-08-25 mobile-focused run has been confirmed working on a real device by the user yet — every single piece compiled clean, built clean, and got a real `npm run dev` boot check, but no session that day had a browser/device tool, so the actual visual/interaction behavior is unverified end to end. **Next session should start with a Reinstall + a real phone pass through this whole list**, oldest to newest:
 
 - Collab WebSocket auth fix (`c81bdcd`) — Docs' amber "Not connected" banner should stay gone, not flicker.
 - Chat/Connections sidebar unification (`59a7069`) + the render-loop fix (`37879c9`) — sending a DM should no longer crash the page.
 - Connections profile view/DM, typing indicator, mute (`d338d37`).
-- Desktop Task modal redesign (`eef4e2a`) — the flattened Documents/Subtasks/Timeframe/Assignees layout.
+- Desktop Task modal redesign (`eef4e2a`) — flattened Documents/Subtasks/Timeframe/Assignees layout, Task description field added later (`2787f95`).
 - Docs subpages panel no longer lingering after leaving Docs (`aaba465`).
 - Mobile: SpaceHome flat list + Chat composer no longer needing a scroll (`2e7ccb6`).
 - Mobile Docs: subpages bottom sheet + "All docs" back button (`769d9dd`, `c4d764d`).
-- Mobile Spaces rebuilt as an inline-expanding tree, desktop "Tasks" → "Spaces" rename, and the two `pinnedTile`/`spacesOpen` bottom-nav bugs (`cba1b8c`, `b0acb64`) — this is the newest, least-tested piece; worth the most scrutiny.
+- Mobile Spaces rebuilt as an inline-expanding tree; desktop "Tasks" → "Spaces" rename; two `pinnedTile`/`spacesOpen` bottom-nav bugs (`cba1b8c`, `b0acb64`).
+- Mobile Spaces landing on the wrong/personal workspace, fixed via `lastRealWorkspaceId` (`191a6db`); mobile header name-overflow fix (`33664ef`).
+- Dead "Comment as" picker removed; Office's `workspaces[0]` bug fixed (real workspace threaded through properly); Members moved from the workspace switcher into Office with a new Invite entry point; "View profile" added to Office avatars (`5b5c399`).
+- Mobile: workspace switcher hidden from the top bar (popup menu only now); standalone Docs tree added to the mobile Spaces sheet (`11a837a`).
+- Space cover banner only shows once a cover is actually set, not as an empty placeholder on every Space (`5c0e91a`).
+- **Newest, least-tested**: "My Tasks" now skips straight to the actual list instead of an intermediate SpaceHome; mobile can finally create Spaces/Folders/Lists (`MobileSpacesSheet`'s new "+" controls); haptic tap feedback on the primary mobile nav surfaces (Android/Chrome only — Safari/iOS has no Vibration API, by Apple's own design, not a bug here); a 30s background poll for Tasks/Events while on Board/Calendar so another device's changes show up without a manual refresh (`9260c59`).
 
-**Still open, not started**: real email invites (backlog item 3 from the 2026-08-25 feedback batch) — needs the user to pick an email provider before any code can be written. Everything else from that batch (profile view/DM on Connections, typing indicator, mute, invite-visibility) shipped this session.
+**Still open, not started**: real email invites (backlog item 3 from the original 2026-08-25 feedback batch) — needs the user to pick an email provider before any code can be written. Dark/Light theme was explicitly deferred at the user's own request — large scope (the whole app is hardcoded dark), revisit as its own dedicated piece of work whenever they're ready to prioritize it, not silently in the background of other fixes.
 
 ## Known bugs / things to remember
 
