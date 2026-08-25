@@ -248,6 +248,15 @@ interface TaskStore {
   // Which Workspace the sidebar/nav is currently scoped to — null only until the first
   // fetchInitialData() resolves (or if the current identity has no workspaces at all).
   activeWorkspaceId: string | null;
+  // The most recent *real* (non-personal) workspace actually selected — kept separately from
+  // activeWorkspaceId because that field legitimately becomes the personal workspace's id too
+  // (e.g. via "My Tasks"). Every "come back to a real workspace" fallback (the desktop rail's
+  // Tasks/Spaces icon, the mobile bottom nav's Spaces button) used to just grab
+  // `workspaces.find(w => !w.isPersonal)` — the first non-personal workspace in fetch order,
+  // which silently landed on the *wrong* workspace for anyone who's a member of more than one
+  // (reported live: New Game Media -> My Tasks -> Spaces landed on CRRM Media instead of back on
+  // New Game Media). This field is what those fallbacks should actually target.
+  lastRealWorkspaceId: string | null;
   activeSpaceId: string | 'everything';
   activeListIds: Set<string>;
   // Planner's own position — lifted out of CalendarView.tsx's local state so back/forward can
@@ -565,6 +574,7 @@ export const useTaskStore = create<TaskStore>((set, get) => {
     docs: {},
     activeView: 'board',
     activeWorkspaceId: null,
+    lastRealWorkspaceId: null,
     activeSpaceId: 'everything',
     activeListIds: new Set(),
     calendarGranularity: 'month',
@@ -604,11 +614,19 @@ export const useTaskStore = create<TaskStore>((set, get) => {
         // previous selection at all, e.g. very first login — defaults to a real team workspace,
         // never auto-picking the personal one as a first landing spot.
         const previousWorkspaceId = get().activeWorkspaceId;
+        const previousLastRealWorkspaceId = get().lastRealWorkspaceId;
         const activeWorkspaceId = workspaces.some((w: HierarchyWorkspace) => w.id === previousWorkspaceId)
           ? previousWorkspaceId
-          : (workspaces.find((w: HierarchyWorkspace) => !w.isPersonal)?.id ?? null);
+          : // Prefer the last *real* workspace actually selected (survives a refetch even when
+            // the previous activeWorkspaceId itself no longer matches, e.g. it was the personal
+            // one) over just grabbing the first non-personal workspace in fetch order — same fix
+            // as setActiveWorkspaceId's own comment above.
+            (workspaces.find((w: HierarchyWorkspace) => w.id === previousLastRealWorkspaceId)?.id ??
+              workspaces.find((w: HierarchyWorkspace) => !w.isPersonal)?.id ??
+              null);
         const activeWorkspace = workspaces.find((w: HierarchyWorkspace) => w.id === activeWorkspaceId);
         const firstSpaceId = activeWorkspace?.spaces[0]?.id || 'everything';
+        const lastRealWorkspaceId = activeWorkspace && !activeWorkspace.isPersonal ? activeWorkspace.id : previousLastRealWorkspaceId;
 
         // Seeds `docs` (normally populated lazily per-task via fetchDocs on modal-open) with
         // every task-scoped doc up front, purely so it's searchable app-wide — fetchDocs still
@@ -626,6 +644,7 @@ export const useTaskStore = create<TaskStore>((set, get) => {
           docs: docsByTask,
           events,
           activeWorkspaceId,
+          lastRealWorkspaceId,
           activeSpaceId: firstSpaceId,
           isLoading: false,
         });
@@ -684,7 +703,12 @@ export const useTaskStore = create<TaskStore>((set, get) => {
     setActiveWorkspaceId: (id) => {
       const workspace = get().workspaces.find((w) => w.id === id);
       const firstSpaceId = workspace?.spaces[0]?.id || 'everything';
-      set({ activeWorkspaceId: id, activeSpaceId: firstSpaceId, activeListIds: new Set() });
+      set({
+        activeWorkspaceId: id,
+        activeSpaceId: firstSpaceId,
+        activeListIds: new Set(),
+        ...(workspace && !workspace.isPersonal ? { lastRealWorkspaceId: id } : {}),
+      });
     },
 
     // Clears any open standalone doc too — since the doc-editor view was hoisted to render

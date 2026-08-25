@@ -1971,6 +1971,18 @@ Not addressed (not what was reported): switching between *multiple* real, non-pe
 
 `npx tsc --noEmit -p .`, `npm run build`, and a real `npm run dev` boot all clean.
 
+## Today's session (2026-08-25, continued a sixteenth time) — Wrong-workspace fallback bug, mobile header name overflow, and a workspace-isolation security question
+
+Three items, first two real bugs found the moment mobile testing actually started:
+
+1. **Mobile header: a long workspace name ("New Game Media") visually spilled over the search bar.** The workspace-switcher column was a rigid `w-32` (128px) on mobile — after subtracting the logo (32px) and chevron, that left roughly 70px of actual text space, tight enough that the truncated name read as overflowing the row rather than cleanly ellipsizing. Fixed by giving the workspace name `flex-1` (grows to use the row's real available width) and shrinking the search control to an icon-only button on mobile (`md:hidden`) instead of the full "Search..." bar that used to compete for the same `flex-1` space — desktop keeps both exactly as they were.
+
+2. **"NGM → My Tasks → Spaces landed on CRRM Media"** — a real regression surfaced by a user who's a member of *two* real workspaces. Yesterday's mobile-Spaces-shows-Personal fix (and the desktop rail's older equivalent, `handleTasksNavClick`) both fell back to `workspaces.find(w => !w.isPersonal)` — the first non-personal workspace in fetch order — whenever returning from the personal workspace, which silently landed on whichever workspace happened to fetch first, not the one actually being used. Added `lastRealWorkspaceId` to `useTaskStore` — updated by `setActiveWorkspaceId` (and the initial-fetch resolution) whenever the target is a real workspace — and both fallback sites now prefer it over the blind array-order pick.
+
+3. **Security question, answered from reading the actual code, not from memory** (an earlier PLANNING.md note from 2026-08-08 describing this as *not* real security predates a later same-day session — "Real authentication: Google OAuth + email/password login" — that replaced the old client-asserted-identity model entirely): `lib/auth/session.ts`'s `getCurrentUserId()` reads a real, cryptographically-signed Auth.js session (server-verified via `auth()`, never trusts a client-supplied id), and every workspace-scoped route (`GET /api/workspaces`, `GET /api/tasks`, etc.) filters with a real Prisma `where: { memberships: { some: { userId } } }` join — a non-member's own request never gets a private workspace's data back over the network, not just hidden client-side. Joining requires either a reusable Discord-style invite *link* (`WorkspaceInvite`, a random UUID — `app/api/invites/[code]/accept`, requires being signed in, silently no-ops if already a member) or a targeted, explicit-accept `WorkspaceMemberInvite` sent by an Owner/Admin — there is no discovery/browse mechanism, no way to join a workspace without possessing one of those two, and no code path where an unauthenticated or non-member request can read another workspace's data.
+
+`npx tsc --noEmit -p .`, `npm run build`, and a real `npm run dev` boot all clean for items 1–2.
+
 ## Checkpoint — end of day, 2026-08-25
 
 Everything below is committed and pushed to `origin/main` (latest: `b0acb64`). Nothing has been confirmed working on a real device yet for anything from `2e7ccb6` onward (the mobile-focused run) — all of it compiled/built clean and got a real `npm run dev` boot check, but this session had no browser/device tool, so the visual/interaction behavior itself is unverified. **Next session should start with a Reinstall + a pass through this list on an actual phone**, roughly in the order it was built:

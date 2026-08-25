@@ -482,6 +482,7 @@ function PageContent() {
     comments,
     docs,
     activeWorkspaceId,
+    lastRealWorkspaceId,
     setActiveWorkspaceId,
     activeSpaceId,
     activeListIds,
@@ -1236,10 +1237,13 @@ function PageContent() {
   const handleTasksNavClick = () => {
     // Clicking Tasks while inside "My tasks" (the personal workspace) previously did nothing
     // visible — activeView was already 'board', so this was a no-op, and nothing ever switched
-    // activeWorkspaceId back to a real team workspace. Fall back to the first non-personal
-    // workspace, same lookup currentWorkspace's own useMemo already uses.
+    // activeWorkspaceId back to a real team workspace. Prefer lastRealWorkspaceId (the workspace
+    // actually last selected) over just grabbing the first non-personal workspace in fetch
+    // order — for anyone in more than one real workspace, that used to silently land on whichever
+    // one happened to fetch first, not the one they were actually on (reported live: New Game
+    // Media -> My Tasks -> Spaces landed on CRRM Media instead of back on New Game Media).
     if (currentWorkspace?.isPersonal) {
-      const fallback = workspaces.find((w) => !w.isPersonal);
+      const fallback = workspaces.find((w) => w.id === lastRealWorkspaceId) ?? workspaces.find((w) => !w.isPersonal);
       if (fallback) setActiveWorkspaceId(fallback.id);
     }
     setActiveView('board');
@@ -2844,7 +2848,13 @@ function PageContent() {
           have to carry that weight themselves (previously both lived stacked at the very top
           of the sidebar, which read as cramped). ================= */}
       <header className="h-14 shrink-0 border-b border-neutral-800/80 bg-neutral-950 flex items-center px-3 gap-4">
-        <div className="flex items-center gap-2 shrink-0 w-32 md:w-64">
+        {/* flex-1 min-w-0 on mobile (not a fixed w-32) — a long workspace name (e.g. "New Game
+            Media") left only ~70px of actual text space once the logo/chevron were subtracted
+            from a rigid 128px box, and truncate's ellipsis inside that little room read as the
+            name visually spilling over the search bar below it. Growing to fill the row (search
+            shrinks to an icon-only button on mobile, see below) gives it real room; desktop keeps
+            its unchanged fixed w-64 alongside the full search bar. */}
+        <div className="flex items-center gap-2 min-w-0 flex-1 md:flex-none md:shrink-0 md:w-64">
           <div className="w-8 h-8 rounded bg-gradient-to-br from-blue-500 to-blue-700 flex items-center justify-center font-black text-white shadow-lg shadow-blue-500/20 shrink-0">
             S
           </div>
@@ -3043,7 +3053,19 @@ function PageContent() {
             )}
           </FloatingPopover>
         </div>
-        <div className="flex-1 flex justify-center">
+        {/* Icon-only on mobile, not the full "Search..." bar — that bar used to take flex-1 of an
+            already-cramped row, squeezing the workspace-name column down to the point its own
+            truncated text visually spilled over this bar. The workspace name gets flex-1 instead
+            now (see its own comment above); a small fixed icon button costs this row almost
+            nothing regardless of how long the workspace name is. */}
+        <button
+          onClick={() => setCommandPaletteOpen(true)}
+          className="md:hidden shrink-0 w-9 h-9 rounded flex items-center justify-center text-neutral-500 hover:text-neutral-300 hover:bg-neutral-900/60 cursor-pointer"
+          title="Search"
+        >
+          <Search className="w-4 h-4" />
+        </button>
+        <div className="hidden md:flex flex-1 justify-center">
           <button
             onClick={() => setCommandPaletteOpen(true)}
             className="w-full max-w-md flex items-center gap-2 bg-neutral-900/60 rounded border border-neutral-800/80 px-3 py-1.5 text-[11px] text-neutral-500 hover:border-neutral-700 hover:text-neutral-300 cursor-pointer"
@@ -4375,9 +4397,12 @@ function PageContent() {
           // icon — without it, opening the mobile Spaces sheet while activeWorkspaceId was still
           // the personal workspace (e.g. landed there via "My Tasks") only ever showed that
           // workspace's own single auto-created space (just "My tasks"), never the real team
-          // workspace's actual Spaces. Reported live as "trykker Spaces, ser bare Personal."
+          // workspace's actual Spaces. Reported live as "trykker Spaces, ser bare Personal," then
+          // (after adding just the !w.isPersonal fallback) "NGM -> My Tasks -> Spaces lands on
+          // CRRM Media" for a user in more than one real workspace — lastRealWorkspaceId (the one
+          // actually last selected) fixes both.
           if (currentWorkspace?.isPersonal) {
-            const fallback = workspaces.find((w) => !w.isPersonal);
+            const fallback = workspaces.find((w) => w.id === lastRealWorkspaceId) ?? workspaces.find((w) => !w.isPersonal);
             if (fallback) setActiveWorkspaceId(fallback.id);
           }
           setMobileSpacesOpen(true);
