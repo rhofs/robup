@@ -2,10 +2,11 @@
 
 import { useState } from 'react';
 import type { useDraggable } from '@dnd-kit/core';
-import { Settings2, Crown, Shield, Trash2, Check, MessageCircle } from 'lucide-react';
+import { Settings2, Crown, Shield, Trash2, Check, MessageCircle, UserRound } from 'lucide-react';
 import { useTaskStore, type AppUser, type HierarchyWorkspace } from '../store/useTaskStore';
 import FloatingPopover from './FloatingPopover';
 import PersonAvatar from './PersonAvatar';
+import ViewProfileModal from './ViewProfileModal';
 
 type ManageableAvatarProps = {
   user: AppUser;
@@ -57,6 +58,7 @@ export default function ManageableAvatar({
 }: ManageableAvatarProps) {
   const { changeWorkspaceMemberRole, assignRole, unassignRole } = useTaskStore();
   const [open, setOpen] = useState(false);
+  const [viewingProfile, setViewingProfile] = useState(false);
 
   const member = workspace.members.find((m) => m.id === user.id);
   const workspaceRole = member?.workspaceRole ?? 'member';
@@ -102,7 +104,7 @@ export default function ManageableAvatar({
               e.stopPropagation();
               setOpen((o) => !o);
             }}
-            title={canManage ? 'Manage' : 'Send DM'}
+            title={canManage ? 'Manage' : 'Profile & DM'}
             className={`absolute ${BADGE_SIZE_CLASSES[size]} rounded-full bg-neutral-700 hover:bg-neutral-600 border-2 border-neutral-900 flex items-center justify-center cursor-pointer text-neutral-200`}
           >
             {/* Gear for Owner/Admin (there's real management underneath); a chat-bubble for
@@ -122,6 +124,16 @@ export default function ManageableAvatar({
             <span className="text-[10px] text-neutral-500 capitalize">{workspaceRole}</span>
           )}
         </div>
+
+        <button
+          onClick={() => {
+            setOpen(false);
+            setViewingProfile(true);
+          }}
+          className="w-full flex items-center gap-2 px-3 py-1.5 text-xs text-neutral-300 hover:bg-neutral-800/60 cursor-pointer text-left"
+        >
+          <UserRound className="w-3.5 h-3.5 shrink-0" /> View profile
+        </button>
 
         <button
           onClick={() => {
@@ -179,6 +191,7 @@ export default function ManageableAvatar({
           </div>
         )}
       </FloatingPopover>
+      <ViewProfileModal userId={viewingProfile ? user.id : null} onClose={() => setViewingProfile(false)} onStartDM={onStartDM} />
     </span>
   );
 }

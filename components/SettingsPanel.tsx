@@ -137,15 +137,19 @@ export default function SettingsPanel({
   canManage,
   onClose,
   onChange,
+  initialTab = 'general',
 }: {
   workspace: HierarchyWorkspace;
   canManage: boolean;
   onClose: () => void;
   onChange: () => void;
+  // Lets a caller land directly on a specific tab — e.g. Office's own "Invite" entry point opens
+  // straight to 'invite' instead of making someone click through from 'general' every time.
+  initialTab?: 'general' | 'roles' | 'invite' | 'import';
 }) {
   const { createRole, updateRole, deleteRole, assignRole, unassignRole, updateWorkspaceDetails, sendWorkspaceMemberInvite } = useTaskStore();
   const { connections, fetchConnections } = useChatStore();
-  const [tab, setTab] = useState<'general' | 'roles' | 'invite' | 'import'>('general');
+  const [tab, setTab] = useState<'general' | 'roles' | 'invite' | 'import'>(initialTab);
   const [hidden, setHidden] = useState(() => readHiddenNavTabs());
   const [weekNumbersHidden, setWeekNumbersHidden] = useState(() => readHideWeekNumbers());
 

@@ -16,6 +16,17 @@ type OfficePageProps = {
   users: AppUser[];
   activeUserId: string | null;
   activeRoomId: string | null;
+  // The workspace Office is actually scoped to right now — previously this component grabbed
+  // `workspaces[0]` internally (whichever real workspace happened to fetch first), completely
+  // ignoring which one was actually active. For anyone in more than one real workspace, that meant
+  // Office silently kept showing the same one workspace's rooms/roster no matter which was
+  // switched to — reported live as a phantom team member who "isn't me" and can't be clicked into
+  // (almost certainly someone from the *other* workspace, wrongly folded into this one's Lobby),
+  // and the Lobby's "Alle har et kontor" empty-state firing when it clearly shouldn't have (same
+  // wrong-membership-set cause). `workspaces` (plural, unchanged) is still needed separately below
+  // — a team member's own Tasks list can include tasks from *any* workspace they and the viewer
+  // both belong to, not just this one.
+  workspace: HierarchyWorkspace | null;
   workspaces: HierarchyWorkspace[];
   currentUserId: string | null;
   canManage: boolean;
@@ -29,12 +40,14 @@ type OfficePageProps = {
   onDeleteRoomRequest: (room: HierarchyRoom) => void;
   onRequestRemoveMember: (user: AppUser) => void;
   onStartDM: (userId: string) => void;
+  onOpenInviteSettings: () => void;
 };
 
 export default function OfficePage({
   users,
   activeUserId,
   activeRoomId,
+  workspace,
   workspaces,
   currentUserId,
   canManage,
@@ -48,6 +61,7 @@ export default function OfficePage({
   onDeleteRoomRequest,
   onRequestRemoveMember,
   onStartDM,
+  onOpenInviteSettings,
 }: OfficePageProps) {
   // taskId's List/Space aren't embedded on Task itself — build the lookup once from the tree,
   // same shape as the cross-Space breadcrumbs elsewhere in the app (e.g. QuickCreatePopover).
@@ -65,7 +79,6 @@ export default function OfficePage({
 
   const statusColorOf = (name: string) => statuses.find((s) => s.name === name)?.color || '#94a3b8';
 
-  const workspace = workspaces[0];
   // `users` is the app-wide registered-user list (used elsewhere for task-assignee pickers etc.)
   // — Office needs to show only THIS workspace's members, otherwise someone just removed via the
   // manage popover (or who simply isn't in this workspace at all) would still linger in the
@@ -104,12 +117,14 @@ export default function OfficePage({
         currentUserId={currentUserId}
         canManage={canManage}
         users={officeUsers}
+        allUsers={users}
         tasks={tasks}
         onSelectUser={(id) => onSelectUser(id)}
         onSelectRoom={(id) => onSelectRoom(id)}
         onDeleteRoomRequest={onDeleteRoomRequest}
         onRequestRemoveMember={onRequestRemoveMember}
         onStartDM={onStartDM}
+        onOpenInviteSettings={onOpenInviteSettings}
       />
     );
   }

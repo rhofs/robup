@@ -2,9 +2,10 @@
 
 import { useState } from 'react';
 import { useDraggable, useDroppable } from '@dnd-kit/core';
-import { Megaphone, Pencil, Plus, Trash2, Users as UsersIcon, DoorOpen, DoorClosed, Maximize2 } from 'lucide-react';
+import { Megaphone, Pencil, Plus, Trash2, Users as UsersIcon, DoorOpen, DoorClosed, Maximize2, UserPlus, Link2 } from 'lucide-react';
 import { useTaskStore, type HierarchyWorkspace, type HierarchyRoom, type AppUser, type Task } from '../store/useTaskStore';
 import ManageableAvatar from './ManageableAvatar';
+import FloatingPopover from './FloatingPopover';
 
 // The "HQ Building" Office home view — a message-of-the-day banner plus a top-down floor plan:
 // Rooms render as boxes in a grid (auto-placed by `order`, left-to-right/top-to-bottom — no free
@@ -21,12 +22,19 @@ type OfficeRoomsProps = {
   currentUserId: string | null;
   canManage: boolean;
   users: AppUser[];
+  // The app-wide registered-user directory (unfiltered) — needed for the "+ Invite" picker's
+  // quick-add list (existing users not yet a member here), distinct from `users` above which is
+  // already scoped down to this workspace's own roster.
+  allUsers: AppUser[];
   tasks: Task[];
   onSelectUser: (userId: string) => void;
   onSelectRoom: (roomId: string) => void;
   onDeleteRoomRequest: (room: HierarchyRoom) => void;
   onRequestRemoveMember: (user: AppUser) => void;
   onStartDM: (userId: string) => void;
+  // Opens the full invite flow (link generation, targeted Connection invites) — reuses
+  // SettingsPanel's existing 'invite' tab rather than rebuilding that flow a second time here.
+  onOpenInviteSettings: () => void;
 };
 
 export default function OfficeRooms({
@@ -34,16 +42,20 @@ export default function OfficeRooms({
   currentUserId,
   canManage,
   users,
+  allUsers,
   tasks,
   onSelectUser,
   onSelectRoom,
   onDeleteRoomRequest,
   onRequestRemoveMember,
   onStartDM,
+  onOpenInviteSettings,
 }: OfficeRoomsProps) {
-  const { createRoom } = useTaskStore();
+  const { createRoom, addWorkspaceMember } = useTaskStore();
   const [creatingRoom, setCreatingRoom] = useState(false);
   const [newRoomDraft, setNewRoomDraft] = useState('');
+  const [inviteOpen, setInviteOpen] = useState(false);
+  const nonMemberUsers = allUsers.filter((u) => !users.some((m) => m.id === u.id));
 
   const unassigned = users.filter((u) => u.roomId === null);
   const taskCountFor = (userIds: string[]) =>
@@ -63,6 +75,57 @@ export default function OfficeRooms({
 
   return (
     <div className="space-y-4">
+      {canManage && (
+        <div className="flex justify-end">
+          <FloatingPopover
+            open={inviteOpen}
+            onClose={() => setInviteOpen(false)}
+            align="right"
+            panelClassName="w-64 bg-neutral-900 border border-neutral-800 rounded shadow-xl py-1.5"
+            anchor={
+              <button
+                onClick={() => setInviteOpen((o) => !o)}
+                className="text-[11px] font-medium px-3 py-1.5 rounded bg-blue-600 hover:bg-blue-500 text-white cursor-pointer transition flex items-center gap-1.5"
+              >
+                <UserPlus className="w-3.5 h-3.5" /> Invite
+              </button>
+            }
+          >
+            {nonMemberUsers.length > 0 && (
+              <>
+                <div className="text-[10px] uppercase tracking-wide text-neutral-500 px-3 py-1">Add existing user</div>
+                <div className="max-h-40 overflow-y-auto">
+                  {nonMemberUsers.map((u) => (
+                    <button
+                      key={u.id}
+                      onClick={() => {
+                        addWorkspaceMember(workspace.id, u.id);
+                        setInviteOpen(false);
+                      }}
+                      className="w-full text-left px-3 py-1.5 text-xs text-neutral-300 hover:bg-neutral-800/60 cursor-pointer flex items-center gap-2"
+                    >
+                      <span className="w-5 h-5 rounded-full text-[8px] font-bold flex items-center justify-center text-white shrink-0" style={{ backgroundColor: u.color }}>
+                        {u.initials}
+                      </span>
+                      <span className="truncate">{u.name}</span>
+                    </button>
+                  ))}
+                </div>
+                <div className="border-t border-neutral-800 my-1" />
+              </>
+            )}
+            <button
+              onClick={() => {
+                setInviteOpen(false);
+                onOpenInviteSettings();
+              }}
+              className="w-full text-left px-3 py-1.5 text-xs text-blue-400 hover:bg-neutral-800/60 cursor-pointer flex items-center gap-1.5"
+            >
+              <Link2 className="w-3.5 h-3.5" /> Invite by link or search…
+            </button>
+          </FloatingPopover>
+        </div>
+      )}
       <MessageBanner workspaceId={workspace.id} value={workspace.messageOfTheDay} />
 
       {/* Subtle graph-paper floor texture sells the "seen from above" read — a grid of rooms on a

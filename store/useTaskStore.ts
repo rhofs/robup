@@ -523,7 +523,7 @@ interface TaskStore {
   setDocTaskLink: (docId: string, taskId: string | null) => Promise<void>;
 
   fetchComments: (taskId: string) => Promise<void>;
-  addComment: (taskId: string, body: string, authorId?: string | null) => Promise<void>;
+  addComment: (taskId: string, body: string) => Promise<void>;
   deleteComment: (taskId: string, commentId: string) => Promise<void>;
   logActivity: (taskId: string, body: string, kind: string) => Promise<void>;
   fetchEventComments: (eventId: string) => Promise<void>;
@@ -2643,12 +2643,12 @@ export const useTaskStore = create<TaskStore>((set, get) => {
       }
     },
 
-    addComment: async (taskId, body, authorId = null) => {
+    addComment: async (taskId, body) => {
       try {
         const res = await fetch(`/api/tasks/${taskId}/comments`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ body, authorId }),
+          body: JSON.stringify({ body }),
         });
         if (!res.ok) {
           console.error('Comment API returned an error:', res.status);
@@ -2665,7 +2665,7 @@ export const useTaskStore = create<TaskStore>((set, get) => {
             await fetch(`/api/tasks/${taskId}/comments`, {
               method: 'POST',
               headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({ id: comment.id, body, authorId, type: comment.type }),
+              body: JSON.stringify({ id: comment.id, body, type: comment.type }),
             });
             set((state) => ({
               comments: { ...state.comments, [taskId]: [...(state.comments[taskId] || []), comment] },

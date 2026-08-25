@@ -797,7 +797,6 @@ function PageContent() {
   } | null>(null);
 
   const [newCommentBody, setNewCommentBody] = useState('');
-  const [commentAsUserId, setCommentAsUserId] = useState(currentUserId ?? '');
 
   const [taskMenu, setTaskMenu] = useState<{ x: number; y: number; task: Task } | null>(null);
   const [spaceMenu, setSpaceMenu] = useState<{ x: number; y: number; space: HierarchySpace } | null>(null);
@@ -810,6 +809,7 @@ function PageContent() {
   const [creatingSpace, setCreatingSpace] = useState(false);
   const [trashOpen, setTrashOpen] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
+  const [settingsInitialTab, setSettingsInitialTab] = useState<'general' | 'roles' | 'invite' | 'import'>('general');
   const [hiddenNavTabs, setHiddenNavTabs] = useState<Set<NavTabId>>(() => new Set());
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   // Whichever grid tile (AppLauncherGrid.tsx) the user last picked — remembered across reloads so
@@ -3076,36 +3076,21 @@ function PageContent() {
                 <Plus className="w-3 h-3" /> New workspace
               </button>
             )}
+            {/* Member view/add/remove moved to Office (per explicit feedback — Office is the
+                team-roster surface, this popover is for switching *which* workspace, not managing
+                who's in it). Office's own avatar tiles already cover view+remove via
+                ManageableAvatar's right-click menu; a "+ Add / Invite" entry point lives in
+                OfficeRooms.tsx's own header now. */}
             {currentWorkspace && !currentWorkspace.isPersonal && (
-              <>
-                <div className="border-t border-neutral-800 my-1" />
-                <div className="text-[10px] uppercase tracking-wide text-neutral-500 px-3 py-1">Members</div>
-                {currentWorkspace.members.map((m) => (
-                  <div key={m.id} className="w-full px-3 py-1 text-xs text-neutral-300 flex items-center justify-between gap-2">
-                    <span className="truncate">{m.name}</span>
-                    {currentWorkspace.members.length > 1 && (
-                      <button
-                        onClick={() => removeWorkspaceMember(currentWorkspace.id, m.id)}
-                        title="Remove from workspace"
-                        className="text-neutral-600 hover:text-red-400 cursor-pointer shrink-0"
-                      >
-                        <X className="w-3 h-3" />
-                      </button>
-                    )}
-                  </div>
-                ))}
-                {users
-                  .filter((u) => !currentWorkspace.members.some((m) => m.id === u.id))
-                  .map((u) => (
-                    <button
-                      key={u.id}
-                      onClick={() => addWorkspaceMember(currentWorkspace.id, u.id)}
-                      className="w-full text-left px-3 py-1.5 text-xs text-blue-400 hover:bg-neutral-800/60 cursor-pointer flex items-center gap-1.5"
-                    >
-                      <Plus className="w-3 h-3" /> {u.name}
-                    </button>
-                  ))}
-              </>
+              <button
+                onClick={() => {
+                  setActiveView('office');
+                  setWorkspaceSwitcherOpen(false);
+                }}
+                className="w-full text-left px-3 py-1.5 text-xs text-neutral-400 hover:bg-neutral-800/60 cursor-pointer flex items-center gap-1.5 border-t border-neutral-800 mt-1"
+              >
+                <Building2 className="w-3 h-3" /> Manage team in Office
+              </button>
             )}
           </FloatingPopover>
         </div>
@@ -4237,6 +4222,7 @@ function PageContent() {
                 users={users}
                 activeUserId={activeOfficeUserId}
                 activeRoomId={activeOfficeRoomId}
+                workspace={currentWorkspace ?? null}
                 workspaces={workspaces}
                 currentUserId={currentUserId}
                 canManage={canManageCurrentWorkspace}
@@ -4250,6 +4236,10 @@ function PageContent() {
                 onDeleteRoomRequest={setRoomToDelete}
                 onRequestRemoveMember={(user) => setMemberToRemove(user)}
                 onStartDM={handleStartDMFromOffice}
+                onOpenInviteSettings={() => {
+                  setSettingsInitialTab('invite');
+                  setSettingsOpen(true);
+                }}
               />
             ) : activeView === 'chat' ? (
               // No workspace-level gate here — DMs are workspace-agnostic (Connections work), and
@@ -5845,18 +5835,6 @@ function PageContent() {
                 </div>
 
                 <div className="p-4 border-t border-neutral-800 space-y-2 shrink-0">
-                  <select
-                    value={commentAsUserId}
-                    onChange={(e) => setCommentAsUserId(e.target.value)}
-                    className="w-full bg-neutral-950 border border-neutral-800 rounded px-2 py-1 text-[11px] text-neutral-300 focus:outline-none"
-                  >
-                    <option value="">Comment as...</option>
-                    {users.map((u) => (
-                      <option key={u.id} value={u.id}>
-                        {u.name}
-                      </option>
-                    ))}
-                  </select>
                   <MentionTextarea
                     value={newCommentBody}
                     onChange={(e) => setNewCommentBody(e.target.value)}
@@ -5864,7 +5842,7 @@ function PageContent() {
                       if (e.key === 'Enter' && !e.shiftKey) {
                         e.preventDefault();
                         if (newCommentBody.trim()) {
-                          addComment(activeModalTask.id, newCommentBody.trim(), commentAsUserId || null);
+                          addComment(activeModalTask.id, newCommentBody.trim());
                           setNewCommentBody('');
                         }
                       }
@@ -5876,7 +5854,7 @@ function PageContent() {
                   <button
                     onClick={() => {
                       if (!newCommentBody.trim()) return;
-                      addComment(activeModalTask.id, newCommentBody.trim(), commentAsUserId || null);
+                      addComment(activeModalTask.id, newCommentBody.trim());
                       setNewCommentBody('');
                     }}
                     className="w-full bg-blue-600 hover:bg-blue-500 text-white text-xs py-2 rounded font-medium cursor-pointer"
@@ -6221,7 +6199,11 @@ function PageContent() {
         <SettingsPanel
           workspace={currentWorkspace}
           canManage={canManageCurrentWorkspace}
-          onClose={() => setSettingsOpen(false)}
+          initialTab={settingsInitialTab}
+          onClose={() => {
+            setSettingsOpen(false);
+            setSettingsInitialTab('general');
+          }}
           onChange={() => {
             setHiddenNavTabs(readHiddenNavTabs());
             setHideWeekNumbers(readHideWeekNumbers());
