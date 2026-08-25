@@ -805,6 +805,7 @@ function PageContent() {
   const [editSpaceColor, setEditSpaceColor] = useState(FIELD_COLOR_CHOICES[0]);
   const [editSpaceTextColor, setEditSpaceTextColor] = useState<string | null>(null);
   const [editSpaceIcon, setEditSpaceIcon] = useState<string | null>(null);
+  const [editSpaceCoverUrl, setEditSpaceCoverUrl] = useState('');
   const [spaceToDelete, setSpaceToDelete] = useState<HierarchySpace | null>(null);
   const [creatingSpace, setCreatingSpace] = useState(false);
   const [trashOpen, setTrashOpen] = useState(false);
@@ -1756,6 +1757,7 @@ function PageContent() {
     setEditSpaceColor(space.color);
     setEditSpaceTextColor(space.textColor);
     setEditSpaceIcon(space.icon);
+    setEditSpaceCoverUrl(space.coverImageUrl ?? '');
     setSpaceMenu(null);
   };
 
@@ -1766,6 +1768,7 @@ function PageContent() {
       color: editSpaceColor,
       textColor: editSpaceTextColor,
       icon: editSpaceIcon,
+      coverImageUrl: editSpaceCoverUrl.trim() || null,
     });
     setSpaceEditTarget(null);
   };
@@ -4892,6 +4895,21 @@ function PageContent() {
                   );
                 })()}
                 <span className="text-xs text-neutral-300">{editSpaceName || 'Preview'}</span>
+              </div>
+              <div>
+                {/* Moved here from a permanently-visible empty gradient banner on the Space Home
+                    page itself — that banner showed on *every* Space with no cover set (including
+                    the auto-created personal "My Tasks" space, which never has one), just to offer
+                    an "Add cover" hover button. Setting a cover is now purely opt-in from Edit
+                    Space instead; Space Home itself shows nothing at all when coverImageUrl is
+                    unset (see SpaceHome.tsx's own CoverBanner). */}
+                <label className="text-[11px] text-neutral-400 mb-1 block">Cover image URL (optional)</label>
+                <input
+                  value={editSpaceCoverUrl}
+                  onChange={(e) => setEditSpaceCoverUrl(e.target.value)}
+                  placeholder="https://..."
+                  className="w-full bg-neutral-950 border border-neutral-700 rounded px-3 py-2 text-xs text-white focus:outline-none focus:border-blue-500"
+                />
               </div>
               <button onClick={saveSpaceEdit} className="w-full bg-blue-600 hover:bg-blue-500 text-white text-xs py-2 rounded font-medium cursor-pointer">
                 Save

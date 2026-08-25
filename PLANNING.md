@@ -2016,6 +2016,16 @@ Two items:
 
 `npx tsc --noEmit -p .`, `npm run build`, and a real `npm run dev` boot all clean. Not visually re-verified in a real browser/device.
 
+## Today's session (2026-08-25, continued a twentieth time) — Space cover only shows once actually set; two feature asks clarified and deferred
+
+User flagged three things; a quick clarifying round resolved two without any code needed:
+- The "expand Spaces inline instead of opening a new window" ask turned out to already match what shipped a few entries up (the mobile Spaces tree) — user had just gotten turned around navigating inside a Space, not describing a missing feature. No action needed.
+- Dark/Light theme: explicitly deferred at the user's own request (flagged as a large undertaking — the whole app is hardcoded dark, a real light theme means touching nearly every screen) — not started, revisit as its own dedicated piece of work later.
+
+**Shipped**: `SpaceHome.tsx`'s cover banner used to always render — a h-36 gradient placeholder with a hover "Add cover" button — on *every* Space regardless of whether one was ever set, including the auto-created personal "My Tasks" space, which never has one. Now `CoverBanner` returns `null` entirely when `space.coverImageUrl` is unset; setting one for the first time moved to the existing Edit Space modal (`app/page.tsx`, new "Cover image URL" field alongside Name/Color/Icon) instead of an always-visible empty banner. Once a cover *is* set, the inline "hover to change" convenience on the Space Home page itself still works exactly as before — only the coverless empty-state placeholder is gone.
+
+`npx tsc --noEmit -p .`, `npm run build`, and a real `npm run dev` boot all clean.
+
 ## Checkpoint — end of day, 2026-08-25
 
 Everything below is committed and pushed to `origin/main` (latest: `b0acb64`). Nothing has been confirmed working on a real device yet for anything from `2e7ccb6` onward (the mobile-focused run) — all of it compiled/built clean and got a real `npm run dev` boot check, but this session had no browser/device tool, so the visual/interaction behavior itself is unverified. **Next session should start with a Reinstall + a pass through this list on an actual phone**, roughly in the order it was built:

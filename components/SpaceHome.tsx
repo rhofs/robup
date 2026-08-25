@@ -172,6 +172,12 @@ export default function SpaceHome({ space, tasks, onNavigateList }: SpaceHomePro
   );
 }
 
+// Only rendered at all once a cover is actually set — used to always render a h-36 gradient
+// placeholder + hover "Add cover" button on *every* Space regardless (including the auto-created
+// personal "My Tasks" space, which never has one), permanent clutter for something most Spaces
+// never use. Setting one for the first time now happens in the Edit Space modal (app/page.tsx,
+// "Cover image URL" field) instead; this component keeps only the "change an existing one inline"
+// convenience, since that's a real save vs. reopening Edit Space every time.
 function CoverBanner({ space, onCommit }: { space: HierarchySpace; onCommit: (url: string | null) => void }) {
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState(space.coverImageUrl || '');
@@ -181,6 +187,8 @@ function CoverBanner({ space, onCommit }: { space: HierarchySpace; onCommit: (ur
     const trimmed = draft.trim();
     onCommit(trimmed || null);
   };
+
+  if (!space.coverImageUrl && !editing) return null;
 
   return (
     <div
