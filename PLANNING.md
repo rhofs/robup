@@ -1983,6 +1983,16 @@ Three items, first two real bugs found the moment mobile testing actually starte
 
 `npx tsc --noEmit -p .`, `npm run build`, and a real `npm run dev` boot all clean for items 1–2.
 
+## Today's session (2026-08-25, continued a seventeenth time) — A Task description field (matching ClickUp), hiding the desktop task ID, and a mobile workspace switcher
+
+User shared a ClickUp screenshot of the reference layout. Three items:
+
+1. **Task description**: `Task.description` already existed in the schema and `PATCH /api/tasks/[id]` already accepted it — genuinely never had a UI anywhere. New `TaskDescriptionBlock` (`app/page.tsx`, click-to-edit textarea, same shape `SpaceHome.tsx`'s `DescriptionBlock` already established for `Space.description`) placed directly under the Status/Dates/Assignees metadata bar and above Documents — matching exactly where ClickUp itself puts it. New `optimisticSetDescription` store action (`useTaskStore.ts`), same undo/redo shape as `optimisticSetTitle`. Deliberately distinct from Documents: Documents are full rich-text collaborative pages meant to grow, this is the one-paragraph "what is this task" summary.
+2. **Desktop task ID removed**: the raw UUID under the title was already `hidden md:block` (mobile never showed it) — now removed outright on desktop too, matching mobile. The header's own "Copy task ID" button (unchanged) is still the way to get it when actually needed.
+3. **Mobile workspace switcher**: the app-launcher grid (`AppLauncherGrid.tsx`, the bottom nav's 4th-slot popup) gained a "Workspace" row section above the tile grid — only rendered once there's genuinely more than one real workspace to switch between. Mobile had no way at all to switch between multiple real workspaces before this (yesterday's fixes made the *fallback* land correctly, but there was still no way to deliberately choose). Rows, not tiles, matching `MobileSpacesSheet.tsx`'s own Space-row shape rather than the square icon grid below it.
+
+`npx tsc --noEmit -p .`, `npm run build`, and a real `npm run dev` boot all clean. No schema change needed (item 1's DB column already existed). Not visually re-verified in a real browser/device.
+
 ## Checkpoint — end of day, 2026-08-25
 
 Everything below is committed and pushed to `origin/main` (latest: `b0acb64`). Nothing has been confirmed working on a real device yet for anything from `2e7ccb6` onward (the mobile-focused run) — all of it compiled/built clean and got a real `npm run dev` boot check, but this session had no browser/device tool, so the visual/interaction behavior itself is unverified. **Next session should start with a Reinstall + a pass through this list on an actual phone**, roughly in the order it was built:

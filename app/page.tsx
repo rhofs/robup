@@ -465,6 +465,61 @@ const timeAgo = (dateStr: string | Date) => {
   return `${days}d ago`;
 };
 
+// Task modal's own free-text description (Task.description — already existed in the schema/API,
+// never had a UI until now). Same click-to-edit-textarea shape SpaceHome.tsx's DescriptionBlock
+// already established for Space.description — kept as its own small copy rather than sharing that
+// component, since the two are tied to different store actions/types with nothing else in common.
+// Deliberately separate from Documents: Documents are full rich-text pages (live collaborative
+// Tiptap editors, meant for specs/notes that grow over time); this is the one-paragraph "what is
+// this task" summary ClickUp itself shows directly under the title/metadata row, not another doc.
+function TaskDescriptionBlock({ value, onCommit }: { value: string | null; onCommit: (value: string | null) => void }) {
+  const [editing, setEditing] = useState(false);
+  const [draft, setDraft] = useState(value || '');
+
+  const commit = () => {
+    setEditing(false);
+    const trimmed = draft.trim();
+    onCommit(trimmed || null);
+  };
+
+  if (editing) {
+    return (
+      <textarea
+        autoFocus
+        value={draft}
+        onChange={(e) => setDraft(e.target.value)}
+        onBlur={commit}
+        onKeyDown={(e) => {
+          if (e.key === 'Escape') {
+            setDraft(value || '');
+            setEditing(false);
+          }
+        }}
+        rows={3}
+        placeholder="Write a description..."
+        className="w-full bg-neutral-900/60 border border-blue-500 rounded px-3 py-2 text-xs text-neutral-200 focus:outline-none resize-none"
+      />
+    );
+  }
+
+  return (
+    <div
+      onClick={() => {
+        setDraft(value || '');
+        setEditing(true);
+      }}
+      className="group flex items-start gap-2 px-2 py-1.5 -mx-2 rounded hover:bg-neutral-800/40 cursor-text"
+    >
+      {value ? (
+        <p className="text-xs text-neutral-300 whitespace-pre-wrap flex-1">{value}</p>
+      ) : (
+        <p className="text-xs text-neutral-500 italic flex-1">Write a description...</p>
+      )}
+      <Pencil className="w-3 h-3 text-neutral-600 opacity-0 group-hover:opacity-100 shrink-0 mt-0.5" />
+    </div>
+  );
+}
+
 export default function Home() {
   return (
     <Suspense fallback={null}>
@@ -517,6 +572,7 @@ function PageContent() {
     optimisticSetList,
     optimisticSetParent,
     optimisticSetTitle,
+    optimisticSetDescription,
     setTaskPrivacy,
     createStatus,
     updateStatus,
@@ -5356,9 +5412,6 @@ function PageContent() {
                       {activeModalTask.title}
                     </h2>
                   )}
-                  {/* Hidden on mobile — a raw UUID is pure visual noise for anyone who isn't
-                      debugging; reachable via the header's "Copy task ID" button instead. */}
-                  <p className="hidden md:block text-[11px] text-neutral-500 font-mono mt-1">ID: {activeModalTask.id}</p>
                 </div>
 
                 {/* Compact metadata bar — Status, Dates, Assignees together right under the
@@ -5550,6 +5603,14 @@ function PageContent() {
                     );
                   })()}
                 </div>
+
+                {/* Description — a plain free-text summary, distinct from Documents below (full
+                    rich-text pages). Matches where ClickUp itself puts this: directly under the
+                    Status/Dates/Assignees row, above everything else. */}
+                <TaskDescriptionBlock
+                  value={activeModalTask.description}
+                  onCommit={(value) => optimisticSetDescription(activeModalTask.id, value)}
+                />
 
                 {/* Docs — multiple named documents, live collaborative editing */}
                 <div className="space-y-2 pt-4 border-t border-neutral-800">
@@ -6098,6 +6159,9 @@ function PageContent() {
         onOpenSettings={() => setSettingsOpen(true)}
         onOpenTrash={() => setTrashOpen(true)}
         onNavigate={closeMobileOverlays}
+        realWorkspaces={workspaces.filter((w) => !w.isPersonal)}
+        activeWorkspaceId={activeWorkspaceId}
+        onSelectWorkspace={setActiveWorkspaceId}
       />
       <MobileSpacesSheet
         open={mobileSpacesOpen}

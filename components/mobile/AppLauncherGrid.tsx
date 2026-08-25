@@ -1,9 +1,10 @@
 'use client';
 
 import { AnimatePresence, motion } from 'framer-motion';
-import { Download, Settings, Trash2 } from 'lucide-react';
+import { Check, Download, Settings, Trash2 } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
 import type { MenuTile } from './navTypes';
+import type { HierarchyWorkspace } from '../../store/useTaskStore';
 import { useInstallPrompt } from '../../hooks/useInstallPrompt';
 
 type Props = {
@@ -23,6 +24,14 @@ type Props = {
   // pinned nav button can open this grid while Spaces is still open) and a tile here always means
   // "go somewhere else now."
   onNavigate: () => void;
+  // Real (non-personal) workspaces — mobile previously had no way at all to switch between more
+  // than one, unlike desktop's own top-left switcher dropdown (reported live after a related fix:
+  // landing on the wrong real workspace was only discoverable, not choosable, on mobile). Rows,
+  // not square icon tiles like the rest of this grid — workspace names vary too much in length to
+  // read well as a tile label, same reasoning MobileSpacesSheet.tsx's own Space rows already use.
+  realWorkspaces: HierarchyWorkspace[];
+  activeWorkspaceId: string | null;
+  onSelectWorkspace: (workspaceId: string) => void;
 };
 
 type TileProps = {
@@ -76,6 +85,9 @@ export default function AppLauncherGrid({
   onOpenSettings,
   onOpenTrash,
   onNavigate,
+  realWorkspaces,
+  activeWorkspaceId,
+  onSelectWorkspace,
 }: Props) {
   // Only ever a real actionable tile on Chrome/Edge-family browsers that fired
   // `beforeinstallprompt` (see useInstallPrompt.ts) — iOS has no programmatic install prompt at
@@ -109,6 +121,41 @@ export default function AppLauncherGrid({
               animate={{ opacity: 1, scale: 1 }}
               transition={{ duration: 0.16, delay: 0.1, ease: 'easeOut' }}
             >
+              {/* Only shown once there's actually more than one real workspace to switch between
+                  — a switcher with nothing to switch to is just clutter. Rows, not tiles: matches
+                  MobileSpacesSheet.tsx's own Space-row shape rather than the square icon grid
+                  below, since a workspace name is free text of unpredictable length. */}
+              {realWorkspaces.length > 1 && (
+                <>
+                  <p className="text-[10px] font-bold text-neutral-500 uppercase tracking-wider px-1 pb-1.5">Workspace</p>
+                  <div className="space-y-0.5 pb-3">
+                    {realWorkspaces.map((ws) => {
+                      const isActive = ws.id === activeWorkspaceId;
+                      return (
+                        <button
+                          key={ws.id}
+                          onClick={() => {
+                            onNavigate();
+                            onSelectWorkspace(ws.id);
+                            onClose();
+                          }}
+                          className={`w-full flex items-center gap-3 px-2 py-2 rounded-lg text-left transition cursor-pointer ${
+                            isActive ? 'bg-neutral-800' : 'hover:bg-neutral-800/60'
+                          }`}
+                        >
+                          <span className="w-7 h-7 rounded-lg bg-blue-600 flex items-center justify-center shrink-0 text-white text-[11px] font-bold">
+                            {ws.name.slice(0, 1).toUpperCase()}
+                          </span>
+                          <span className="min-w-0 flex-1 text-sm text-neutral-200 truncate">{ws.name}</span>
+                          {isActive && <Check className="w-4 h-4 text-blue-400 shrink-0" />}
+                        </button>
+                      );
+                    })}
+                  </div>
+                  <div className="h-px bg-neutral-800/70 mb-3" />
+                </>
+              )}
+
               <div className="grid grid-cols-3 gap-4">
                 {pinnableTiles.map((tile) => (
                   <Tile

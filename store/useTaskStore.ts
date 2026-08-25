@@ -341,6 +341,7 @@ interface TaskStore {
   setTaskPrivacy: (taskId: string, isPrivate: boolean, accessJson: string) => void;
   optimisticSetParent: (taskId: string, parentId: string | null) => void;
   optimisticSetTitle: (taskId: string, title: string) => void;
+  optimisticSetDescription: (taskId: string, description: string | null) => void;
 
   createStatus: (spaceId: string, name: string, color: string, id?: string) => Promise<void>;
   updateStatus: (spaceId: string, statusId: string, patch: { name?: string; color?: string; order?: number }) => Promise<void>;
@@ -1139,6 +1140,27 @@ export const useTaskStore = create<TaskStore>((set, get) => {
           label: 'Rename task',
           undo: () => get().optimisticSetTitle(taskId, oldTitle),
           redo: () => get().optimisticSetTitle(taskId, title),
+        });
+      }
+    },
+
+    optimisticSetDescription: (taskId, description) => {
+      const oldDescription = get().tasks.find((t) => t.id === taskId)?.description ?? null;
+      set((state) => ({
+        tasks: state.tasks.map((t) => (t.id === taskId ? { ...t, description } : t)),
+      }));
+      fetch(`/api/tasks/${taskId}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ description, authorId: useSessionStore.getState().currentUserId }),
+      }).then(() => {
+        if (get().comments[taskId]) get().fetchComments(taskId);
+      });
+      if (oldDescription !== description) {
+        useHistoryStore.getState().push({
+          label: 'Edit description',
+          undo: () => get().optimisticSetDescription(taskId, oldDescription),
+          redo: () => get().optimisticSetDescription(taskId, description),
         });
       }
     },
