@@ -1342,6 +1342,17 @@ function PageContent() {
   // MobilePersonalSpacesSheet's own data source — a plain find (not useMemo) since `workspaces`
   // already changes identity on every relevant update and this isn't hot-path.
   const personalWorkspace = workspaces.find((w) => w.isPersonal);
+  // The real "Spaces" sheet's own data source — deliberately NOT currentWorkspace, which
+  // legitimately *is* the personal workspace while My Tasks is active. That sheet component is
+  // never unmounted (see MobileSpacesSheet.tsx's own file-level comment), so feeding it
+  // currentWorkspace would carry the personal workspace's own Spaces into its internal
+  // expand-state tracking while hidden, purely because of which workspace happened to be active
+  // at that moment — this always resolves to a *real* workspace, same fallback openMobileSpaces()
+  // itself already uses.
+  const realSheetWorkspace =
+    currentWorkspace && !currentWorkspace.isPersonal
+      ? currentWorkspace
+      : (workspaces.find((w) => w.id === lastRealWorkspaceId) ?? workspaces.find((w) => !w.isPersonal));
 
   // Shared with the mobile bottom nav / app-launcher grid (components/mobile/*) so both surfaces
   // drive the exact same setters as the desktop icon rail — see handleTasksNavClick below and the
@@ -1360,9 +1371,8 @@ function PageContent() {
     // any more (that used to rely on a React-local `lastRealNav` that could drift out of sync with
     // this exact same information already tracked in the store, reported live as the memory
     // "sometimes working, sometimes not").
-    if (currentWorkspace?.isPersonal) {
-      const fallback = workspaces.find((w) => w.id === lastRealWorkspaceId) ?? workspaces.find((w) => !w.isPersonal);
-      if (fallback) setActiveWorkspaceId(fallback.id);
+    if (currentWorkspace?.isPersonal && realSheetWorkspace) {
+      setActiveWorkspaceId(realSheetWorkspace.id);
     }
     setActiveView('board');
   };
@@ -1383,9 +1393,8 @@ function PageContent() {
     setModalTaskStack([]);
     // setActiveWorkspaceId now restores this workspace's own last position automatically — see
     // its own comment in store/useTaskStore.ts.
-    if (currentWorkspace?.isPersonal) {
-      const fallback = workspaces.find((w) => w.id === lastRealWorkspaceId) ?? workspaces.find((w) => !w.isPersonal);
-      if (fallback) setActiveWorkspaceId(fallback.id);
+    if (currentWorkspace?.isPersonal && realSheetWorkspace) {
+      setActiveWorkspaceId(realSheetWorkspace.id);
     }
     // Opening the sheet with nothing picked yet left activeView pointed at whatever view was
     // active before (Chat, Planner, ...) — the nav-tab highlight glitches this caused (another
@@ -6361,9 +6370,14 @@ function PageContent() {
         onClose={() => setMobileSpacesOpen(false)}
         title="Spaces"
         onOpenSearch={() => setCommandPaletteOpen(true)}
-        workspaceName={currentWorkspace?.name ?? 'Workspace'}
-        workspaceId={currentWorkspace?.id ?? null}
-        spaces={currentWorkspace?.spaces ?? []}
+        // Deliberately NOT currentWorkspace — that legitimately *becomes* the personal workspace
+        // while My Tasks is active, and this sheet (never unmounted, see MobileSpacesSheet.tsx's
+        // own file-level comment) would then briefly carry the personal workspace's own Spaces
+        // into its internal expand-state tracking, even while hidden. This mirrors what
+        // openMobileSpaces()'s own fallback already resolves to.
+        workspaceName={realSheetWorkspace?.name ?? 'Workspace'}
+        workspaceId={realSheetWorkspace?.id ?? null}
+        spaces={realSheetWorkspace?.spaces ?? []}
         activeSpaceId={activeSpaceId}
         activeListIds={activeListIds}
         onSelectSpace={(spaceId) => {
