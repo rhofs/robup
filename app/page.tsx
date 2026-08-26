@@ -857,13 +857,6 @@ function PageContent() {
   // Chat/Planner filter sheets) just stayed visually on top forever after being opened once,
   // silently masking every subsequent tap even though `activeView` (and the URL) really was
   // switching correctly underneath the whole time.
-  const closeMobileOverlays = useCallback(() => {
-    setMobileSpacesOpen(false);
-    setMobilePersonalSpacesOpen(false);
-    setMobileMenuOpen(false);
-    setMobileChatSheetOpen(false);
-    setMobileCalendarFilterOpen(false);
-  }, []);
   // Set synchronously (never via state) by openMobileSpaces()/the My Tasks tile's onClick right
   // before they call setActiveView('board') to open their own sheet — those two calls landing in
   // the same batched render change activeView's value, which used to make the backstop effect
@@ -871,7 +864,29 @@ function PageContent() {
   // (true) call from that same tap. Reported live as "Spaces dumps me straight into a random
   // Space/List instead of showing the tree" and "My Tasks shows the SpaceHome card instead of the
   // list" — both were really this same close-right-after-open race, not a targeting bug.
+  //
+  // Consumed by closeMobileOverlays() itself (below) rather than only by the activeView-watching
+  // effect that follows it — Spaces and My Tasks both use activeView === 'board', so bouncing
+  // directly between the two (a real, common path) never actually changes activeView's *value* at
+  // all, meaning that effect's dependency never fires and the flag was never getting reset. It sat
+  // stuck `true` until some later, unrelated nav tap happened to change activeView for real — at
+  // which point *that* tap's own closeMobileOverlays() call got silently (and wrongly) skipped too.
+  // Reported live as "My Tasks ender fortsatt opp på 'Kort sida' om jeg går frem og tilbake 2
+  // ganger" — the second round tripped over a flag left behind by the first. Consuming it inside
+  // closeMobileOverlays() itself means *any* call — direct (onNavigate, at the top of every real
+  // nav tap) or via the effect — clears it, so it can never survive past the very next close.
   const suppressOverlayCloseRef = useRef(false);
+  const closeMobileOverlays = useCallback(() => {
+    if (suppressOverlayCloseRef.current) {
+      suppressOverlayCloseRef.current = false;
+      return;
+    }
+    setMobileSpacesOpen(false);
+    setMobilePersonalSpacesOpen(false);
+    setMobileMenuOpen(false);
+    setMobileChatSheetOpen(false);
+    setMobileCalendarFilterOpen(false);
+  }, []);
   // Backstop for activeView changes that don't go through one of the nav's own tap handlers below
   // (e.g. a deep link, or opening a task from search) — MobileBottomNav/AppLauncherGrid also call
   // closeMobileOverlays() directly at the moment of every nav tap, which is the actual fix: this
@@ -879,10 +894,6 @@ function PageContent() {
   // re-tapping a destination you were already on before opening Spaces (activeView never changes)
   // silently skipped it, leaving Spaces stuck open exactly when the tap should have closed it.
   useEffect(() => {
-    if (suppressOverlayCloseRef.current) {
-      suppressOverlayCloseRef.current = false;
-      return;
-    }
     closeMobileOverlays();
   }, [activeView, closeMobileOverlays]);
   // Remembers whichever List was last viewed *while the personal workspace was active* — so
@@ -1420,7 +1431,17 @@ function PageContent() {
     // sheet that was just opened — see that ref's own comment for the reported symptom.
     suppressOverlayCloseRef.current = true;
     setActiveView('board');
-    setMobileSpacesOpen(true);
+    // If there's already a specific List to land on — either because we never actually left the
+    // real workspace, or lastRealNav just restored one above — skip the picker sheet and go
+    // straight to its board content, same "skip the pointless middle screen" behavior My Tasks
+    // already has (see meNavItems' own `if (lastPersonalNav) {...}` below). Reported live as
+    // "går jeg inn på en liste i Spaces, så til planner og tilbake, så havner jeg i oversikten" —
+    // this used to unconditionally reopen the tree even when there was a specific List to return
+    // to directly. Read fresh from the store (not the closed-over activeListIds) since setNavigation
+    // above may have just changed it synchronously in this same call.
+    if (useTaskStore.getState().activeListIds.size === 0) {
+      setMobileSpacesOpen(true);
+    }
   };
 
   const handleOfficeNavClick = () => {

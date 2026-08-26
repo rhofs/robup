@@ -99,32 +99,28 @@ export default function MobileSpacesSheet({
   const [expandedDocFolderIds, setExpandedDocFolderIds] = useState<Set<string>>(new Set());
 
   // Auto-expands the tree to wherever activeSpaceId/activeListIds actually point right now,
-  // instead of relying purely on manual taps. This component is never unmounted (only hidden via
-  // `open`, see the file-level comment above), so expandedSpaceIds/expandedFolderIds would
-  // otherwise accumulate every Space ever visited across the whole session — the very first Space
-  // auto-expanded (usually the workspace's first one) stayed expanded forever after, no matter
-  // where the user navigated to later, since this effect used to only ever *add* entries, never
-  // remove any. Reported live as "havner jeg alltid tilbake til 'Spaces', hvor Test Space er åpen,
-  // uansett hvor jeg er" — that space wasn't being *restored*, it just never got the chance to
-  // collapse again. Fixed by replacing (not merging into) the expanded sets on every fresh
-  // open — a closed->open transition means "show me where I actually am," not "show me everywhere
-  // I've ever been." Manual taps still accumulate normally while the sheet stays open in one visit.
-  const wasOpenRef = useRef(false);
+  // instead of relying purely on manual taps — but only when that target has genuinely *changed*
+  // since the last time this ran, tracked via lastAutoExpandTargetRef rather than reacting to
+  // `open` at all. Two failed attempts before this shape: (1) merging into the expand-state on
+  // every open accumulated every Space ever visited forever, since this component is deliberately
+  // never unmounted (see the file-level comment above) — the first Space it ever auto-expanded
+  // never left the set again, reported live as "Test Space er alltid åpen, uansett hvor jeg er."
+  // (2) *replacing* the expand-state on every closed->open transition fixed that, but then fought
+  // the user's own manual taps: collapsing the current Space, navigating away, and back (still the
+  // *same* target) re-expanded it anyway, reported live as toggling a Space "look[ing] like it did
+  // nothing" once you left and returned. Comparing against the last *target* solves both — arriving
+  // at a genuinely different Space/List replaces the expand-state to show exactly that; returning
+  // to the same one you already left expanded (or collapsed) leaves whatever you last did alone.
+  const lastAutoExpandTargetRef = useRef<string | null>(null);
   useEffect(() => {
-    const justOpened = open && !wasOpenRef.current;
-    wasOpenRef.current = open;
-    if (!open || !activeSpaceId) return;
+    if (!activeSpaceId) return;
     const space = spaces.find((s) => s.id === activeSpaceId);
-    if (!space) {
-      if (justOpened) setExpandedSpaceIds(new Set());
-      return;
-    }
-    if (justOpened) {
-      setExpandedSpaceIds(new Set([space.id]));
-    } else {
-      setExpandedSpaceIds((prev) => (prev.has(space.id) ? prev : new Set(prev).add(space.id)));
-    }
+    if (!space) return;
     const activeList = space.lists.find((l) => activeListIds.has(l.id));
+    const targetKey = `${space.id}:${activeList?.id ?? ''}`;
+    if (lastAutoExpandTargetRef.current === targetKey) return;
+    lastAutoExpandTargetRef.current = targetKey;
+    setExpandedSpaceIds(new Set([space.id]));
     const ancestorIds = new Set<string>();
     if (activeList?.folderId) {
       let folderId: string | null = activeList.folderId;
@@ -134,24 +130,9 @@ export default function MobileSpacesSheet({
         folderId = folder?.parentId ?? null;
       }
     }
-    if (justOpened) {
-      setExpandedFolderIds(ancestorIds);
-      return;
-    }
-    if (ancestorIds.size === 0) return;
-    setExpandedFolderIds((prev) => {
-      let changed = false;
-      const next = new Set(prev);
-      for (const id of ancestorIds) {
-        if (!next.has(id)) {
-          next.add(id);
-          changed = true;
-        }
-      }
-      return changed ? next : prev;
-    });
+    setExpandedFolderIds(ancestorIds);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [open, activeSpaceId, activeListIds, spaces]);
+  }, [activeSpaceId, activeListIds, spaces]);
 
   const toggleSpace = (spaceId: string) =>
     setExpandedSpaceIds((prev) => {
