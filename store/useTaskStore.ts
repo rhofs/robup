@@ -629,6 +629,25 @@ export const useTaskStore = create<TaskStore>((set, get) => {
         const firstSpaceId = activeWorkspace?.spaces[0]?.id || 'everything';
         const lastRealWorkspaceId = activeWorkspace && !activeWorkspace.isPersonal ? activeWorkspace.id : previousLastRealWorkspaceId;
 
+        // Same "keep it if it's still valid" rule as activeWorkspaceId just above, extended to
+        // Space/List — this used to unconditionally reset to firstSpaceId (and silently drop
+        // activeListIds' actual content) on *every* call, not just a genuine workspace switch.
+        // fetchInitialData runs on every mount/identity-change/reconnect, not only on first login —
+        // a mobile browser discarding and reloading a backgrounded tab (very common on phones)
+        // re-ran this and snapped straight back to the first Space every time, no matter which real
+        // Space/List had actually been open, since nothing here ever looked at the previous value.
+        // Reported live as "uansett hvor jeg er, havner jeg alltid tilbake i [the first Space]."
+        const previousActiveSpaceId = get().activeSpaceId;
+        const previousActiveListIds = get().activeListIds;
+        const previousSpaceStillValid =
+          previousActiveSpaceId === 'everything' ||
+          !!activeWorkspace?.spaces.some((s: HierarchySpace) => s.id === previousActiveSpaceId);
+        const activeSpaceId = previousSpaceStillValid ? previousActiveSpaceId : firstSpaceId;
+        const activeSpace = activeWorkspace?.spaces.find((s: HierarchySpace) => s.id === activeSpaceId);
+        const activeListIds = previousSpaceStillValid
+          ? new Set([...previousActiveListIds].filter((id) => activeSpace?.lists.some((l: HierarchyList) => l.id === id)))
+          : new Set<string>();
+
         // Seeds `docs` (normally populated lazily per-task via fetchDocs on modal-open) with
         // every task-scoped doc up front, purely so it's searchable app-wide — fetchDocs still
         // re-fetches its own task's slice on modal-open as the freshness safety net it always was.
@@ -646,7 +665,8 @@ export const useTaskStore = create<TaskStore>((set, get) => {
           events,
           activeWorkspaceId,
           lastRealWorkspaceId,
-          activeSpaceId: firstSpaceId,
+          activeSpaceId,
+          activeListIds,
           isLoading: false,
         });
       } catch (error) {
