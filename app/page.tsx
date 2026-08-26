@@ -883,6 +883,13 @@ function PageContent() {
   // tab while the personal workspace just happens to still be active" — reported live as My Tasks
   // always landing on an empty "Personal — Nothing in here yet" Docs screen instead of a list.
   const [lastPersonalNav, setLastPersonalNav] = useState<{ spaceId: string; listIds: string[] } | null>(null);
+  // Same idea as lastPersonalNav just above, mirrored for real (non-personal) workspaces —
+  // openMobileSpaces' own fallback used to rely purely on setActiveWorkspaceId's side effect of
+  // resetting activeSpaceId to workspace.spaces[0], which meant going My Tasks -> Spaces always
+  // landed on the first Space instead of wherever was actually last open (reported live: "husker
+  // ikke hvor Spaces var før vi forlot den"). Keyed per-workspace since switching between two real
+  // workspaces should each remember their own last position, not share one slot.
+  const [lastRealNav, setLastRealNav] = useState<{ workspaceId: string; spaceId: string; listIds: string[] } | null>(null);
   const [hideWeekNumbers, setHideWeekNumbers] = useState(false);
   useEffect(() => {
     setHiddenNavTabs(readHiddenNavTabs());
@@ -1324,6 +1331,13 @@ function PageContent() {
       setLastPersonalNav({ spaceId: activeSpaceId, listIds: [...activeListIds] });
     }
   }, [currentWorkspace, activeView, activeSpaceId, activeListIds]);
+  // Tracking half of lastRealNav — same plain snapshot pattern as lastPersonalNav above, for the
+  // exact same reason (correct regardless of *how* the user got there).
+  useEffect(() => {
+    if (currentWorkspace && !currentWorkspace.isPersonal && activeView === 'board' && activeSpaceId !== 'everything') {
+      setLastRealNav({ workspaceId: currentWorkspace.id, spaceId: activeSpaceId, listIds: [...activeListIds] });
+    }
+  }, [currentWorkspace, activeView, activeSpaceId, activeListIds]);
   // Mobile-only header title (replaces the generic "S" logo — see the header's own comment) — same
   // per-view labels the breadcrumb already uses, except "board" splits on whether the personal
   // workspace is active, since "Spaces" and "My Tasks" are genuinely different destinations that
@@ -1353,7 +1367,12 @@ function PageContent() {
     // Media -> My Tasks -> Spaces landed on CRRM Media instead of back on New Game Media).
     if (currentWorkspace?.isPersonal) {
       const fallback = workspaces.find((w) => w.id === lastRealWorkspaceId) ?? workspaces.find((w) => !w.isPersonal);
-      if (fallback) setActiveWorkspaceId(fallback.id);
+      if (fallback) {
+        setActiveWorkspaceId(fallback.id);
+        if (lastRealNav?.workspaceId === fallback.id) {
+          setNavigation(lastRealNav.spaceId, lastRealNav.listIds);
+        }
+      }
     }
     setActiveView('board');
   };
@@ -1368,7 +1387,14 @@ function PageContent() {
   const openMobileSpaces = () => {
     if (currentWorkspace?.isPersonal) {
       const fallback = workspaces.find((w) => w.id === lastRealWorkspaceId) ?? workspaces.find((w) => !w.isPersonal);
-      if (fallback) setActiveWorkspaceId(fallback.id);
+      if (fallback) {
+        setActiveWorkspaceId(fallback.id);
+        // setActiveWorkspaceId's own side effect resets activeSpaceId to spaces[0] — restore
+        // wherever was actually last open in this workspace instead, if we have it.
+        if (lastRealNav?.workspaceId === fallback.id) {
+          setNavigation(lastRealNav.spaceId, lastRealNav.listIds);
+        }
+      }
     }
     // Opening the sheet with nothing picked yet left activeView pointed at whatever view was
     // active before (Chat, Planner, ...) — the nav-tab highlight glitches this caused (another
@@ -6325,6 +6351,7 @@ function PageContent() {
         workspaceId={currentWorkspace?.id ?? null}
         spaces={currentWorkspace?.spaces ?? []}
         activeSpaceId={activeSpaceId}
+        activeListIds={activeListIds}
         onSelectSpace={(spaceId) => {
           setModalTaskStack([]);
           setNavigation(spaceId, []);
@@ -6362,6 +6389,7 @@ function PageContent() {
         workspaceId={personalWorkspace?.id ?? null}
         spaces={personalWorkspace?.spaces ?? []}
         activeSpaceId={activeSpaceId}
+        activeListIds={activeListIds}
         onSelectSpace={(spaceId) => {
           setModalTaskStack([]);
           setNavigation(spaceId, []);

@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { ChevronRight, ChevronDown, Globe, Search, X, Plus, Folder as FolderIconLucide, List as ListIconLucide, FileText } from 'lucide-react';
 import { useTaskStore, type HierarchySpace } from '../../store/useTaskStore';
 import { FOLDER_ICON_MAP } from '../FolderTree';
@@ -26,6 +26,12 @@ type Props = {
   workspaceId: string | null;
   spaces: HierarchySpace[];
   activeSpaceId: string;
+  // Used purely to auto-expand the tree to whatever's actually selected right now (the Space, and
+  // every Folder ancestor above the active List if there is one) — see the effect below. Without
+  // this, the tree only ever expanded from manual taps, so navigating away and back (Planner, My
+  // Tasks, ...) and reopening this sheet showed everything collapsed even when activeSpaceId still
+  // correctly pointed at exactly where you were, reported live as "husker ikke hvor Spaces var."
+  activeListIds: Set<string>;
   onSelectSpace: (spaceId: string) => void;
   onSelectList: (spaceId: string, listId: string) => void;
   onSelectDoc: (spaceId: string, docId: string) => void;
@@ -65,6 +71,7 @@ export default function MobileSpacesSheet({
   workspaceId,
   spaces,
   activeSpaceId,
+  activeListIds,
   onSelectSpace,
   onSelectList,
   onSelectDoc,
@@ -90,6 +97,39 @@ export default function MobileSpacesSheet({
   // (real uuids), but conceptually they're different trees and deserve independent expand state.
   const [expandedDocsSpaceIds, setExpandedDocsSpaceIds] = useState<Set<string>>(new Set());
   const [expandedDocFolderIds, setExpandedDocFolderIds] = useState<Set<string>>(new Set());
+
+  // Auto-expands the tree to wherever activeSpaceId/activeListIds actually point right now,
+  // instead of relying purely on manual taps. Runs whenever the sheet opens or the active
+  // selection changes underneath it — expandedSpaceIds/expandedFolderIds only ever grow here
+  // (never removed), so a space the user manually collapsed stays collapsed on the next render
+  // unless the active selection itself moves back into it.
+  useEffect(() => {
+    if (!open || !activeSpaceId) return;
+    const space = spaces.find((s) => s.id === activeSpaceId);
+    if (!space) return;
+    setExpandedSpaceIds((prev) => (prev.has(space.id) ? prev : new Set(prev).add(space.id)));
+    const activeList = space.lists.find((l) => activeListIds.has(l.id));
+    if (!activeList?.folderId) return;
+    const ancestorIds = new Set<string>();
+    let folderId: string | null = activeList.folderId;
+    while (folderId) {
+      ancestorIds.add(folderId);
+      const folder = space.folders.find((f) => f.id === folderId);
+      folderId = folder?.parentId ?? null;
+    }
+    setExpandedFolderIds((prev) => {
+      let changed = false;
+      const next = new Set(prev);
+      for (const id of ancestorIds) {
+        if (!next.has(id)) {
+          next.add(id);
+          changed = true;
+        }
+      }
+      return changed ? next : prev;
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open, activeSpaceId, activeListIds, spaces]);
 
   const toggleSpace = (spaceId: string) =>
     setExpandedSpaceIds((prev) => {
