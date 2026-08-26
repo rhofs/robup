@@ -294,11 +294,6 @@ interface TaskStore {
   setActiveView: (view: 'board' | 'calendar' | 'docs' | 'office' | 'mytasks' | 'profile' | 'chat' | 'directMessages') => void;
   setActiveWorkspaceId: (id: string) => void;
   setNavigation: (spaceId: string, listIds?: string[]) => void;
-  // Explicitly discards a workspace's remembered position (lastPositionByWorkspaceId) — for the
-  // mobile "Back" button's "I want the overview now, not a specific list" signal, since without
-  // this, setActiveWorkspaceId would just restore the exact List you backed out of the next time
-  // you navigate back to that workspace, undoing the point of pressing Back at all.
-  forgetLastPosition: (workspaceId: string) => void;
   setCalendarGranularity: (g: 'month' | 'week' | 'day') => void;
   setCalendarFocusDate: (d: Date) => void;
   setDocsNavigation: (docFolderId: string | null, docId: string | null) => void;
@@ -799,14 +794,6 @@ export const useTaskStore = create<TaskStore>((set, get) => {
             ? { ...state.lastPositionByWorkspaceId, [state.activeWorkspaceId]: { spaceId, listIds } }
             : state.lastPositionByWorkspaceId,
       })),
-
-    forgetLastPosition: (workspaceId) =>
-      set((state) => {
-        if (!(workspaceId in state.lastPositionByWorkspaceId)) return state;
-        const next = { ...state.lastPositionByWorkspaceId };
-        delete next[workspaceId];
-        return { lastPositionByWorkspaceId: next };
-      }),
 
     setCalendarGranularity: (calendarGranularity) => set({ calendarGranularity }),
 

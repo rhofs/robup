@@ -558,7 +558,6 @@ function PageContent() {
     setActiveOfficeRoomId,
     fetchInitialData,
     setNavigation,
-    forgetLastPosition,
     setShowArchived,
     optimisticMoveTask,
     optimisticCreateTask,
@@ -878,6 +877,18 @@ function PageContent() {
   // nav tap) or via the effect — clears it, so it can never survive past the very next close.
   const suppressOverlayCloseRef = useRef(false);
   const closeMobileOverlays = useCallback(() => {
+    // A task modal renders globally (outside any activeView branch — see its own "TASK / SUBTASK
+    // MODAL" block further down), so a stale modalTaskStack entry (opened from Chat, search,
+    // anywhere) doesn't just sit invisible on some other tab — it reappears, complete with its
+    // row-into-modal "magic move" entrance animation, the instant *any* destination renders board
+    // content again. Reported live happening leaving Chat specifically, toward several different
+    // destinations (Spaces, My Tasks, even Planner) — not something specific to one nav handler,
+    // so it belongs here, in the one place already called at the start of every real nav tap,
+    // rather than duplicated into each individual handler. Deliberately unconditional (before the
+    // suppress check below) — even while an overlay-close is being suppressed because a sheet is
+    // about to open in this same tap, the destination is still genuinely new and a stale modal
+    // should still go.
+    setModalTaskStack([]);
     if (suppressOverlayCloseRef.current) {
       suppressOverlayCloseRef.current = false;
       return;
@@ -1385,12 +1396,6 @@ function PageContent() {
   // shows Personal, and the nav pill lights up too" resurfaced from a second, forgotten call site
   // rather than a real regression in the already-fixed one.
   const openMobileSpaces = () => {
-    // A stale modalTaskStack entry (e.g. a task opened earlier from Chat/search and never
-    // properly closed) used to stay in place across this navigation and pop back open with its
-    // row-expand "magic move" animation the instant board content became visible again — reported
-    // live as "en rar animasjon... tasken utvider seg liksom" when landing on Spaces from Chat/My
-    // Tasks. Every *other* real navigation action already clears this; this one didn't.
-    setModalTaskStack([]);
     // setActiveWorkspaceId now restores this workspace's own last position automatically — see
     // its own comment in store/useTaskStore.ts.
     if (currentWorkspace?.isPersonal && realSheetWorkspace) {
@@ -1405,8 +1410,16 @@ function PageContent() {
     // guard below (kept anyway, as defense-in-depth against the state update not having landed yet).
     // suppressOverlayCloseRef: without this, changing activeView here in the same tap as
     // setMobileSpacesOpen(true) triggered the backstop effect above, which immediately closed the
-    // sheet that was just opened — see that ref's own comment for the reported symptom.
-    suppressOverlayCloseRef.current = true;
+    // sheet that was just opened. Only set when activeView is actually about to change — Spaces and
+    // My Tasks both use 'board', so this call is a no-op between the two, and the backstop effect's
+    // own dependency (activeView) never changes either — meaning it would never fire to *consume*
+    // the flag, leaving it stuck true and wrongly suppressing some later, unrelated tap's own
+    // legitimate close. Reported live as "fra Spaces til My Tasks... kan jeg ikke gå tilbake til
+    // Spaces igjen, stuck" — bouncing between the two 'board' screens is exactly the pairing where
+    // the flag could never get consumed and cleared normally.
+    if (useTaskStore.getState().activeView !== 'board') {
+      suppressOverlayCloseRef.current = true;
+    }
     setActiveView('board');
     // If there's already a specific List to land on — either because we never actually left the
     // real workspace, or setActiveWorkspaceId just restored one above — skip the picker sheet and
@@ -1522,9 +1535,6 @@ function PageContent() {
             // to the async ensure-and-create path the very first time (or a stale local list).
             const known = workspaces.find((w) => w.isPersonal)?.id;
             const workspaceId = known ?? (await ensurePersonalWorkspace(currentUserId)).workspaceId;
-            // Stale modalTaskStack entry -> stray task-modal "magic move" animation on arrival —
-            // same fix and same reasoning as openMobileSpaces' own comment above.
-            setModalTaskStack([]);
             // setActiveWorkspaceId itself now restores this workspace's own last-visited Space/List
             // (store-level lastPositionByWorkspaceId, kept current by setNavigation) — replaces the
             // separate React-local `lastPersonalNav` this used to read, which could drift out of
@@ -1537,10 +1547,12 @@ function PageContent() {
             // which is what caused both the nav-tab highlight glitches (another tab reading as
             // active underneath this one) and the popup menu's dimmed backdrop showing the wrong
             // view's content through it. suppressOverlayCloseRef: same race as openMobileSpaces —
-            // without it, this setActiveView('board') triggered the backstop effect and immediately
-            // closed the sheet just opened below, dropping straight into the personal Space's
-            // SpaceHome card (no list selected) instead of showing the tree.
-            suppressOverlayCloseRef.current = true;
+            // only set when activeView is actually about to change (see that function's own
+            // comment for why bouncing between two 'board' screens — Spaces and My Tasks — must
+            // never set this, or the flag gets stuck and wrongly suppresses a later, unrelated tap).
+            if (useTaskStore.getState().activeView !== 'board') {
+              suppressOverlayCloseRef.current = true;
+            }
             setActiveView('board');
             // Only open the tree picker when there's genuinely nothing more specific to land on —
             // same "skip the pointless middle screen" check openMobileSpaces uses for "Spaces."
@@ -3843,13 +3855,18 @@ function PageContent() {
                 <button
                   onClick={() => {
                     // Pressing Back here is a deliberate "I want the overview now, not a specific
-                    // list" signal — without forgetting it, setActiveWorkspaceId would just restore
-                    // the exact List you backed out of the next time you navigate back to this same
-                    // workspace (Back only opens a sheet *on top*, it never itself touches
-                    // activeSpaceId/activeListIds), landing right back where you just left instead
-                    // of the overview you were actually asking for. Applies to both "My Tasks" and
-                    // real Spaces now that both skip the picker sheet when a position is remembered.
-                    if (currentWorkspace) forgetLastPosition(currentWorkspace.id);
+                    // list" signal. Clearing just the List selection (keeping the Space, so the
+                    // sheet still shows it expanded) via setNavigation immediately updates
+                    // activeListIds — which is what the skip-the-picker-sheet check in
+                    // openMobileSpaces()/the My Tasks handler actually reads — *and* updates
+                    // lastPositionByWorkspaceId for next time, in one call. A bare
+                    // forgetLastPosition() alone wasn't enough: it only affects a *future*
+                    // setActiveWorkspaceId call, so bouncing Spaces -> Back -> Planner -> Spaces
+                    // without ever actually switching workspace (a very common path) left the
+                    // current activeListIds untouched, and the very next Spaces visit skipped
+                    // straight back into the same List anyway. Applies to both "My Tasks" and real
+                    // Spaces now that both skip the picker sheet when a position is remembered.
+                    if (activeSpaceId !== 'everything') setNavigation(activeSpaceId, []);
                     if (currentWorkspace?.isPersonal) {
                       setMobilePersonalSpacesOpen(true);
                     } else {
