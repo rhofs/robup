@@ -864,6 +864,14 @@ function PageContent() {
     setMobileChatSheetOpen(false);
     setMobileCalendarFilterOpen(false);
   }, []);
+  // Set synchronously (never via state) by openMobileSpaces()/the My Tasks tile's onClick right
+  // before they call setActiveView('board') to open their own sheet — those two calls landing in
+  // the same batched render change activeView's value, which used to make the backstop effect
+  // below fire and immediately undo the very setMobileSpacesOpen(true)/setMobilePersonalSpacesOpen
+  // (true) call from that same tap. Reported live as "Spaces dumps me straight into a random
+  // Space/List instead of showing the tree" and "My Tasks shows the SpaceHome card instead of the
+  // list" — both were really this same close-right-after-open race, not a targeting bug.
+  const suppressOverlayCloseRef = useRef(false);
   // Backstop for activeView changes that don't go through one of the nav's own tap handlers below
   // (e.g. a deep link, or opening a task from search) — MobileBottomNav/AppLauncherGrid also call
   // closeMobileOverlays() directly at the moment of every nav tap, which is the actual fix: this
@@ -871,6 +879,10 @@ function PageContent() {
   // re-tapping a destination you were already on before opening Spaces (activeView never changes)
   // silently skipped it, leaving Spaces stuck open exactly when the tap should have closed it.
   useEffect(() => {
+    if (suppressOverlayCloseRef.current) {
+      suppressOverlayCloseRef.current = false;
+      return;
+    }
     closeMobileOverlays();
   }, [activeView, closeMobileOverlays]);
   // Remembers whichever List was last viewed *while the personal workspace was active* — so
@@ -1403,6 +1415,10 @@ function PageContent() {
     // popup menu's dimmed backdrop was showing through as "the wrong window's background."
     // Setting it explicitly here is the actual fix, not just the nav highlight's own !mobileSheetOpen
     // guard below (kept anyway, as defense-in-depth against the state update not having landed yet).
+    // suppressOverlayCloseRef: without this, changing activeView here in the same tap as
+    // setMobileSpacesOpen(true) triggered the backstop effect above, which immediately closed the
+    // sheet that was just opened — see that ref's own comment for the reported symptom.
+    suppressOverlayCloseRef.current = true;
     setActiveView('board');
     setMobileSpacesOpen(true);
   };
@@ -1522,6 +1538,11 @@ function PageContent() {
               // Planner, ...), which is what caused both the nav-tab highlight glitches (another
               // tab reading as active underneath this one) and the popup menu's dimmed backdrop
               // showing the wrong view's content through it.
+              // suppressOverlayCloseRef: same race as openMobileSpaces — without it, this
+              // setActiveView('board') triggered the backstop effect and immediately closed the
+              // sheet just opened below, dropping straight into the personal Space's SpaceHome
+              // card (no list selected) instead of showing the tree.
+              suppressOverlayCloseRef.current = true;
               setActiveView('board');
               setMobilePersonalSpacesOpen(true);
             }
