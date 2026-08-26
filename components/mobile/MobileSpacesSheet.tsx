@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { ChevronRight, ChevronDown, Globe, Search, X, Plus, Folder as FolderIconLucide, List as ListIconLucide, FileText } from 'lucide-react';
 import { useTaskStore, type HierarchySpace } from '../../store/useTaskStore';
 import { FOLDER_ICON_MAP } from '../FolderTree';
@@ -99,24 +99,46 @@ export default function MobileSpacesSheet({
   const [expandedDocFolderIds, setExpandedDocFolderIds] = useState<Set<string>>(new Set());
 
   // Auto-expands the tree to wherever activeSpaceId/activeListIds actually point right now,
-  // instead of relying purely on manual taps. Runs whenever the sheet opens or the active
-  // selection changes underneath it — expandedSpaceIds/expandedFolderIds only ever grow here
-  // (never removed), so a space the user manually collapsed stays collapsed on the next render
-  // unless the active selection itself moves back into it.
+  // instead of relying purely on manual taps. This component is never unmounted (only hidden via
+  // `open`, see the file-level comment above), so expandedSpaceIds/expandedFolderIds would
+  // otherwise accumulate every Space ever visited across the whole session — the very first Space
+  // auto-expanded (usually the workspace's first one) stayed expanded forever after, no matter
+  // where the user navigated to later, since this effect used to only ever *add* entries, never
+  // remove any. Reported live as "havner jeg alltid tilbake til 'Spaces', hvor Test Space er åpen,
+  // uansett hvor jeg er" — that space wasn't being *restored*, it just never got the chance to
+  // collapse again. Fixed by replacing (not merging into) the expanded sets on every fresh
+  // open — a closed->open transition means "show me where I actually am," not "show me everywhere
+  // I've ever been." Manual taps still accumulate normally while the sheet stays open in one visit.
+  const wasOpenRef = useRef(false);
   useEffect(() => {
+    const justOpened = open && !wasOpenRef.current;
+    wasOpenRef.current = open;
     if (!open || !activeSpaceId) return;
     const space = spaces.find((s) => s.id === activeSpaceId);
-    if (!space) return;
-    setExpandedSpaceIds((prev) => (prev.has(space.id) ? prev : new Set(prev).add(space.id)));
-    const activeList = space.lists.find((l) => activeListIds.has(l.id));
-    if (!activeList?.folderId) return;
-    const ancestorIds = new Set<string>();
-    let folderId: string | null = activeList.folderId;
-    while (folderId) {
-      ancestorIds.add(folderId);
-      const folder = space.folders.find((f) => f.id === folderId);
-      folderId = folder?.parentId ?? null;
+    if (!space) {
+      if (justOpened) setExpandedSpaceIds(new Set());
+      return;
     }
+    if (justOpened) {
+      setExpandedSpaceIds(new Set([space.id]));
+    } else {
+      setExpandedSpaceIds((prev) => (prev.has(space.id) ? prev : new Set(prev).add(space.id)));
+    }
+    const activeList = space.lists.find((l) => activeListIds.has(l.id));
+    const ancestorIds = new Set<string>();
+    if (activeList?.folderId) {
+      let folderId: string | null = activeList.folderId;
+      while (folderId) {
+        ancestorIds.add(folderId);
+        const folder = space.folders.find((f) => f.id === folderId);
+        folderId = folder?.parentId ?? null;
+      }
+    }
+    if (justOpened) {
+      setExpandedFolderIds(ancestorIds);
+      return;
+    }
+    if (ancestorIds.size === 0) return;
     setExpandedFolderIds((prev) => {
       let changed = false;
       const next = new Set(prev);
