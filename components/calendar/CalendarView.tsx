@@ -25,15 +25,24 @@ type Granularity = 'month' | 'week' | 'day';
 // Default lane caps, used whenever Fit mode isn't actively overriding them (see isFitActive/
 // maxVisibleLanes below) — Fit mode derives its own cap from however many lanes the viewport-fitted
 // row height actually has room for, which can be lower (never higher) than these.
-const MONTH_MAX_LANES = 6;
+// MONTH_MAX_LANES doubles as the non-Fit row-height floor's own lane budget (see contentHeight
+// below) — at the old value of 6, every Month row reserved room for 6 lanes' worth of bars even on
+// a day with only one or two, which read as the "+N" chip floating in a lot of empty space below
+// it rather than sitting snugly in a properly-sized cell. Dropped to 2 per direct feedback
+// ("plass til hvertfall 2 events/tasks og +1 ikonet") — a day with more than 2 still overflows
+// correctly into "+N", it just no longer inflates every *other* day's row height to accommodate it.
+// WEEK_MAX_LANES is unchanged: Week granularity's columns are already much taller/roomier by
+// design, and wasn't part of this feedback.
+const MONTH_MAX_LANES = 2;
 const WEEK_MAX_LANES = 12;
-// Measured against the chip's actual rendered height (24px, from its py-[3px] padding + line
-// height) plus a couple px of breathing room — this used to be 14, comfortably under-budgeted,
-// which was invisible while the old row-wide overflow strip just used `bottom: 0` and absorbed
-// the mismatch, but became a real few-px overflow past the cell's own bottom edge once the chip
-// moved to sit inside a specific day's own reserved space (a row exactly at the lane cap has
-// nothing left to absorb it).
-const OVERFLOW_H = 26;
+// Measured against the chip's actual rendered height (now ~14px — 8px font/leading-none plus its
+// py-[2px] padding, after both the bars and this chip were shrunk together per direct feedback)
+// plus a couple px of breathing room — this used to be 14 pre-shrink, comfortably under-budgeted,
+// which was invisible while the old row-wide overflow strip just used `bottom: 0` and absorbed the
+// mismatch, but became a real few-px overflow past the cell's own bottom edge once the chip moved
+// to sit inside a specific day's own reserved space (a row exactly at the lane cap has nothing left
+// to absorb it).
+const OVERFLOW_H = 16;
 
 // Falls back to this when an Event has neither its own `color` set nor a linked Space — a fixed
 // violet, distinct from every default Task-status color so an Event bar reads as "not a task"

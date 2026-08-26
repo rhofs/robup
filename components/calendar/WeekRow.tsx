@@ -9,11 +9,14 @@ import { withAlpha } from '../../lib/colorAlpha';
 import type { ClippedSegment, DragMode, DragState } from '../../lib/ganttLayout';
 import type { Task, Event } from '../../store/useTaskStore';
 
-// Landed in the expert visual-refinement pass's 22-26px/3-5px target range. CalendarView.tsx's
-// Fit mode (see its own comment) derives how many lanes actually fit a given row height from
-// these two constants, same as the non-Fit MONTH_MAX_LANES/WEEK_MAX_LANES caps always have.
-export const BAR_H = 24;
-export const BAR_GAP = 4;
+// Shrunk from the expert visual-refinement pass's original 22-26px/3-5px target range per direct
+// user feedback ("litt smalere, vertikalt") — rows built around MONTH_MAX_LANES bars (see
+// CalendarView.tsx) at the old height left comfortable room for only ~2 tasks/events before
+// "+N" kicked in, while feeling like a lot of dead vertical space per bar. CalendarView.tsx's Fit
+// mode (see its own comment) derives how many lanes actually fit a given row height from these two
+// constants, same as the non-Fit MONTH_MAX_LANES/WEEK_MAX_LANES caps always have.
+export const BAR_H = 18;
+export const BAR_GAP = 3;
 export const DAY_NUM_H = 26;
 export const GUTTER_WIDTH = 34;
 const CLICK_DRAG_THRESHOLD = 4;
@@ -257,9 +260,12 @@ export default function WeekRow({
                     className="absolute left-1 right-1 z-10 text-left cursor-pointer"
                     style={{ top: overflowTop }}
                   >
-                    <span className="inline-flex items-center gap-1 text-[9px] leading-none text-neutral-300 bg-neutral-800/70 hover:bg-neutral-700/80 border-l-2 border-neutral-600 rounded-sm pl-1 pr-1.5 py-[3px] transition">
-                      <span className="w-1.5 h-1 rounded-[1px] bg-neutral-500 shrink-0" />
-                      +{overflowByDay[i]} more
+                    {/* "+N", not "+N more" — and shrunk again (8px, tighter padding, no leading
+                        dot) per direct feedback ("enda mindre") once the bars themselves got
+                        shorter, so this still reads as clearly smaller than a bar rather than
+                        competing with one for vertical space. */}
+                    <span className="inline-flex items-center text-[8px] leading-none text-neutral-300 bg-neutral-800/70 hover:bg-neutral-700/80 border-l-2 border-neutral-600 rounded-sm px-1 py-[2px] transition">
+                      +{overflowByDay[i]}
                     </span>
                   </button>
                 )}
