@@ -558,6 +558,7 @@ function PageContent() {
     setActiveOfficeRoomId,
     fetchInitialData,
     setNavigation,
+    forgetLastPosition,
     setShowArchived,
     optimisticMoveTask,
     optimisticCreateTask,
@@ -896,23 +897,6 @@ function PageContent() {
   useEffect(() => {
     closeMobileOverlays();
   }, [activeView, closeMobileOverlays]);
-  // Remembers whichever List was last viewed *while the personal workspace was active* — so
-  // "My Tasks" can jump straight back there next time instead of always reopening the tree picker.
-  // Declared here (state only); the tracking effect lives further down, after currentWorkspace is
-  // computed, since it reads that value. Deliberately 'board' only, not 'docs' too — the generic
-  // standalone Docs *tab* (an entirely separate destination, visibleNavTabs' own 'docs' item) also
-  // sets activeView to 'docs' without switching away from whatever workspace was already active, so
-  // this had no way to tell "genuinely browsing a personal Doc" apart from "on the unrelated Docs
-  // tab while the personal workspace just happens to still be active" — reported live as My Tasks
-  // always landing on an empty "Personal — Nothing in here yet" Docs screen instead of a list.
-  const [lastPersonalNav, setLastPersonalNav] = useState<{ spaceId: string; listIds: string[] } | null>(null);
-  // Same idea as lastPersonalNav just above, mirrored for real (non-personal) workspaces —
-  // openMobileSpaces' own fallback used to rely purely on setActiveWorkspaceId's side effect of
-  // resetting activeSpaceId to workspace.spaces[0], which meant going My Tasks -> Spaces always
-  // landed on the first Space instead of wherever was actually last open (reported live: "husker
-  // ikke hvor Spaces var før vi forlot den"). Keyed per-workspace since switching between two real
-  // workspaces should each remember their own last position, not share one slot.
-  const [lastRealNav, setLastRealNav] = useState<{ workspaceId: string; spaceId: string; listIds: string[] } | null>(null);
   const [hideWeekNumbers, setHideWeekNumbers] = useState(false);
   useEffect(() => {
     setHiddenNavTabs(readHiddenNavTabs());
@@ -1344,23 +1328,6 @@ function PageContent() {
     () => workspaces.find((w) => w.id === activeWorkspaceId) ?? workspaces.find((w) => !w.isPersonal),
     [workspaces, activeWorkspaceId]
   );
-  // Tracking half of lastPersonalNav (state declared earlier, before currentWorkspace existed) — a
-  // plain snapshot-on-every-relevant-render effect rather than capturing it manually inside each of
-  // MobilePersonalSpacesSheet's own onSelect* callbacks, so it stays correct regardless of *how* the
-  // user got there (the tree, a task-modal deep link, browser back/forward) — anything that's ever
-  // true for "I'm looking at personal content right now" should count.
-  useEffect(() => {
-    if (currentWorkspace?.isPersonal && activeView === 'board' && activeSpaceId !== 'everything') {
-      setLastPersonalNav({ spaceId: activeSpaceId, listIds: [...activeListIds] });
-    }
-  }, [currentWorkspace, activeView, activeSpaceId, activeListIds]);
-  // Tracking half of lastRealNav — same plain snapshot pattern as lastPersonalNav above, for the
-  // exact same reason (correct regardless of *how* the user got there).
-  useEffect(() => {
-    if (currentWorkspace && !currentWorkspace.isPersonal && activeView === 'board' && activeSpaceId !== 'everything') {
-      setLastRealNav({ workspaceId: currentWorkspace.id, spaceId: activeSpaceId, listIds: [...activeListIds] });
-    }
-  }, [currentWorkspace, activeView, activeSpaceId, activeListIds]);
   // Mobile-only header title (replaces the generic "S" logo — see the header's own comment) — same
   // per-view labels the breadcrumb already uses, except "board" splits on whether the personal
   // workspace is active, since "Spaces" and "My Tasks" are genuinely different destinations that
@@ -1388,14 +1355,14 @@ function PageContent() {
     // order — for anyone in more than one real workspace, that used to silently land on whichever
     // one happened to fetch first, not the one they were actually on (reported live: New Game
     // Media -> My Tasks -> Spaces landed on CRRM Media instead of back on New Game Media).
+    // setActiveWorkspaceId itself now restores that workspace's own last-visited Space/List
+    // (store-level lastPositionByWorkspaceId) — no separate manual setNavigation call needed here
+    // any more (that used to rely on a React-local `lastRealNav` that could drift out of sync with
+    // this exact same information already tracked in the store, reported live as the memory
+    // "sometimes working, sometimes not").
     if (currentWorkspace?.isPersonal) {
       const fallback = workspaces.find((w) => w.id === lastRealWorkspaceId) ?? workspaces.find((w) => !w.isPersonal);
-      if (fallback) {
-        setActiveWorkspaceId(fallback.id);
-        if (lastRealNav?.workspaceId === fallback.id) {
-          setNavigation(lastRealNav.spaceId, lastRealNav.listIds);
-        }
-      }
+      if (fallback) setActiveWorkspaceId(fallback.id);
     }
     setActiveView('board');
   };
@@ -1408,16 +1375,17 @@ function PageContent() {
   // shows Personal, and the nav pill lights up too" resurfaced from a second, forgotten call site
   // rather than a real regression in the already-fixed one.
   const openMobileSpaces = () => {
+    // A stale modalTaskStack entry (e.g. a task opened earlier from Chat/search and never
+    // properly closed) used to stay in place across this navigation and pop back open with its
+    // row-expand "magic move" animation the instant board content became visible again — reported
+    // live as "en rar animasjon... tasken utvider seg liksom" when landing on Spaces from Chat/My
+    // Tasks. Every *other* real navigation action already clears this; this one didn't.
+    setModalTaskStack([]);
+    // setActiveWorkspaceId now restores this workspace's own last position automatically — see
+    // its own comment in store/useTaskStore.ts.
     if (currentWorkspace?.isPersonal) {
       const fallback = workspaces.find((w) => w.id === lastRealWorkspaceId) ?? workspaces.find((w) => !w.isPersonal);
-      if (fallback) {
-        setActiveWorkspaceId(fallback.id);
-        // setActiveWorkspaceId's own side effect resets activeSpaceId to spaces[0] — restore
-        // wherever was actually last open in this workspace instead, if we have it.
-        if (lastRealNav?.workspaceId === fallback.id) {
-          setNavigation(lastRealNav.spaceId, lastRealNav.listIds);
-        }
-      }
+      if (fallback) setActiveWorkspaceId(fallback.id);
     }
     // Opening the sheet with nothing picked yet left activeView pointed at whatever view was
     // active before (Chat, Planner, ...) — the nav-tab highlight glitches this caused (another
@@ -1432,12 +1400,12 @@ function PageContent() {
     suppressOverlayCloseRef.current = true;
     setActiveView('board');
     // If there's already a specific List to land on — either because we never actually left the
-    // real workspace, or lastRealNav just restored one above — skip the picker sheet and go
-    // straight to its board content, same "skip the pointless middle screen" behavior My Tasks
-    // already has (see meNavItems' own `if (lastPersonalNav) {...}` below). Reported live as
+    // real workspace, or setActiveWorkspaceId just restored one above — skip the picker sheet and
+    // go straight to its board content, same "skip the pointless middle screen" check meNavItems'
+    // own My Tasks handler below uses. Reported live as
     // "går jeg inn på en liste i Spaces, så til planner og tilbake, så havner jeg i oversikten" —
     // this used to unconditionally reopen the tree even when there was a specific List to return
-    // to directly. Read fresh from the store (not the closed-over activeListIds) since setNavigation
+    // to directly. Read fresh from the store (not a closed-over value) since setActiveWorkspaceId
     // above may have just changed it synchronously in this same call.
     if (useTaskStore.getState().activeListIds.size === 0) {
       setMobileSpacesOpen(true);
@@ -1545,26 +1513,29 @@ function PageContent() {
             // to the async ensure-and-create path the very first time (or a stale local list).
             const known = workspaces.find((w) => w.isPersonal)?.id;
             const workspaceId = known ?? (await ensurePersonalWorkspace(currentUserId)).workspaceId;
+            // Stale modalTaskStack entry -> stray task-modal "magic move" animation on arrival —
+            // same fix and same reasoning as openMobileSpaces' own comment above.
+            setModalTaskStack([]);
+            // setActiveWorkspaceId itself now restores this workspace's own last-visited Space/List
+            // (store-level lastPositionByWorkspaceId, kept current by setNavigation) — replaces the
+            // separate React-local `lastPersonalNav` this used to read, which could drift out of
+            // sync with the store's own idea of "where was I" and made this "sometimes work,
+            // sometimes not" depending on exactly which of two near-duplicate mechanisms had the
+            // current answer. Same unified mechanism openMobileSpaces now uses for "Spaces."
             setActiveWorkspaceId(workspaceId);
-            // Land back on whatever List was last viewed under the personal workspace, same as
-            // any other nav destination remembering where you left off — only fall back to the
-            // tree browser (MobilePersonalSpacesSheet) the very first time this session.
-            if (lastPersonalNav) {
-              setModalTaskStack([]);
-              setNavigation(lastPersonalNav.spaceId, lastPersonalNav.listIds);
-              setActiveView('board');
-            } else {
-              // Same fix as openMobileSpaces just above: opening the tree with nothing picked
-              // yet used to leave activeView pointed at whatever was active before (Chat,
-              // Planner, ...), which is what caused both the nav-tab highlight glitches (another
-              // tab reading as active underneath this one) and the popup menu's dimmed backdrop
-              // showing the wrong view's content through it.
-              // suppressOverlayCloseRef: same race as openMobileSpaces — without it, this
-              // setActiveView('board') triggered the backstop effect and immediately closed the
-              // sheet just opened below, dropping straight into the personal Space's SpaceHome
-              // card (no list selected) instead of showing the tree.
-              suppressOverlayCloseRef.current = true;
-              setActiveView('board');
+            // Same fix as openMobileSpaces just above: opening the tree with nothing picked yet
+            // used to leave activeView pointed at whatever was active before (Chat, Planner, ...),
+            // which is what caused both the nav-tab highlight glitches (another tab reading as
+            // active underneath this one) and the popup menu's dimmed backdrop showing the wrong
+            // view's content through it. suppressOverlayCloseRef: same race as openMobileSpaces —
+            // without it, this setActiveView('board') triggered the backstop effect and immediately
+            // closed the sheet just opened below, dropping straight into the personal Space's
+            // SpaceHome card (no list selected) instead of showing the tree.
+            suppressOverlayCloseRef.current = true;
+            setActiveView('board');
+            // Only open the tree picker when there's genuinely nothing more specific to land on —
+            // same "skip the pointless middle screen" check openMobileSpaces uses for "Spaces."
+            if (useTaskStore.getState().activeListIds.size === 0) {
               setMobilePersonalSpacesOpen(true);
             }
           } catch (err) {
@@ -1574,9 +1545,9 @@ function PageContent() {
             showToast(`Couldn't open My Tasks: ${err instanceof Error ? err.message : 'unknown error'}`);
           }
         },
-        // Deliberately 'board' only, not 'docs' too — see lastPersonalNav's own comment above for
-        // why 'docs' can't be attributed to My Tasks specifically (the standalone Docs tab shares
-        // that same activeView value regardless of which workspace happens to be active).
+        // Deliberately 'board' only, not 'docs' too — 'docs' can't be attributed to My Tasks
+        // specifically, since the standalone Docs tab shares that same activeView value regardless
+        // of which workspace happens to be active.
         // `|| mobilePersonalSpacesOpen`: opening the tree itself doesn't set activeView to 'board'
         // (only actually picking something in it does — same reason the primary Spaces tab's own
         // `active` needed `|| spacesOpen`), so without this the pinned button read as "not active"
@@ -1608,7 +1579,7 @@ function PageContent() {
         active: activeView === 'profile',
       },
     ],
-    [currentUserId, currentWorkspace, activeView, workspaces, lastPersonalNav, mobilePersonalSpacesOpen, ensurePersonalWorkspace, setActiveWorkspaceId, setActiveView]
+    [currentUserId, currentWorkspace, activeView, workspaces, mobilePersonalSpacesOpen, ensurePersonalWorkspace, setActiveWorkspaceId, setActiveView]
   );
 
   // Everything not already pinned to the bottom nav's 3 fixed slots — shared between
@@ -3862,14 +3833,15 @@ function PageContent() {
               {(activeView === 'board' || activeView === 'docs') && (
                 <button
                   onClick={() => {
+                    // Pressing Back here is a deliberate "I want the overview now, not a specific
+                    // list" signal — without forgetting it, setActiveWorkspaceId would just restore
+                    // the exact List you backed out of the next time you navigate back to this same
+                    // workspace (Back only opens a sheet *on top*, it never itself touches
+                    // activeSpaceId/activeListIds), landing right back where you just left instead
+                    // of the overview you were actually asking for. Applies to both "My Tasks" and
+                    // real Spaces now that both skip the picker sheet when a position is remembered.
+                    if (currentWorkspace) forgetLastPosition(currentWorkspace.id);
                     if (currentWorkspace?.isPersonal) {
-                      // Pressing Back here is a deliberate "I want the overview now, not a specific
-                      // list" signal — without clearing this, lastPersonalNav kept remembering
-                      // whatever list was last active underneath (Back only opens a sheet *on top*,
-                      // it never touches activeSpaceId/activeListIds), so returning to My Tasks
-                      // later jumped straight back into the list you'd just backed out of, not the
-                      // overview you were actually looking at when you switched away.
-                      setLastPersonalNav(null);
                       setMobilePersonalSpacesOpen(true);
                     } else {
                       setMobileSpacesOpen(true);

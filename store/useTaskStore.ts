@@ -257,6 +257,17 @@ interface TaskStore {
   // (reported live: New Game Media -> My Tasks -> Spaces landed on CRRM Media instead of back on
   // New Game Media). This field is what those fallbacks should actually target.
   lastRealWorkspaceId: string | null;
+  // Each workspace's own last-visited Space/List, keyed by workspaceId — consulted by
+  // setActiveWorkspaceId below so switching *back* to a workspace (e.g. My Tasks -> Spaces, or
+  // Spaces -> My Tasks -> Spaces) restores exactly where that workspace was left, instead of
+  // always resetting to its first Space. Updated by setNavigation itself, so every path that ever
+  // selects a Space/List keeps this current automatically — no separate tracking effect needed
+  // per screen. This replaced two parallel, React-local (app/page.tsx `useState`) mechanisms doing
+  // the same job for "Spaces" and "My Tasks" independently (`lastRealNav`/`lastPersonalNav`),
+  // which could drift out of sync with each other and with this store's own state — reported live
+  // as the memory "sometimes working, sometimes not" depending on exactly which of several nearly-
+  // identical code paths a given navigation happened to go through.
+  lastPositionByWorkspaceId: Record<string, { spaceId: string; listIds: string[] }>;
   activeSpaceId: string | 'everything';
   activeListIds: Set<string>;
   // Planner's own position — lifted out of CalendarView.tsx's local state so back/forward can
@@ -283,6 +294,11 @@ interface TaskStore {
   setActiveView: (view: 'board' | 'calendar' | 'docs' | 'office' | 'mytasks' | 'profile' | 'chat' | 'directMessages') => void;
   setActiveWorkspaceId: (id: string) => void;
   setNavigation: (spaceId: string, listIds?: string[]) => void;
+  // Explicitly discards a workspace's remembered position (lastPositionByWorkspaceId) — for the
+  // mobile "Back" button's "I want the overview now, not a specific list" signal, since without
+  // this, setActiveWorkspaceId would just restore the exact List you backed out of the next time
+  // you navigate back to that workspace, undoing the point of pressing Back at all.
+  forgetLastPosition: (workspaceId: string) => void;
   setCalendarGranularity: (g: 'month' | 'week' | 'day') => void;
   setCalendarFocusDate: (d: Date) => void;
   setDocsNavigation: (docFolderId: string | null, docId: string | null) => void;
@@ -576,6 +592,7 @@ export const useTaskStore = create<TaskStore>((set, get) => {
     activeView: 'board',
     activeWorkspaceId: null,
     lastRealWorkspaceId: null,
+    lastPositionByWorkspaceId: {},
     activeSpaceId: 'everything',
     activeListIds: new Set(),
     calendarGranularity: 'month',
@@ -657,7 +674,7 @@ export const useTaskStore = create<TaskStore>((set, get) => {
           (docsByTask[doc.taskId] ??= []).push(doc);
         }
 
-        set({
+        set((state) => ({
           workspaces,
           tasks,
           users,
@@ -668,7 +685,14 @@ export const useTaskStore = create<TaskStore>((set, get) => {
           activeSpaceId,
           activeListIds,
           isLoading: false,
-        });
+          // Seeds setActiveWorkspaceId's own restore map with wherever this call resolved to, so
+          // a later switch away and back (e.g. to My Tasks and back) has a record even right after
+          // a reload, before setNavigation would otherwise get a chance to record one itself.
+          lastPositionByWorkspaceId:
+            activeWorkspaceId && activeSpaceId !== 'everything'
+              ? { ...state.lastPositionByWorkspaceId, [activeWorkspaceId]: { spaceId: activeSpaceId, listIds: [...activeListIds] } }
+              : state.lastPositionByWorkspaceId,
+        }));
       } catch (error) {
         console.error('Error fetching data:', error);
         set({ isLoading: false });
@@ -718,16 +742,24 @@ export const useTaskStore = create<TaskStore>((set, get) => {
 
     setActiveView: (activeView) => set({ activeView }),
 
-    // Switching workspace is a nav-context change, same shape as switching Space — resets
-    // Space/List selection to that workspace's own default rather than carrying over a
-    // selection that (usually) doesn't even exist there.
+    // Switching workspace is a nav-context change, same shape as switching Space — but restores
+    // that workspace's own last-visited Space/List (lastPositionByWorkspaceId, kept current by
+    // setNavigation below) if it still exists, rather than always resetting to its first Space.
+    // Every caller of this action — the mobile Spaces/My Tasks handlers, the desktop workspace
+    // switcher, URL-hydration on load — gets this restore for free, instead of each needing its
+    // own separate "remember where I was" bookkeeping.
     setActiveWorkspaceId: (id) => {
       const workspace = get().workspaces.find((w) => w.id === id);
-      const firstSpaceId = workspace?.spaces[0]?.id || 'everything';
+      const remembered = get().lastPositionByWorkspaceId[id];
+      const rememberedSpace = remembered && workspace?.spaces.find((s) => s.id === remembered.spaceId);
+      const activeSpaceId = rememberedSpace ? remembered.spaceId : workspace?.spaces[0]?.id || 'everything';
+      const activeListIds = rememberedSpace
+        ? new Set(remembered!.listIds.filter((lid) => rememberedSpace.lists.some((l) => l.id === lid)))
+        : new Set<string>();
       set({
         activeWorkspaceId: id,
-        activeSpaceId: firstSpaceId,
-        activeListIds: new Set(),
+        activeSpaceId,
+        activeListIds,
         ...(workspace && !workspace.isPersonal ? { lastRealWorkspaceId: id } : {}),
       });
     },
@@ -760,7 +792,21 @@ export const useTaskStore = create<TaskStore>((set, get) => {
         )
           ? 'board'
           : state.activeView,
+        // Keeps lastPositionByWorkspaceId current for setActiveWorkspaceId's own restore logic
+        // above — 'everything' is a workspace-wide view, not a specific place to remember.
+        lastPositionByWorkspaceId:
+          state.activeWorkspaceId && spaceId !== 'everything'
+            ? { ...state.lastPositionByWorkspaceId, [state.activeWorkspaceId]: { spaceId, listIds } }
+            : state.lastPositionByWorkspaceId,
       })),
+
+    forgetLastPosition: (workspaceId) =>
+      set((state) => {
+        if (!(workspaceId in state.lastPositionByWorkspaceId)) return state;
+        const next = { ...state.lastPositionByWorkspaceId };
+        delete next[workspaceId];
+        return { lastPositionByWorkspaceId: next };
+      }),
 
     setCalendarGranularity: (calendarGranularity) => set({ calendarGranularity }),
 
