@@ -2169,6 +2169,18 @@ User confirmed the fade removal reads as nicer, but Spaces/My Tasks' search bar 
 
 **Verified**: `npx tsc --noEmit` clean, `npm run build` succeeds, tested against a local production build before write-up.
 
+## Today's session (2026-08-26) — The real root cause behind the whole "nav tab stays blue" saga: opening a tree sheet never set activeView at all
+
+User deployed the whole 2026-08-25 batch to production manually, then reported a cluster of nav-highlight glitches that all trace back to the same single root cause: **opening the Spaces or My Tasks tree sheet (with nothing picked yet) never touched `activeView`** — it just flipped `mobileSpacesOpen`/`mobilePersonalSpacesOpen` to `true` and left `activeView` sitting at whatever it was before (Chat, Planner, ...). Reported live in four different shapes depending on which tab was active beforehand:
+- Spaces → My Tasks: My Tasks correctly gets the pill, but Chat *also* turns blue with no pill (two tabs simultaneously claiming the same shared `layoutId="mobileNavPill"` is undefined behavior — one wins the visible pill, the other just gets stranded text color).
+- Planner → My Tasks: Planner stays blue.
+- Chat → My Tasks: Chat stays blue (same mechanism, different starting tab).
+- Opening the popup menu afterward: its dimmed backdrop showed *Chat's* content through it, not Spaces/My Tasks' — the same stale `activeView` bleeding into whatever's actually rendered behind the overlay, not just a display-only highlight bug.
+
+Fixed at two levels: (1) the actual root cause — `openMobileSpaces()` and My Tasks' own tile `onClick` (its first-visit, no-`lastPersonalNav` branch) now both call `setActiveView('board')` explicitly the moment they open their sheet, so `activeView` reflects reality immediately instead of however long it takes the user to pick something. (2) defense-in-depth on the display layer — `visibleNavTabs`' `calendar`/`docs`/`office`/`chat` entries all gained a `&& !mobileSheetOpen` guard (`mobileSheetOpen = mobileSpacesOpen || mobilePersonalSpacesOpen`), matching the same "nothing else reads as active while a full-screen sheet covers everything" guard `board`/My Tasks' own active checks already had — kept even with the root-cause fix in place, in case a state update hasn't landed yet at render time.
+
+`npx tsc --noEmit -p .`, `npm run build`, and a real `npm run dev` boot all clean. Not yet re-verified on-device — this needs a real phone pass (and a fresh deploy, since the user deploys manually) before considering it closed.
+
 ## Known bugs / things to remember
 
 - **A Zustand selector that constructs a new object/array literal inline (instead of returning a reference already stable in the store) can cause an infinite React render loop, not just wasted re-renders.** Zustand's hook (built on `useSyncExternalStore`) re-invokes the selector on every store update and compares the result by reference; a selector that never returns a stable reference makes React conclude the snapshot is perpetually "unstable." Hit this in `app/page.tsx`'s `activeChatChannelLabel` (built `{kind, text}` inline) — reproduced live as "This page couldn't load" every time a DM was opened, diagnosed from a repeating `up`/`ud` React-internals stack in the browser console. Fix: select a plain reference (`.find()`'s result, or `null`) and derive anything object-shaped in a downstream `useMemo` instead.

@@ -1370,6 +1370,14 @@ function PageContent() {
       const fallback = workspaces.find((w) => w.id === lastRealWorkspaceId) ?? workspaces.find((w) => !w.isPersonal);
       if (fallback) setActiveWorkspaceId(fallback.id);
     }
+    // Opening the sheet with nothing picked yet left activeView pointed at whatever view was
+    // active before (Chat, Planner, ...) — the nav-tab highlight glitches this caused (another
+    // tab reading as "active," with no sliding pill, since two tabs can't share the same
+    // layoutId cleanly) were only the visible symptom; the same stale activeView is also what the
+    // popup menu's dimmed backdrop was showing through as "the wrong window's background."
+    // Setting it explicitly here is the actual fix, not just the nav highlight's own !mobileSheetOpen
+    // guard below (kept anyway, as defense-in-depth against the state update not having landed yet).
+    setActiveView('board');
     setMobileSpacesOpen(true);
   };
 
@@ -1400,13 +1408,24 @@ function PageContent() {
         active: activeView === 'board' && !currentWorkspace?.isPersonal,
       });
     }
+    // Opening either mobile tree sheet (Spaces, My Tasks' own Personal Spaces) never changes
+    // activeView by itself — only actually picking a Space/List/Doc inside one does (same fact
+    // `board`'s own active check already accounts for via !currentWorkspace?.isPersonal, and My
+    // Tasks' own via `|| mobilePersonalSpacesOpen`). Every *other* tab here was still just a bare
+    // `activeView === X` with no equivalent exclusion, so whichever tab was active before opening
+    // one of these sheets kept reading as active underneath it — reported live as Chat or Planner
+    // staying/turning blue (with no sliding pill, since two tabs simultaneously claiming the same
+    // shared `layoutId="mobileNavPill"` is undefined behavior) while genuinely looking at Spaces or
+    // My Tasks. Same fix applied uniformly: nothing else can read as active while either sheet is
+    // covering the screen.
+    const mobileSheetOpen = mobileSpacesOpen || mobilePersonalSpacesOpen;
     if (!hiddenNavTabs.has('calendar') && hasRealWorkspace) {
       tabs.push({
         id: 'calendar',
         label: 'Planner',
         icon: CalendarIcon,
         onClick: () => setActiveView('calendar'),
-        active: activeView === 'calendar',
+        active: activeView === 'calendar' && !mobileSheetOpen,
       });
     }
     if (!hiddenNavTabs.has('docs') && hasRealWorkspace) {
@@ -1415,7 +1434,7 @@ function PageContent() {
         label: 'Docs',
         icon: FileText,
         onClick: () => setActiveView('docs'),
-        active: activeView === 'docs',
+        active: activeView === 'docs' && !mobileSheetOpen,
       });
     }
     if (!hiddenNavTabs.has('office') && hasRealWorkspace) {
@@ -1424,7 +1443,7 @@ function PageContent() {
         label: 'Office',
         icon: Building2,
         onClick: handleOfficeNavClick,
-        active: activeView === 'office',
+        active: activeView === 'office' && !mobileSheetOpen,
       });
     }
     if (!hiddenNavTabs.has('chat')) {
@@ -1433,12 +1452,12 @@ function PageContent() {
         label: 'Chat',
         icon: MessageSquare,
         onClick: () => setActiveView('chat'),
-        active: activeView === 'chat',
+        active: activeView === 'chat' && !mobileSheetOpen,
         badge: chatUnreadCount,
       });
     }
     return tabs;
-  }, [hiddenNavTabs, hasRealWorkspace, activeView, currentWorkspace, workspaces, chatUnreadCount]);
+  }, [hiddenNavTabs, hasRealWorkspace, activeView, currentWorkspace, workspaces, chatUnreadCount, mobileSpacesOpen, mobilePersonalSpacesOpen]);
 
   // The desktop sidebar's "Me zone" (My tasks/My assigned tasks/Network/Profile) has no mobile
   // equivalent — it's inside the same hidden-below-md <aside> as the Spaces/Lists tree, and unlike
@@ -1472,6 +1491,12 @@ function PageContent() {
               setNavigation(lastPersonalNav.spaceId, lastPersonalNav.listIds);
               setActiveView('board');
             } else {
+              // Same fix as openMobileSpaces just above: opening the tree with nothing picked
+              // yet used to leave activeView pointed at whatever was active before (Chat,
+              // Planner, ...), which is what caused both the nav-tab highlight glitches (another
+              // tab reading as active underneath this one) and the popup menu's dimmed backdrop
+              // showing the wrong view's content through it.
+              setActiveView('board');
               setMobilePersonalSpacesOpen(true);
             }
           } catch (err) {
