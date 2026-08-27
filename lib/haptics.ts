@@ -9,3 +9,13 @@ export function hapticTap(): void {
     navigator.vibrate(10);
   }
 }
+
+// A more pronounced pulse than hapticTap's default 10ms — for a surface the user specifically
+// asked for stronger feedback on (the mobile popup menu's own buttons: tiles, Settings/Trash/
+// Archive, the workspace picker) without changing the subtler default every other tap in the app
+// (bottom nav, task rows, etc.) already uses.
+export function hapticTapStrong(): void {
+  if (typeof navigator !== 'undefined' && 'vibrate' in navigator) {
+    navigator.vibrate(20);
+  }
+}

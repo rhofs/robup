@@ -830,6 +830,9 @@ function PageContent() {
   const [settingsInitialTab, setSettingsInitialTab] = useState<'general' | 'roles' | 'invite' | 'import'>('general');
   const [hiddenNavTabs, setHiddenNavTabs] = useState<Set<NavTabId>>(() => new Set());
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  // Reported up by MobileBottomNav's own ResizeObserver — AppLauncherGrid uses this to size its
+  // panel to exactly match the nav "island" it opens from, rather than a fixed inset-x guess.
+  const [navIslandWidth, setNavIslandWidth] = useState<number | null>(null);
   // Whichever grid tile (AppLauncherGrid.tsx) the user last picked — remembered across reloads so
   // the bottom nav's dynamic 4th slot (MobileBottomNav.tsx) can shortcut straight back to it,
   // ClickUp-style, instead of always opening the grid. localStorage read is guarded for SSR.
@@ -1608,8 +1611,21 @@ function PageContent() {
     [visibleNavTabs]
   );
   const pinnableMobileTiles: MenuTile[] = useMemo(() => [...mobileGridTabs, ...meNavItems], [mobileGridTabs, meNavItems]);
-  const pinnedMobileTile: MenuTile | null =
-    pinnableMobileTiles.find((t) => t.id === pinnedMenuTileId) ?? pinnableMobileTiles[0] ?? null;
+  // No `?? pinnableMobileTiles[0]` fallback any more — that silently pinned whatever happened to
+  // be first in this array-order-dependent list (meNavItems' own first entry is "My Tasks")
+  // before the user had ever actually picked anything. MobileBottomNav.tsx's handlePinnedTap
+  // treats a *real* pinned tile as a navigate-there shortcut whenever you're not already on it —
+  // meaning the very first tap on the dynamic 4th slot, before any deliberate pin exists, could
+  // silently jump straight to My Tasks instead of opening the picker grid the user actually
+  // expected, landing on its own empty SpaceHome card if nothing was remembered there yet.
+  // Reported live as "jeg trykker på popup-menyen, og får 'My task'-kortet i bakgrunnen" — it
+  // wasn't the menu showing the wrong thing behind it, the tap never opened the menu at all.
+  // `pinnedTile` already renders correctly as `null` (MobileBottomNav's own `PinnedIcon = pinnedTile
+  // ?.icon ?? MenuIcon`, a generic hamburger) and behaves correctly as `null` (handlePinnedTap's
+  // `pinnedTile && ...` check falls through to opening the menu), so there's no need for an
+  // implicit default here at all — only an explicit pick (persisted via pinnedMenuTileId) should
+  // ever turn the 4th slot into a shortcut.
+  const pinnedMobileTile: MenuTile | null = pinnableMobileTiles.find((t) => t.id === pinnedMenuTileId) ?? null;
 
   // Owner or Admin of the current workspace — gates role management, member role changes, and
   // the "make private" control on Space/Folder/List/Task (server re-checks this independently on
@@ -3829,17 +3845,15 @@ function PageContent() {
             Desktop keeps its original border+lighter-bg treatment unchanged. */}
         <header className="border-b-0 md:border-b border-neutral-800/80 bg-neutral-950 md:bg-neutral-900/40 shrink-0">
           {/* md:h-11 + md:py-0 restore the original fixed-height compact desktop row exactly —
-              mobile instead sizes naturally off its own padding (pt-2 pb-5, noticeably more room
-              below the search pill than above it — bumped from pb-3 per direct feedback that
-              Calendar/Chat's own content wrapper (a tight p-2 on mobile, vs p-6 everywhere else,
-              see the content div below) left the search bar feeling cramped against their content
-              specifically. Bumping *this* shared padding — one row, used by literally every view —
-              rather than each view's own content-wrapper padding is what makes the extra air
-              apply identically everywhere in one change, per the same feedback, without touching
-              Calendar/Chat's own tighter internal layout budget) so the now-taller/rounder search
-              bar has real breathing room instead of being squeezed into a height tuned for the old
-              shorter one. */}
-          <div className="relative md:h-11 pt-2 pb-5 md:py-0 px-3 md:px-6 flex items-center gap-2 justify-between border-b-0 md:border-b border-neutral-800/40">
+              mobile instead sizes naturally off its own padding (pt-2 pb-8 — bumped twice now,
+              pb-3 -> pb-5 -> pb-8, per repeated direct feedback that it still felt tight) so the
+              now-taller/rounder search bar has real breathing room instead of being squeezed into
+              a height tuned for the old shorter one. Bumping *this* shared padding — one row, used
+              by literally every view — rather than each view's own content-wrapper padding is
+              what makes the extra air apply identically everywhere in one change, without touching
+              Calendar/Chat's own tighter p-2 content-wrapper budget (they were the two specifically
+              flagged as feeling cramped, since every other view already used a roomier p-6). */}
+          <div className="relative md:h-11 pt-2 pb-8 md:py-0 px-3 md:px-6 flex items-center gap-2 justify-between border-b-0 md:border-b border-neutral-800/40">
             {/* Mobile-only — the Spaces/Personal-Spaces tree sheets are the *only* way to reach a
                 specific List or Doc on mobile (the desktop sidebar is hidden below md), and neither
                 sheet stays mounted once you've navigated in, so there was previously no way back at
@@ -4712,6 +4726,7 @@ function PageContent() {
         spacesOpen={mobileSpacesOpen}
         pinnedTile={pinnedMobileTile}
         onNavigate={closeMobileOverlays}
+        onIslandWidthChange={setNavIslandWidth}
       />
 
       {/* ================= BULK ACTION BAR ================= */}
@@ -6413,6 +6428,7 @@ function PageContent() {
         realWorkspaces={workspaces.filter((w) => !w.isPersonal)}
         activeWorkspaceId={activeWorkspaceId}
         onSelectWorkspace={setActiveWorkspaceId}
+        islandWidth={navIslandWidth}
       />
       <MobileSpacesSheet
         open={mobileSpacesOpen}

@@ -1,5 +1,6 @@
 'use client';
 
+import { useEffect, useRef } from 'react';
 import { ChevronDown, ChevronUp, LayoutGrid, Menu as MenuIcon } from 'lucide-react';
 import { AnimatePresence, motion } from 'framer-motion';
 import type { NavTab, MenuTile } from './navTypes';
@@ -33,6 +34,12 @@ type Props = {
   // and reading as "the tap did nothing." Calling this directly guarantees a clean slate regardless
   // of whether the destination happens to match what's already active.
   onNavigate: () => void;
+  // Reports the nav pill's own real rendered width whenever it changes (content/label width,
+  // screen rotation, etc.) — AppLauncherGrid.tsx uses this to size the popup panel to *exactly*
+  // match the "island" it opens from, per direct feedback wanting the two to read as the same
+  // physical shape. Optional purely so this component doesn't require a measuring parent to render
+  // at all (existing tests/usages without it just don't get width-matching).
+  onIslandWidthChange?: (width: number) => void;
 };
 
 // Mobile-only bottom nav (md:hidden) — reads the exact same visibleNavTabs/setActiveView plumbing
@@ -50,10 +57,35 @@ type Props = {
 // dropped along with that panel's own layoutId morph per feedback that the open animation felt
 // choppy (a `layout` animation isn't compositor-only the way transform/opacity are); the panel now
 // just scales/fades in on its own, so this slot doesn't need a matching anchor for it any more.
-export default function MobileBottomNav({ navTabs, menuOpen, onOpenMenu, onCloseMenu, onOpenSpaces, spacesOpen, pinnedTile, onNavigate }: Props) {
+export default function MobileBottomNav({
+  navTabs,
+  menuOpen,
+  onOpenMenu,
+  onCloseMenu,
+  onOpenSpaces,
+  spacesOpen,
+  pinnedTile,
+  onNavigate,
+  onIslandWidthChange,
+}: Props) {
   const primaryTabs = PRIMARY_NAV_TAB_IDS
     .map((id) => navTabs.find((t) => t.id === id))
     .filter((t): t is NavTab => !!t);
+
+  // Measures the pill's own real width (content-driven, so it varies with label lengths/screen
+  // size) — a ResizeObserver rather than a one-time read, so a screen rotation or a nav-tab label
+  // change keeps AppLauncherGrid's own matching width current, not just correct at first mount.
+  const navRef = useRef<HTMLElement | null>(null);
+  useEffect(() => {
+    const el = navRef.current;
+    if (!el || !onIslandWidthChange) return;
+    const observer = new ResizeObserver((entries) => {
+      const width = entries[0]?.contentRect.width;
+      if (width) onIslandWidthChange(width);
+    });
+    observer.observe(el);
+    return () => observer.disconnect();
+  }, [onIslandWidthChange]);
 
   // Same !spacesOpen guard primaryTabs' own `active` already applies (see its comment above) —
   // opening Spaces never changes activeView (only actually picking a Space does), so whatever tab
@@ -90,7 +122,7 @@ export default function MobileBottomNav({ navTabs, menuOpen, onOpenMenu, onClose
       className="relative z-40 flex md:hidden justify-center px-3 pt-4"
       style={{ paddingBottom: 'calc(env(safe-area-inset-bottom) + 16px)' }}
     >
-      <nav className="flex items-center gap-0.5 bg-neutral-900 border border-neutral-800/80 rounded-full px-1.5 py-1.5 shadow-lg shadow-black/30">
+      <nav ref={navRef} className="flex items-center gap-0.5 bg-neutral-900 border border-neutral-800/80 rounded-full px-1.5 py-1.5 shadow-lg shadow-black/30">
         {primaryTabs.map((tab) => {
           const isSpaces = tab.id === 'board';
           const Icon = isSpaces ? LayoutGrid : tab.icon;

@@ -7,7 +7,7 @@ import type { LucideIcon } from 'lucide-react';
 import type { MenuTile } from './navTypes';
 import type { HierarchyWorkspace } from '../../store/useTaskStore';
 import { useInstallPrompt } from '../../hooks/useInstallPrompt';
-import { hapticTap } from '../../lib/haptics';
+import { hapticTapStrong } from '../../lib/haptics';
 
 type Props = {
   open: boolean;
@@ -40,6 +40,12 @@ type Props = {
   realWorkspaces: HierarchyWorkspace[];
   activeWorkspaceId: string | null;
   onSelectWorkspace: (workspaceId: string) => void;
+  // The nav pill's own real rendered width (MobileBottomNav.tsx's ResizeObserver, threaded
+  // through app/page.tsx) — sizes this panel to *exactly* match it, per direct feedback wanting
+  // the popup to read as the same physical "island" pushed upward, not a separate wider card.
+  // null only until the first measurement lands, which in practice is always before the panel can
+  // even be opened (the nav bar renders, and gets measured, well before any tap on it).
+  islandWidth: number | null;
 };
 
 type TileProps = {
@@ -54,7 +60,7 @@ function Tile({ icon: Icon, label, selected, badge, onClick }: TileProps) {
   return (
     <button
       onClick={() => {
-        hapticTap();
+        hapticTapStrong();
         onClick();
       }}
       className="flex flex-col items-center gap-1 cursor-pointer"
@@ -86,11 +92,13 @@ function Tile({ icon: Icon, label, selected, badge, onClick }: TileProps) {
 // background pill (MobileBottomNav.tsx) — a real container-transform growing the small pill into
 // this panel. Dropped per direct feedback that the open animation felt choppy/low-FPS: a `layout`
 // animation interpolates actual box-model geometry (width/height/position) every frame, which the
-// browser can't hand off to the GPU compositor the way it can transform/opacity — exactly the kind
-// of animation that visibly janks on a mid-range phone even though it looks fine on a dev machine.
-// Replaced with a plain scale+opacity+y `initial`/`animate`/`exit` — compositor-only properties,
-// smooth on real hardware — trading the fancier "grows out of the button" flourish for one that
-// actually stays smooth. MobileBottomNav.tsx's own matching anchor was removed too.
+// browser can't hand off to the GPU compositor the way it can transform/opacity. Went through a
+// clip-path-reveal version next, then settled on the current shape per further direct feedback
+// (real ClickUp screenshots) wanting the panel to be the *same width* as the nav pill and slide
+// straight up like a lid, not grow in place — width now comes from a real DOM measurement of the
+// pill itself (MobileBottomNav.tsx's ResizeObserver, threaded through app/page.tsx as
+// `islandWidth`), and the motion is a plain translateY, still avoiding the non-compositable
+// `layout` property that caused the original choppiness.
 export default function AppLauncherGrid({
   open,
   onClose,
@@ -106,6 +114,7 @@ export default function AppLauncherGrid({
   realWorkspaces,
   activeWorkspaceId,
   onSelectWorkspace,
+  islandWidth,
 }: Props) {
   // Only ever a real actionable tile on Chrome/Edge-family browsers that fired
   // `beforeinstallprompt` (see useInstallPrompt.ts) — iOS has no programmatic install prompt at
@@ -134,26 +143,33 @@ export default function AppLauncherGrid({
             onClick={onClose}
           />
           <motion.div
-            // Reveals upward from its own bottom edge — the nav bar "island" sitting right below —
-            // via an animated clip-path inset, not scale/y: per direct feedback wanting the panel
-            // to visually grow out of the nav island (bottom anchored, "lid" pushed up) rather than
-            // pop in from a fixed point. clip-path is compositor-accelerated in modern browsers,
-            // same reasoning as dropping the old layoutId morph for choppiness — this gets the
-            // "grows from below" *feel* back without reintroducing a `layout`-animated (non-
-            // compositable) property. Only the top inset moves (100% -> 0%, i.e. the visible sliver
-            // starts at zero height right at the bottom edge and grows upward to the panel's full
-            // height); the `round` component keeps the mask's own corners matching the panel's
-            // rounded-2xl the whole way through, so it never looks like a rectangular window
-            // clipping a rounded shape.
-            initial={{ clipPath: 'inset(100% 0% 0% 0% round 16px)' }}
-            animate={{ clipPath: 'inset(0% 0% 0% 0% round 16px)' }}
-            exit={{ clipPath: 'inset(100% 0% 0% 0% round 16px)' }}
+            // A literal "lid sliding up" — translateY only, not the clip-path reveal from the
+            // previous round: per direct feedback ("skyves opp, akkurat som et lokk... en
+            // skyveanimasjon"), the whole shape should visibly travel upward as one piece rather
+            // than being progressively unmasked in place. translateY is exactly as
+            // compositor-friendly as the clip-path it replaces (both avoid the non-compositable
+            // `layout`-animated box-model interpolation that caused the original choppiness) —
+            // this is a different *direction* of motion, not a step back in performance.
+            // Slides up from roughly the nav pill's own height, so it reads as emerging from
+            // there rather than travelling its own full height (which would look like it's
+            // arriving from off-screen, not from the island specifically).
+            initial={{ y: 56, opacity: 0 }}
+            animate={{ y: 0, opacity: 1 }}
+            exit={{ y: 56, opacity: 0 }}
             transition={{ duration: 0.22, ease: 'easeOut' }}
-            // No explicit gap above the nav pill any more (dropped the old + 8px) — per the
-            // ClickUp reference the user pointed at, the panel should read as connected to/growing
-            // out of the nav island directly, not floating a visible gap above it.
-            style={{ bottom: 'calc(4.75rem + env(safe-area-inset-bottom))' }}
-            className="absolute inset-x-3 bg-neutral-900 border border-neutral-800/80 rounded-2xl shadow-2xl shadow-black/40 px-2.5 pt-3 pb-2 max-h-[60vh] overflow-y-auto"
+            style={{
+              // No explicit gap above the nav pill (dropped the old + 8px) — per the ClickUp
+              // reference the user pointed at, the panel reads as connected to/growing out of the
+              // nav island directly, not floating a visible gap above it.
+              bottom: 'calc(4.75rem + env(safe-area-inset-bottom))',
+              // Sized to the nav pill's own real measured width (MobileBottomNav.tsx's
+              // ResizeObserver) instead of a fixed inset-x guess — per direct feedback wanting the
+              // popup to read as the *same* physical island pushed upward, not a separate wider
+              // card next to it. Falls back to a reasonable fixed width for the one render before
+              // the first measurement lands (in practice always before the panel is even openable).
+              width: islandWidth ? `${islandWidth}px` : undefined,
+            }}
+            className={`absolute left-1/2 -translate-x-1/2 ${islandWidth ? '' : 'w-[280px]'} bg-neutral-900 border border-neutral-800/80 rounded-2xl shadow-2xl shadow-black/40 px-2.5 pt-3 pb-2 max-h-[60vh] overflow-y-auto`}
           >
             <motion.div
               initial={{ opacity: 0 }}
@@ -170,7 +186,10 @@ export default function AppLauncherGrid({
               {realWorkspaces.length > 1 && activeWorkspace && (
                 <>
                   <button
-                    onClick={() => setWorkspacePickerOpen((v) => !v)}
+                    onClick={() => {
+                      hapticTapStrong();
+                      setWorkspacePickerOpen((v) => !v);
+                    }}
                     className="w-full flex items-center gap-3 px-2 py-1.5 rounded-lg text-left transition cursor-pointer hover:bg-neutral-800/60"
                   >
                     <span className="w-7 h-7 rounded-lg bg-blue-600 flex items-center justify-center shrink-0 text-white text-[11px] font-bold">
@@ -189,7 +208,7 @@ export default function AppLauncherGrid({
                           <button
                             key={ws.id}
                             onClick={() => {
-                              hapticTap();
+                              hapticTapStrong();
                               onNavigate();
                               onSelectWorkspace(ws.id);
                               onClose();
