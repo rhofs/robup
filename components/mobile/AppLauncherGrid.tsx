@@ -163,17 +163,23 @@ export default function AppLauncherGrid({
             // fading. Still purely compositor-friendly (no `layout`-animated property). This never
             // actually played on-device until MotionConfig(reducedMotion="never") was added at the
             // app root (app/layout.tsx) — every round up to and including this one had been
-            // silently hard-cutting under the OS Reduce Motion setting, see PLANNING.md. 0.22s read
-            // as a snap once it was finally animating for real ("klippes bare inn" rather than
-            // sliding) — 0.34s with a slower-starting ease reads as an actual upward motion instead
-            // of a pop. `round` only rounds the top two corners now (bottom-right/bottom-left left
-            // at 0) to match the panel's own `rounded-t-2xl` below — rounding all four while the
-            // panel sits flush on the nav pill was creating a visible seam at the bottom, see that
-            // className's own comment.
+            // silently hard-cutting under the OS Reduce Motion setting, see PLANNING.md. `round`
+            // only rounds the top two corners now (bottom-right/bottom-left left at 0) to match
+            // the panel's own `rounded-t-2xl` below — rounding all four while the panel sits flush
+            // on the nav pill was creating a visible seam at the bottom, see that className's own
+            // comment. A plain duration/ease tween (tried right after the reduced-motion fix) still
+            // read as a flat, mechanical "clips in" rather than motion — per direct feedback asking
+            // for the same springy bounce the active-tab pill already has (`layoutId`'s own
+            // `stiffness: 500, damping: 34` below), switched to a real spring here too. Framer
+            // Motion's spring interpolates complex/string values like `clipPath` the same way it
+            // does numbers, so this stays exactly as compositor-cheap as the tween was. Softer than
+            // the tab pill's own spring (lower stiffness, lower damping ratio) since this panel is
+            // much taller/heavier-feeling than a small highlight — a light overshoot reads as a
+            // gentle "settle," not a wobble.
             initial={{ clipPath: 'inset(100% 0% 0% 0% round 16px 16px 0px 0px)' }}
             animate={{ clipPath: 'inset(0% 0% 0% 0% round 16px 16px 0px 0px)' }}
             exit={{ clipPath: 'inset(100% 0% 0% 0% round 16px 16px 0px 0px)' }}
-            transition={{ duration: 0.34, ease: [0.22, 1, 0.36, 1] }}
+            transition={{ type: 'spring', stiffness: 300, damping: 22, mass: 0.9 }}
             style={{
               // No explicit gap above the nav pill (dropped the old + 8px) — per the ClickUp
               // reference the user pointed at, the panel reads as connected to/growing out of the
