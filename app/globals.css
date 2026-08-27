@@ -16,9 +16,15 @@
   :root {
     /* Dark gray, not nearly-black — matches ClickUp's own dark theme base rather than Tailwind's
        neutral-950 (#0a0a0a), which reads as pure black next to the neutral-900 cards/panels
-       elevated on top of it. Sits strictly between neutral-950 and neutral-900 so that elevation
-       hierarchy (page canvas darker than the cards on it) stays intact. */
-    --background: #121212;
+       elevated on top of it. Sits strictly between neutral-950 and neutral-900 (barely 5 raw
+       levels apart, #121212 -> #171717) so that elevation hierarchy (page canvas darker than the
+       cards on it) stays intact — too little headroom there to meaningfully soften this by just
+       nudging the gray value up. Given a very slight cool undertone instead, per direct feedback
+       that the flat neutral gray felt "too harsh"/reads as pure black across every screen (Spaces,
+       Planner, Chat) — same luminance in that same narrow band, but a hint of blue reads as
+       noticeably less flat/stark than an equally-dark true gray, the same trick Linear/Vercel-style
+       dark UIs lean on. */
+    --background: #101218;
     --foreground: #ededed;
   }
 }

@@ -9,14 +9,20 @@ import { withAlpha } from '../../lib/colorAlpha';
 import type { ClippedSegment, DragMode, DragState } from '../../lib/ganttLayout';
 import type { Task, Event } from '../../store/useTaskStore';
 
-// Shrunk from the expert visual-refinement pass's original 22-26px/3-5px target range per direct
-// user feedback ("litt smalere, vertikalt") — rows built around MONTH_MAX_LANES bars (see
-// CalendarView.tsx) at the old height left comfortable room for only ~2 tasks/events before
-// "+N" kicked in, while feeling like a lot of dead vertical space per bar. CalendarView.tsx's Fit
-// mode (see its own comment) derives how many lanes actually fit a given row height from these two
+// WeekRow-local render shape — `isOverflowCut` is purely a display decision made here (see the
+// borrow logic below), never touched by assignLanes/CalendarView.tsx, so it doesn't belong on the
+// shared ClippedSegment type. A plain ClippedSegment (the already-visible, un-borrowed case) is
+// still structurally assignable since the field is optional.
+type RenderSegment = ClippedSegment & { isOverflowCut?: boolean };
+
+// Shrunk twice now from the expert visual-refinement pass's original 22-26px/3-5px target range
+// per direct user feedback — first to 18/3 ("litt smalere, vertikalt"), then again here to 14/2
+// once it was clear 18/3 still didn't comfortably fit 2 bars + the "+N" chip within
+// MONTH_MAX_LANES' (2) row-height floor (see CalendarView.tsx). CalendarView.tsx's Fit mode (see
+// its own comment) derives how many lanes actually fit a given row height from these two
 // constants, same as the non-Fit MONTH_MAX_LANES/WEEK_MAX_LANES caps always have.
-export const BAR_H = 18;
-export const BAR_GAP = 3;
+export const BAR_H = 14;
+export const BAR_GAP = 2;
 export const DAY_NUM_H = 26;
 export const GUTTER_WIDTH = 34;
 const CLICK_DRAG_THRESHOLD = 4;
@@ -121,7 +127,7 @@ export default function WeekRow({
   // a borrowed-and-truncated bar still anchors off its real assigned lane, not the visual one.
   const alreadyVisible = segments.filter((s) => s.lane < maxVisibleLanes);
   const overflowByDay = new Array(7).fill(0);
-  const borrowedSegments: ClippedSegment[] = [];
+  const borrowedSegments: RenderSegment[] = [];
   // occupied[lane][day]: true once something (an originally-visible segment, or an earlier
   // borrowed one) already claims that day/lane — checked so two overflow segments competing for
   // the same free gap on the same day don't both render on top of each other.
@@ -154,13 +160,19 @@ export default function WeekRow({
         lane: bestLane,
         colSpan: bestLen,
         isEndEdge: fullyFits ? s.isEndEdge : false,
+        // Drives a dashed (not solid) right edge on the bar itself — a flat cut reads as "the bar
+        // just stops," which isn't intuitive for "it keeps going, folded into +N from here." Kept
+        // as its own flag rather than reusing `!isEndEdge`, since that's already true for the
+        // unrelated, pre-existing case of a segment continuing into *next week's* row — this only
+        // marks the new overflow-truncation case specifically.
+        isOverflowCut: !fullyFits,
       });
     }
     for (let d = s.colStart + bestLen; d < s.colStart + s.colSpan; d++) {
       overflowByDay[d] = (overflowByDay[d] || 0) + 1;
     }
   }
-  const visibleSegments = [...alreadyVisible, ...borrowedSegments];
+  const visibleSegments: RenderSegment[] = [...alreadyVisible, ...borrowedSegments];
 
   // Computed from THIS row's own bars, not a value shared across the whole month — otherwise a
   // quiet row's "+N more" chip gets pushed down to match however tall the busiest row in the
@@ -408,7 +420,7 @@ function EventBar({
   isMobile,
 }: {
   event: Event;
-  seg: ClippedSegment;
+  seg: RenderSegment;
   barStyle: React.CSSProperties;
   color: string;
   isDraggingThis: boolean;
@@ -488,7 +500,7 @@ function TaskBar({
   isMobile,
 }: {
   task: Task;
-  seg: ClippedSegment;
+  seg: RenderSegment;
   barStyle: React.CSSProperties;
   color: string;
   isDraggingThis: boolean;
@@ -522,6 +534,11 @@ function TaskBar({
           backgroundColor: withAlpha(color, hovered ? HOVER_BG_ALPHA : BASE_BG_ALPHA),
           borderColor: withAlpha(color, hovered ? HOVER_BORDER_ALPHA : BASE_BORDER_ALPHA),
           color,
+          // Tasks are always solid-bordered (the Task-vs-Event tell, see EventBar's own comment)
+          // — except right here: a bar truncated by the overflow-borrow logic above (WeekRow's own
+          // visibleSegments computation) gets a dashed right edge specifically, so a flat "it just
+          // stops" cut reads instead as "it keeps going, folded into +N from here."
+          ...(seg.isOverflowCut ? { borderRightStyle: 'dashed' as const, borderRightWidth: 2 } : {}),
         }}
       >
         <span className="truncate flex-1">{task.title}</span>
