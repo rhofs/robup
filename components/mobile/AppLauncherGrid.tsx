@@ -136,19 +136,17 @@ export default function AppLauncherGrid({
             onClick={onClose}
           />
           <motion.div
-            // A literal "lid sliding up" — translateY only, not the clip-path reveal from the
-            // previous round: per direct feedback ("skyves opp, akkurat som et lokk... en
-            // skyveanimasjon"), the whole shape should visibly travel upward as one piece rather
-            // than being progressively unmasked in place. translateY is exactly as
-            // compositor-friendly as the clip-path it replaces (both avoid the non-compositable
-            // `layout`-animated box-model interpolation that caused the original choppiness) —
-            // this is a different *direction* of motion, not a step back in performance.
-            // Slides up from roughly the nav pill's own height, so it reads as emerging from
-            // there rather than travelling its own full height (which would look like it's
-            // arriving from off-screen, not from the island specifically).
-            initial={{ y: 56, opacity: 0 }}
-            animate={{ y: 0, opacity: 1 }}
-            exit={{ y: 56, opacity: 0 }}
+            // "Rullgardin," not a slide-and-fade: per direct feedback, a translateY+opacity entrance
+            // still reads as a *new* panel materializing next to the nav pill, not the pill's own
+            // body extending upward. A roller blind is always fully opaque material — pulling it
+            // down doesn't fade the pattern in, it just uncovers more of what's already there. Back
+            // to an animated clip-path (dropped two rounds ago for a slide, brought back here with
+            // no opacity animation anywhere in this tree — see the content wrapper below too) so
+            // the whole shape is opaque throughout and only ever progressively unmasked, never
+            // fading. Still purely compositor-friendly (no `layout`-animated property).
+            initial={{ clipPath: 'inset(100% 0% 0% 0% round 16px)' }}
+            animate={{ clipPath: 'inset(0% 0% 0% 0% round 16px)' }}
+            exit={{ clipPath: 'inset(100% 0% 0% 0% round 16px)' }}
             transition={{ duration: 0.22, ease: 'easeOut' }}
             style={{
               // No explicit gap above the nav pill (dropped the old + 8px) — per the ClickUp
@@ -163,11 +161,7 @@ export default function AppLauncherGrid({
             // shape while this panel is open, matching the ClickUp reference screenshots.
             className="absolute left-1/2 -translate-x-1/2 w-[300px] max-w-[calc(100vw-48px)] bg-neutral-900 border border-neutral-800/80 rounded-2xl shadow-2xl shadow-black/40 px-2.5 pt-3 pb-2 max-h-[60vh] overflow-y-auto"
           >
-            <motion.div
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              transition={{ duration: 0.14, delay: 0.1 }}
-            >
+            <div>
               {/* Only shown once there's actually more than one real workspace to switch between
                   — a switcher with nothing to switch to is just clutter. One row (the *active*
                   workspace, tap to expand the rest) instead of one row per workspace — per direct
@@ -276,7 +270,7 @@ export default function AppLauncherGrid({
                   />
                 )}
               </div>
-            </motion.div>
+            </div>
           </motion.div>
         </div>
       )}

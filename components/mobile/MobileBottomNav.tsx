@@ -117,7 +117,17 @@ export default function MobileBottomNav({
           component's rendered width and feeding it to the other. justify-between (not the old
           tight/content-fit packing) is what actually spends this now-wider pill's own width on
           spreading the 4 tabs evenly, rather than leaving dead space on one side. */}
-      <nav className="flex items-center justify-between gap-0.5 w-[300px] max-w-[calc(100vw-48px)] bg-neutral-900 border border-neutral-800/80 rounded-full px-1.5 py-1.5 shadow-lg shadow-black/30">
+      {/* borderRadius animates in sync with the popup panel's own opening (round 16px in its
+          clip-path, see AppLauncherGrid.tsx) — a plain `rounded-full` pill sitting directly under
+          a `rounded-2xl` panel has visibly mismatched corners exactly where they touch, breaking
+          the "one continuous shape" read even with matching width/color/no-gap already in place.
+          borderRadius is paint-only (no layout reflow), so this stays just as compositor-cheap as
+          everything else in this chain. */}
+      <motion.nav
+        animate={{ borderRadius: menuOpen ? 16 : 9999 }}
+        transition={{ duration: 0.22, ease: 'easeOut' }}
+        className="flex items-center justify-between gap-0.5 w-[300px] max-w-[calc(100vw-48px)] bg-neutral-900 border border-neutral-800/80 px-1.5 py-1.5 shadow-lg shadow-black/30"
+      >
         {primaryTabs.map((tab) => {
           const isSpaces = tab.id === 'board';
           const Icon = isSpaces ? LayoutGrid : tab.icon;
@@ -189,7 +199,7 @@ export default function MobileBottomNav({
             </span>
           )}
         </button>
-      </nav>
+      </motion.nav>
     </div>
   );
 }
