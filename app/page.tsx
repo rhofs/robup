@@ -3829,10 +3829,17 @@ function PageContent() {
             Desktop keeps its original border+lighter-bg treatment unchanged. */}
         <header className="border-b-0 md:border-b border-neutral-800/80 bg-neutral-950 md:bg-neutral-900/40 shrink-0">
           {/* md:h-11 + md:py-0 restore the original fixed-height compact desktop row exactly —
-              mobile instead sizes naturally off its own padding (pt-2 pb-3, a bit more room below
-              the search pill than above it) so the now-taller/rounder search bar has real
-              breathing room instead of being squeezed into a height tuned for the old shorter one. */}
-          <div className="relative md:h-11 pt-2 pb-3 md:py-0 px-3 md:px-6 flex items-center gap-2 justify-between border-b-0 md:border-b border-neutral-800/40">
+              mobile instead sizes naturally off its own padding (pt-2 pb-5, noticeably more room
+              below the search pill than above it — bumped from pb-3 per direct feedback that
+              Calendar/Chat's own content wrapper (a tight p-2 on mobile, vs p-6 everywhere else,
+              see the content div below) left the search bar feeling cramped against their content
+              specifically. Bumping *this* shared padding — one row, used by literally every view —
+              rather than each view's own content-wrapper padding is what makes the extra air
+              apply identically everywhere in one change, per the same feedback, without touching
+              Calendar/Chat's own tighter internal layout budget) so the now-taller/rounder search
+              bar has real breathing room instead of being squeezed into a height tuned for the old
+              shorter one. */}
+          <div className="relative md:h-11 pt-2 pb-5 md:py-0 px-3 md:px-6 flex items-center gap-2 justify-between border-b-0 md:border-b border-neutral-800/40">
             {/* Mobile-only — the Spaces/Personal-Spaces tree sheets are the *only* way to reach a
                 specific List or Doc on mobile (the desktop sidebar is hidden below md), and neither
                 sheet stays mounted once you've navigated in, so there was previously no way back at
@@ -3911,7 +3918,7 @@ function PageContent() {
             <div className="md:hidden absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 w-[min(calc(100%-88px),420px)]">
               <button
                 onClick={() => setCommandPaletteOpen(true)}
-                className="w-full flex items-center gap-1.5 bg-neutral-900/60 border border-neutral-800/80 rounded-full px-3 py-2.5 text-neutral-500 hover:border-neutral-700 hover:text-neutral-300 cursor-pointer"
+                className="w-full flex items-center gap-1.5 bg-neutral-900/60 border border-neutral-800/80 rounded-full px-3 py-3 text-neutral-500 hover:border-neutral-700 hover:text-neutral-300 cursor-pointer"
               >
                 <Search className="w-3.5 h-3.5 shrink-0" />
                 <span className="text-[11px] truncate">Search...</span>

@@ -149,7 +149,10 @@ export default function AppLauncherGrid({
             animate={{ clipPath: 'inset(0% 0% 0% 0% round 16px)' }}
             exit={{ clipPath: 'inset(100% 0% 0% 0% round 16px)' }}
             transition={{ duration: 0.22, ease: 'easeOut' }}
-            style={{ bottom: 'calc(4.75rem + env(safe-area-inset-bottom) + 8px)' }}
+            // No explicit gap above the nav pill any more (dropped the old + 8px) — per the
+            // ClickUp reference the user pointed at, the panel should read as connected to/growing
+            // out of the nav island directly, not floating a visible gap above it.
+            style={{ bottom: 'calc(4.75rem + env(safe-area-inset-bottom))' }}
             className="absolute inset-x-3 bg-neutral-900 border border-neutral-800/80 rounded-2xl shadow-2xl shadow-black/40 px-2.5 pt-3 pb-2 max-h-[60vh] overflow-y-auto"
           >
             <motion.div
