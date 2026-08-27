@@ -107,7 +107,6 @@ import SettingsPanel, { readHiddenNavTabs, readHideWeekNumbers, type NavTabId } 
 import type { NavTab, MenuTile } from '../components/mobile/navTypes';
 import { PRIMARY_NAV_TAB_IDS } from '../components/mobile/navTypes';
 import MobileBottomNav from '../components/mobile/MobileBottomNav';
-import AppLauncherGrid from '../components/mobile/AppLauncherGrid';
 import MobileSpacesSheet from '../components/mobile/MobileSpacesSheet';
 import MobileDocPagesSheet from '../components/mobile/MobileDocPagesSheet';
 import MobileCalendarFilterSheet from '../components/mobile/MobileCalendarFilterSheet';
@@ -4723,6 +4722,16 @@ function PageContent() {
         spacesOpen={mobileSpacesOpen}
         pinnedTile={pinnedMobileTile}
         onNavigate={closeMobileOverlays}
+        contentTiles={mobileGridTabs}
+        meItems={meNavItems}
+        onSelectTile={pinMobileMenuTile}
+        onOpenSettings={() => setSettingsOpen(true)}
+        onOpenTrash={() => setTrashOpen(true)}
+        showArchived={showArchived}
+        onToggleArchive={() => setShowArchived(!showArchived)}
+        realWorkspaces={workspaces.filter((w) => !w.isPersonal)}
+        activeWorkspaceId={activeWorkspaceId}
+        onSelectWorkspace={setActiveWorkspaceId}
       />
 
       {/* ================= BULK ACTION BAR ================= */}
@@ -6409,22 +6418,6 @@ function PageContent() {
         onOpenTask={(id) => setModalTaskStack([id])}
       />
 
-      <AppLauncherGrid
-        open={mobileMenuOpen}
-        onClose={() => setMobileMenuOpen(false)}
-        contentTiles={mobileGridTabs}
-        meItems={meNavItems}
-        pinnedTileId={pinnedMobileTile?.id ?? null}
-        onSelectTile={pinMobileMenuTile}
-        onOpenSettings={() => setSettingsOpen(true)}
-        onOpenTrash={() => setTrashOpen(true)}
-        showArchived={showArchived}
-        onToggleArchive={() => setShowArchived(!showArchived)}
-        onNavigate={closeMobileOverlays}
-        realWorkspaces={workspaces.filter((w) => !w.isPersonal)}
-        activeWorkspaceId={activeWorkspaceId}
-        onSelectWorkspace={setActiveWorkspaceId}
-      />
       <MobileSpacesSheet
         open={mobileSpacesOpen}
         onClose={() => setMobileSpacesOpen(false)}

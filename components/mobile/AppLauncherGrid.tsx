@@ -1,7 +1,6 @@
 'use client';
 
-import { useState } from 'react';
-import { AnimatePresence, motion } from 'framer-motion';
+import { useEffect, useState } from 'react';
 import { Archive, ChevronDown, Download, Settings, Trash2 } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
 import type { MenuTile } from './navTypes';
@@ -10,14 +9,17 @@ import { useInstallPrompt } from '../../hooks/useInstallPrompt';
 import { hapticTapStrong } from '../../lib/haptics';
 
 type Props = {
-  open: boolean;
+  // Only used to reset the workspace-picker accordion back to collapsed once the menu closes —
+  // this component's own content stays mounted at all times now (MobileBottomNav.tsx owns the
+  // single shared box and reveals/hides it via clip-path, not mount/unmount), so there's no
+  // AnimatePresence exit here to hang that reset off any more.
+  menuOpen: boolean;
   onClose: () => void;
   // Everything not already pinned to the bottom nav's 3 fixed slots (app/page.tsx's
   // visibleNavTabs minus PRIMARY_NAV_TAB_IDS) plus the "Me" section (My Tasks/Assigned/
   // Connections/Profile) — both selectable as the nav's 4th, dynamic slot.
   contentTiles: MenuTile[];
   meItems: MenuTile[];
-  pinnedTileId: string | null;
   onSelectTile: (id: string) => void;
   onOpenSettings: () => void;
   onOpenTrash: () => void;
@@ -76,25 +78,17 @@ function Tile({ icon: Icon, label, selected, badge, onClick }: TileProps) {
   );
 }
 
-// Mobile-only "more" grid — opened from the bottom nav's dynamic 4th slot (MobileBottomNav.tsx),
-// which also shows whichever tile was last picked here as its own icon/label so the two act as one
-// ClickUp-style shortcut-or-switcher control. Selecting a tile here both performs its action *and*
-// pins it (onSelectTile) so it becomes the nav's shortcut going forward; the currently-pinned tile
-// gets a highlighted ring, matching the reference screenshot's bordered "selected" tile.
-//
-// Used to share a framer-motion `layoutId` ("mobileMenuMorph") with the 4th nav button's own
-// background pill (MobileBottomNav.tsx) — a real container-transform growing the small pill into
-// this panel. Dropped per direct feedback that the open animation felt choppy/low-FPS: a `layout`
-// animation interpolates actual box-model geometry (width/height/position) every frame, which the
-// browser can't hand off to the GPU compositor the way it can transform/opacity. Went through a
-// clip-path-reveal version, then a JS-measured width-match, before settling on the current shape:
-// per further direct feedback with real ClickUp screenshots, the panel now shares MobileBottomNav
-// .tsx's own `w-[300px] max-w-[calc(100vw-48px)]` literally (see that file's own `NAV_ISLAND_WIDTH`
-// comment for why a shared fixed value replaced the DOM-measurement approach), sits flush against
-// the pill with no gap, and slides up as one piece via a plain translateY — no `layout`-animated
-// property anywhere in this chain, same reasoning as every round before it.
-export default function AppLauncherGrid({
-  open,
+// Mobile-only "more" grid content — rendered *inside* MobileBottomNav.tsx's single shared island
+// box (that file owns the outer shape, clip-path reveal, border, background and corner radius; see
+// its own file-level comment for why). This component only ever renders the scrollable content
+// portion: the workspace switcher accordion and the tile grids. Previously owned its own separate
+// floating panel (motion.div, backdrop, AnimatePresence) — merged into the nav pill's own box after
+// several rounds of trying to fake "one seamless shape" out of two independently-bordered/rounded
+// elements touching (fade → slide → clip-path → matched corners → matched borders — see
+// PLANNING.md's whole popup-menu saga). Two elements touching can only ever *approximate* one
+// shape; a single shared box can't have a seam by construction, which is the actual fix.
+export default function AppLauncherGridContent({
+  menuOpen,
   onClose,
   contentTiles,
   meItems,
@@ -115,209 +109,130 @@ export default function AppLauncherGrid({
   const pinnableTiles = [...contentTiles, ...meItems];
   // Accordion, not one row per workspace — a row-per-workspace list was the biggest single
   // contributor to the panel feeling cluttered/tall for anyone in 3+ real workspaces. Collapsed
-  // by default, reset on every open/close so it doesn't stay expanded into an unrelated later
-  // visit to the menu.
+  // by default, reset whenever the menu closes (this component's own content never unmounts any
+  // more, so a plain effect on `menuOpen` replaces the old AnimatePresence onExitComplete reset).
   const [workspacePickerOpen, setWorkspacePickerOpen] = useState(false);
+  useEffect(() => {
+    if (!menuOpen) setWorkspacePickerOpen(false);
+  }, [menuOpen]);
   const activeWorkspace = realWorkspaces.find((w) => w.id === activeWorkspaceId);
 
   return (
-    <AnimatePresence
-      onExitComplete={() => setWorkspacePickerOpen(false)}
-    >
-      {open && (
-        // pointer-events-none on this full-screen wrapper: shrinking the backdrop below to leave
-        // a hole over the nav island (see its own comment) only stopped the *visible* dim there —
-        // this wrapper is still a `fixed inset-0` box, and a plain div with no explicit
-        // pointer-events still captures clicks over its whole area by default even where nothing
-        // is drawn, silently swallowing taps meant for the real pinned button underneath it (z-40,
-        // below this z-50) before they could ever reach it. Reported live as "stuck open, can only
-        // dismiss by tapping outside or picking another tab" — the pinned button's own re-tap-to-
-        // close logic (MobileBottomNav.tsx's handlePinnedTap) was always correct, it just never
-        // received the tap. Re-enabled explicitly on the two children that actually need it.
-        <div className="fixed inset-0 z-50 md:hidden pointer-events-none">
-          <motion.div
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
-            transition={{ duration: 0.18 }}
-            // bottom stops flush with the nav island (same 4.75rem + safe-area value
-            // MobileBottomNav.tsx's own pill and this panel's `bottom` already share) instead of
-            // the full `inset-0` this used to be — the old full-screen dim painted over the nav
-            // pill too, at z-50 above its z-40, so it read as darker than the equally-opaque panel
-            // sitting directly above it ("hovedøya blir dimma... skal ha samme farge", reported
-            // live). Leaving a hole here keeps the pill at its own natural, undimmed color so the
-            // pill+panel read as one continuous, evenly-lit shape.
-            style={{ bottom: 'calc(4.75rem + env(safe-area-inset-bottom))' }}
-            className="absolute inset-x-0 top-0 bg-black/60 pointer-events-auto"
-            onClick={onClose}
-          />
-          <motion.div
-            // "Rullgardin," not a slide-and-fade: per direct feedback, a translateY+opacity entrance
-            // still reads as a *new* panel materializing next to the nav pill, not the pill's own
-            // body extending upward. A roller blind is always fully opaque material — pulling it
-            // down doesn't fade the pattern in, it just uncovers more of what's already there. Back
-            // to an animated clip-path (dropped two rounds ago for a slide, brought back here with
-            // no opacity animation anywhere in this tree — see the content wrapper below too) so
-            // the whole shape is opaque throughout and only ever progressively unmasked, never
-            // fading. Still purely compositor-friendly (no `layout`-animated property). This never
-            // actually played on-device until MotionConfig(reducedMotion="never") was added at the
-            // app root (app/layout.tsx) — every round up to and including this one had been
-            // silently hard-cutting under the OS Reduce Motion setting, see PLANNING.md. `round`
-            // only rounds the top two corners now (bottom-right/bottom-left left at 0) to match
-            // the panel's own `rounded-t-2xl` below — rounding all four while the panel sits flush
-            // on the nav pill was creating a visible seam at the bottom, see that className's own
-            // comment. A plain duration/ease tween (tried right after the reduced-motion fix) still
-            // read as a flat, mechanical "clips in" rather than motion — per direct feedback asking
-            // for the same springy bounce the active-tab pill already has (`layoutId`'s own
-            // `stiffness: 500, damping: 34` below), switched to a real spring here too. Framer
-            // Motion's spring interpolates complex/string values like `clipPath` the same way it
-            // does numbers, so this stays exactly as compositor-cheap as the tween was. Softer than
-            // the tab pill's own spring (lower stiffness, lower damping ratio) since this panel is
-            // much taller/heavier-feeling than a small highlight — a light overshoot reads as a
-            // gentle "settle," not a wobble.
-            initial={{ clipPath: 'inset(100% 0% 0% 0% round 16px 16px 0px 0px)' }}
-            animate={{ clipPath: 'inset(0% 0% 0% 0% round 16px 16px 0px 0px)' }}
-            exit={{ clipPath: 'inset(100% 0% 0% 0% round 16px 16px 0px 0px)' }}
-            transition={{ type: 'spring', stiffness: 300, damping: 22, mass: 0.9 }}
-            style={{
-              // No explicit gap above the nav pill (dropped the old + 8px) — per the ClickUp
-              // reference the user pointed at, the panel reads as connected to/growing out of the
-              // nav island directly, not floating a visible gap above it.
-              bottom: 'calc(4.75rem + env(safe-area-inset-bottom))',
+    <div>
+      {/* Only shown once there's actually more than one real workspace to switch between
+          — a switcher with nothing to switch to is just clutter. One row (the *active*
+          workspace, tap to expand the rest) instead of one row per workspace — per direct
+          feedback that a full list ate too much of the panel for anyone in several
+          workspaces. Matches MobileSpacesSheet.tsx's own Space-row shape rather than the
+          square icon grid below, since a workspace name is free text of unpredictable
+          length. */}
+      {realWorkspaces.length > 1 && activeWorkspace && (
+        <>
+          <button
+            onClick={() => {
+              hapticTapStrong();
+              setWorkspacePickerOpen((v) => !v);
             }}
-            // w-[300px] max-w-[calc(100vw-48px)]: literally the same width class as
-            // MobileBottomNav.tsx's own `<nav>` pill (its `NAV_ISLAND_WIDTH` comment explains why
-            // this is a shared fixed value rather than a measured one) — same left-1/2
-            // -translate-x-1/2 centering too, so the two align exactly and read as one continuous
-            // shape while this panel is open, matching the ClickUp reference screenshots.
-            // rounded-t-2xl (not rounded-2xl) + border-x/border-t only (no border-b): the panel
-            // sits flush on top of the nav pill with zero gap, so a fully-rounded bottom and a
-            // border stroke running under it both drew a visible seam right where the two pieces
-            // are supposed to read as one shape ("avrundet bunn... en Frame nederst, så den
-            // skiller nederste del av menyøya", reported live). MobileBottomNav.tsx's own pill
-            // corners are synced to match: square on top where it meets this panel, still rounded
-            // on the bottom where it's the island's own outer edge.
-            className="absolute left-1/2 -translate-x-1/2 w-[300px] max-w-[calc(100vw-48px)] bg-neutral-900 border-x border-t border-neutral-800/80 rounded-t-2xl shadow-2xl shadow-black/40 px-2.5 pt-3 pb-2 max-h-[60vh] overflow-y-auto"
+            className="w-full flex items-center gap-3 px-2 py-1.5 rounded-lg text-left transition cursor-pointer hover:bg-neutral-800/60"
           >
-            <div>
-              {/* Only shown once there's actually more than one real workspace to switch between
-                  — a switcher with nothing to switch to is just clutter. One row (the *active*
-                  workspace, tap to expand the rest) instead of one row per workspace — per direct
-                  feedback that a full list ate too much of the panel for anyone in several
-                  workspaces. Matches MobileSpacesSheet.tsx's own Space-row shape rather than the
-                  square icon grid below, since a workspace name is free text of unpredictable
-                  length. */}
-              {realWorkspaces.length > 1 && activeWorkspace && (
-                <>
+            <span className="w-7 h-7 rounded-lg bg-blue-600 flex items-center justify-center shrink-0 text-white text-[11px] font-bold">
+              {activeWorkspace.name.slice(0, 1).toUpperCase()}
+            </span>
+            <span className="min-w-0 flex-1 text-sm text-neutral-200 truncate">{activeWorkspace.name}</span>
+            <ChevronDown
+              className={`w-4 h-4 text-neutral-500 shrink-0 transition-transform ${workspacePickerOpen ? 'rotate-180' : ''}`}
+            />
+          </button>
+          {workspacePickerOpen && (
+            <div className="space-y-0.5 pt-0.5 pb-1.5 pl-3">
+              {realWorkspaces
+                .filter((ws) => ws.id !== activeWorkspaceId)
+                .map((ws) => (
                   <button
+                    key={ws.id}
                     onClick={() => {
                       hapticTapStrong();
-                      setWorkspacePickerOpen((v) => !v);
+                      onNavigate();
+                      onSelectWorkspace(ws.id);
+                      onClose();
                     }}
                     className="w-full flex items-center gap-3 px-2 py-1.5 rounded-lg text-left transition cursor-pointer hover:bg-neutral-800/60"
                   >
-                    <span className="w-7 h-7 rounded-lg bg-blue-600 flex items-center justify-center shrink-0 text-white text-[11px] font-bold">
-                      {activeWorkspace.name.slice(0, 1).toUpperCase()}
+                    <span className="w-6 h-6 rounded-md bg-neutral-700 flex items-center justify-center shrink-0 text-white text-[10px] font-bold">
+                      {ws.name.slice(0, 1).toUpperCase()}
                     </span>
-                    <span className="min-w-0 flex-1 text-sm text-neutral-200 truncate">{activeWorkspace.name}</span>
-                    <ChevronDown
-                      className={`w-4 h-4 text-neutral-500 shrink-0 transition-transform ${workspacePickerOpen ? 'rotate-180' : ''}`}
-                    />
+                    <span className="min-w-0 flex-1 text-sm text-neutral-300 truncate">{ws.name}</span>
                   </button>
-                  {workspacePickerOpen && (
-                    <div className="space-y-0.5 pt-0.5 pb-1.5 pl-3">
-                      {realWorkspaces
-                        .filter((ws) => ws.id !== activeWorkspaceId)
-                        .map((ws) => (
-                          <button
-                            key={ws.id}
-                            onClick={() => {
-                              hapticTapStrong();
-                              onNavigate();
-                              onSelectWorkspace(ws.id);
-                              onClose();
-                            }}
-                            className="w-full flex items-center gap-3 px-2 py-1.5 rounded-lg text-left transition cursor-pointer hover:bg-neutral-800/60"
-                          >
-                            <span className="w-6 h-6 rounded-md bg-neutral-700 flex items-center justify-center shrink-0 text-white text-[10px] font-bold">
-                              {ws.name.slice(0, 1).toUpperCase()}
-                            </span>
-                            <span className="min-w-0 flex-1 text-sm text-neutral-300 truncate">{ws.name}</span>
-                          </button>
-                        ))}
-                    </div>
-                  )}
-                  <div className="h-px bg-neutral-800/70 my-2" />
-                </>
-              )}
-
-              {/* No `selected` ring on the pinned tile here any more — whichever tile is pinned
-                  already gets its own highlighted state down in the nav pill's 4th slot
-                  (MobileBottomNav.tsx), and showing it selected in *both* places at once read as
-                  two conflicting answers to "what's currently selected," per a redesign the user
-                  pointed at ("My Tasks valgt to steder med forskjellig utseende... nå er det bare
-                  My Tasks nederst som er markert som aktiv fane"). This grid is just the picker —
-                  only the nav slot itself represents "current." */}
-              <div className="grid grid-cols-3 gap-4">
-                {pinnableTiles.map((tile) => (
-                  <Tile
-                    key={tile.id}
-                    icon={tile.icon}
-                    label={tile.label}
-                    badge={tile.badge}
-                    onClick={() => {
-                      onNavigate();
-                      onSelectTile(tile.id);
-                      tile.onClick();
-                      onClose();
-                    }}
-                  />
                 ))}
-              </div>
-
-              <div className="h-px bg-neutral-800/70 my-3" />
-
-              <div className="grid grid-cols-3 gap-4 pb-2">
-                <Tile
-                  icon={Settings}
-                  label="Settings"
-                  onClick={() => {
-                    onOpenSettings();
-                    onClose();
-                  }}
-                />
-                <Tile
-                  icon={Trash2}
-                  label="Trash"
-                  onClick={() => {
-                    onOpenTrash();
-                    onClose();
-                  }}
-                />
-                <Tile
-                  icon={Archive}
-                  label={showArchived ? 'Viewing archive' : 'Archive'}
-                  selected={showArchived}
-                  onClick={() => {
-                    onToggleArchive();
-                    onClose();
-                  }}
-                />
-                {canInstall && (
-                  <Tile
-                    icon={Download}
-                    label="Install"
-                    onClick={() => {
-                      promptInstall();
-                      onClose();
-                    }}
-                  />
-                )}
-              </div>
             </div>
-          </motion.div>
-        </div>
+          )}
+          <div className="h-px bg-neutral-800/70 my-2" />
+        </>
       )}
-    </AnimatePresence>
+
+      {/* No `selected` ring on the pinned tile here any more — whichever tile is pinned
+          already gets its own highlighted state down in the nav pill's 4th slot
+          (MobileBottomNav.tsx), and showing it selected in *both* places at once read as
+          two conflicting answers to "what's currently selected," per a redesign the user
+          pointed at ("My Tasks valgt to steder med forskjellig utseende... nå er det bare
+          My Tasks nederst som er markert som aktiv fane"). This grid is just the picker —
+          only the nav slot itself represents "current." */}
+      <div className="grid grid-cols-3 gap-4">
+        {pinnableTiles.map((tile) => (
+          <Tile
+            key={tile.id}
+            icon={tile.icon}
+            label={tile.label}
+            badge={tile.badge}
+            onClick={() => {
+              onNavigate();
+              onSelectTile(tile.id);
+              tile.onClick();
+              onClose();
+            }}
+          />
+        ))}
+      </div>
+
+      <div className="h-px bg-neutral-800/70 my-3" />
+
+      <div className="grid grid-cols-3 gap-4 pb-2">
+        <Tile
+          icon={Settings}
+          label="Settings"
+          onClick={() => {
+            onOpenSettings();
+            onClose();
+          }}
+        />
+        <Tile
+          icon={Trash2}
+          label="Trash"
+          onClick={() => {
+            onOpenTrash();
+            onClose();
+          }}
+        />
+        <Tile
+          icon={Archive}
+          label={showArchived ? 'Viewing archive' : 'Archive'}
+          selected={showArchived}
+          onClick={() => {
+            onToggleArchive();
+            onClose();
+          }}
+        />
+        {canInstall && (
+          <Tile
+            icon={Download}
+            label="Install"
+            onClick={() => {
+              promptInstall();
+              onClose();
+            }}
+          />
+        )}
+      </div>
+    </div>
   );
 }
