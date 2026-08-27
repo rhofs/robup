@@ -213,17 +213,19 @@ export default function MobileSpacesSheet({
               by the reserved back-button slot's width, which this row wasn't accounting for at
               all. Matching the structure exactly, not just eyeballing similar padding numbers,
               guarantees the same position regardless of which spacing values change later. */}
-          <div className="px-3 pt-2 pb-3 shrink-0 flex items-center gap-2">
-            <div className="w-7 h-7 shrink-0" aria-hidden />
-            {/* Centering wrapper, same fix and same reasoning as app/page.tsx's own search row —
-                this sheet has *nothing* trailing the search button at all, so the old plain
-                flex-1 button was the most lopsided case of the left/right-air mismatch: a full
-                left-slot width (32px) of margin on one side, just the row's own padding (16px)
-                on the other. */}
-            <div className="flex-1 min-w-0 flex justify-center">
+          <div className="relative px-3 pt-2 pb-3 shrink-0 flex items-center gap-2">
+            <div className="relative z-10 w-7 h-7 shrink-0" aria-hidden />
+            {/* True absolute centering on the row itself, same fix and same reasoning as
+                app/page.tsx's own search row — a flex-1-based wrapper still centers only *within
+                whatever space is left* after the reserved slot (and any gap reserved for trailing
+                content even when nothing renders there), which drifted this row's own search bar
+                out of sync with app/page.tsx's per-view header despite both trying to match the
+                same position. Being positioned off the row's own bounding box makes it identical
+                on literally every screen, this one included, full stop. */}
+            <div className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 w-[min(calc(100%-88px),420px)]">
               <button
                 onClick={onOpenSearch}
-                className="w-full max-w-[420px] mx-1 flex items-center gap-1.5 bg-neutral-900/60 border border-neutral-800/80 rounded-full px-3 py-2.5 text-neutral-500 hover:border-neutral-700 hover:text-neutral-300 cursor-pointer"
+                className="w-full flex items-center gap-1.5 bg-neutral-900/60 border border-neutral-800/80 rounded-full px-3 py-2.5 text-neutral-500 hover:border-neutral-700 hover:text-neutral-300 cursor-pointer"
               >
                 <Search className="w-3.5 h-3.5 shrink-0" />
                 <span className="text-[11px] truncate">Search...</span>

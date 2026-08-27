@@ -3832,7 +3832,7 @@ function PageContent() {
               mobile instead sizes naturally off its own padding (pt-2 pb-3, a bit more room below
               the search pill than above it) so the now-taller/rounder search bar has real
               breathing room instead of being squeezed into a height tuned for the old shorter one. */}
-          <div className="md:h-11 pt-2 pb-3 md:py-0 px-3 md:px-6 flex items-center gap-2 justify-between border-b-0 md:border-b border-neutral-800/40">
+          <div className="relative md:h-11 pt-2 pb-3 md:py-0 px-3 md:px-6 flex items-center gap-2 justify-between border-b-0 md:border-b border-neutral-800/40">
             {/* Mobile-only — the Spaces/Personal-Spaces tree sheets are the *only* way to reach a
                 specific List or Doc on mobile (the desktop sidebar is hidden below md), and neither
                 sheet stays mounted once you've navigated in, so there was previously no way back at
@@ -3847,7 +3847,7 @@ function PageContent() {
                 Planner/Chat (no Back button) than on Board/Docs (Back button present), so it
                 visibly shifted left/right depending on which screen you were on. Reserving the
                 width unconditionally keeps the search bar's own position identical everywhere. */}
-            <div className="md:hidden w-7 h-7 shrink-0 flex items-center justify-center">
+            <div className="relative z-10 md:hidden w-7 h-7 shrink-0 flex items-center justify-center">
               {(activeView === 'board' || activeView === 'docs') && (
                 <button
                   onClick={() => {
@@ -3894,19 +3894,24 @@ function PageContent() {
             {/* The mobile search pill lives here — this per-view row — for every view, not the
                 title row above, so it's in one consistent spot regardless of which screen is
                 showing (the title row's own height/content varies less predictably per view than
-                this row, which already always hosts view-specific controls). Wrapped in its own
-                centering container rather than letting the button itself be the flex-1 element —
-                a plain flex-1 button fills every last px of whatever's left after the back-slot
-                and any trailing per-view buttons, so on a view with nothing trailing it (unequal
-                to the fixed-width back-slot on the left) the button's own right edge lands right
-                at the row's padding while its left edge still sits past the full back-slot width,
-                a real, visible left/right imbalance. Centering it inside a `justify-center` region
-                that itself still eats all the remaining row space keeps the gap on both sides of
-                the pill equal regardless of what (if anything) sits on either side of this region. */}
-            <div className="md:hidden flex-1 min-w-0 flex justify-center">
+                this row, which already always hosts view-specific controls).
+                True absolute centering on the row itself (which is `relative` for exactly this),
+                not a `flex-1 justify-center` wrapper — that still centered *within whatever space
+                was left* after the back-slot and any trailing per-view content, and even an empty
+                trailing element still consumes its own `gap` before it, quietly narrowing that
+                space on some views but not others (reported live: Spaces/My Tasks landing a bit
+                further right than Planner/Chat, despite neither having any *visible* trailing
+                content on mobile — the gap reservation alone was enough to shift it). Being
+                absolutely positioned off the row's own bounding box means it's now identically
+                centered on literally every view, full stop, regardless of what else is or isn't in
+                the row. The back-button slot and any trailing content stay in normal flex flow
+                (still pinned to the row's own left/right via justify-between) and simply sit behind
+                the centered pill in stacking order — the back-slot's own icon has room to spare on
+                the sides, so nothing ends up covered. */}
+            <div className="md:hidden absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 w-[min(calc(100%-88px),420px)]">
               <button
                 onClick={() => setCommandPaletteOpen(true)}
-                className="w-full max-w-[420px] mx-1 flex items-center gap-1.5 bg-neutral-900/60 border border-neutral-800/80 rounded-full px-3 py-2.5 text-neutral-500 hover:border-neutral-700 hover:text-neutral-300 cursor-pointer"
+                className="w-full flex items-center gap-1.5 bg-neutral-900/60 border border-neutral-800/80 rounded-full px-3 py-2.5 text-neutral-500 hover:border-neutral-700 hover:text-neutral-300 cursor-pointer"
               >
                 <Search className="w-3.5 h-3.5 shrink-0" />
                 <span className="text-[11px] truncate">Search...</span>
@@ -3996,7 +4001,7 @@ function PageContent() {
                 placement (harmless); on mobile the breadcrumb div above is hidden entirely, and
                 without this these buttons would land at the row's start instead of staying
                 pinned to the right the way they visually always have. */}
-            <div className="flex items-center gap-1.5 ml-auto">
+            <div className="relative z-10 flex items-center gap-1.5 ml-auto">
               {/* Removed on mobile — redundant with the bottom nav's own "Spaces" tab and the new
                   Back button (both reach the exact same sheet). Desktop never had this button at
                   all (it was already md:hidden), so nothing changes there. */}

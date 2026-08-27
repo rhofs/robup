@@ -134,14 +134,29 @@ export default function AppLauncherGrid({
             onClick={onClose}
           />
           <motion.div
-            initial={{ opacity: 0, scale: 0.94, y: 12 }}
-            animate={{ opacity: 1, scale: 1, y: 0 }}
-            exit={{ opacity: 0, scale: 0.96, y: 6 }}
-            transition={{ duration: 0.16, ease: 'easeOut' }}
-            style={{ transformOrigin: 'bottom center', bottom: 'calc(4.75rem + env(safe-area-inset-bottom) + 8px)' }}
+            // Reveals upward from its own bottom edge — the nav bar "island" sitting right below —
+            // via an animated clip-path inset, not scale/y: per direct feedback wanting the panel
+            // to visually grow out of the nav island (bottom anchored, "lid" pushed up) rather than
+            // pop in from a fixed point. clip-path is compositor-accelerated in modern browsers,
+            // same reasoning as dropping the old layoutId morph for choppiness — this gets the
+            // "grows from below" *feel* back without reintroducing a `layout`-animated (non-
+            // compositable) property. Only the top inset moves (100% -> 0%, i.e. the visible sliver
+            // starts at zero height right at the bottom edge and grows upward to the panel's full
+            // height); the `round` component keeps the mask's own corners matching the panel's
+            // rounded-2xl the whole way through, so it never looks like a rectangular window
+            // clipping a rounded shape.
+            initial={{ clipPath: 'inset(100% 0% 0% 0% round 16px)' }}
+            animate={{ clipPath: 'inset(0% 0% 0% 0% round 16px)' }}
+            exit={{ clipPath: 'inset(100% 0% 0% 0% round 16px)' }}
+            transition={{ duration: 0.22, ease: 'easeOut' }}
+            style={{ bottom: 'calc(4.75rem + env(safe-area-inset-bottom) + 8px)' }}
             className="absolute inset-x-3 bg-neutral-900 border border-neutral-800/80 rounded-2xl shadow-2xl shadow-black/40 px-2.5 pt-3 pb-2 max-h-[60vh] overflow-y-auto"
           >
-            <div>
+            <motion.div
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              transition={{ duration: 0.14, delay: 0.1 }}
+            >
               {/* Only shown once there's actually more than one real workspace to switch between
                   — a switcher with nothing to switch to is just clutter. One row (the *active*
                   workspace, tap to expand the rest) instead of one row per workspace — per direct
@@ -247,7 +262,7 @@ export default function AppLauncherGrid({
                   />
                 )}
               </div>
-            </div>
+            </motion.div>
           </motion.div>
         </div>
       )}
