@@ -642,10 +642,13 @@ export default function CalendarView({ tasks, events, statuses, workspaces, show
         </div>
       )}
 
-      {/* Lighter border/bg on mobile specifically ("den er litt tung" — the boxed-in look reads
-          heavier on a narrow screen where it spans edge-to-edge than on desktop where it's one
-          panel among several). Desktop keeps the original weight unchanged. */}
-      <div className="flex-1 min-h-0 bg-neutral-900/40 md:bg-neutral-900/60 border border-neutral-800/50 md:border-neutral-800/80 rounded overflow-hidden">
+      {/* No border/bg/rounding of its own on mobile any more — app/page.tsx's own wrapper around
+          this whole view now already draws a distinct rounded-top sheet right below the search
+          bar, so this box's own smaller bordered "card" sat *inset inside* that sheet, reading as
+          a second, fainter version of the exact "small rounded box inside a bigger straight-edged
+          background" seam reported on Chat's list. Desktop has no such outer sheet, so it keeps
+          its original boxed-card look unchanged. */}
+      <div className={`flex-1 min-h-0 overflow-hidden ${isMobile ? '' : 'bg-neutral-900/60 border border-neutral-800/80 rounded'}`}>
         {granularity === 'day' ? (
           <DayTimeline
             day={focusDate}

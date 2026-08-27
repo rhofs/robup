@@ -344,7 +344,12 @@ export default function ChatPanel() {
 
   return (
     <div
-      className="relative flex flex-col h-full"
+      // pb-[env(safe-area-inset-bottom)]: an open conversation is now a genuine full-screen mobile
+      // destination (the floating bottom nav hides entirely while one's open — see app/page.tsx's
+      // MobileBottomNav mount), so this composer is the literal last thing on screen and needs its
+      // own safe-area clearance instead of borrowing the nav's. Resolves to 0 wherever there's no
+      // inset (desktop, non-notched devices), so it's harmless to always apply.
+      className="relative flex flex-col h-full pb-[env(safe-area-inset-bottom)]"
       onDragEnter={handleDragEnter}
       onDragLeave={handleDragLeave}
       onDragOver={handleDragOver}

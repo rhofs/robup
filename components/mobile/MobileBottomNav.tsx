@@ -95,11 +95,17 @@ const ISLAND_BOTTOM_OFFSET = `calc(env(safe-area-inset-bottom) + ${ISLAND_EXTRA_
 // small grid) — the reflow cost here is not a real jank source, and it buys a construction where
 // the rounded corners are structurally guaranteed to never move.
 //
-// The outer wrapper (below) stays in normal document flow (so the rest of the page still gets its
-// bottom safe-area padding correctly, unaffected by whether the menu is open) and reserves exactly
-// `closedHeight` of real space. The animated box itself is `position: absolute; bottom: 0` inside
-// that wrapper — its content is always fully mounted (never conditionally unmounted), so there's no
-// remount-driven measurement jump the first time it opens.
+// The outer wrapper (below) is `fixed`, floating over whatever's scrolled underneath rather than
+// reserving space for itself in document flow — content behind it (Spaces/My Tasks/Chat/Planner)
+// scrolls its own full length, visible/blurred through the island's translucent background, per a
+// ClickUp/Messenger-style reference the user pointed at: a page's content genuinely extends the
+// whole way down, with the nav floating as its own rounded island on top, rather than the page
+// stopping short to leave the nav a clear lane. Each scrollable surface still carries its own
+// bottom padding (sized to clear the island) so its very last item can still be scrolled fully
+// into view above it — see the padding added at each of those call sites. The animated box itself
+// is `position: absolute; bottom: 0` inside this wrapper — its content is always fully mounted
+// (never conditionally unmounted), so there's no remount-driven measurement jump the first time it
+// opens.
 export default function MobileBottomNav({
   navTabs,
   menuOpen,
@@ -225,7 +231,7 @@ export default function MobileBottomNav({
         )}
       </AnimatePresence>
 
-      <div className="relative z-50 md:hidden" style={{ height: reservedHeight }}>
+      <div className="fixed inset-x-0 bottom-0 z-50 md:hidden">
         <motion.div
           // Only `height` is ever animated here — a plain number, not a shape/string — and the
           // rounding/clipping (`rounded-[24px] overflow-hidden`) below is completely static, so
@@ -238,7 +244,16 @@ export default function MobileBottomNav({
           animate={{ height: menuOpen ? islandHeightPx : closedHeightPx }}
           transition={{ type: 'spring', stiffness: 300, damping: 28, mass: 0.9 }}
           style={{ bottom: ISLAND_BOTTOM_OFFSET }}
-          className="absolute left-1/2 -translate-x-1/2 w-[300px] max-w-[calc(100vw-48px)] rounded-[24px] overflow-hidden flex flex-col justify-end bg-neutral-900 border border-neutral-800/80 shadow-2xl shadow-black/40"
+          // Translucent + blurred, not opaque — this island now floats directly over scrolled
+          // content (see the file's own top comment) instead of sitting on empty reserved space,
+          // so it needs to actually read as "floating over" rather than just "a solid box that
+          // happens to be positioned on top." bg-neutral-950, not -900: the scrollable content
+          // sheets behind it (Spaces/Chat/board list/Planner) all became bg-neutral-900 in the
+          // same rounded-corner pass, so a -900 island blended into whatever was scrolled under
+          // it instead of reading as its own distinct piece of chrome. -950 matches the page's own
+          // header/root shade instead, the same darker tone the nav had before any of those
+          // content sheets existed.
+          className="absolute left-1/2 -translate-x-1/2 w-[300px] max-w-[calc(100vw-48px)] rounded-[24px] overflow-hidden flex flex-col justify-end bg-neutral-950/90 backdrop-blur-xl border border-neutral-800/80 shadow-2xl shadow-black/40"
         >
           {/* Single flex child, measured as a whole (see islandRef above) — its natural content
               height is always the *full* open height regardless of the animated parent's current

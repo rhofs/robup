@@ -176,7 +176,12 @@ export default function MobileSpacesSheet({
       {open && (
         <div
           className="fixed inset-x-0 top-0 z-30 md:hidden bg-neutral-950 flex flex-col"
-          style={{ bottom: 'calc(4.75rem + env(safe-area-inset-bottom))' }}
+          // Full height now, not stopped short above the nav — MobileBottomNav.tsx floats over
+          // content (`fixed`, translucent) rather than reserving its own lane, matching the same
+          // treatment as every other mobile scroll surface (see that file's own top comment). The
+          // tree list below carries its own bottom padding instead, so its last row can still
+          // scroll fully clear of the floating island.
+          style={{ bottom: 0 }}
         >
           {/* h-14, matching the global mobile header's own fixed height exactly (app/page.tsx) —
               this row used to size itself from py-3 + the title text's line-height, which came out
@@ -259,7 +264,11 @@ export default function MobileSpacesSheet({
               </button>
             </div>
           )}
-          <div className="flex-1 overflow-y-auto px-3 py-2 space-y-0.5">
+          {/* rounded-t-2xl + a step-lighter background than the bg-neutral-950 header above it —
+              a plain flat seam there read as a hard cutoff; the reference the user pointed at
+              (ClickUp's own Chats list) has the scrollable content sit on a distinctly rounded
+              "sheet" starting just below the header instead. */}
+          <div className="flex-1 overflow-y-auto px-3 py-2 pb-28 space-y-0.5 bg-neutral-900 rounded-t-2xl">
             <button
               onClick={() => {
                 onSelectSpace('everything');

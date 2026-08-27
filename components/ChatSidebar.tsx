@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { Hash, MessageCircle, Pencil, Plus, Check, Bell, BellOff } from 'lucide-react';
 import { useChatStore, type ChatChannel, type Connection } from '../store/useChatStore';
 import { useSessionStore } from '../store/useSessionStore';
+import { useIsMobile } from '../hooks/useIsMobile';
 import FloatingPopover from './FloatingPopover';
 
 type ChatSidebarProps = {
@@ -20,6 +21,7 @@ type ChatSidebarProps = {
 // reachable from the Me-zone, since a Connection you haven't messaged yet has no ChatChannel row
 // at all and showing one for every Connection would mean inventing fake conversations.
 export default function ChatSidebar({ workspaceId }: ChatSidebarProps) {
+  const isMobile = useIsMobile();
   const {
     channelsByWorkspace,
     dms,
@@ -73,7 +75,11 @@ export default function ChatSidebar({ workspaceId }: ChatSidebarProps) {
           "active" pill is the more immediately legible "these are the two views" affordance,
           and reads fine both here (the narrow desktop <aside>) and inline as mobile Chat's own
           main content (app/page.tsx) now that it's shown there too. */}
-      <div className="flex items-center gap-1 p-1 bg-neutral-950/60 border border-neutral-800/60 rounded-lg">
+      {/* Border dropped on mobile only — inline here, this pill's own straight-edged border sat
+          just below app/page.tsx's new big rounded-top-corner sheet and read as a second,
+          conflicting border right under the first one. Desktop (this same component, in the
+          `<aside>` sidebar) keeps its border unchanged. */}
+      <div className={`flex items-center gap-1 p-1 bg-neutral-950/60 rounded-lg ${isMobile ? '' : 'border border-neutral-800/60'}`}>
         <button
           onClick={() => setActiveChatSidebarTab('channels')}
           className={`flex-1 flex items-center justify-center gap-1.5 px-2 py-1.5 rounded-md text-xs font-medium transition cursor-pointer ${

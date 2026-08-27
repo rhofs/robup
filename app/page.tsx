@@ -4057,9 +4057,45 @@ function PageContent() {
 
         <div
           className={
-            activeView === 'calendar' || activeView === 'chat'
-              ? 'flex-1 min-h-0 overflow-hidden p-2 md:p-6 flex flex-col'
-              : 'flex-1 overflow-auto p-6'
+            // Planner's month grid sizes its own rows to exactly fill this box's measured height
+            // (CalendarView.tsx's `containerHeight`, via `clientHeight` — which *includes* an
+            // element's own padding), so reserving the floating nav's clearance as padding on that
+            // same measured element does nothing: the row-height math still divides up the full
+            // padded box, and the grid renders straight through the padding to the true bottom
+            // edge. Reserving it here instead — one level up, on this element's *parent* — actually
+            // shrinks the space CalendarView measures, so its rows correctly leave room instead of
+            // running under the nav. Chat doesn't need this: its own list is a normal scrolling
+            // flow (own bottom padding genuinely works there), and an open conversation hides the
+            // nav entirely rather than floating over it.
+            //
+            // bg-neutral-900 rounded-t-2xl (mobile only): this is the layer that actually sits
+            // right below the search bar for Planner — the earlier attempt at this rounded-sheet
+            // look was placed one level too deep, on CalendarView's own inner grid/day-timeline box,
+            // which isn't what should visually differentiate from the header. Matches the same
+            // treatment Chat's own list wrapper got, right below the search bar there too.
+            activeView === 'calendar'
+              ? 'flex-1 min-h-0 overflow-hidden p-2 pb-28 md:p-6 flex flex-col bg-neutral-900 md:bg-transparent rounded-t-2xl md:rounded-none'
+              : activeView === 'chat'
+              ? // The Chat *list* (nothing picked yet) draws its own rounded-top sheet flush
+                // against the screen edges (see the ChatSidebar wrapper below) — this outer
+                // wrapper's own p-2 was sitting *around* that sheet, showing the page's darker
+                // root background through the gap as a second, straight-edged "layer" behind a
+                // smaller rounded one. Reported live as looking like two stacked boxes instead of
+                // one. Dropped entirely for the list case; kept for an *open* conversation
+                // (ChatPanel), which still wants real breathing room around its message bubbles
+                // and has no rounded sheet of its own to go edge-to-edge with.
+                isMobile && !activeChatEntity
+                ? 'flex-1 min-h-0 overflow-hidden flex flex-col'
+                : 'flex-1 min-h-0 overflow-hidden p-2 md:p-6 flex flex-col'
+              : activeView === 'board'
+              ? // Same rounded-top sheet as Chat/Planner get, right below the search bar — put
+                // directly on this outermost scrollable element itself (not a nested inner div)
+                // specifically to avoid the "smaller rounded box inset inside a bigger straight
+                // background" seam Chat had before its own fix above; this element's own p-6
+                // padding just becomes the sheet's internal content inset instead of an external
+                // gap around a separately-colored box.
+                'flex-1 overflow-auto p-6 pb-28 md:pb-6 bg-neutral-900 md:bg-transparent rounded-t-2xl md:rounded-none'
+              : 'flex-1 overflow-auto p-6 pb-28 md:pb-6'
           }
           onClick={closeAllMenus}
         >
@@ -4536,7 +4572,16 @@ function PageContent() {
                       the header row re-opens this same view once a channel *is* picked (see its own
                       condition below), matching how Spaces/Docs already get back to their own tree. */}
                   {isMobile && !activeChatEntity ? (
-                    <div className="h-full overflow-y-auto px-3 py-3">
+                    // pb-28: this list coexists with the floating bottom nav (MobileBottomNav.tsx
+                    // is `fixed`, floating over content rather than reserving space for itself —
+                    // see its own top comment), so the list needs enough of its own bottom padding
+                    // to let the very last channel/DM row scroll fully clear of the island.
+                    // rounded-t-2xl + bg-neutral-900: a step lighter than the page's own
+                    // bg-neutral-950 header above it, matching MobileSpacesSheet.tsx's own list —
+                    // same "content sits on a rounded sheet below the header" reference the user
+                    // pointed at (ClickUp's own Chats list), applied consistently everywhere a
+                    // mobile screen is fundamentally a plain list like this one.
+                    <div className="h-full overflow-y-auto px-3 py-3 pb-28 bg-neutral-900 rounded-t-2xl">
                       <ChatSidebar workspaceId={activeWorkspaceId} />
                     </div>
                   ) : (
@@ -4713,6 +4758,14 @@ function PageContent() {
       </main>
       </div>
 
+      {/* Hidden entirely (not just visually) while an actual conversation is open on mobile — an
+          open DM/channel should read as its own full-screen destination, matching the reference
+          the user pointed at: no floating nav in front of the message list/input, only the header's
+          own Back button (already wired to setActiveChatChannelId(null), see the header row above)
+          gets you out. The channel/DM *picker* (ChatSidebar, shown when nothing's picked yet) still
+          gets the floating nav like every other screen — only an actually-open conversation hides
+          it. */}
+      {!(activeView === 'chat' && isMobile && activeChatEntity) && (
       <MobileBottomNav
         navTabs={visibleNavTabs}
         menuOpen={mobileMenuOpen}
@@ -4733,6 +4786,7 @@ function PageContent() {
         activeWorkspaceId={activeWorkspaceId}
         onSelectWorkspace={setActiveWorkspaceId}
       />
+      )}
 
       {/* ================= BULK ACTION BAR ================= */}
       {selectedIds.size > 0 && (
