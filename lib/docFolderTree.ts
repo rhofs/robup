@@ -16,6 +16,20 @@ export const getChildDocFolders = (space: HierarchySpace, parentId: string | nul
 export const getSpaceDocsIn = (space: HierarchySpace, folderId: string | null) =>
   space.spaceDocs.filter((d) => d.folderId === folderId && d.parentId === null && !d.archived).sort((a, b) => a.order - b.order);
 
+// Docs created from inside a Space's Task-Folder tree (getBoardDocsIn, lib/folderTree.ts) have
+// `boardFolderId` set but `folderId` left null — meaning they never show up anywhere in *this*
+// tree at all, which is exactly what "kun 1 doc, men det er flere i workspacet" turned out to be:
+// two genuinely separate doc trees that don't share content. Per explicit direction ("alle docs
+// synes i docs fanen, men de kan eksistere i Spaces også") these are surfaced flattened at the
+// Docs tab's own root level (DocsBrowser.tsx only calls this for folderId === null) rather than
+// mixed into the folder hierarchy — they have no matching DocFolder location to slot into, and a
+// doc that happens to have *both* folderId and boardFolderId set already appears via its folderId
+// above, so it's deliberately excluded here to avoid listing it twice.
+export const getUnfiledBoardDocs = (space: HierarchySpace) =>
+  space.spaceDocs
+    .filter((d) => d.boardFolderId !== null && d.folderId === null && d.parentId === null && !d.archived)
+    .sort((a, b) => a.order - b.order);
+
 // Direct subpages of a given Doc, for the sidebar's expand-in-place and the book panel's tree.
 export const getChildDocs = (space: HierarchySpace, parentDocId: string) =>
   space.spaceDocs.filter((d) => d.parentId === parentDocId).sort((a, b) => a.order - b.order);
