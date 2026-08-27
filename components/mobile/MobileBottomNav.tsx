@@ -1,6 +1,5 @@
 'use client';
 
-import { useEffect, useRef } from 'react';
 import { ChevronDown, ChevronUp, LayoutGrid, Menu as MenuIcon } from 'lucide-react';
 import { AnimatePresence, motion } from 'framer-motion';
 import type { NavTab, MenuTile } from './navTypes';
@@ -34,12 +33,6 @@ type Props = {
   // and reading as "the tap did nothing." Calling this directly guarantees a clean slate regardless
   // of whether the destination happens to match what's already active.
   onNavigate: () => void;
-  // Reports the nav pill's own real rendered width whenever it changes (content/label width,
-  // screen rotation, etc.) — AppLauncherGrid.tsx uses this to size the popup panel to *exactly*
-  // match the "island" it opens from, per direct feedback wanting the two to read as the same
-  // physical shape. Optional purely so this component doesn't require a measuring parent to render
-  // at all (existing tests/usages without it just don't get width-matching).
-  onIslandWidthChange?: (width: number) => void;
 };
 
 // Mobile-only bottom nav (md:hidden) — reads the exact same visibleNavTabs/setActiveView plumbing
@@ -66,26 +59,10 @@ export default function MobileBottomNav({
   spacesOpen,
   pinnedTile,
   onNavigate,
-  onIslandWidthChange,
 }: Props) {
   const primaryTabs = PRIMARY_NAV_TAB_IDS
     .map((id) => navTabs.find((t) => t.id === id))
     .filter((t): t is NavTab => !!t);
-
-  // Measures the pill's own real width (content-driven, so it varies with label lengths/screen
-  // size) — a ResizeObserver rather than a one-time read, so a screen rotation or a nav-tab label
-  // change keeps AppLauncherGrid's own matching width current, not just correct at first mount.
-  const navRef = useRef<HTMLElement | null>(null);
-  useEffect(() => {
-    const el = navRef.current;
-    if (!el || !onIslandWidthChange) return;
-    const observer = new ResizeObserver((entries) => {
-      const width = entries[0]?.contentRect.width;
-      if (width) onIslandWidthChange(width);
-    });
-    observer.observe(el);
-    return () => observer.disconnect();
-  }, [onIslandWidthChange]);
 
   // Same !spacesOpen guard primaryTabs' own `active` already applies (see its comment above) —
   // opening Spaces never changes activeView (only actually picking a Space does), so whatever tab
@@ -100,10 +77,20 @@ export default function MobileBottomNav({
 
   const handlePinnedTap = () => {
     hapticTap();
-    onNavigate();
+    // onNavigate() (closeMobileOverlays) used to fire unconditionally here, *including* when this
+    // tap only opens the grid — but that means opening the menu ON TOP of an already-open Spaces/
+    // Personal-Spaces tree sheet dismissed that sheet first, revealing whatever board content sat
+    // underneath (often its own SpaceHome "card", since just browsing the tree doesn't select a
+    // List) behind the menu's dimmed backdrop instead of the tree itself. Reported live as "jeg
+    // går fra Personal Spaces... til My Tasks med Personal og 'kort'" when opening the menu — not
+    // the menu showing the wrong background, the background *changing* out from under it. The
+    // menu (z-50) already renders above the tree sheet (z-30) in normal stacking order, so it can
+    // safely sit on top without needing to close it first — only a *real* destination change
+    // (the shortcut-navigate branch below) should still dismiss other overlays first.
     if (menuOpen) {
       onCloseMenu();
     } else if (pinnedTile && !pinnedIsCurrentDestination) {
+      onNavigate();
       pinnedTile.onClick();
     } else {
       onOpenMenu();
@@ -122,7 +109,15 @@ export default function MobileBottomNav({
       className="relative z-40 flex md:hidden justify-center px-3 pt-4"
       style={{ paddingBottom: 'calc(env(safe-area-inset-bottom) + 16px)' }}
     >
-      <nav ref={navRef} className="flex items-center gap-0.5 bg-neutral-900 border border-neutral-800/80 rounded-full px-1.5 py-1.5 shadow-lg shadow-black/30">
+      {/* NAV_ISLAND_WIDTH: this literal width class is duplicated in AppLauncherGrid.tsx's own
+          panel — deliberately, not measured/passed as a prop (an earlier attempt at that was
+          reverted). Both need to share the *exact* same width for the popup to read as one
+          continuous shape with the pill it opens from, per the ClickUp reference screenshots the
+          user pointed at — a shared fixed value is simpler and more robust than measuring one
+          component's rendered width and feeding it to the other. justify-between (not the old
+          tight/content-fit packing) is what actually spends this now-wider pill's own width on
+          spreading the 4 tabs evenly, rather than leaving dead space on one side. */}
+      <nav className="flex items-center justify-between gap-0.5 w-[300px] max-w-[calc(100vw-48px)] bg-neutral-900 border border-neutral-800/80 rounded-full px-1.5 py-1.5 shadow-lg shadow-black/30">
         {primaryTabs.map((tab) => {
           const isSpaces = tab.id === 'board';
           const Icon = isSpaces ? LayoutGrid : tab.icon;
@@ -140,7 +135,7 @@ export default function MobileBottomNav({
                 onNavigate();
                 (isSpaces ? onOpenSpaces : tab.onClick)();
               }}
-              className={`relative z-0 flex flex-col items-center justify-center gap-0.5 px-4 py-2 rounded-full transition cursor-pointer ${
+              className={`relative z-0 flex-1 flex flex-col items-center justify-center gap-0.5 px-2 py-2 rounded-full transition cursor-pointer ${
                 active ? 'text-blue-400' : 'text-neutral-500'
               }`}
             >
@@ -170,7 +165,7 @@ export default function MobileBottomNav({
         })}
         <button
           onClick={handlePinnedTap}
-          className={`relative z-0 flex flex-col items-center justify-center gap-0.5 px-4 py-2 rounded-full transition cursor-pointer ${
+          className={`relative z-0 flex-1 flex flex-col items-center justify-center gap-0.5 px-2 py-2 rounded-full transition cursor-pointer ${
             pinnedActive ? 'text-blue-400' : 'text-neutral-500'
           }`}
         >

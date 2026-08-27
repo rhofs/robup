@@ -830,9 +830,6 @@ function PageContent() {
   const [settingsInitialTab, setSettingsInitialTab] = useState<'general' | 'roles' | 'invite' | 'import'>('general');
   const [hiddenNavTabs, setHiddenNavTabs] = useState<Set<NavTabId>>(() => new Set());
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
-  // Reported up by MobileBottomNav's own ResizeObserver — AppLauncherGrid uses this to size its
-  // panel to exactly match the nav "island" it opens from, rather than a fixed inset-x guess.
-  const [navIslandWidth, setNavIslandWidth] = useState<number | null>(null);
   // Whichever grid tile (AppLauncherGrid.tsx) the user last picked — remembered across reloads so
   // the bottom nav's dynamic 4th slot (MobileBottomNav.tsx) can shortcut straight back to it,
   // ClickUp-style, instead of always opening the grid. localStorage read is guarded for SSR.
@@ -4726,7 +4723,6 @@ function PageContent() {
         spacesOpen={mobileSpacesOpen}
         pinnedTile={pinnedMobileTile}
         onNavigate={closeMobileOverlays}
-        onIslandWidthChange={setNavIslandWidth}
       />
 
       {/* ================= BULK ACTION BAR ================= */}
@@ -6428,7 +6424,6 @@ function PageContent() {
         realWorkspaces={workspaces.filter((w) => !w.isPersonal)}
         activeWorkspaceId={activeWorkspaceId}
         onSelectWorkspace={setActiveWorkspaceId}
-        islandWidth={navIslandWidth}
       />
       <MobileSpacesSheet
         open={mobileSpacesOpen}

@@ -40,12 +40,6 @@ type Props = {
   realWorkspaces: HierarchyWorkspace[];
   activeWorkspaceId: string | null;
   onSelectWorkspace: (workspaceId: string) => void;
-  // The nav pill's own real rendered width (MobileBottomNav.tsx's ResizeObserver, threaded
-  // through app/page.tsx) — sizes this panel to *exactly* match it, per direct feedback wanting
-  // the popup to read as the same physical "island" pushed upward, not a separate wider card.
-  // null only until the first measurement lands, which in practice is always before the panel can
-  // even be opened (the nav bar renders, and gets measured, well before any tap on it).
-  islandWidth: number | null;
 };
 
 type TileProps = {
@@ -93,12 +87,12 @@ function Tile({ icon: Icon, label, selected, badge, onClick }: TileProps) {
 // this panel. Dropped per direct feedback that the open animation felt choppy/low-FPS: a `layout`
 // animation interpolates actual box-model geometry (width/height/position) every frame, which the
 // browser can't hand off to the GPU compositor the way it can transform/opacity. Went through a
-// clip-path-reveal version next, then settled on the current shape per further direct feedback
-// (real ClickUp screenshots) wanting the panel to be the *same width* as the nav pill and slide
-// straight up like a lid, not grow in place — width now comes from a real DOM measurement of the
-// pill itself (MobileBottomNav.tsx's ResizeObserver, threaded through app/page.tsx as
-// `islandWidth`), and the motion is a plain translateY, still avoiding the non-compositable
-// `layout` property that caused the original choppiness.
+// clip-path-reveal version, then a JS-measured width-match, before settling on the current shape:
+// per further direct feedback with real ClickUp screenshots, the panel now shares MobileBottomNav
+// .tsx's own `w-[300px] max-w-[calc(100vw-48px)]` literally (see that file's own `NAV_ISLAND_WIDTH`
+// comment for why a shared fixed value replaced the DOM-measurement approach), sits flush against
+// the pill with no gap, and slides up as one piece via a plain translateY — no `layout`-animated
+// property anywhere in this chain, same reasoning as every round before it.
 export default function AppLauncherGrid({
   open,
   onClose,
@@ -114,7 +108,6 @@ export default function AppLauncherGrid({
   realWorkspaces,
   activeWorkspaceId,
   onSelectWorkspace,
-  islandWidth,
 }: Props) {
   // Only ever a real actionable tile on Chrome/Edge-family browsers that fired
   // `beforeinstallprompt` (see useInstallPrompt.ts) — iOS has no programmatic install prompt at
@@ -162,14 +155,13 @@ export default function AppLauncherGrid({
               // reference the user pointed at, the panel reads as connected to/growing out of the
               // nav island directly, not floating a visible gap above it.
               bottom: 'calc(4.75rem + env(safe-area-inset-bottom))',
-              // Sized to the nav pill's own real measured width (MobileBottomNav.tsx's
-              // ResizeObserver) instead of a fixed inset-x guess — per direct feedback wanting the
-              // popup to read as the *same* physical island pushed upward, not a separate wider
-              // card next to it. Falls back to a reasonable fixed width for the one render before
-              // the first measurement lands (in practice always before the panel is even openable).
-              width: islandWidth ? `${islandWidth}px` : undefined,
             }}
-            className={`absolute left-1/2 -translate-x-1/2 ${islandWidth ? '' : 'w-[280px]'} bg-neutral-900 border border-neutral-800/80 rounded-2xl shadow-2xl shadow-black/40 px-2.5 pt-3 pb-2 max-h-[60vh] overflow-y-auto`}
+            // w-[300px] max-w-[calc(100vw-48px)]: literally the same width class as
+            // MobileBottomNav.tsx's own `<nav>` pill (its `NAV_ISLAND_WIDTH` comment explains why
+            // this is a shared fixed value rather than a measured one) — same left-1/2
+            // -translate-x-1/2 centering too, so the two align exactly and read as one continuous
+            // shape while this panel is open, matching the ClickUp reference screenshots.
+            className="absolute left-1/2 -translate-x-1/2 w-[300px] max-w-[calc(100vw-48px)] bg-neutral-900 border border-neutral-800/80 rounded-2xl shadow-2xl shadow-black/40 px-2.5 pt-3 pb-2 max-h-[60vh] overflow-y-auto"
           >
             <motion.div
               initial={{ opacity: 0 }}
