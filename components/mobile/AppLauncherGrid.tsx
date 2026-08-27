@@ -126,7 +126,16 @@ export default function AppLauncherGrid({
       onExitComplete={() => setWorkspacePickerOpen(false)}
     >
       {open && (
-        <div className="fixed inset-0 z-50 md:hidden">
+        // pointer-events-none on this full-screen wrapper: shrinking the backdrop below to leave
+        // a hole over the nav island (see its own comment) only stopped the *visible* dim there —
+        // this wrapper is still a `fixed inset-0` box, and a plain div with no explicit
+        // pointer-events still captures clicks over its whole area by default even where nothing
+        // is drawn, silently swallowing taps meant for the real pinned button underneath it (z-40,
+        // below this z-50) before they could ever reach it. Reported live as "stuck open, can only
+        // dismiss by tapping outside or picking another tab" — the pinned button's own re-tap-to-
+        // close logic (MobileBottomNav.tsx's handlePinnedTap) was always correct, it just never
+        // received the tap. Re-enabled explicitly on the two children that actually need it.
+        <div className="fixed inset-0 z-50 md:hidden pointer-events-none">
           <motion.div
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
@@ -140,7 +149,7 @@ export default function AppLauncherGrid({
             // live). Leaving a hole here keeps the pill at its own natural, undimmed color so the
             // pill+panel read as one continuous, evenly-lit shape.
             style={{ bottom: 'calc(4.75rem + env(safe-area-inset-bottom))' }}
-            className="absolute inset-x-0 top-0 bg-black/60"
+            className="absolute inset-x-0 top-0 bg-black/60 pointer-events-auto"
             onClick={onClose}
           />
           <motion.div
@@ -151,11 +160,20 @@ export default function AppLauncherGrid({
             // to an animated clip-path (dropped two rounds ago for a slide, brought back here with
             // no opacity animation anywhere in this tree — see the content wrapper below too) so
             // the whole shape is opaque throughout and only ever progressively unmasked, never
-            // fading. Still purely compositor-friendly (no `layout`-animated property).
-            initial={{ clipPath: 'inset(100% 0% 0% 0% round 16px)' }}
-            animate={{ clipPath: 'inset(0% 0% 0% 0% round 16px)' }}
-            exit={{ clipPath: 'inset(100% 0% 0% 0% round 16px)' }}
-            transition={{ duration: 0.22, ease: 'easeOut' }}
+            // fading. Still purely compositor-friendly (no `layout`-animated property). This never
+            // actually played on-device until MotionConfig(reducedMotion="never") was added at the
+            // app root (app/layout.tsx) — every round up to and including this one had been
+            // silently hard-cutting under the OS Reduce Motion setting, see PLANNING.md. 0.22s read
+            // as a snap once it was finally animating for real ("klippes bare inn" rather than
+            // sliding) — 0.34s with a slower-starting ease reads as an actual upward motion instead
+            // of a pop. `round` only rounds the top two corners now (bottom-right/bottom-left left
+            // at 0) to match the panel's own `rounded-t-2xl` below — rounding all four while the
+            // panel sits flush on the nav pill was creating a visible seam at the bottom, see that
+            // className's own comment.
+            initial={{ clipPath: 'inset(100% 0% 0% 0% round 16px 16px 0px 0px)' }}
+            animate={{ clipPath: 'inset(0% 0% 0% 0% round 16px 16px 0px 0px)' }}
+            exit={{ clipPath: 'inset(100% 0% 0% 0% round 16px 16px 0px 0px)' }}
+            transition={{ duration: 0.34, ease: [0.22, 1, 0.36, 1] }}
             style={{
               // No explicit gap above the nav pill (dropped the old + 8px) — per the ClickUp
               // reference the user pointed at, the panel reads as connected to/growing out of the
@@ -167,7 +185,14 @@ export default function AppLauncherGrid({
             // this is a shared fixed value rather than a measured one) — same left-1/2
             // -translate-x-1/2 centering too, so the two align exactly and read as one continuous
             // shape while this panel is open, matching the ClickUp reference screenshots.
-            className="absolute left-1/2 -translate-x-1/2 w-[300px] max-w-[calc(100vw-48px)] bg-neutral-900 border border-neutral-800/80 rounded-2xl shadow-2xl shadow-black/40 px-2.5 pt-3 pb-2 max-h-[60vh] overflow-y-auto"
+            // rounded-t-2xl (not rounded-2xl) + border-x/border-t only (no border-b): the panel
+            // sits flush on top of the nav pill with zero gap, so a fully-rounded bottom and a
+            // border stroke running under it both drew a visible seam right where the two pieces
+            // are supposed to read as one shape ("avrundet bunn... en Frame nederst, så den
+            // skiller nederste del av menyøya", reported live). MobileBottomNav.tsx's own pill
+            // corners are synced to match: square on top where it meets this panel, still rounded
+            // on the bottom where it's the island's own outer edge.
+            className="absolute left-1/2 -translate-x-1/2 w-[300px] max-w-[calc(100vw-48px)] bg-neutral-900 border-x border-t border-neutral-800/80 rounded-t-2xl shadow-2xl shadow-black/40 px-2.5 pt-3 pb-2 max-h-[60vh] overflow-y-auto"
           >
             <div>
               {/* Only shown once there's actually more than one real workspace to switch between

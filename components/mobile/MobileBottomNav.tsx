@@ -117,15 +117,24 @@ export default function MobileBottomNav({
           component's rendered width and feeding it to the other. justify-between (not the old
           tight/content-fit packing) is what actually spends this now-wider pill's own width on
           spreading the 4 tabs evenly, rather than leaving dead space on one side. */}
-      {/* borderRadius animates in sync with the popup panel's own opening (round 16px in its
-          clip-path, see AppLauncherGrid.tsx) — a plain `rounded-full` pill sitting directly under
-          a `rounded-2xl` panel has visibly mismatched corners exactly where they touch, breaking
-          the "one continuous shape" read even with matching width/color/no-gap already in place.
-          borderRadius is paint-only (no layout reflow), so this stays just as compositor-cheap as
-          everything else in this chain. */}
+      {/* Corner radii animate in sync with the popup panel's own opening (AppLauncherGrid.tsx) —
+          per-corner, not the single `borderRadius` shorthand this used at first: the panel now
+          sits flush on this pill with square bottom corners and only *its own* top corners
+          rounded (see that file's className comment for why — a fully-rounded bottom there was
+          drawing a seam right at the touch point). This pill mirrors that: top corners flatten to
+          0 while open (square where it meets the panel above), bottom corners stay rounded (still
+          the island's own outer edge) at the same 16px the panel uses, so the two pieces read as
+          one continuously-rounded shape rather than two separate rounded rects touching. All
+          border-radius sub-properties are paint-only (no layout reflow), same as the single
+          shorthand was. */}
       <motion.nav
-        animate={{ borderRadius: menuOpen ? 16 : 9999 }}
-        transition={{ duration: 0.22, ease: 'easeOut' }}
+        animate={{
+          borderTopLeftRadius: menuOpen ? 0 : 9999,
+          borderTopRightRadius: menuOpen ? 0 : 9999,
+          borderBottomLeftRadius: menuOpen ? 16 : 9999,
+          borderBottomRightRadius: menuOpen ? 16 : 9999,
+        }}
+        transition={{ duration: 0.34, ease: [0.22, 1, 0.36, 1] }}
         className="flex items-center justify-between gap-0.5 w-[300px] max-w-[calc(100vw-48px)] bg-neutral-900 border border-neutral-800/80 px-1.5 py-1.5 shadow-lg shadow-black/30"
       >
         {primaryTabs.map((tab) => {
