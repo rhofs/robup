@@ -104,13 +104,63 @@ export default function WeekRow({
     }
   };
 
-  const visibleSegments = segments.filter((s) => s.lane < maxVisibleLanes);
+  // assignLanes (lib/ganttLayout.ts) gives every segment ONE lane for its whole clipped width in
+  // this row, chosen so it's free across that *entire* span — a task can land in an overflow lane
+  // purely because of a conflict on one or two days near its end, even though the visible-cap
+  // lanes sat completely empty for days at its start. The old binary "lane < cap -> show, else
+  // hide the whole segment" filter below made a task's "+N" cover its full width in that case,
+  // even on days genuinely free of any conflict. Reported live: "+1" spanning 18 Aug - 1 Sep with
+  // the first three days empty.
+  //
+  // Fixed by letting an overflow segment *borrow* a cap-visible lane for whichever leading run of
+  // its own days that lane is actually free — rendered as a real, truncated bar (square right
+  // edge instead of rounded, "åpen til høyre" per the request) for that prefix, folding into "+N"
+  // only from where the real conflict starts. This is purely a rendering decision — it doesn't
+  // touch `lanes`/assignLanes at all, so drag/pin logic (CalendarView.tsx's handleDragStart reads
+  // `lanes.get(taskId)` directly, never a segment's own `.lane`) is completely unaffected; dragging
+  // a borrowed-and-truncated bar still anchors off its real assigned lane, not the visual one.
+  const alreadyVisible = segments.filter((s) => s.lane < maxVisibleLanes);
   const overflowByDay = new Array(7).fill(0);
-  segments
-    .filter((s) => s.lane >= maxVisibleLanes)
-    .forEach((s) => {
-      for (let i = s.colStart; i < s.colStart + s.colSpan; i++) overflowByDay[i] = (overflowByDay[i] || 0) + 1;
-    });
+  const borrowedSegments: ClippedSegment[] = [];
+  // occupied[lane][day]: true once something (an originally-visible segment, or an earlier
+  // borrowed one) already claims that day/lane — checked so two overflow segments competing for
+  // the same free gap on the same day don't both render on top of each other.
+  const occupied: boolean[][] = Array.from({ length: Math.max(maxVisibleLanes, 1) }, () => new Array(7).fill(false));
+  for (const s of alreadyVisible) {
+    for (let d = s.colStart; d < s.colStart + s.colSpan; d++) occupied[s.lane][d] = true;
+  }
+  // Ascending lane order: the least-overflowed tasks (closest to actually fitting) get first pick
+  // of any free borrowed slot — same priority order the lane numbers already encode.
+  const candidateOverflow = segments.filter((s) => s.lane >= maxVisibleLanes).sort((a, b) => a.lane - b.lane);
+  for (const s of candidateOverflow) {
+    let bestLane = -1;
+    let bestLen = 0;
+    for (let lane = 0; lane < maxVisibleLanes; lane++) {
+      let len = 0;
+      for (let d = s.colStart; d < s.colStart + s.colSpan; d++) {
+        if (occupied[lane][d]) break;
+        len++;
+      }
+      if (len > bestLen) {
+        bestLen = len;
+        bestLane = lane;
+      }
+    }
+    if (bestLane !== -1 && bestLen > 0) {
+      for (let d = s.colStart; d < s.colStart + bestLen; d++) occupied[bestLane][d] = true;
+      const fullyFits = bestLen === s.colSpan;
+      borrowedSegments.push({
+        ...s,
+        lane: bestLane,
+        colSpan: bestLen,
+        isEndEdge: fullyFits ? s.isEndEdge : false,
+      });
+    }
+    for (let d = s.colStart + bestLen; d < s.colStart + s.colSpan; d++) {
+      overflowByDay[d] = (overflowByDay[d] || 0) + 1;
+    }
+  }
+  const visibleSegments = [...alreadyVisible, ...borrowedSegments];
 
   // Computed from THIS row's own bars, not a value shared across the whole month — otherwise a
   // quiet row's "+N more" chip gets pushed down to match however tall the busiest row in the
