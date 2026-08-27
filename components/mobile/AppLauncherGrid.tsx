@@ -1,7 +1,8 @@
 'use client';
 
+import { useState } from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
-import { Archive, Check, Download, Settings, Trash2 } from 'lucide-react';
+import { Archive, ChevronDown, Download, Settings, Trash2 } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
 import type { MenuTile } from './navTypes';
 import type { HierarchyWorkspace } from '../../store/useTaskStore';
@@ -56,14 +57,14 @@ function Tile({ icon: Icon, label, selected, badge, onClick }: TileProps) {
         hapticTap();
         onClick();
       }}
-      className="flex flex-col items-center gap-1.5 cursor-pointer"
+      className="flex flex-col items-center gap-1 cursor-pointer"
     >
       <span
-        className={`relative w-14 h-14 rounded-2xl flex items-center justify-center transition ${
+        className={`relative w-12 h-12 rounded-xl flex items-center justify-center transition ${
           selected ? 'bg-neutral-800 ring-2 ring-blue-500' : 'bg-neutral-800/60'
         }`}
       >
-        <Icon className={`w-6 h-6 ${selected ? 'text-blue-400' : 'text-neutral-300'}`} />
+        <Icon className={`w-5 h-5 ${selected ? 'text-blue-400' : 'text-neutral-300'}`} />
         {!!badge && badge > 0 && (
           <span className="absolute -top-1 -right-1 min-w-[16px] h-4 px-1 rounded-full bg-red-500 text-white text-[9px] font-bold flex items-center justify-center leading-none">
             {badge > 99 ? '99+' : badge}
@@ -81,13 +82,15 @@ function Tile({ icon: Icon, label, selected, badge, onClick }: TileProps) {
 // pins it (onSelectTile) so it becomes the nav's shortcut going forward; the currently-pinned tile
 // gets a highlighted ring, matching the reference screenshot's bordered "selected" tile.
 //
-// The panel shares a framer-motion `layoutId` ("mobileMenuMorph") with the 4th nav button's own
-// background pill (MobileBottomNav.tsx) — a real container-transform: the small rounded-full pill
-// grows into this rounded-2xl panel and back, rather than an unrelated slide/fade. An earlier
-// attempt at this was reverted after a real device reported the nav going totally unresponsive —
-// that turned out to be an unrelated bug (a different mobile overlay never closing on navigation,
-// see PLANNING.md's 2026-08-24 entries), not this animation, so it's back. Content (the tile grid)
-// fades and scales in on its own short delay, once the container's own growth is mostly settled.
+// Used to share a framer-motion `layoutId` ("mobileMenuMorph") with the 4th nav button's own
+// background pill (MobileBottomNav.tsx) — a real container-transform growing the small pill into
+// this panel. Dropped per direct feedback that the open animation felt choppy/low-FPS: a `layout`
+// animation interpolates actual box-model geometry (width/height/position) every frame, which the
+// browser can't hand off to the GPU compositor the way it can transform/opacity — exactly the kind
+// of animation that visibly janks on a mid-range phone even though it looks fine on a dev machine.
+// Replaced with a plain scale+opacity+y `initial`/`animate`/`exit` — compositor-only properties,
+// smooth on real hardware — trading the fancier "grows out of the button" flourish for one that
+// actually stays smooth. MobileBottomNav.tsx's own matching anchor was removed too.
 export default function AppLauncherGrid({
   open,
   onClose,
@@ -109,9 +112,17 @@ export default function AppLauncherGrid({
   // all, so it gets a longer text hint in AccountSettingsPanel.tsx instead of a dead tile here.
   const { canInstall, promptInstall } = useInstallPrompt();
   const pinnableTiles = [...contentTiles, ...meItems];
+  // Accordion, not one row per workspace — a row-per-workspace list was the biggest single
+  // contributor to the panel feeling cluttered/tall for anyone in 3+ real workspaces. Collapsed
+  // by default, reset on every open/close so it doesn't stay expanded into an unrelated later
+  // visit to the menu.
+  const [workspacePickerOpen, setWorkspacePickerOpen] = useState(false);
+  const activeWorkspace = realWorkspaces.find((w) => w.id === activeWorkspaceId);
 
   return (
-    <AnimatePresence>
+    <AnimatePresence
+      onExitComplete={() => setWorkspacePickerOpen(false)}
+    >
       {open && (
         <div className="fixed inset-0 z-50 md:hidden">
           <motion.div
@@ -123,56 +134,63 @@ export default function AppLauncherGrid({
             onClick={onClose}
           />
           <motion.div
-            layoutId="mobileMenuMorph"
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
-            transition={{ layout: { type: 'spring', stiffness: 380, damping: 30, mass: 0.9 }, opacity: { duration: 0.12 } }}
+            initial={{ opacity: 0, scale: 0.94, y: 12 }}
+            animate={{ opacity: 1, scale: 1, y: 0 }}
+            exit={{ opacity: 0, scale: 0.96, y: 6 }}
+            transition={{ duration: 0.16, ease: 'easeOut' }}
             style={{ transformOrigin: 'bottom center', bottom: 'calc(4.75rem + env(safe-area-inset-bottom) + 8px)' }}
-            className="absolute inset-x-3 bg-neutral-900 border border-neutral-800/80 rounded-2xl shadow-2xl shadow-black/40 px-3 pt-4 pb-2 max-h-[60vh] overflow-y-auto"
+            className="absolute inset-x-3 bg-neutral-900 border border-neutral-800/80 rounded-2xl shadow-2xl shadow-black/40 px-2.5 pt-3 pb-2 max-h-[60vh] overflow-y-auto"
           >
-            <motion.div
-              initial={{ opacity: 0, scale: 0.8 }}
-              animate={{ opacity: 1, scale: 1 }}
-              transition={{ duration: 0.16, delay: 0.1, ease: 'easeOut' }}
-            >
+            <div>
               {/* Only shown once there's actually more than one real workspace to switch between
-                  — a switcher with nothing to switch to is just clutter. Rows, not tiles: matches
-                  MobileSpacesSheet.tsx's own Space-row shape rather than the square icon grid
-                  below, since a workspace name is free text of unpredictable length. */}
-              {realWorkspaces.length > 1 && (
+                  — a switcher with nothing to switch to is just clutter. One row (the *active*
+                  workspace, tap to expand the rest) instead of one row per workspace — per direct
+                  feedback that a full list ate too much of the panel for anyone in several
+                  workspaces. Matches MobileSpacesSheet.tsx's own Space-row shape rather than the
+                  square icon grid below, since a workspace name is free text of unpredictable
+                  length. */}
+              {realWorkspaces.length > 1 && activeWorkspace && (
                 <>
-                  <p className="text-[10px] font-bold text-neutral-500 uppercase tracking-wider px-1 pb-1.5">Workspace</p>
-                  <div className="space-y-0.5 pb-3">
-                    {realWorkspaces.map((ws) => {
-                      const isActive = ws.id === activeWorkspaceId;
-                      return (
-                        <button
-                          key={ws.id}
-                          onClick={() => {
-                            hapticTap();
-                            onNavigate();
-                            onSelectWorkspace(ws.id);
-                            onClose();
-                          }}
-                          className={`w-full flex items-center gap-3 px-2 py-2 rounded-lg text-left transition cursor-pointer ${
-                            isActive ? 'bg-neutral-800' : 'hover:bg-neutral-800/60'
-                          }`}
-                        >
-                          <span className="w-7 h-7 rounded-lg bg-blue-600 flex items-center justify-center shrink-0 text-white text-[11px] font-bold">
-                            {ws.name.slice(0, 1).toUpperCase()}
-                          </span>
-                          <span className="min-w-0 flex-1 text-sm text-neutral-200 truncate">{ws.name}</span>
-                          {isActive && <Check className="w-4 h-4 text-blue-400 shrink-0" />}
-                        </button>
-                      );
-                    })}
-                  </div>
-                  <div className="h-px bg-neutral-800/70 mb-3" />
+                  <button
+                    onClick={() => setWorkspacePickerOpen((v) => !v)}
+                    className="w-full flex items-center gap-3 px-2 py-1.5 rounded-lg text-left transition cursor-pointer hover:bg-neutral-800/60"
+                  >
+                    <span className="w-7 h-7 rounded-lg bg-blue-600 flex items-center justify-center shrink-0 text-white text-[11px] font-bold">
+                      {activeWorkspace.name.slice(0, 1).toUpperCase()}
+                    </span>
+                    <span className="min-w-0 flex-1 text-sm text-neutral-200 truncate">{activeWorkspace.name}</span>
+                    <ChevronDown
+                      className={`w-4 h-4 text-neutral-500 shrink-0 transition-transform ${workspacePickerOpen ? 'rotate-180' : ''}`}
+                    />
+                  </button>
+                  {workspacePickerOpen && (
+                    <div className="space-y-0.5 pt-0.5 pb-1.5 pl-3">
+                      {realWorkspaces
+                        .filter((ws) => ws.id !== activeWorkspaceId)
+                        .map((ws) => (
+                          <button
+                            key={ws.id}
+                            onClick={() => {
+                              hapticTap();
+                              onNavigate();
+                              onSelectWorkspace(ws.id);
+                              onClose();
+                            }}
+                            className="w-full flex items-center gap-3 px-2 py-1.5 rounded-lg text-left transition cursor-pointer hover:bg-neutral-800/60"
+                          >
+                            <span className="w-6 h-6 rounded-md bg-neutral-700 flex items-center justify-center shrink-0 text-white text-[10px] font-bold">
+                              {ws.name.slice(0, 1).toUpperCase()}
+                            </span>
+                            <span className="min-w-0 flex-1 text-sm text-neutral-300 truncate">{ws.name}</span>
+                          </button>
+                        ))}
+                    </div>
+                  )}
+                  <div className="h-px bg-neutral-800/70 my-2" />
                 </>
               )}
 
-              <div className="grid grid-cols-3 gap-4">
+              <div className="grid grid-cols-3 gap-3">
                 {pinnableTiles.map((tile) => (
                   <Tile
                     key={tile.id}
@@ -190,9 +208,9 @@ export default function AppLauncherGrid({
                 ))}
               </div>
 
-              <div className="h-px bg-neutral-800/70 my-4" />
+              <div className="h-px bg-neutral-800/70 my-3" />
 
-              <div className="grid grid-cols-3 gap-4 pb-2">
+              <div className="grid grid-cols-3 gap-3 pb-2">
                 <Tile
                   icon={Settings}
                   label="Settings"
@@ -229,7 +247,7 @@ export default function AppLauncherGrid({
                   />
                 )}
               </div>
-            </motion.div>
+            </div>
           </motion.div>
         </div>
       )}

@@ -45,11 +45,11 @@ type Props = {
 // Floating rounded pill (not a flush-edge bar). All 4 slots share one sliding "bubble"
 // (`layoutId="mobileNavPill"`) that moves between whichever is active, including the 4th
 // (dynamic) slot — so switching to/from it slides like the other 3, not a hard cut. That 4th
-// slot *also* carries a second, invisible `layoutId="mobileMenuMorph"` anchor (opacity 0, purely
-// for position/size tracking) shared with the grid panel itself (AppLauncherGrid.tsx) — only one
-// of {this anchor, the panel} is ever mounted at a time, so framer-motion grows the panel directly
-// out of this button's geometry when the grid opens. Two separate shared identities stacked in the
-// same spot: one purely for color/sliding, one purely for the popup's own grow-animation.
+// slot used to also carry a second, invisible `layoutId="mobileMenuMorph"` anchor shared with the
+// grid panel (AppLauncherGrid.tsx), growing the panel directly out of this button's geometry —
+// dropped along with that panel's own layoutId morph per feedback that the open animation felt
+// choppy (a `layout` animation isn't compositor-only the way transform/opacity are); the panel now
+// just scales/fades in on its own, so this slot doesn't need a matching anchor for it any more.
 export default function MobileBottomNav({ navTabs, menuOpen, onOpenMenu, onCloseMenu, onOpenSpaces, spacesOpen, pinnedTile, onNavigate }: Props) {
   const primaryTabs = PRIMARY_NAV_TAB_IDS
     .map((id) => navTabs.find((t) => t.id === id))
@@ -142,13 +142,6 @@ export default function MobileBottomNav({ navTabs, menuOpen, onOpenMenu, onClose
             pinnedActive ? 'text-blue-400' : 'text-neutral-500'
           }`}
         >
-          {/* Invisible — exists purely so the grid panel (AppLauncherGrid.tsx) has this button's
-              exact position/size to FLIP from when it opens, via the shared layoutId. The
-              *visible* highlight color comes from the mobileNavPill pill right below instead,
-              which is what lets this button join the other 3 tabs' continuous sliding animation
-              rather than being a disconnected hard cut — two separate layoutId identities
-              occupying the same spot, one purely for geometry, one purely for color. */}
-          {!menuOpen && <motion.div layoutId="mobileMenuMorph" style={{ opacity: 0 }} className="absolute inset-0 rounded-full -z-10" />}
           <AnimatePresence>
             {!menuOpen && pinnedActive && (
               <motion.div

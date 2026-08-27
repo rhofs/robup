@@ -295,18 +295,33 @@ export default function CalendarView({ tasks, events, statuses, workspaces, show
 
   // Two modes, both still "every week gets the exact same height" (never content-driven per
   // row — the "keep weekly rows static" constraint holds in both):
-  // - Fit: rowHeight is purely containerHeight / weeks.length, full stop — the whole month
-  //   always fits with no scrolling, whatever that works out to per week.
-  // - Not Fit (unchanged from before Fit existed): a fixed size reserving room for the full
-  //   per-granularity lane cap plus the overflow strip, stretched to fill the container evenly
-  //   if there's room to spare, scrolling if there isn't.
+  // - Fit: containerHeight / weeks.length, same as always — EXCEPT it's now floored at
+  //   `contentHeight` (below) too, not purely that division. fitMode defaults to `true`, so this
+  //   floor is what most users' Month view actually runs under day to day — every prior round of
+  //   "shrink the bars/chip so 2 fit + '+N'" tuned MONTH_MAX_LANES/BAR_H/OVERFLOW_H, but without
+  //   this floor those constants never actually bounded the *default* row height at all (Fit mode
+  //   just divided evenly, however short that came out on a real phone with several visible
+  //   weeks) — reported live as "fortsatt ikke plass til 2 gant bjelker + +1" despite three
+  //   rounds of shrinking those exact constants. A too-short screen now scrolls slightly instead
+  //   of silently dropping below 2 visible lanes — a deliberate trade against Fit mode's original
+  //   "never scroll" promise, since the explicit ask ("i allefall 2 bjelker") is a harder
+  //   requirement than that.
+  // - Not Fit (unchanged from before Fit existed): the same floor, stretched to fill the
+  //   container evenly if there's room to spare, scrolling if there isn't.
   const rowHeight = useMemo(() => {
     if (granularity === 'day') return 0;
-    if (isFitActive && weeks.length > 0 && containerHeight > 0) return Math.floor(containerHeight / weeks.length);
     const defaultMaxLanes = granularity === 'month' ? MONTH_MAX_LANES : WEEK_MAX_LANES;
     const contentHeight = DAY_NUM_H + defaultMaxLanes * (BAR_H + BAR_GAP) + OVERFLOW_H;
-    return weeks.length > 0 && containerHeight > 0 ? Math.max(contentHeight, containerHeight / weeks.length) : contentHeight;
+    if (weeks.length === 0 || containerHeight <= 0) return contentHeight;
+    const evenSplit = isFitActive ? Math.floor(containerHeight / weeks.length) : containerHeight / weeks.length;
+    return Math.max(contentHeight, evenSplit);
   }, [granularity, isFitActive, containerHeight, weeks.length]);
+
+  // Fit mode's own "never scroll" grid container (below) hid overflow outright — fine when the
+  // floor above never kicks in, but the floor existing at all means it sometimes needs to. Only
+  // switches the container to scrollable when the floor actually won out over the even split (a
+  // genuinely too-short screen for 2 lanes), not on every Fit render.
+  const gridNeedsScroll = weeks.length > 0 && containerHeight > 0 && rowHeight * weeks.length > containerHeight;
 
   // Fit mode never shrinks events — it shrinks how many LANES are visible before "+N more" kicks
   // in, derived from whatever rowHeight Fit just computed. Outside Fit mode, the same fixed caps
@@ -651,7 +666,7 @@ export default function CalendarView({ tasks, events, statuses, workspaces, show
           // scrollbar along the very bottom of the grid.
           <div
             ref={gridContainerCallbackRef}
-            className={`relative h-full overflow-x-hidden ${isFitActive ? 'overflow-y-hidden' : 'overflow-y-auto'}`}
+            className={`relative h-full overflow-x-hidden ${isFitActive && !gridNeedsScroll ? 'overflow-y-hidden' : 'overflow-y-auto'}`}
           >
             {weeks.map((weekDays, i) => (
               <WeekRow

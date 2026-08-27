@@ -24,8 +24,7 @@ type Props = {
 // Mobile-only page picker for a Doc "book" — stands in for the desktop-only DocSubpagesPanel
 // column (hidden below md, same as Spaces/Lists' FolderTree; at phone width its fixed 224px
 // column left barely any room for the doc editor itself, reported live as "docs er croppa
-// vekk"). Reuses DocSubpagesPanel unmodified inside a bottom sheet, same pattern
-// MobileChatSheet.tsx already established for ChatSidebar — closes itself by watching
+// vekk"). Reuses DocSubpagesPanel unmodified inside a bottom sheet — closes itself by watching
 // activeDocId change, since DocSubpagesPanel calls onOpenDoc directly rather than taking its own
 // onSelect/close callback.
 export default function MobileDocPagesSheet({

@@ -109,7 +109,7 @@ function groupIntoDays(messages: ChatMessage[]): { label: string; runs: Run[] }[
   return days;
 }
 
-export default function ChatPanel({ onOpenMobilePicker }: { onOpenMobilePicker?: () => void } = {}) {
+export default function ChatPanel() {
   const { channelsByWorkspace, dms, messagesByChannel, activeChannelId, fetchMessages, postMessage, deleteMessage, setActiveThreadRootId, toggleReaction } =
     useChatStore();
   const currentUserId = useSessionStore((s) => s.currentUserId);
@@ -331,21 +331,13 @@ export default function ChatPanel({ onOpenMobilePicker }: { onOpenMobilePicker?:
   };
 
   if (!activeChannelId) {
-    // The sidebar this used to unconditionally point at is hidden on mobile (see
-    // components/mobile/MobileChatSheet.tsx) — pointing mobile users at it by name left them
-    // stuck with no visible next step at all. onOpenMobilePicker (passed from app/page.tsx) opens
-    // that same sheet directly instead of just describing where it would be on a wider screen.
+    // Mobile with nothing picked never actually reaches this branch any more — app/page.tsx
+    // renders ChatSidebar inline instead of this component at all in that state (see its own
+    // comment). Desktop can still land here (the sidebar is its own always-visible <aside>, so
+    // "nothing picked yet" is a real, ordinary state there).
     return (
       <div className="flex h-full flex-col items-center justify-center gap-3 text-[12px] text-neutral-500">
         <span>{isMobile ? 'Pick a channel or DM to get started.' : 'Pick a channel from the sidebar, or create a new one.'}</span>
-        {isMobile && onOpenMobilePicker && (
-          <button
-            onClick={onOpenMobilePicker}
-            className="text-xs bg-blue-600 hover:bg-blue-500 text-white px-4 py-2 rounded font-medium cursor-pointer"
-          >
-            Choose a conversation
-          </button>
-        )}
       </div>
     );
   }

@@ -68,29 +68,36 @@ export default function ChatSidebar({ workspaceId }: ChatSidebarProps) {
 
   return (
     <div className="space-y-4">
-      <div className="space-y-1">
+      {/* Segmented pill control, not two stacked full-width rows — per direct feedback that the
+          old rows read as plain list items rather than a tab switcher. Side-by-side + a filled
+          "active" pill is the more immediately legible "these are the two views" affordance,
+          and reads fine both here (the narrow desktop <aside>) and inline as mobile Chat's own
+          main content (app/page.tsx) now that it's shown there too. */}
+      <div className="flex items-center gap-1 p-1 bg-neutral-950/60 border border-neutral-800/60 rounded-lg">
         <button
           onClick={() => setActiveChatSidebarTab('channels')}
-          className={`w-full text-left px-2.5 py-1.5 rounded text-xs font-medium transition flex items-center gap-2 cursor-pointer ${
-            activeChatSidebarTab === 'channels' ? 'bg-neutral-800 text-blue-400' : 'text-neutral-300 hover:bg-neutral-800/40'
+          className={`flex-1 flex items-center justify-center gap-1.5 px-2 py-1.5 rounded-md text-xs font-medium transition cursor-pointer ${
+            activeChatSidebarTab === 'channels' ? 'bg-neutral-800 text-blue-400' : 'text-neutral-400 hover:text-neutral-200'
           }`}
         >
-          <Hash className="w-3.5 h-3.5" /> Channels
+          <Hash className="w-3.5 h-3.5 shrink-0" />
+          <span className="truncate">Channels</span>
           {channelsUnread > 0 && (
-            <span className="ml-auto min-w-[16px] h-4 px-1 rounded-full bg-red-500 text-white text-[9px] font-bold flex items-center justify-center leading-none">
+            <span className="shrink-0 min-w-[16px] h-4 px-1 rounded-full bg-red-500 text-white text-[9px] font-bold flex items-center justify-center leading-none">
               {channelsUnread > 99 ? '99+' : channelsUnread}
             </span>
           )}
         </button>
         <button
           onClick={() => setActiveChatSidebarTab('dms')}
-          className={`w-full text-left px-2.5 py-1.5 rounded text-xs font-medium transition flex items-center gap-2 cursor-pointer ${
-            activeChatSidebarTab === 'dms' ? 'bg-neutral-800 text-blue-400' : 'text-neutral-300 hover:bg-neutral-800/40'
+          className={`flex-1 flex items-center justify-center gap-1.5 px-2 py-1.5 rounded-md text-xs font-medium transition cursor-pointer ${
+            activeChatSidebarTab === 'dms' ? 'bg-neutral-800 text-blue-400' : 'text-neutral-400 hover:text-neutral-200'
           }`}
         >
-          <MessageCircle className="w-3.5 h-3.5" /> Direct Messages
+          <MessageCircle className="w-3.5 h-3.5 shrink-0" />
+          <span className="truncate">DMs</span>
           {dmsUnread > 0 && (
-            <span className="ml-auto min-w-[16px] h-4 px-1 rounded-full bg-red-500 text-white text-[9px] font-bold flex items-center justify-center leading-none">
+            <span className="shrink-0 min-w-[16px] h-4 px-1 rounded-full bg-red-500 text-white text-[9px] font-bold flex items-center justify-center leading-none">
               {dmsUnread > 99 ? '99+' : dmsUnread}
             </span>
           )}

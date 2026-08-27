@@ -109,7 +109,6 @@ import { PRIMARY_NAV_TAB_IDS } from '../components/mobile/navTypes';
 import MobileBottomNav from '../components/mobile/MobileBottomNav';
 import AppLauncherGrid from '../components/mobile/AppLauncherGrid';
 import MobileSpacesSheet from '../components/mobile/MobileSpacesSheet';
-import MobileChatSheet from '../components/mobile/MobileChatSheet';
 import MobileDocPagesSheet from '../components/mobile/MobileDocPagesSheet';
 import MobileCalendarFilterSheet from '../components/mobile/MobileCalendarFilterSheet';
 import { useIsMobile } from '../hooks/useIsMobile';
@@ -848,7 +847,6 @@ function PageContent() {
   // browsing it never lights up the bottom nav's "Spaces" tab (that tab's own `spacesOpen` prop
   // only ever reads mobileSpacesOpen).
   const [mobilePersonalSpacesOpen, setMobilePersonalSpacesOpen] = useState(false);
-  const [mobileChatSheetOpen, setMobileChatSheetOpen] = useState(false);
   const [mobileCalendarFilterOpen, setMobileCalendarFilterOpen] = useState(false);
   const [mobileDocPagesOpen, setMobileDocPagesOpen] = useState(false);
   // The real bug behind "tapping a different nav button does nothing": none of these mobile-only
@@ -896,7 +894,6 @@ function PageContent() {
     setMobileSpacesOpen(false);
     setMobilePersonalSpacesOpen(false);
     setMobileMenuOpen(false);
-    setMobileChatSheetOpen(false);
     setMobileCalendarFilterOpen(false);
   }, []);
   // Backstop for activeView changes that don't go through one of the nav's own tap handlers below
@@ -3879,18 +3876,42 @@ function PageContent() {
                   <ArrowLeft className="w-4 h-4" />
                 </button>
               )}
+              {/* Same slot, same affordance, for Chat once a channel/DM is actually open — mobile
+                  now shows the Channels/DMs picker (ChatSidebar) inline as the main view instead
+                  of behind the removed header "Chat" button, so this is the only way back to it
+                  once you've picked something. Only rendered while something IS picked; the picker
+                  itself is already what's showing otherwise, so there's nothing to go "back" to. */}
+              {activeView === 'chat' && !!activeChatEntity && (
+                <button
+                  onClick={() => setActiveChatChannelId(null)}
+                  title="Back"
+                  className="p-1.5 rounded text-neutral-400 hover:text-white hover:bg-neutral-800/60 cursor-pointer"
+                >
+                  <ArrowLeft className="w-4 h-4" />
+                </button>
+              )}
             </div>
             {/* The mobile search pill lives here — this per-view row — for every view, not the
                 title row above, so it's in one consistent spot regardless of which screen is
                 showing (the title row's own height/content varies less predictably per view than
-                this row, which already always hosts view-specific controls). */}
-            <button
-              onClick={() => setCommandPaletteOpen(true)}
-              className="md:hidden flex-1 min-w-0 mx-1 flex items-center gap-1.5 bg-neutral-900/60 border border-neutral-800/80 rounded-full px-3 py-2.5 text-neutral-500 hover:border-neutral-700 hover:text-neutral-300 cursor-pointer"
-            >
-              <Search className="w-3.5 h-3.5 shrink-0" />
-              <span className="text-[11px] truncate">Search...</span>
-            </button>
+                this row, which already always hosts view-specific controls). Wrapped in its own
+                centering container rather than letting the button itself be the flex-1 element —
+                a plain flex-1 button fills every last px of whatever's left after the back-slot
+                and any trailing per-view buttons, so on a view with nothing trailing it (unequal
+                to the fixed-width back-slot on the left) the button's own right edge lands right
+                at the row's padding while its left edge still sits past the full back-slot width,
+                a real, visible left/right imbalance. Centering it inside a `justify-center` region
+                that itself still eats all the remaining row space keeps the gap on both sides of
+                the pill equal regardless of what (if anything) sits on either side of this region. */}
+            <div className="md:hidden flex-1 min-w-0 flex justify-center">
+              <button
+                onClick={() => setCommandPaletteOpen(true)}
+                className="w-full max-w-[420px] mx-1 flex items-center gap-1.5 bg-neutral-900/60 border border-neutral-800/80 rounded-full px-3 py-2.5 text-neutral-500 hover:border-neutral-700 hover:text-neutral-300 cursor-pointer"
+              >
+                <Search className="w-3.5 h-3.5 shrink-0" />
+                <span className="text-[11px] truncate">Search...</span>
+              </button>
+            </div>
             {/* Hidden on mobile entirely — a breadcrumb reads as unpolished clutter at phone
                 width, and the "Lists"/"Channels"/"Archive" buttons below already tell you where
                 you are well enough without it. Desktop keeps it unchanged. */}
@@ -3993,20 +4014,6 @@ function PageContent() {
                   }`}
                 >
                   <Archive className="w-3.5 h-3.5" /> {showArchived ? 'Viewing archive' : 'Archive'}
-                </button>
-              )}
-              {/* Chat's own channel-and-DM list lives in the desktop-only sidebar (ChatSidebar) —
-                  hidden below md same as the Spaces/Lists tree, so mobile needs its own way in.
-                  See MobileChatSheet.tsx, which reuses that exact same component unmodified
-                  inside a bottom sheet. Filled blue, not just outlined-neutral like Lists/Archive
-                  — this is the *only* way into the channel/DM list on mobile, so it needs to read
-                  as a primary action, not a subtle secondary one. */}
-              {activeView === 'chat' && (
-                <button
-                  onClick={() => setMobileChatSheetOpen(true)}
-                  className="md:hidden text-[11px] font-medium px-3 py-1.5 rounded bg-blue-600 hover:bg-blue-500 text-white cursor-pointer transition flex items-center gap-1.5"
-                >
-                  <MessageCircle className="w-3.5 h-3.5" /> Chat
                 </button>
               )}
               {/* DocSubpagesPanel (a real 224px sidebar column) is hidden below md same as the
@@ -4499,7 +4506,20 @@ function PageContent() {
               // same full-screen-replace treatment.
               <div className="flex-1 min-h-0 flex gap-3">
                 <div className={`flex-1 min-w-0 min-h-0 ${isMobile && activeThreadRootMessage ? 'hidden' : ''}`}>
-                  <ChatPanel onOpenMobilePicker={() => setMobileChatSheetOpen(true)} />
+                  {/* Mobile with nothing picked: ChatSidebar (the same Channels/DMs list the
+                      desktop <aside> already renders) shows inline as the main content instead of
+                      behind a separate sheet — removes the need for the header's own blue "Chat"
+                      button (dedicated, single purpose, and its function wasn't obvious from the
+                      label alone per direct feedback) entirely for this state. The Back button in
+                      the header row re-opens this same view once a channel *is* picked (see its own
+                      condition below), matching how Spaces/Docs already get back to their own tree. */}
+                  {isMobile && !activeChatEntity ? (
+                    <div className="h-full overflow-y-auto px-3 py-3">
+                      <ChatSidebar workspaceId={activeWorkspaceId} />
+                    </div>
+                  ) : (
+                    <ChatPanel />
+                  )}
                 </div>
                 {activeThreadRootMessage && (
                   <ChatThreadPanel
@@ -6457,11 +6477,6 @@ function PageContent() {
           setDocsNavigation(folderId, docId);
           setActiveView('docs');
         }}
-      />
-      <MobileChatSheet
-        open={mobileChatSheetOpen}
-        onClose={() => setMobileChatSheetOpen(false)}
-        workspaceId={activeWorkspaceId}
       />
       {currentSpace && activeStandaloneDoc && docBookRoot && docBookHasPages && (
         <MobileDocPagesSheet

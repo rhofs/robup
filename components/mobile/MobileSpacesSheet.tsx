@@ -215,13 +215,20 @@ export default function MobileSpacesSheet({
               guarantees the same position regardless of which spacing values change later. */}
           <div className="px-3 pt-2 pb-3 shrink-0 flex items-center gap-2">
             <div className="w-7 h-7 shrink-0" aria-hidden />
-            <button
-              onClick={onOpenSearch}
-              className="flex-1 min-w-0 mx-1 flex items-center gap-1.5 bg-neutral-900/60 border border-neutral-800/80 rounded-full px-3 py-2.5 text-neutral-500 hover:border-neutral-700 hover:text-neutral-300 cursor-pointer"
-            >
-              <Search className="w-3.5 h-3.5 shrink-0" />
-              <span className="text-[11px] truncate">Search...</span>
-            </button>
+            {/* Centering wrapper, same fix and same reasoning as app/page.tsx's own search row —
+                this sheet has *nothing* trailing the search button at all, so the old plain
+                flex-1 button was the most lopsided case of the left/right-air mismatch: a full
+                left-slot width (32px) of margin on one side, just the row's own padding (16px)
+                on the other. */}
+            <div className="flex-1 min-w-0 flex justify-center">
+              <button
+                onClick={onOpenSearch}
+                className="w-full max-w-[420px] mx-1 flex items-center gap-1.5 bg-neutral-900/60 border border-neutral-800/80 rounded-full px-3 py-2.5 text-neutral-500 hover:border-neutral-700 hover:text-neutral-300 cursor-pointer"
+              >
+                <Search className="w-3.5 h-3.5 shrink-0" />
+                <span className="text-[11px] truncate">Search...</span>
+              </button>
+            </div>
           </div>
           {creatingSpace && workspaceId && (
             <div className="flex items-center gap-2 px-4 py-2.5 border-b border-neutral-800/60 shrink-0 bg-neutral-900/40">
