@@ -124,8 +124,14 @@ export default function MobileBottomNav({
           ("Ikke endre avrundingen til menyen, behold avrundigen av hjørnene... Den endre til mer
           spiss når jeg trykker menyen opp"). Left permanently rounded instead — the panel's own
           flat bottom (see its className comment) sitting on a still-round pill top is a smaller,
-          static visual detail than an animated corner-sharpening was. */}
-      <nav className="rounded-full flex items-center justify-between gap-0.5 w-[300px] max-w-[calc(100vw-48px)] bg-neutral-900 border border-neutral-800/80 px-1.5 py-1.5 shadow-lg shadow-black/30">
+          static visual detail than an animated corner-sharpening was. Its own top border *does*
+          still drop while open (an instant toggle, not an animated property — no shape/radius
+          change, so it doesn't reintroduce the complaint above) so the pill and the panel above it
+          share one unbroken outline instead of a border line running right across the seam —
+          per the "hele menyøya skal gå i ett" reference the user pointed at. */}
+      <nav
+        className={`rounded-full flex items-center justify-between gap-0.5 w-[300px] max-w-[calc(100vw-48px)] bg-neutral-900 border-x border-b ${menuOpen ? '' : 'border-t'} border-neutral-800/80 px-1.5 py-1.5 shadow-lg shadow-black/30`}
+      >
         {primaryTabs.map((tab) => {
           const isSpaces = tab.id === 'board';
           const Icon = isSpaces ? LayoutGrid : tab.icon;

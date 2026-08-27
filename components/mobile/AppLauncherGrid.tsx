@@ -98,7 +98,6 @@ export default function AppLauncherGrid({
   onClose,
   contentTiles,
   meItems,
-  pinnedTileId,
   onSelectTile,
   onOpenSettings,
   onOpenTrash,
@@ -252,14 +251,20 @@ export default function AppLauncherGrid({
                 </>
               )}
 
-              <div className="grid grid-cols-3 gap-3">
+              {/* No `selected` ring on the pinned tile here any more — whichever tile is pinned
+                  already gets its own highlighted state down in the nav pill's 4th slot
+                  (MobileBottomNav.tsx), and showing it selected in *both* places at once read as
+                  two conflicting answers to "what's currently selected," per a redesign the user
+                  pointed at ("My Tasks valgt to steder med forskjellig utseende... nå er det bare
+                  My Tasks nederst som er markert som aktiv fane"). This grid is just the picker —
+                  only the nav slot itself represents "current." */}
+              <div className="grid grid-cols-3 gap-4">
                 {pinnableTiles.map((tile) => (
                   <Tile
                     key={tile.id}
                     icon={tile.icon}
                     label={tile.label}
                     badge={tile.badge}
-                    selected={tile.id === pinnedTileId}
                     onClick={() => {
                       onNavigate();
                       onSelectTile(tile.id);
@@ -272,7 +277,7 @@ export default function AppLauncherGrid({
 
               <div className="h-px bg-neutral-800/70 my-3" />
 
-              <div className="grid grid-cols-3 gap-3 pb-2">
+              <div className="grid grid-cols-3 gap-4 pb-2">
                 <Tile
                   icon={Settings}
                   label="Settings"
