@@ -132,7 +132,15 @@ export default function AppLauncherGrid({
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
             transition={{ duration: 0.18 }}
-            className="absolute inset-0 bg-black/60"
+            // bottom stops flush with the nav island (same 4.75rem + safe-area value
+            // MobileBottomNav.tsx's own pill and this panel's `bottom` already share) instead of
+            // the full `inset-0` this used to be — the old full-screen dim painted over the nav
+            // pill too, at z-50 above its z-40, so it read as darker than the equally-opaque panel
+            // sitting directly above it ("hovedøya blir dimma... skal ha samme farge", reported
+            // live). Leaving a hole here keeps the pill at its own natural, undimmed color so the
+            // pill+panel read as one continuous, evenly-lit shape.
+            style={{ bottom: 'calc(4.75rem + env(safe-area-inset-bottom))' }}
+            className="absolute inset-x-0 top-0 bg-black/60"
             onClick={onClose}
           />
           <motion.div
