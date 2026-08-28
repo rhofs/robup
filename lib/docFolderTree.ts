@@ -68,3 +68,27 @@ export const isDescendantOfDocFolder = (space: HierarchySpace, candidateParentId
   if (candidateParentId === folderId) return true;
   return collectDocFolderIdsUnder(space, folderId).includes(candidateParentId);
 };
+
+export type WorkspaceDocEntry = { doc: TaskDoc; space: HierarchySpace };
+
+// Every real, top-level doc across every Space in a workspace, flattened into one list — the
+// Docs tab's own data source now, replacing the old "pick a Space first" per-Space DocFolder
+// browse (per direct feedback: "every single space has its own docs folder... I want that
+// removed... the docs tab should list all docs in the workspace"). A Doc's own spaceId/folderId
+// are untouched by this — it still genuinely "lives" wherever it was filed (a Space's DocFolder
+// tree, or a board Folder via boardFolderId) — this just reads across every Space at once instead
+// of requiring one to be selected first, the same way CommandPalette.tsx's own search index
+// already loops every space's spaceDocs for its "doc" results. Root-level only (parentId === null,
+// matching getSpaceDocsIn/getUnfiledBoardDocs above) — a subpage is reached through its parent doc,
+// not listed here as its own top-level entry. Sorted most-recently-updated first, since a flat
+// cross-space list has no folder structure left to browse by.
+export const getAllWorkspaceDocs = (spaces: HierarchySpace[]): WorkspaceDocEntry[] => {
+  const out: WorkspaceDocEntry[] = [];
+  for (const space of spaces) {
+    for (const doc of space.spaceDocs) {
+      if (doc.parentId !== null || doc.archived) continue;
+      out.push({ doc, space });
+    }
+  }
+  return out.sort((a, b) => new Date(b.doc.updatedAt).getTime() - new Date(a.doc.updatedAt).getTime());
+};

@@ -89,7 +89,6 @@ import CalendarView from '../components/calendar/CalendarView';
 import QuickCreatePopover from '../components/calendar/QuickCreatePopover';
 import EventDetailModal from '../components/calendar/EventDetailModal';
 import SpaceHome from '../components/SpaceHome';
-import DocFolderTree from '../components/DocFolderTree';
 import DocsBrowser from '../components/DocsBrowser';
 import DocSubpagesPanel from '../components/DocSubpagesPanel';
 import { getChildDocs } from '../lib/docFolderTree';
@@ -1114,7 +1113,6 @@ function PageContent() {
   // changed during that session. Scoped to this browser tab's own connection, not a shared field.
   const docEditBaselineRef = useRef<{ docId: string; title: string; content: string } | null>(null);
 
-  const [docFolderToDelete, setDocFolderToDelete] = useState<HierarchyDocFolder | null>(null);
   const [spaceDocToDelete, setSpaceDocToDelete] = useState<TaskDoc | null>(null);
   const [roomToDelete, setRoomToDelete] = useState<HierarchyRoom | null>(null);
 
@@ -3035,12 +3033,6 @@ function PageContent() {
   const docBookRoot = docBreadcrumb.docChain[0] ?? null;
   const docBookHasPages = !!(currentSpace && docBookRoot && getChildDocs(currentSpace, docBookRoot.id).length > 0);
 
-  const handleNewSpaceDoc = async () => {
-    if (!currentSpace) return;
-    const doc = await createSpaceDoc(currentSpace.id, activeDocFolderId, {});
-    if (doc) setDocsNavigation(activeDocFolderId, doc.id);
-  };
-
   if (isLoading) {
     return (
       <div className="flex h-dvh w-screen items-center justify-center bg-neutral-950 text-blue-400 font-mono text-sm">
@@ -3748,28 +3740,14 @@ function PageContent() {
                       )}
                     </DroppableSidebarItem>
 
-                    {!collapsedSpaceIds.has(space.id) &&
-                      (activeView === 'docs' ? (
-                        <DocFolderTree
-                          space={space}
-                          activeDocFolderId={activeSpaceId === space.id ? activeDocFolderId : null}
-                          activeStandaloneDocId={activeSpaceId === space.id ? activeStandaloneDocId : null}
-                          onNavigateFolder={(folderId) => {
-                            setNavigation(space.id, []);
-                            setDocsNavigation(folderId, null);
-                          }}
-                          onOpenDoc={(docId) => {
-                            setNavigation(space.id, []);
-                            setDocsNavigation(activeDocFolderId, docId);
-                          }}
-                          onDeleteFolderRequest={setDocFolderToDelete}
-                          onDeleteDocRequest={setSpaceDocToDelete}
-                          onDocContextMenu={(e, doc) => openDocMenu(e, doc, space.id)}
-                          renameDocId={renameDocId}
-                          onRenameDocHandled={() => setRenameDocId(null)}
-                          docDropIndicator={docDropIndicator}
-                        />
-                      ) : (
+                    {/* No DocFolderTree branch here any more while activeView === 'docs' — the
+                        Docs tab is now a flat, workspace-wide list (DocsBrowser.tsx, driven by
+                        lib/docFolderTree.ts's getAllWorkspaceDocs), so per-Space doc browsing from
+                        the sidebar was removed per direct feedback ("every single space has its
+                        own docs folder... I want that removed"). Space rows still render (and are
+                        still clickable/droppable above), just without an expandable Docs subtree
+                        underneath while on this particular tab. */}
+                    {!collapsedSpaceIds.has(space.id) && activeView !== 'docs' && (
                         <FolderTree
                           space={space}
                           tasks={tasks}
@@ -3802,7 +3780,7 @@ function PageContent() {
                           listDropIndicator={listDropIndicator}
                           showArchived={showArchived}
                         />
-                      ))}
+                    )}
                     {spaceDropIndicator?.targetId === space.id && spaceDropIndicator.position === 'below' && (
                       <div className="h-0.5 bg-blue-500 rounded-full mx-2" />
                     )}
@@ -4236,18 +4214,16 @@ function PageContent() {
 
             {activeStandaloneDoc && currentSpace && (activeView === 'board' || activeView === 'docs') ? (
               <div className="w-full space-y-2">
-                {/* Desktop always has DocFolderTree (the main sidebar, hidden below md) sitting
-                    right there to jump to any other Doc/Folder at a glance — mobile has no
-                    equivalent, so the small breadcrumb link below (easy to miss next to "+ Add
-                    page"/export/link controls on a cramped screen) was the *only* way back to the
-                    Docs browser grid. Reported live as a doc "actually missing" on mobile — it
-                    wasn't gone, just not reachable in an obvious way once a different doc/folder
-                    is open. Same handler the breadcrumb's own Space-name segment already uses,
-                    just promoted to its own prominent, always-visible mobile-only row. */}
+                {/* Desktop's sidebar used to always have DocFolderTree sitting right there to jump
+                    to any other Doc at a glance while one was open — that per-Space tree is gone
+                    now (the Docs tab is a flat, workspace-wide list instead, see DocsBrowser.tsx),
+                    so this "All docs" link is no longer mobile-only; it's the only way back to the
+                    flat list on *either* surface once a specific doc is open. Same handler the
+                    breadcrumb's own Space-name segment already uses. */}
                 {activeView === 'docs' && (
                   <button
                     onClick={() => setDocsNavigation(docBreadcrumb.folderChain[0]?.id ?? null, null)}
-                    className="md:hidden flex items-center gap-1.5 text-xs text-neutral-400 hover:text-blue-400 cursor-pointer -ml-1 mb-1"
+                    className="flex items-center gap-1.5 text-xs text-neutral-400 hover:text-blue-400 cursor-pointer -ml-1 mb-1"
                   >
                     <ChevronLeft className="w-3.5 h-3.5" /> All docs
                   </button>
@@ -4619,30 +4595,22 @@ function PageContent() {
                 )}
               </div>
             ) : activeView === 'docs' ? (
-              !currentSpace ? (
-                <div className="text-[11px] text-neutral-500 px-1 py-8 text-center border border-dashed border-neutral-800 rounded">
-                  Pick a Space in the sidebar to browse its Docs.
-                </div>
-              ) : (
-                <>
-                  <div className="flex items-center justify-end mb-2">
-                    <button
-                      onClick={handleNewSpaceDoc}
-                      className="text-[11px] bg-blue-600 hover:bg-blue-500 text-white px-2.5 py-1.5 rounded font-medium cursor-pointer flex items-center gap-1"
-                    >
-                      <Plus className="w-3.5 h-3.5" /> New doc
-                    </button>
-                  </div>
-                  <DocsBrowser
-                    space={currentSpace}
-                    folderId={activeDocFolderId}
-                    onNavigateFolder={(folderId) => setDocsNavigation(folderId, null)}
-                    onOpenDoc={(docId) => setDocsNavigation(activeDocFolderId, docId)}
-                    onDeleteFolderRequest={setDocFolderToDelete}
-                    onDeleteDocRequest={setSpaceDocToDelete}
-                  />
-                </>
-              )
+              // Flat, workspace-wide list — no more "pick a Space first" gate. A Doc still lives
+              // wherever it was actually filed (unchanged data model, see lib/docFolderTree.ts's
+              // getAllWorkspaceDocs); this just reads across every Space in the current workspace
+              // at once instead of requiring one to already be selected. "New doc" is no longer
+              // offered from here — creating one is inherently a per-Space action (which Space
+              // would an aggregate view even file it under?), so that stays where it already lives:
+              // inside a Space's own board view.
+              <DocsBrowser
+                spaces={currentWorkspace?.spaces ?? []}
+                onOpenDoc={(spaceId, folderId, docId) => {
+                  setModalTaskStack([]);
+                  setNavigation(spaceId, []);
+                  setDocsNavigation(folderId, docId);
+                }}
+                onDeleteDocRequest={setSpaceDocToDelete}
+              />
             ) : activeView === 'calendar' ? (
               <div className="flex-1 min-h-0">
                 <CalendarView
@@ -6381,27 +6349,17 @@ function PageContent() {
       />
 
       <ConfirmDialog
-        open={!!docFolderToDelete}
-        title="Delete doc folder?"
-        message={docFolderToDelete ? `This permanently deletes "${docFolderToDelete.name}" and every sub-folder and document inside it.` : ''}
-        onCancel={() => setDocFolderToDelete(null)}
-        onConfirm={() => {
-          if (docFolderToDelete) {
-            deleteDocFolder(docFolderToDelete.spaceId, docFolderToDelete.id);
-            if (activeDocFolderId === docFolderToDelete.id) setDocsNavigation(null, null);
-          }
-          setDocFolderToDelete(null);
-        }}
-      />
-
-      <ConfirmDialog
         open={!!spaceDocToDelete}
         title="Delete document?"
         message={spaceDocToDelete ? `This permanently deletes "${spaceDocToDelete.title || 'Untitled'}".` : ''}
         onCancel={() => setSpaceDocToDelete(null)}
         onConfirm={() => {
-          if (spaceDocToDelete && currentSpace) {
-            deleteSpaceDoc(spaceDocToDelete.id, currentSpace.id);
+          // spaceDocToDelete's own spaceId (not currentSpace.id) — deleting a doc directly from
+          // the flat, workspace-wide Docs tab (lib/docFolderTree.ts's getAllWorkspaceDocs) never
+          // requires first navigating into that doc's own Space, so currentSpace can't be trusted
+          // to actually be the deleted doc's owner any more.
+          if (spaceDocToDelete && spaceDocToDelete.spaceId) {
+            deleteSpaceDoc(spaceDocToDelete.id, spaceDocToDelete.spaceId);
             if (activeStandaloneDocId === spaceDocToDelete.id) setDocsNavigation(activeDocFolderId, null);
           }
           setSpaceDocToDelete(null);
@@ -6488,10 +6446,17 @@ function PageContent() {
         )}
       </AnimatePresence>
 
+      {/* scopeKind derived straight from activeView, no extra state needed — the top search bar
+          (both the desktop pill and the mobile per-view one, see app/page.tsx's own header row)
+          already just opens this same shared palette from every screen; while actually on the
+          Docs tab it should search docs only, per direct feedback ("that search bar should be
+          specific to search for docs within the docs tab"), not the full task/people/space/list
+          index every other screen wants. */}
       <CommandPalette
         open={commandPaletteOpen}
         onClose={() => setCommandPaletteOpen(false)}
         onOpenTask={(id) => setModalTaskStack([id])}
+        scopeKind={activeView === 'docs' ? 'doc' : undefined}
       />
 
       <MobileSpacesSheet
@@ -6525,12 +6490,6 @@ function PageContent() {
           setDocsNavigation(null, docId);
           setActiveView('board');
         }}
-        onSelectSpaceDoc={(spaceId, docId, folderId) => {
-          setModalTaskStack([]);
-          setNavigation(spaceId, []);
-          setDocsNavigation(folderId, docId);
-          setActiveView('docs');
-        }}
       />
       {/* "My Tasks"'s own tree browser — literally the same MobileSpacesSheet component, just
           fed the personal workspace's own data instead of the real one, per the explicit ask for
@@ -6562,12 +6521,6 @@ function PageContent() {
           setNavigation(spaceId, []);
           setDocsNavigation(null, docId);
           setActiveView('board');
-        }}
-        onSelectSpaceDoc={(spaceId, docId, folderId) => {
-          setModalTaskStack([]);
-          setNavigation(spaceId, []);
-          setDocsNavigation(folderId, docId);
-          setActiveView('docs');
         }}
       />
       {currentSpace && activeStandaloneDoc && docBookRoot && docBookHasPages && (

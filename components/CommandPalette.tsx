@@ -45,14 +45,22 @@ const CATEGORY_ICON: Record<PaletteResult['kind'], typeof Search> = {
 };
 
 const MAX_PER_CATEGORY = 5;
+// Higher cap when scopeKind narrows the results to just one category — no other categories are
+// competing for the same result-list space, so there's room to actually browse more than 5.
+const MAX_PER_SCOPED_CATEGORY = 20;
 
 type CommandPaletteProps = {
   open: boolean;
   onClose: () => void;
   onOpenTask: (taskId: string) => void;
+  // When set, only this one category's results are shown/searched — used by the Docs tab's own
+  // search bar (app/page.tsx passes 'doc' whenever activeView === 'docs') so a docs-only screen
+  // gets docs-only search instead of the full task/people/space/list index every other screen
+  // wants. undefined (the default) searches everything, unchanged.
+  scopeKind?: PaletteResult['kind'];
 };
 
-export default function CommandPalette({ open, onClose, onOpenTask }: CommandPaletteProps) {
+export default function CommandPalette({ open, onClose, onOpenTask, scopeKind }: CommandPaletteProps) {
   const { tasks, users, workspaces, docs, setActiveView, setNavigation, setDocsNavigation, setActiveOfficeUserId } = useTaskStore();
   const [query, setQuery] = useState('');
   const [selectedIndex, setSelectedIndex] = useState(0);
@@ -125,14 +133,19 @@ export default function CommandPalette({ open, onClose, onOpenTask }: CommandPal
     }
 
     const flat: PaletteResult[] = [];
-    for (const kind of ['task', 'doc', 'person', 'space', 'list'] as const) {
+    // scopeKind narrows this to one category — MAX_PER_SCOPED_CATEGORY (not the general
+    // MAX_PER_CATEGORY) since there's no longer four other categories' worth of results competing
+    // for the same limited list space.
+    const kinds = scopeKind ? [scopeKind] : (['task', 'doc', 'person', 'space', 'list'] as const);
+    const cap = scopeKind ? MAX_PER_SCOPED_CATEGORY : MAX_PER_CATEGORY;
+    for (const kind of kinds) {
       byCategory[kind]
         .sort((a, b) => a.score - b.score || a.label.length - b.label.length)
-        .slice(0, MAX_PER_CATEGORY)
+        .slice(0, cap)
         .forEach((r) => flat.push(r));
     }
     return flat;
-  }, [query, tasks, users, workspaces, docs]);
+  }, [query, tasks, users, workspaces, docs, scopeKind]);
 
   const activate = (r: PaletteResult) => {
     if (r.kind === 'task') {
@@ -211,7 +224,7 @@ export default function CommandPalette({ open, onClose, onOpenTask }: CommandPal
                   setSelectedIndex(0);
                 }}
                 onKeyDown={handleKeyDown}
-                placeholder="Search tasks, docs, people, spaces & lists..."
+                placeholder={scopeKind === 'doc' ? 'Search docs...' : 'Search tasks, docs, people, spaces & lists...'}
                 className="flex-1 bg-transparent text-sm text-white placeholder:text-neutral-500 focus:outline-none"
               />
             </div>
