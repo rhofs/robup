@@ -3,16 +3,19 @@
 import { Suspense, useState } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { signIn } from 'next-auth/react';
-import { List, Calendar, FileText, MessageSquare, Building2 } from 'lucide-react';
+import { List, Calendar, FileText, MessageSquare } from 'lucide-react';
 
-// Same five icons as the real app's own nav rail (app/page.tsx), matching each feature exactly —
-// a logged-out visitor should recognize the same icons once they're actually inside the app.
+// Same four icons as the real app's own nav rail (app/page.tsx), matching each feature exactly —
+// a logged-out visitor should recognize the same icons once they're actually inside the app. Was
+// five (Office included) — trimmed to the four the user actually asked to lead with, and the
+// self-hosting/"your own server" pitch below was dropped entirely: Siqt isn't something a visitor
+// can run on their own infrastructure, so claiming that was a real, direct-feedback-flagged
+// overpromise ("we don't offer it on their own server"), not a style choice.
 const FEATURES = [
-  { icon: List, title: 'Tasks', description: 'Spaces, Folders, Lists, subtasks, and custom fields — organized your way.' },
-  { icon: Calendar, title: 'Planner', description: 'A real Gantt-style calendar. Drag to reschedule, in Month, Week, or Day view.' },
-  { icon: FileText, title: 'Docs', description: 'Real-time collaborative documents, nested wherever they make sense.' },
-  { icon: MessageSquare, title: 'Chat', description: 'Channels and DMs, reactions and threads — built in, not bolted on.' },
-  { icon: Building2, title: 'Office', description: 'A virtual floor plan showing who’s around and what room they’re in.' },
+  { icon: List, title: 'Tasks', description: 'Spaces, Lists, and subtasks — organized your way.' },
+  { icon: Calendar, title: 'Planner', description: 'A visual monthly calendar. Drag a task to reschedule it.' },
+  { icon: FileText, title: 'Docs', description: 'Real-time collaborative documents, right next to the work.' },
+  { icon: MessageSquare, title: 'Chat', description: 'Channels and DMs, without leaving the app.' },
 ];
 
 // Thin Suspense wrapper around the real page — useSearchParams() (needed below for
@@ -82,33 +85,43 @@ function LoginPageContent() {
   };
 
   return (
-    <div className="min-h-screen bg-neutral-950 flex flex-col lg:flex-row">
+    <div className="relative min-h-screen bg-neutral-950 flex flex-col lg:flex-row overflow-hidden">
+      {/* A single soft radial glow instead of a flat black field — the previous version was
+          honest about its content but visually inert. Pure CSS (no image asset), fixed behind
+          everything (-z-10), sized generously so it reads as ambient light rather than a visible
+          shape with an edge. */}
+      <div
+        className="pointer-events-none absolute -z-10 -top-40 -left-40 w-[720px] h-[720px] rounded-full opacity-[0.15] blur-3xl"
+        style={{ background: 'radial-gradient(circle, #3b82f6, transparent 70%)' }}
+        aria-hidden
+      />
       {/* Marketing side — backlog #7: this used to be nothing but the auth card below, dropping
           a logged-out visitor straight into a bare form with no explanation of what Siqt even is.
-          ClickUp-style: a headline + short pitch + the same 5 feature icons the real app's own
-          nav rail uses, so it's recognizable once someone's actually inside. */}
+          Copy trimmed to four features and rewritten to drop every self-hosting/"your own
+          infrastructure" claim (see FEATURES' own comment) — simpler and, more importantly,
+          actually true. */}
       <div className="flex-1 flex flex-col justify-center px-6 py-16 sm:px-12 lg:px-20">
-        <div className="max-w-2xl">
-          <div className="flex items-center gap-2 mb-10">
-            <div className="w-8 h-8 rounded bg-gradient-to-br from-blue-500 to-blue-700 text-white font-black flex items-center justify-center shrink-0">
+        <div className="max-w-xl">
+          <div className="flex items-center gap-2.5 mb-12">
+            <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-blue-500 to-blue-700 text-white font-black flex items-center justify-center shrink-0 shadow-lg shadow-blue-500/20">
               S
             </div>
-            <span className="text-white font-bold tracking-tight">Siqt</span>
+            <span className="text-white font-bold tracking-tight text-lg">Siqt</span>
           </div>
 
-          <h1 className="text-3xl sm:text-4xl font-bold text-white tracking-tight leading-tight mb-4">
-            One workspace for tasks, docs, and chat — running on your own server.
+          <h1 className="text-4xl sm:text-5xl font-bold text-white tracking-tight leading-[1.1] mb-5">
+            Tasks, planning, docs, and chat — <span className="text-blue-400">one place</span>.
           </h1>
-          <p className="text-neutral-400 text-base leading-relaxed mb-12 max-w-lg">
-            Siqt brings Tasks, Planner, Docs, Chat, and a virtual Office together in one app —
-            no third-party cloud in between. Your data stays on infrastructure you control.
+          <p className="text-neutral-400 text-base leading-relaxed mb-14 max-w-md">
+            Siqt brings your team's work together in a single, focused app — no jumping between
+            four different tools to get one thing done.
           </p>
 
-          <div className="grid sm:grid-cols-2 gap-x-8 gap-y-6">
+          <div className="grid sm:grid-cols-2 gap-x-10 gap-y-8">
             {FEATURES.map((f) => (
-              <div key={f.title} className="flex gap-3">
-                <div className="w-9 h-9 rounded bg-neutral-900 border border-neutral-800 flex items-center justify-center shrink-0">
-                  <f.icon className="w-4 h-4 text-blue-400" />
+              <div key={f.title} className="flex gap-3.5">
+                <div className="w-10 h-10 rounded-xl bg-neutral-900 border border-neutral-800 flex items-center justify-center shrink-0">
+                  <f.icon className="w-4.5 h-4.5 text-blue-400" />
                 </div>
                 <div className="min-w-0">
                   <h3 className="text-sm font-semibold text-white mb-0.5">{f.title}</h3>
@@ -120,11 +133,12 @@ function LoginPageContent() {
         </div>
       </div>
 
-      {/* Auth side — the exact same functional sign-in/signup card as before, just no longer
-          carrying the entire page on its own. */}
+      {/* Auth side — the exact same functional sign-in/signup card as before (form/handlers
+          untouched), just a slightly more polished shell (rounded-xl, a touch more padding and
+          shadow) to match the marketing side's own refresh. */}
       <div className="w-full lg:w-[420px] shrink-0 flex items-center justify-center border-t lg:border-t-0 lg:border-l border-neutral-800 bg-neutral-900/20 px-4 py-12">
         <div className="w-full max-w-sm">
-          <div className="bg-neutral-900 border border-neutral-800 rounded-lg p-5">
+          <div className="bg-neutral-900 border border-neutral-800 rounded-xl p-6 shadow-2xl shadow-black/40">
           <div className="flex mb-4 border border-neutral-800 rounded overflow-hidden">
             <button
               type="button"
