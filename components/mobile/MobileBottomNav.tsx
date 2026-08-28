@@ -85,7 +85,7 @@ const ISLAND_BOTTOM_OFFSET = `calc(env(safe-area-inset-bottom) + ${ISLAND_EXTRA_
 // animated rounded corner is a known rough edge in mobile browsers, and it persisted even once both
 // keyframes were made token-for-token identical in shape (only the numbers differed), so the
 // instability lives in animating the shape itself, not in how the values were written. Fixed by
-// separating "what's rounded" from "what's animated": the outer box's `rounded-[24px] overflow-
+// separating "what's rounded" from "what's animated": the outer box's `rounded-[32px] overflow-
 // hidden` is completely static, never touched by any animation, so the corners can never glitch.
 // Only a plain numeric `height` is animated (the simplest, most reliably-interpolated CSS value
 // there is), and `flex flex-col justify-end` keeps the tab row pinned to the bottom the whole time,
@@ -234,7 +234,7 @@ export default function MobileBottomNav({
       <div className="fixed inset-x-0 bottom-0 z-50 md:hidden">
         <motion.div
           // Only `height` is ever animated here — a plain number, not a shape/string — and the
-          // rounding/clipping (`rounded-[24px] overflow-hidden`) below is completely static, so
+          // rounding/clipping (`rounded-[32px] overflow-hidden`) below is completely static, so
           // there's no way for the corners to visibly change mid-transition (see top-level
           // comment). `flex flex-col justify-end` bottom-anchors the content: when height shrinks
           // below the content's natural size, the overflow is clipped off the *top* (grid content)
@@ -253,7 +253,7 @@ export default function MobileBottomNav({
           // it instead of reading as its own distinct piece of chrome. -950 matches the page's own
           // header/root shade instead, the same darker tone the nav had before any of those
           // content sheets existed.
-          className="absolute left-1/2 -translate-x-1/2 w-[300px] max-w-[calc(100vw-48px)] rounded-[24px] overflow-hidden flex flex-col justify-end bg-neutral-950/90 backdrop-blur-xl border border-neutral-800/80 shadow-2xl shadow-black/40"
+          className="absolute left-1/2 -translate-x-1/2 w-[300px] max-w-[calc(100vw-48px)] rounded-[32px] overflow-hidden flex flex-col justify-end bg-neutral-950/90 backdrop-blur-xl border border-neutral-800/80 shadow-2xl shadow-black/40"
         >
           {/* Single flex child, measured as a whole (see islandRef above) — its natural content
               height is always the *full* open height regardless of the animated parent's current
@@ -326,7 +326,15 @@ export default function MobileBottomNav({
                     />
                   )}
                   <Icon className="w-5 h-5" />
-                  <span className="text-[10px] font-medium leading-none">{label}</span>
+                  {/* h-3, fixed: matches the pinned button's own label row below exactly (which
+                      needs it explicitly since it wraps an icon alongside the text) so both rows
+                      resolve to the identical height regardless of content — without it, a plain
+                      text span here and a `flex items-center` icon+text span there could differ by
+                      a pixel or two, enough to visibly shift *this* button's own icon up/down
+                      relative to the other three, since `nav`'s `items-center` centers each button
+                      by its own intrinsic (auto) height. Reported live as "My Tasks... the icon
+                      more up while Spaces/Planner/Chat are lined nicely." */}
+                  <span className="h-3 text-[10px] font-medium leading-none">{label}</span>
                   {!!tab.badge && tab.badge > 0 && (
                     <span className="absolute top-0.5 right-1.5 min-w-[15px] h-[15px] px-1 rounded-full bg-red-500 text-white text-[8px] font-bold flex items-center justify-center leading-none">
                       {tab.badge > 99 ? '99+' : tab.badge}
@@ -351,7 +359,11 @@ export default function MobileBottomNav({
                 )}
               </AnimatePresence>
               <PinnedIcon className="w-5 h-5" />
-              <span className="flex items-center gap-0.5 text-[10px] font-medium leading-none">
+              {/* h-3, fixed: see the matching comment on the plain tab label above — this row
+                  wraps a chevron icon alongside its text, which (without an explicit height) sized
+                  this span very slightly taller than the plain-text-only label the other 3 tabs
+                  use, visibly shifting this button's own icon up relative to theirs. */}
+              <span className="h-3 flex items-center gap-0.5 text-[10px] font-medium leading-none">
                 {pinnedTile?.label ?? 'Menu'}
                 {menuOpen ? <ChevronUp className="w-2.5 h-2.5" /> : <ChevronDown className="w-2.5 h-2.5" />}
               </span>

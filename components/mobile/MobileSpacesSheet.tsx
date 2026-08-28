@@ -218,10 +218,10 @@ export default function MobileSpacesSheet({
               by the reserved back-button slot's width, which this row wasn't accounting for at
               all. Matching the structure exactly, not just eyeballing similar padding numbers,
               guarantees the same position regardless of which spacing values change later. */}
-          {/* pb-8, matching app/page.tsx's own per-view header row exactly (bumped alongside it
-              both times, pb-3 -> pb-5 -> pb-8, per the explicit ask to keep any search-row spacing
-              change identical across every screen this bar appears on). */}
-          <div className="relative px-3 pt-2 pb-8 shrink-0 flex items-center gap-2">
+          {/* pb-9, matching app/page.tsx's own per-view header row exactly (bumped alongside it
+              every time, pb-3 -> pb-5 -> pb-8 -> pb-9, per the explicit ask to keep any search-row
+              spacing change identical across every screen this bar appears on). */}
+          <div className="relative px-3 pt-2 pb-9 shrink-0 flex items-center gap-2">
             <div className="relative z-10 w-7 h-7 shrink-0" aria-hidden />
             {/* True absolute centering on the row itself, same fix and same reasoning as
                 app/page.tsx's own search row — a flex-1-based wrapper still centers only *within

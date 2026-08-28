@@ -3835,7 +3835,16 @@ function PageContent() {
       )}
 
       {/* ================= MAIN AREA ================= */}
-      <main className="flex-1 flex flex-col h-full overflow-hidden bg-[#121212] relative">
+      {/* bg-neutral-950 (not the old hardcoded bg-[#121212]): that arbitrary value predates the
+          rounded-sheet treatment below and was never updated when the app's shared background
+          tokens were — it sat one shade lighter than the header's own bg-neutral-950, which
+          quietly peeks through at the header/content boundary and at a content sheet's own
+          rounded-top corners (Planner, Chat) as a straight-edged, slightly-darker line/frame right
+          where the rounded corner cuts away, reported live as "a darker frame that is straight
+          behind it... you can see the straight line go past where the corner starts to round
+          off." Matching this to the header's own token removes the mismatched third shade
+          entirely, rather than chasing the geometry of exactly where it peeks through. */}
+      <main className="flex-1 flex flex-col h-full overflow-hidden bg-neutral-950 relative">
         {/* Mobile: no border framing this row at all, and the same bg-neutral-950 as the title bar
             above — reads as one continuous header block instead of two visually distinct bands.
             Desktop keeps its original border+lighter-bg treatment unchanged. */}
@@ -3849,7 +3858,7 @@ function PageContent() {
               what makes the extra air apply identically everywhere in one change, without touching
               Calendar/Chat's own tighter p-2 content-wrapper budget (they were the two specifically
               flagged as feeling cramped, since every other view already used a roomier p-6). */}
-          <div className="relative md:h-11 pt-2 pb-8 md:py-0 px-3 md:px-6 flex items-center gap-2 justify-between border-b-0 md:border-b border-neutral-800/40">
+          <div className="relative md:h-11 pt-2 pb-9 md:py-0 px-3 md:px-6 flex items-center gap-2 justify-between border-b-0 md:border-b border-neutral-800/40">
             {/* Mobile-only — the Spaces/Personal-Spaces tree sheets are the *only* way to reach a
                 specific List or Doc on mobile (the desktop sidebar is hidden below md), and neither
                 sheet stays mounted once you've navigated in, so there was previously no way back at
