@@ -433,6 +433,15 @@ const DEFAULT_COLUMN_WIDTHS: Record<string, number> = { name: 280 };
 // clearance instead of the "just let content run under it" treatment that works for scrolling lists.
 const NAV_TOTAL_HEIGHT_PB_CLASS = 'pb-[calc(4.75rem+env(safe-area-inset-bottom)+10px)]';
 
+// The search pill's own *static* label (shown before it's even tapped), not just what
+// CommandPalette shows once it's open — per direct feedback: "the same should be written in the
+// search bar before you press it" for whatever it's actually scoped to search (see
+// CommandPalette.tsx's own scopeKind, which this mirrors exactly). Used by both the desktop pill
+// and the mobile per-view header pill below, so the two can never drift out of sync with each
+// other or with what actually happens once tapped.
+const searchPillLabel = (view: string) =>
+  view === 'docs' ? 'Search docs...' : view === 'chat' ? 'Search chats and channels...' : 'Search...';
+
 const NAME_WIDTH_RANGE = { min: 140, max: 640 };
 const COLUMN_WIDTH_RANGE = { min: 70, max: 300 };
 const COLUMN_WIDTHS_STORAGE_KEY = 'siqt.columnWidths';
@@ -3303,7 +3312,7 @@ function PageContent() {
             className="w-full max-w-md flex items-center gap-2 bg-neutral-900/60 rounded border border-neutral-800/80 px-3 py-1.5 text-[11px] text-neutral-500 hover:border-neutral-700 hover:text-neutral-300 cursor-pointer"
           >
             <Search className="w-3.5 h-3.5" />
-            <span className="flex-1 text-left">Search...</span>
+            <span className="flex-1 text-left">{searchPillLabel(activeView)}</span>
             <span className="hidden md:inline text-[9px] font-mono text-neutral-600">Ctrl+K</span>
           </button>
         </div>
@@ -3927,7 +3936,7 @@ function PageContent() {
                 className="w-full flex items-center gap-1.5 bg-neutral-900/60 border border-neutral-800/80 rounded-full px-3 py-3 text-neutral-500 hover:border-neutral-700 hover:text-neutral-300 cursor-pointer"
               >
                 <Search className="w-3.5 h-3.5 shrink-0" />
-                <span className="text-[11px] truncate">Search...</span>
+                <span className="text-[11px] truncate">{searchPillLabel(activeView)}</span>
               </button>
             </div>
             {/* Hidden on mobile entirely — a breadcrumb reads as unpolished clutter at phone
@@ -6449,14 +6458,14 @@ function PageContent() {
       {/* scopeKind derived straight from activeView, no extra state needed — the top search bar
           (both the desktop pill and the mobile per-view one, see app/page.tsx's own header row)
           already just opens this same shared palette from every screen; while actually on the
-          Docs tab it should search docs only, per direct feedback ("that search bar should be
-          specific to search for docs within the docs tab"), not the full task/people/space/list
-          index every other screen wants. */}
+          Docs or Chat tab it should search only that ("search bar should be specific to search
+          for docs within the docs tab... the same goes for chat, that you search chats and
+          channels"), not the full task/people/space/list index every other screen wants. */}
       <CommandPalette
         open={commandPaletteOpen}
         onClose={() => setCommandPaletteOpen(false)}
         onOpenTask={(id) => setModalTaskStack([id])}
-        scopeKind={activeView === 'docs' ? 'doc' : undefined}
+        scopeKind={activeView === 'docs' ? 'doc' : activeView === 'chat' ? 'channel' : undefined}
       />
 
       <MobileSpacesSheet

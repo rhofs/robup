@@ -2,14 +2,17 @@
 
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
-import { Search, ListChecks, FileText, UserCircle, List as ListIcon, Layers } from 'lucide-react';
+import { Search, ListChecks, FileText, UserCircle, List as ListIcon, Layers, MessageSquare } from 'lucide-react';
 import { useTaskStore } from '../store/useTaskStore';
+import { useChatStore } from '../store/useChatStore';
+import { useSessionStore } from '../store/useSessionStore';
 import { scoreMatch } from '../lib/search';
 
 // Searches everything already loaded eagerly client-side: Task titles, both standalone (Docs-tab)
 // AND task-scoped Doc titles (the latter bulk-loaded into `docs` via GET /api/task-docs at
 // startup, same field the task modal's Documents tab lazily refreshes per-task), People names,
-// and Space/List names.
+// Space/List names, and Chat channels/DMs (also fetched eagerly at app mount — app/page.tsx's own
+// unread-badge polling effect — not just once Chat's own sidebar has been opened).
 type PaletteResult =
   | { kind: 'task'; id: string; label: string; sub?: string; score: number }
   | {
@@ -26,7 +29,8 @@ type PaletteResult =
     }
   | { kind: 'person'; id: string; label: string; sub?: string; score: number }
   | { kind: 'space'; id: string; label: string; sub?: string; score: number }
-  | { kind: 'list'; id: string; label: string; spaceId: string; sub?: string; score: number };
+  | { kind: 'list'; id: string; label: string; spaceId: string; sub?: string; score: number }
+  | { kind: 'channel'; id: string; label: string; sub?: string; score: number; isDm: boolean };
 
 const CATEGORY_LABEL: Record<PaletteResult['kind'], string> = {
   task: 'Tasks',
@@ -34,6 +38,7 @@ const CATEGORY_LABEL: Record<PaletteResult['kind'], string> = {
   person: 'People',
   space: 'Spaces',
   list: 'Lists',
+  channel: 'Chats & Channels',
 };
 
 const CATEGORY_ICON: Record<PaletteResult['kind'], typeof Search> = {
@@ -42,6 +47,7 @@ const CATEGORY_ICON: Record<PaletteResult['kind'], typeof Search> = {
   person: UserCircle,
   space: Layers,
   list: ListIcon,
+  channel: MessageSquare,
 };
 
 const MAX_PER_CATEGORY = 5;
@@ -61,7 +67,9 @@ type CommandPaletteProps = {
 };
 
 export default function CommandPalette({ open, onClose, onOpenTask, scopeKind }: CommandPaletteProps) {
-  const { tasks, users, workspaces, docs, setActiveView, setNavigation, setDocsNavigation, setActiveOfficeUserId } = useTaskStore();
+  const { tasks, users, workspaces, docs, activeWorkspaceId, setActiveView, setNavigation, setDocsNavigation, setActiveOfficeUserId } = useTaskStore();
+  const { channelsByWorkspace, dms, setActiveChannelId, setActiveChatSidebarTab } = useChatStore();
+  const currentUserId = useSessionStore((s) => s.currentUserId);
   const [query, setQuery] = useState('');
   const [selectedIndex, setSelectedIndex] = useState(0);
   const inputRef = useRef<HTMLInputElement>(null);
@@ -79,7 +87,7 @@ export default function CommandPalette({ open, onClose, onOpenTask, scopeKind }:
     const q = query.trim().toLowerCase();
     if (!q) return [];
 
-    const byCategory: Record<PaletteResult['kind'], PaletteResult[]> = { task: [], doc: [], person: [], space: [], list: [] };
+    const byCategory: Record<PaletteResult['kind'], PaletteResult[]> = { task: [], doc: [], person: [], space: [], list: [], channel: [] };
 
     for (const t of tasks) {
       const score = scoreMatch(t.title, q);
@@ -132,11 +140,27 @@ export default function CommandPalette({ open, onClose, onOpenTask, scopeKind }:
       }
     }
 
+    // Channels (current workspace only, matching ChatSidebar's own scoping) + DMs (all, workspace-
+    // agnostic — Connections can span workspaces entirely). A DM has no `name` of its own; its
+    // label is built from its other members exactly like ChatSidebar.tsx's own DM row does, so a
+    // search result reads the same as the list it came from.
+    const currentChannels = activeWorkspaceId ? channelsByWorkspace[activeWorkspaceId] ?? [] : [];
+    for (const c of currentChannels) {
+      const score = scoreMatch(c.name ?? '', q);
+      if (score !== null) byCategory.channel.push({ kind: 'channel', id: c.id, label: c.name ?? 'Untitled', score, isDm: false });
+    }
+    for (const dm of dms) {
+      const others = (dm.members ?? []).map((m) => m.user).filter((u) => u.id !== currentUserId);
+      const label = others.map((u) => u.name).join(', ') || 'Just you';
+      const score = scoreMatch(label, q);
+      if (score !== null) byCategory.channel.push({ kind: 'channel', id: dm.id, label, sub: 'DM', score, isDm: true });
+    }
+
     const flat: PaletteResult[] = [];
     // scopeKind narrows this to one category — MAX_PER_SCOPED_CATEGORY (not the general
     // MAX_PER_CATEGORY) since there's no longer four other categories' worth of results competing
     // for the same limited list space.
-    const kinds = scopeKind ? [scopeKind] : (['task', 'doc', 'person', 'space', 'list'] as const);
+    const kinds = scopeKind ? [scopeKind] : (['task', 'doc', 'person', 'space', 'list', 'channel'] as const);
     const cap = scopeKind ? MAX_PER_SCOPED_CATEGORY : MAX_PER_CATEGORY;
     for (const kind of kinds) {
       byCategory[kind]
@@ -145,7 +169,7 @@ export default function CommandPalette({ open, onClose, onOpenTask, scopeKind }:
         .forEach((r) => flat.push(r));
     }
     return flat;
-  }, [query, tasks, users, workspaces, docs, scopeKind]);
+  }, [query, tasks, users, workspaces, docs, scopeKind, activeWorkspaceId, channelsByWorkspace, dms, currentUserId]);
 
   const activate = (r: PaletteResult) => {
     if (r.kind === 'task') {
@@ -171,6 +195,10 @@ export default function CommandPalette({ open, onClose, onOpenTask, scopeKind }:
     } else if (r.kind === 'list') {
       setActiveView('board');
       setNavigation(r.spaceId, [r.id]);
+    } else if (r.kind === 'channel') {
+      setActiveView('chat');
+      setActiveChatSidebarTab(r.isDm ? 'dms' : 'channels');
+      setActiveChannelId(r.id);
     }
     onClose();
   };
@@ -224,7 +252,13 @@ export default function CommandPalette({ open, onClose, onOpenTask, scopeKind }:
                   setSelectedIndex(0);
                 }}
                 onKeyDown={handleKeyDown}
-                placeholder={scopeKind === 'doc' ? 'Search docs...' : 'Search tasks, docs, people, spaces & lists...'}
+                placeholder={
+                  scopeKind === 'doc'
+                    ? 'Search docs...'
+                    : scopeKind === 'channel'
+                    ? 'Search chats and channels...'
+                    : 'Search tasks, docs, people, spaces & lists...'
+                }
                 className="flex-1 bg-transparent text-sm text-white placeholder:text-neutral-500 focus:outline-none"
               />
             </div>

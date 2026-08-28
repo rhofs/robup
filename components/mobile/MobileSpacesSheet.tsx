@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from 'react';
 import { ChevronRight, ChevronDown, Globe, Search, X, Plus, Folder as FolderIconLucide, List as ListIconLucide, FileText } from 'lucide-react';
 import { useTaskStore, type HierarchySpace } from '../../store/useTaskStore';
 import { FOLDER_ICON_MAP } from '../FolderTree';
+import FloatingPopover from '../FloatingPopover';
 import { getChildFolders, getListsIn, getBoardDocsIn } from '../../lib/folderTree';
 
 type Props = {
@@ -71,12 +72,20 @@ export default function MobileSpacesSheet({
 }: Props) {
   // Called directly via the store, same as FolderTree.tsx's own create-Folder/List/Space
   // buttons already do — no need to thread these through app/page.tsx as props.
-  const { createSpace, createFolder, createList } = useTaskStore();
+  const { createSpace, createFolder, createList, createSpaceDoc } = useTaskStore();
   const [creatingSpace, setCreatingSpace] = useState(false);
   const [newSpaceDraft, setNewSpaceDraft] = useState('');
   const commitNewSpace = () => {
     const trimmed = newSpaceDraft.trim();
     if (trimmed && workspaceId) createSpace(workspaceId, trimmed);
+    setNewSpaceDraft('');
+    setCreatingSpace(false);
+  };
+  // Re-tapping the same "+" used to be the only way to back out of naming a new Space — not
+  // intuitive (a "+" reads as "add," not "cancel"). Now there's a real Cancel button in the draft
+  // row itself, plus tapping/clicking anywhere outside it (the row's own onBlur, below) discards
+  // the draft the same way. Reported live: "make a smart and intuitive way of canceling."
+  const cancelNewSpace = () => {
     setNewSpaceDraft('');
     setCreatingSpace(false);
   };
@@ -157,22 +166,24 @@ export default function MobileSpacesSheet({
               a few px shorter, pushing the search row (and everything in it) up slightly compared
               to Planner/Chat, where that taller h-14 global header sits above their own search row
               instead of this shorter title row. */}
+          {/* The header's own close ("X") button was removed — it only ever did the same thing
+              tapping outside this sheet, or picking something in it, already does (both dismiss
+              it), so it was a redundant, slightly confusing extra affordance rather than a
+              distinct action. Reported live: "the cross can be removed." The "+" here always
+              *opens* the new-Space draft now rather than toggling it closed too — see
+              cancelNewSpace below for how the draft row itself now offers a real, discoverable way
+              to back out instead. */}
           <div className="h-14 flex items-center justify-between px-4 shrink-0">
             <span className="text-lg font-semibold text-white">{title}</span>
-            <div className="flex items-center gap-1">
-              {workspaceId && (
-                <button
-                  onClick={() => setCreatingSpace((o) => !o)}
-                  title="New space"
-                  className="text-neutral-500 hover:text-neutral-200 cursor-pointer p-1"
-                >
-                  <Plus className="w-4.5 h-4.5" />
-                </button>
-              )}
-              <button onClick={onClose} className="text-neutral-500 hover:text-neutral-200 cursor-pointer p-1">
-                <X className="w-4.5 h-4.5" />
+            {workspaceId && (
+              <button
+                onClick={() => setCreatingSpace(true)}
+                title="New space"
+                className="text-neutral-500 hover:text-neutral-200 cursor-pointer p-1"
+              >
+                <Plus className="w-4.5 h-4.5" />
               </button>
-            </div>
+            )}
           </div>
           {/* Search moved to its own row below the title — matches the same "search sits in the
               row right under the title" spot every other mobile screen now uses (app/page.tsx's
@@ -210,26 +221,44 @@ export default function MobileSpacesSheet({
             </div>
           </div>
           {creatingSpace && workspaceId && (
-            <div className="flex items-center gap-2 px-4 py-2.5 border-b border-neutral-800/60 shrink-0 bg-neutral-900/40">
+            // onBlur here (not just on the input) cancels whenever focus leaves this whole row —
+            // tapping/clicking anywhere else in the sheet, or outside it entirely, discards the
+            // draft exactly like Escape does. The Add/Cancel buttons' own `onMouseDown`
+            // preventDefault stops them from ever stealing focus away from the input in the first
+            // place, so clicking *them* never triggers this blur at all — only a genuine "went
+            // somewhere else" does, avoiding the classic "blur fires before the button's click"
+            // race that would otherwise make Add/Cancel unreliable.
+            <div
+              className="flex items-center gap-2 px-4 py-2.5 border-b border-neutral-800/60 shrink-0 bg-neutral-900/40"
+              onBlur={(e) => {
+                if (!e.currentTarget.contains(e.relatedTarget as Node | null)) cancelNewSpace();
+              }}
+            >
               <input
                 autoFocus
                 value={newSpaceDraft}
                 onChange={(e) => setNewSpaceDraft(e.target.value)}
                 onKeyDown={(e) => {
                   if (e.key === 'Enter') commitNewSpace();
-                  if (e.key === 'Escape') {
-                    setNewSpaceDraft('');
-                    setCreatingSpace(false);
-                  }
+                  if (e.key === 'Escape') cancelNewSpace();
                 }}
                 placeholder="Space name..."
                 className="flex-1 bg-neutral-950 border border-blue-500 rounded px-3 py-1.5 text-sm text-white focus:outline-none"
               />
               <button
+                onMouseDown={(e) => e.preventDefault()}
                 onClick={commitNewSpace}
                 className="bg-blue-600 hover:bg-blue-500 text-white text-xs px-3 py-1.5 rounded font-medium cursor-pointer shrink-0"
               >
                 Add
+              </button>
+              <button
+                onMouseDown={(e) => e.preventDefault()}
+                onClick={cancelNewSpace}
+                title="Cancel"
+                className="text-neutral-500 hover:text-neutral-200 cursor-pointer p-1.5 shrink-0"
+              >
+                <X className="w-4 h-4" />
               </button>
             </div>
           )}
@@ -300,6 +329,7 @@ export default function MobileSpacesSheet({
                         }}
                         onCreateFolder={(name, parentId) => createFolder(space.id, name, parentId)}
                         onCreateList={(name, folderId) => createList(space.id, name, folderId)}
+                        onCreateDoc={(name, folderId) => createSpaceDoc(space.id, null, { title: name, boardFolderId: folderId })}
                       />
                     </>
                   )}
@@ -326,6 +356,7 @@ function SpaceContents({
   onSelectDoc,
   onCreateFolder,
   onCreateList,
+  onCreateDoc,
 }: {
   space: HierarchySpace;
   folderId: string | null;
@@ -336,6 +367,7 @@ function SpaceContents({
   onSelectDoc: (docId: string) => void;
   onCreateFolder: (name: string, parentId: string | null) => void;
   onCreateList: (name: string, folderId: string | null) => void;
+  onCreateDoc: (name: string, folderId: string | null) => void;
 }) {
   const childFolders = getChildFolders(space, folderId);
   const leaves = [
@@ -382,6 +414,7 @@ function SpaceContents({
                 onSelectDoc={onSelectDoc}
                 onCreateFolder={onCreateFolder}
                 onCreateList={onCreateList}
+                onCreateDoc={onCreateDoc}
               />
             )}
           </div>
@@ -406,71 +439,136 @@ function SpaceContents({
         depth={depth}
         onCreateFolder={(name) => onCreateFolder(name, folderId)}
         onCreateList={(name) => onCreateList(name, folderId)}
+        onCreateDoc={(name) => onCreateDoc(name, folderId)}
       />
     </>
   );
 }
 
-// Compact "+ Folder" / "+ List" quick-add pair at the end of each SpaceContents level — the
-// desktop sidebar's own equivalent inline-add buttons live in a hidden-below-md <aside>, with
-// nothing standing in for them on mobile before this.
+// Single "+ New" dropdown (Folder / List / Docs) at the end of each SpaceContents level, instead
+// of two separate "+ Folder"/"+ List" buttons — mirrors the desktop sidebar's own FolderTree.tsx
+// "+ New" FloatingPopover exactly (List/Folder/Doc, same order, same icons), including the Docs
+// option that was missing here before. Once a mode is picked, the draft row's Cancel button and
+// outside-click-cancels behavior match the "+ New Space" row above — same reasoning, same
+// mousedown-preventDefault trick to keep Add/Cancel from racing the input's own blur.
 function NewFolderOrListRow({
   depth,
   onCreateFolder,
   onCreateList,
+  onCreateDoc,
 }: {
   depth: number;
   onCreateFolder: (name: string) => void;
   onCreateList: (name: string) => void;
+  onCreateDoc: (name: string) => void;
 }) {
-  const [mode, setMode] = useState<'folder' | 'list' | null>(null);
+  const [mode, setMode] = useState<'folder' | 'list' | 'doc' | null>(null);
   const [draft, setDraft] = useState('');
+  const [menuOpen, setMenuOpen] = useState(false);
 
   const commit = () => {
     const trimmed = draft.trim();
-    if (trimmed) (mode === 'folder' ? onCreateFolder : onCreateList)(trimmed);
+    if (trimmed) {
+      if (mode === 'folder') onCreateFolder(trimmed);
+      else if (mode === 'list') onCreateList(trimmed);
+      else if (mode === 'doc') onCreateDoc(trimmed);
+    }
+    setDraft('');
+    setMode(null);
+  };
+
+  const cancel = () => {
     setDraft('');
     setMode(null);
   };
 
   if (mode) {
     return (
-      <div className="flex items-center gap-1.5 py-1" style={{ paddingLeft: 8 + depth * 20, paddingRight: 8 }}>
+      // onBlur cancels on any focus-out, same reasoning (and same mousedown-preventDefault
+      // Add/Cancel pairing) as the "+ New Space" row above.
+      <div
+        className="flex items-center gap-1.5 py-1"
+        style={{ paddingLeft: 8 + depth * 20, paddingRight: 8 }}
+        onBlur={(e) => {
+          if (!e.currentTarget.contains(e.relatedTarget as Node | null)) cancel();
+        }}
+      >
         <input
           autoFocus
           value={draft}
           onChange={(e) => setDraft(e.target.value)}
           onKeyDown={(e) => {
             if (e.key === 'Enter') commit();
-            if (e.key === 'Escape') {
-              setDraft('');
-              setMode(null);
-            }
+            if (e.key === 'Escape') cancel();
           }}
-          placeholder={mode === 'folder' ? 'Folder name...' : 'List name...'}
+          placeholder={mode === 'folder' ? 'Folder name...' : mode === 'list' ? 'List name...' : 'Doc title...'}
           className="flex-1 min-w-0 bg-neutral-950 border border-blue-500 rounded px-2 py-1 text-[13px] text-white focus:outline-none"
         />
-        <button onClick={commit} className="text-[11px] bg-blue-600 hover:bg-blue-500 text-white px-2 py-1 rounded font-medium cursor-pointer shrink-0">
+        <button
+          onMouseDown={(e) => e.preventDefault()}
+          onClick={commit}
+          className="text-[11px] bg-blue-600 hover:bg-blue-500 text-white px-2 py-1 rounded font-medium cursor-pointer shrink-0"
+        >
           Add
+        </button>
+        <button
+          onMouseDown={(e) => e.preventDefault()}
+          onClick={cancel}
+          title="Cancel"
+          className="text-neutral-500 hover:text-neutral-200 cursor-pointer p-1 shrink-0"
+        >
+          <X className="w-3.5 h-3.5" />
         </button>
       </div>
     );
   }
 
   return (
-    <div className="flex items-center gap-3 py-1.5" style={{ paddingLeft: 8 + depth * 20, paddingRight: 8 }}>
-      <button
-        onClick={() => setMode('folder')}
-        className="flex items-center gap-1 text-[12px] text-neutral-500 hover:text-blue-400 cursor-pointer"
+    <div className="py-1" style={{ paddingLeft: 8 + depth * 20, paddingRight: 8 }}>
+      <FloatingPopover
+        open={menuOpen}
+        onClose={() => setMenuOpen(false)}
+        panelClassName="w-36 bg-neutral-900 border border-neutral-800 rounded shadow-xl py-1"
+        anchor={
+          <button
+            onClick={() => setMenuOpen((o) => !o)}
+            className="flex items-center gap-1 text-[12px] text-neutral-500 hover:text-blue-400 cursor-pointer"
+          >
+            <Plus className="w-3 h-3" /> New
+          </button>
+        }
       >
-        <Plus className="w-3 h-3" /> Folder
-      </button>
-      <button
-        onClick={() => setMode('list')}
-        className="flex items-center gap-1 text-[12px] text-neutral-500 hover:text-blue-400 cursor-pointer"
-      >
-        <Plus className="w-3 h-3" /> List
-      </button>
+        <button
+          onClick={() => {
+            setDraft('');
+            setMode('list');
+            setMenuOpen(false);
+          }}
+          className="w-full text-left px-3 py-1.5 text-[11px] text-neutral-300 hover:bg-neutral-800/60 cursor-pointer flex items-center gap-2"
+        >
+          <ListIconLucide className="w-3 h-3" /> List
+        </button>
+        <button
+          onClick={() => {
+            setDraft('');
+            setMode('folder');
+            setMenuOpen(false);
+          }}
+          className="w-full text-left px-3 py-1.5 text-[11px] text-neutral-300 hover:bg-neutral-800/60 cursor-pointer flex items-center gap-2"
+        >
+          <FolderIconLucide className="w-3 h-3" /> Folder
+        </button>
+        <button
+          onClick={() => {
+            setDraft('');
+            setMode('doc');
+            setMenuOpen(false);
+          }}
+          className="w-full text-left px-3 py-1.5 text-[11px] text-neutral-300 hover:bg-neutral-800/60 cursor-pointer flex items-center gap-2"
+        >
+          <FileText className="w-3 h-3" /> Docs
+        </button>
+      </FloatingPopover>
     </div>
   );
 }
