@@ -333,6 +333,15 @@ model User {
   title         String?
   status        String?
   isDnd         Boolean   @default(false) @map("is_dnd")
+  // The one way to find/be found for a connection request now (app/api/connections/lookup) —
+  // replaced open free-text name search across every user, which the user later decided was a
+  // real privacy problem ("random people cannot search you"). Nullable+unique, same reasoning as
+  // email below (SQLite treats NULL as distinct under a unique index) — you're simply unreachable
+  // by lookup until you set one; the personal /connect/[code] link remains a fully working
+  // alternative regardless. Always stored/compared lowercase (see the PATCH route), same
+  // normalization auth.ts's own email lookup already uses, so "Robin"/"robin" can't collide or
+  // silently fail to match.
+  username      String?   @unique
 
   // Real accounts (Google OAuth + email/password login). Nullable+unique mirrors the existing
   // Workspace.personalOwnerId precedent — SQLite treats NULL as distinct under a unique index, so

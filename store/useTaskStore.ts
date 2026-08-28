@@ -26,6 +26,7 @@ export type CustomFieldDef = {
 export type AppUser = {
   id: string;
   name: string;
+  username: string | null;
   initials: string;
   color: string;
   phone: string | null;
@@ -390,6 +391,13 @@ interface TaskStore {
       websiteUrl?: string | null;
     }
   ) => Promise<void>;
+  // Deliberately separate from updateUser above, not folded into its patch shape — every other
+  // field there is silently-optimistic (apply locally, fire the PATCH, never check the response),
+  // which is fine for a phone number or a bio but wrong here: a taken/invalid username is a real,
+  // expected outcome the caller needs to actually see, not something to paper over. Self-only,
+  // enforced again server-side (PATCH /api/users/[id]) — never call this with anyone but the
+  // signed-in caller's own id.
+  setUsername: (userId: string, username: string | null) => Promise<{ ok: true } | { ok: false; error: string }>;
   deleteUser: (userId: string) => Promise<void>;
 
   // Office "rooms" — purely organizational/visual grouping of team members, unrelated to the
@@ -1467,6 +1475,21 @@ export const useTaskStore = create<TaskStore>((set, get) => {
           redo: () => get().updateUser(userId, patch),
         });
       }
+    },
+
+    setUsername: async (userId, username) => {
+      const res = await fetch(`/api/users/${userId}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ username }),
+      });
+      if (!res.ok) {
+        const data = await res.json().catch(() => null);
+        return { ok: false, error: data?.error || 'Could not update username' };
+      }
+      const user = await res.json();
+      set((state) => ({ users: state.users.map((u) => (u.id === userId ? { ...u, username: user.username } : u)) }));
+      return { ok: true };
     },
 
     deleteUser: async (userId) => {

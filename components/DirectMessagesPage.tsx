@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { Link2, Check, X, Clock, Search, UserPlus } from 'lucide-react';
+import { Link2, Check, X, Clock, AtSign, UserPlus, UserMinus } from 'lucide-react';
 import { useChatStore, type ConnectionRequest, type ConnectionSearchResult } from '../store/useChatStore';
 import { useTaskStore } from '../store/useTaskStore';
 import { useSessionStore } from '../store/useSessionStore';
@@ -27,8 +27,9 @@ export default function DirectMessagesPage() {
     regenerateConnectionInvite,
     acceptConnectionRequest,
     declineConnectionRequest,
-    searchUsersToConnect,
+    lookupUserByUsername,
     sendConnectionRequestTo,
+    removeConnection,
     createOrOpenDM,
     setActiveChannelId,
     setActiveChatSidebarTab,
@@ -65,8 +66,8 @@ export default function DirectMessagesPage() {
     <div className="h-[75vh] overflow-y-auto">
       <div className="max-w-xl mx-auto space-y-6 py-2">
         <div>
-          <p className="text-[10px] font-bold text-neutral-500 uppercase tracking-wider mb-1.5">Find people</p>
-          <PeopleSearch onSearch={searchUsersToConnect} onSendRequest={sendConnectionRequestTo} />
+          <p className="text-[10px] font-bold text-neutral-500 uppercase tracking-wider mb-1.5">Add by username</p>
+          <UsernameLookup onLookup={lookupUserByUsername} onSendRequest={sendConnectionRequestTo} />
         </div>
 
         <div>
@@ -144,12 +145,25 @@ export default function DirectMessagesPage() {
           )}
           <div className="space-y-0.5">
             {connections.map((c) => (
-              <div key={c.id} className="flex items-center gap-2.5 px-2 py-1.5 rounded hover:bg-neutral-900/40">
+              <div key={c.id} className="group flex items-center gap-2.5 px-2 py-1.5 rounded hover:bg-neutral-900/40">
                 <ConnectionAvatarMenu user={c} onViewProfile={() => setViewingProfileId(c.id)} onStartDM={() => handleStartDM(c.id)} />
                 <div className="min-w-0 flex-1 cursor-pointer" onClick={() => setViewingProfileId(c.id)}>
                   <div className="text-xs text-neutral-200 truncate">{c.name}</div>
                   <div className="text-[10px] text-neutral-500">{c.source === 'connection' ? 'Connected directly' : 'Coworker'}</div>
                 </div>
+                {/* Only a real 'connection' entry has an underlying Connection row to remove — a
+                    'workspace' one is just shared-membership, computed on the fly, nothing to
+                    delete (see lib/auth/connections.ts's getConnectedUserIds). Leaving a workspace
+                    is the only way to stop being connected to a coworker. */}
+                {c.source === 'connection' && (
+                  <button
+                    onClick={() => removeConnection(c.id)}
+                    title="Remove connection"
+                    className="shrink-0 opacity-0 group-hover:opacity-100 text-neutral-500 hover:text-red-400 cursor-pointer"
+                  >
+                    <UserMinus className="w-3.5 h-3.5" />
+                  </button>
+                )}
               </div>
             ))}
           </div>
@@ -160,35 +174,33 @@ export default function DirectMessagesPage() {
   );
 }
 
-// Free-text name search — the other way in besides sharing/opening a personal connect link.
-// Debounced (300ms) so every keystroke doesn't fire a request; a query under 2 chars is treated
-// as "not searching yet" both here and server-side (app/api/connections/search/route.ts).
-function PeopleSearch({
-  onSearch,
+// Exact-username lookup — replaced the old free-text name search across every user, which was a
+// real privacy problem (any signed-in person could browse for/find anyone else by name). Explicit
+// submit (Enter or the button), not debounced-as-you-type — an exact lookup has nothing useful to
+// show until the whole username is typed, so firing a request per keystroke was just noise. The
+// personal connect-link above remains the other, unchanged way in.
+function UsernameLookup({
+  onLookup,
   onSendRequest,
 }: {
-  onSearch: (query: string) => Promise<ConnectionSearchResult[]>;
+  onLookup: (username: string) => Promise<ConnectionSearchResult[]>;
   onSendRequest: (userId: string) => Promise<{ status: string } | null>;
 }) {
   const [query, setQuery] = useState('');
   const [results, setResults] = useState<ConnectionSearchResult[]>([]);
   const [loading, setLoading] = useState(false);
+  const [searched, setSearched] = useState(false);
   const [sentIds, setSentIds] = useState<Set<string>>(new Set());
 
-  useEffect(() => {
+  const submit = async () => {
     const q = query.trim();
-    if (q.length < 2) {
-      setResults([]);
-      return;
-    }
+    if (!q) return;
     setLoading(true);
-    const t = setTimeout(() => {
-      onSearch(q)
-        .then(setResults)
-        .finally(() => setLoading(false));
-    }, 300);
-    return () => clearTimeout(t);
-  }, [query, onSearch]);
+    const found = await onLookup(q);
+    setResults(found);
+    setSearched(true);
+    setLoading(false);
+  };
 
   const handleSend = async (userId: string) => {
     setSentIds((prev) => new Set(prev).add(userId));
@@ -198,17 +210,29 @@ function PeopleSearch({
   return (
     <div className="space-y-1.5">
       <div className="relative">
-        <Search className="w-3.5 h-3.5 absolute left-2.5 top-1/2 -translate-y-1/2 text-neutral-600" />
+        <AtSign className="w-3.5 h-3.5 absolute left-2.5 top-1/2 -translate-y-1/2 text-neutral-600" />
         <input
           value={query}
-          onChange={(e) => setQuery(e.target.value)}
-          placeholder="Search by name..."
-          className="w-full bg-neutral-950 border border-neutral-800 rounded pl-8 pr-2 py-1.5 text-xs text-white placeholder:text-neutral-600 focus:outline-none focus:border-blue-500"
+          onChange={(e) => {
+            setQuery(e.target.value);
+            setSearched(false);
+          }}
+          onKeyDown={(e) => {
+            if (e.key === 'Enter') submit();
+          }}
+          placeholder="Enter their exact username..."
+          className="w-full bg-neutral-950 border border-neutral-800 rounded pl-8 pr-16 py-1.5 text-xs text-white placeholder:text-neutral-600 focus:outline-none focus:border-blue-500"
         />
+        <button
+          onClick={submit}
+          disabled={!query.trim() || loading}
+          className="absolute right-1 top-1/2 -translate-y-1/2 text-[10px] text-blue-400 hover:text-blue-300 disabled:opacity-40 px-2 py-1 cursor-pointer"
+        >
+          {loading ? '…' : 'Look up'}
+        </button>
       </div>
-      {loading && <p className="text-[11px] text-neutral-500 px-0.5">Searching…</p>}
-      {!loading && query.trim().length >= 2 && results.length === 0 && (
-        <p className="text-[11px] text-neutral-500 px-0.5">No one found.</p>
+      {!loading && searched && results.length === 0 && (
+        <p className="text-[11px] text-neutral-500 px-0.5">No one with that username.</p>
       )}
       <div className="space-y-0.5">
         {results.map((u) => {

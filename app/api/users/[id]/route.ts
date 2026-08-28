@@ -21,6 +21,8 @@ export async function GET(_req: Request, { params }: { params: Promise<{ id: str
   return NextResponse.json(user);
 }
 
+const USERNAME_RE = /^[a-z0-9_]{3,20}$/;
+
 export async function PATCH(req: Request, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
   // Not a self-only check: this route is also how the Office directory edits *other* team
@@ -32,6 +34,33 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
   if (!callerId) return NextResponse.json({ error: 'Not authenticated' }, { status: 401 });
 
   const body = await req.json();
+
+  // username is the one field here that IS self-only — unlike phone/title/status/etc. above,
+  // it's the identity someone else looks you up by (app/api/connections/lookup), not a directory
+  // detail a teammate might legitimately correct on your behalf. Validated and normalized to
+  // lowercase server-side too (never trust the client alone), same reasoning schema.prisma's own
+  // comment on the column gives.
+  if (body.username !== undefined) {
+    if (callerId !== id) return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
+    if (body.username === null) {
+      await prisma.user.update({ where: { id }, data: { username: null } });
+    } else {
+      const username = String(body.username).trim().toLowerCase();
+      if (!USERNAME_RE.test(username)) {
+        return NextResponse.json(
+          { error: 'Username must be 3-20 characters: lowercase letters, numbers, underscores only.' },
+          { status: 400 }
+        );
+      }
+      try {
+        await prisma.user.update({ where: { id }, data: { username } });
+      } catch (err: any) {
+        if (err?.code === 'P2002') return NextResponse.json({ error: 'That username is already taken.' }, { status: 409 });
+        throw err;
+      }
+    }
+  }
+
   const data: any = {};
   if (body.name !== undefined) data.name = body.name;
   if (body.initials !== undefined) data.initials = body.initials;

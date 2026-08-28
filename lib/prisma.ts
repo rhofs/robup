@@ -15,6 +15,7 @@ if (process.env.NODE_ENV !== 'production') globalForPrisma.prisma = prisma;
 export const publicUserSelect = {
   id: true,
   name: true,
+  username: true,
   initials: true,
   color: true,
   phone: true,

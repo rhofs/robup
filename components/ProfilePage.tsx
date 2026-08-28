@@ -2,13 +2,17 @@
 
 import { useState } from 'react';
 import { signOut } from 'next-auth/react';
-import { Image as ImageIcon, Pencil, Link2, Globe, X, AlertTriangle, ChevronRight } from 'lucide-react';
+import { Image as ImageIcon, Pencil, Link2, Globe, AtSign, X, AlertTriangle, ChevronRight } from 'lucide-react';
 import { AppUser } from '../store/useTaskStore';
 import { EditableField } from './OfficePage';
 
 type ProfilePageProps = {
   currentUser: AppUser | null;
   onUpdate: (patch: { avatarUrl?: string | null; bio?: string | null; linkedinUrl?: string | null; websiteUrl?: string | null }) => void;
+  // Separate from onUpdate above (which is fire-and-forget/always-optimistic, see
+  // useTaskStore.ts's own updateUser) — a taken/invalid username is a real, expected outcome that
+  // needs to actually reach the UI, not be silently swallowed.
+  onSetUsername: (username: string | null) => Promise<{ ok: true } | { ok: false; error: string }>;
 };
 
 // "Me" profile page — reached by clicking the avatar in the new sidebar zone. Picture and bio
@@ -17,7 +21,7 @@ type ProfilePageProps = {
 // file/blob storage, so a real upload was never in scope. LinkedIn/website reuse the shared
 // EditableField (exported from OfficePage.tsx, where it was previously private) rather than a
 // third copy-paste of the same click-to-edit input.
-export default function ProfilePage({ currentUser, onUpdate }: ProfilePageProps) {
+export default function ProfilePage({ currentUser, onUpdate, onSetUsername }: ProfilePageProps) {
   if (!currentUser) {
     return (
       <div className="max-w-xl mx-auto text-[11px] text-neutral-500 px-1 py-8 text-center border border-dashed border-neutral-800 rounded">
@@ -38,6 +42,7 @@ export default function ProfilePage({ currentUser, onUpdate }: ProfilePageProps)
         <BioBlock value={currentUser.bio} onCommit={(value) => onUpdate({ bio: value })} />
 
         <div className="space-y-1.5 pt-1">
+          <UsernameField value={currentUser.username} onCommit={onSetUsername} />
           <EditableField
             icon={Link2}
             value={currentUser.linkedinUrl}
@@ -240,6 +245,93 @@ function AvatarEditor({ user, onCommit }: { user: AppUser; onCommit: (url: strin
       <span className="absolute inset-0 rounded-full bg-neutral-950/0 group-hover:bg-neutral-950/50 flex items-center justify-center transition">
         <ImageIcon className="w-4 h-4 text-white opacity-0 group-hover:opacity-100" />
       </span>
+    </button>
+  );
+}
+
+// Not the shared EditableField (used for LinkedIn/website below) — those are fire-and-forget, and
+// a taken/invalid username is a real outcome someone needs to actually see, not silently swallow.
+// The person's own username is what someone else now has to already know to send a connection
+// request (app/api/connections/lookup replaced open name search) — shown as "@handle" once set,
+// same convention as Twitter/Discord/etc.
+function UsernameField({
+  value,
+  onCommit,
+}: {
+  value: string | null;
+  onCommit: (username: string | null) => Promise<{ ok: true } | { ok: false; error: string }>;
+}) {
+  const [editing, setEditing] = useState(false);
+  const [draft, setDraft] = useState(value || '');
+  const [error, setError] = useState<string | null>(null);
+  const [saving, setSaving] = useState(false);
+
+  const commit = async () => {
+    const trimmed = draft.trim().toLowerCase();
+    if (trimmed === (value || '')) {
+      setEditing(false);
+      setError(null);
+      return;
+    }
+    setSaving(true);
+    const result = await onCommit(trimmed || null);
+    setSaving(false);
+    if (result.ok) {
+      setError(null);
+      setEditing(false);
+    } else {
+      setError(result.error);
+    }
+  };
+
+  if (editing) {
+    return (
+      <div className="space-y-1">
+        <div className="flex items-center gap-1.5">
+          <AtSign className="w-3.5 h-3.5 text-neutral-500 shrink-0" />
+          <input
+            autoFocus
+            value={draft}
+            disabled={saving}
+            onChange={(e) => {
+              setDraft(e.target.value);
+              setError(null);
+            }}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter') commit();
+              if (e.key === 'Escape') {
+                setDraft(value || '');
+                setError(null);
+                setEditing(false);
+              }
+            }}
+            placeholder="username"
+            className="flex-1 bg-neutral-950 border border-blue-500 rounded px-2 py-1 text-xs text-white focus:outline-none disabled:opacity-50"
+          />
+          <button
+            onClick={commit}
+            disabled={saving}
+            className="text-[11px] text-blue-400 hover:text-blue-300 disabled:opacity-50 cursor-pointer shrink-0"
+          >
+            Save
+          </button>
+        </div>
+        {error && <p className="text-[10px] text-red-400 pl-5">{error}</p>}
+      </div>
+    );
+  }
+
+  return (
+    <button
+      onClick={() => setEditing(true)}
+      className="w-full flex items-center gap-1.5 text-xs text-left cursor-pointer group"
+    >
+      <AtSign className="w-3.5 h-3.5 text-neutral-500 shrink-0" />
+      {value ? (
+        <span className="text-neutral-300 group-hover:text-blue-400">{value}</span>
+      ) : (
+        <span className="text-neutral-500 group-hover:text-blue-400 italic">Set a username so people can find you...</span>
+      )}
     </button>
   );
 }

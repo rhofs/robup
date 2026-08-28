@@ -35,7 +35,7 @@ export type ChatChannel = {
 };
 
 export type Connection = ChatDMMember & { source: 'connection' | 'workspace' };
-export type ConnectionSearchResult = ChatDMMember & { status: 'connected' | 'requested-by-me' | 'requested-by-them' | 'none' };
+export type ConnectionSearchResult = ChatDMMember & { username: string | null; status: 'connected' | 'requested-by-me' | 'requested-by-them' | 'none' };
 export type ConnectionInvite = { id: string; createdAt: string };
 export type ConnectionRequest = { id: string; createdAt: string; user: ChatDMMember };
 
@@ -137,10 +137,18 @@ interface ChatStore {
   // correct by construction.
   acceptConnectionRequest: (id: string) => Promise<void>;
   declineConnectionRequest: (id: string) => Promise<void>;
-  // Free-text name search (app/api/connections/search/route.ts) — the other way in besides
-  // opening someone's personal connect link. Not cached in store state (a transient search-box
-  // result, not app-wide data other components need), just returned straight to the caller.
-  searchUsersToConnect: (query: string) => Promise<ConnectionSearchResult[]>;
+  // Removes an established Connection (app/api/connections/[userId]/route.ts DELETE) — only ever
+  // meaningful for a `source: 'connection'` entry; a `source: 'workspace'` one has no underlying
+  // Connection row to delete at all (see getConnectedUserIds), so the UI should only ever offer
+  // this for the former. Sharing a workspace still counts as connected either way — this can't
+  // "un-coworker" two people, only remove an *explicit* connection between them.
+  removeConnection: (userId: string) => Promise<void>;
+  // Exact-username lookup (app/api/connections/lookup/route.ts) — replaced the old free-text name
+  // search across every user, which the user later flagged as a real privacy problem ("random
+  // people cannot search you"). Returns 0 or 1 results now, never a browsable list; the personal
+  // connect-link (fetchConnectionInvite/regenerateConnectionInvite above) remains the other way
+  // in. Not cached in store state (a transient lookup-box result), just returned to the caller.
+  lookupUserByUsername: (username: string) => Promise<ConnectionSearchResult[]>;
   sendConnectionRequestTo: (userId: string) => Promise<{ status: string } | null>;
   fetchMessages: (channelId: string) => Promise<void>;
   postMessage: (
@@ -334,8 +342,13 @@ export const useChatStore = create<ChatStore>((set, get) => ({
     }));
   },
 
-  searchUsersToConnect: async (query) => {
-    const res = await fetch(`/api/connections/search?q=${encodeURIComponent(query)}`);
+  removeConnection: async (userId) => {
+    set((state) => ({ connections: state.connections.filter((c) => c.id !== userId) }));
+    await fetch(`/api/connections/${userId}`, { method: 'DELETE' });
+  },
+
+  lookupUserByUsername: async (username) => {
+    const res = await fetch(`/api/connections/lookup?username=${encodeURIComponent(username)}`);
     if (!res.ok) return [];
     return res.json();
   },

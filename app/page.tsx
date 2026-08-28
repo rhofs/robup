@@ -596,6 +596,7 @@ function PageContent() {
     updateCustomField,
     deleteCustomField,
     updateUser,
+    setUsername,
     createRoom,
     updateRoom,
     deleteRoom,
@@ -4525,6 +4526,9 @@ function PageContent() {
               <ProfilePage
                 currentUser={users.find((u) => u.id === currentUserId) ?? null}
                 onUpdate={(patch) => currentUserId && updateUser(currentUserId, patch)}
+                onSetUsername={(username) =>
+                  currentUserId ? setUsername(currentUserId, username) : Promise.resolve({ ok: false, error: 'Not signed in' })
+                }
               />
             ) : activeView === 'office' ? (
               <OfficePage
