@@ -4067,15 +4067,20 @@ function PageContent() {
         <div
           className={
             // Planner's month grid sizes its own rows to exactly fill this box's measured height
-            // (CalendarView.tsx's `containerHeight`, via `clientHeight` — which *includes* an
-            // element's own padding), so reserving the floating nav's clearance as padding on that
-            // same measured element does nothing: the row-height math still divides up the full
-            // padded box, and the grid renders straight through the padding to the true bottom
-            // edge. Reserving it here instead — one level up, on this element's *parent* — actually
-            // shrinks the space CalendarView measures, so its rows correctly leave room instead of
-            // running under the nav. Chat doesn't need this: its own list is a normal scrolling
-            // flow (own bottom padding genuinely works there), and an open conversation hides the
-            // nav entirely rather than floating over it.
+            // (CalendarView.tsx's `containerHeight`, via `clientHeight`). A large `pb-28` used to
+            // live here specifically to keep the grid's own row math from running the calendar
+            // under the floating nav at all — but that reservation is just this wrapper's own flat
+            // `bg-neutral-900`, not scrolling content, so the area behind the nav read as a static
+            // solid block rather than genuine calendar content blurred through it: "it seems like
+            // there's a fixed solid color... in ClickUp the bar is the only thing above the
+            // background... you can see behind it, blurred," reported live once the floating-nav
+            // redesign was actually compared side-by-side with the reference. Chat/Board's own
+            // scrolling lists already get this right for free (their content naturally extends the
+            // full length, nav floats over the *real* tail end of it) — Planner's Fit-mode grid has
+            // no scroll to do that, so it needs the same "extend the full available height" instead
+            // achieved directly: no more reserved pb, just the same small `p-2` breathing room
+            // Chat/Board use. The grid's own bottom row now genuinely sits (partly) behind the
+            // translucent/blurred island instead of stopping short of it, matching the reference.
             //
             // bg-neutral-900 rounded-t-2xl (mobile only): this is the layer that actually sits
             // right below the search bar for Planner — the earlier attempt at this rounded-sheet
@@ -4083,7 +4088,7 @@ function PageContent() {
             // which isn't what should visually differentiate from the header. Matches the same
             // treatment Chat's own list wrapper got, right below the search bar there too.
             activeView === 'calendar'
-              ? 'flex-1 min-h-0 overflow-hidden p-2 pb-28 md:p-6 flex flex-col bg-neutral-900 md:bg-transparent rounded-t-2xl md:rounded-none'
+              ? 'flex-1 min-h-0 overflow-hidden p-2 md:p-6 flex flex-col bg-neutral-900 md:bg-transparent rounded-t-2xl md:rounded-none'
               : activeView === 'chat'
               ? // The Chat *list* (nothing picked yet) draws its own rounded-top sheet flush
                 // against the screen edges (see the ChatSidebar wrapper below) — this outer
