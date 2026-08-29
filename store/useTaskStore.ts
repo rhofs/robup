@@ -414,7 +414,7 @@ interface TaskStore {
     name: string,
     userId: string,
     opts?: { orgType?: 'company' | 'personal_project'; workEmail?: string | null }
-  ) => Promise<void>;
+  ) => Promise<{ ok: true } | { ok: false; error: string }>;
   updateWorkspaceDetails: (
     workspaceId: string,
     patch: { name?: string; orgType?: 'company' | 'personal_project'; workEmail?: string | null }
@@ -1638,9 +1638,14 @@ export const useTaskStore = create<TaskStore>((set, get) => {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ name, userId, orgType: opts?.orgType, workEmail: opts?.workEmail }),
       });
+      if (!res.ok) {
+        const data = await res.json().catch(() => null);
+        return { ok: false, error: data?.error || `Could not create workspace (${res.status})` };
+      }
       const created = await res.json();
       await get().refetchWorkspaces();
       get().setActiveWorkspaceId(created.id);
+      return { ok: true };
     },
 
     // Editing the workspace-identity fields set at creation (backlog #2) — Owner/Admin-gated

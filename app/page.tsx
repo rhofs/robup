@@ -3256,13 +3256,20 @@ function PageContent() {
                 />
                 <button
                   type="button"
-                  onClick={() => {
+                  onClick={async () => {
                     const trimmed = newWorkspaceDraft.trim();
-                    if (trimmed && currentUserId) {
-                      createWorkspace(trimmed, currentUserId, {
-                        orgType: newWorkspaceType,
-                        workEmail: newWorkspaceEmail.trim() || null,
-                      });
+                    if (!trimmed) return;
+                    if (!currentUserId) {
+                      showToast('Signed-out session — try reloading the page.');
+                      return;
+                    }
+                    const result = await createWorkspace(trimmed, currentUserId, {
+                      orgType: newWorkspaceType,
+                      workEmail: newWorkspaceEmail.trim() || null,
+                    });
+                    if (!result.ok) {
+                      showToast(`Could not create workspace: ${result.error}`);
+                      return;
                     }
                     setNewWorkspaceDraft('');
                     setNewWorkspaceEmail('');
