@@ -17,15 +17,28 @@ export function createGoogleOAuthClient() {
 // One shared "Connect Google" flow/refresh token backs both the Docs export feature and
 // Calendar two-way sync (backlog #13) — a single consent grants both, rather than two separate
 // connect buttons and two stored tokens for what's really one Google account link. Anyone who
-// connected before the calendar scope existed needs to reconnect once (Google re-prompts for
-// consent automatically when the requested scope set changes — the existing oauth/start route's
-// prompt: 'consent' already forces this).
-// The full (not `calendar.events`-only) Calendar scope is required here — creating the dedicated
-// "Siqt" calendar itself (calendar.calendars.insert, in lib/google/calendarSync.ts) operates on
-// the Calendars resource, which only the full `calendar` scope covers; `calendar.events` alone
-// would cover reading/writing events but not creating the calendar they live in.
+// connected before needs to reconnect once whenever this scope list narrows or widens (Google
+// re-prompts for consent automatically when the requested scope set changes — the existing
+// oauth/start route's prompt: 'consent' already forces this).
+//
+// Deliberately the *narrowest* scope that covers what this app's Google calls actually do — not
+// the broadest one that would technically also work, per the user's own flagged concern that the
+// original `documents` scope's consent text ("See, edit, create, and delete all your Google Docs
+// documents") is real, unnecessary exposure of every *pre-existing* private doc, not just the
+// ones Siqt creates:
+// - `drive.file` (not `documents`) — the only Docs-API calls this app makes are
+//   `documents.create` + `documents.batchUpdate` on the doc it JUST created
+//   (app/api/docs/[id]/export/google/route.ts), never reading/editing/deleting anything that
+//   already existed. `drive.file` is Google's own documented "per-file access, only to files
+//   this app created or the user explicitly opened with it" scope — both of those Docs API calls
+//   are explicitly supported under it, so nothing breaks, but the consent text becomes "...only
+//   the specific Google Drive files you use with this app" instead.
+// - `calendar.events` (not the full `calendar`) — lib/google/calendarSync.ts only ever calls
+//   `events.list/insert/update/delete` against `calendarId: 'primary'` (an existing calendar the
+//   user already has); it never creates/deletes/manages a Calendar resource itself, which is the
+//   only thing the full `calendar` scope adds on top of `calendar.events`.
 export const GOOGLE_EXPORT_SCOPES = [
-  'https://www.googleapis.com/auth/documents',
+  'https://www.googleapis.com/auth/drive.file',
   'https://www.googleapis.com/auth/userinfo.email',
-  'https://www.googleapis.com/auth/calendar',
+  'https://www.googleapis.com/auth/calendar.events',
 ];
