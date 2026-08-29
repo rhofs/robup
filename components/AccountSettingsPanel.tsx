@@ -72,7 +72,7 @@ export default function AccountSettingsPanel({
           >
             <Share2 className={`w-3.5 h-3.5 shrink-0 ${connected ? 'text-green-500' : 'text-neutral-400'}`} />
             <span className="text-xs text-neutral-300">
-              {connected ? `Google Docs connected as ${user.googleEmail}` : 'Connect Google account for Doc export'}
+              {connected ? `Google connected as ${user.googleEmail} — Docs export & Calendar sync` : 'Connect Google account for Docs export & Calendar sync'}
             </span>
           </a>
           <InstallRow />

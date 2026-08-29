@@ -6276,6 +6276,7 @@ function PageContent() {
         event={events.find((e) => e.id === eventDetailId) ?? null}
         workspaces={workspaces}
         users={users}
+        currentUserId={currentUserId}
         onClose={() => setEventDetailId(null)}
         onUpdate={(patch) => eventDetailId && updateEvent(eventDetailId, patch)}
         onSetAssignees={(assigneeIds) => eventDetailId && optimisticSetEventAssignees(eventDetailId, assigneeIds)}

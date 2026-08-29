@@ -17,6 +17,7 @@ type EventDetailModalProps = {
   event: Event | null;
   workspaces: HierarchyWorkspace[];
   users: AppUser[];
+  currentUserId: string | null;
   onClose: () => void;
   onUpdate: (patch: {
     title?: string;
@@ -36,7 +37,7 @@ type EventDetailModalProps = {
 // no subtasks/docs/status/custom-fields, none of that concept applies to an Event. Does now have
 // Activity & Comments (backlog #12 — see EventActivityPanel), the one thing from the Task modal
 // that genuinely does apply here (a date-range edit needs somewhere to log to).
-export default function EventDetailModal({ event, workspaces, users, onClose, onUpdate, onSetAssignees, onDelete }: EventDetailModalProps) {
+export default function EventDetailModal({ event, workspaces, users, currentUserId, onClose, onUpdate, onSetAssignees, onDelete }: EventDetailModalProps) {
   const [titleDraft, setTitleDraft] = useState(event?.title ?? '');
   const [editingTitle, setEditingTitle] = useState(false);
   const [assigneePickerOpen, setAssigneePickerOpen] = useState(false);
@@ -44,7 +45,11 @@ export default function EventDetailModal({ event, workspaces, users, onClose, on
   if (!event) return null;
 
   const spaces = workspaces.flatMap((w) => w.spaces);
-  const syncOwnerEmail = event.googleSyncOwnerId ? users.find((u) => u.id === event.googleSyncOwnerId)?.googleEmail : null;
+  // Per-assignee sync now (see EventGoogleSync in schema.prisma) — the badge only speaks for the
+  // person actually looking at it: is *this* viewer's own Google Calendar one of the ones this
+  // event is mirrored to. A teammate's own sync status isn't this viewer's business to see here.
+  const syncedForViewer = !!currentUserId && event.googleSyncedUserIds.includes(currentUserId);
+  const viewerGoogleEmail = users.find((u) => u.id === currentUserId)?.googleEmail;
   const commitTitle = () => {
     setEditingTitle(false);
     const trimmed = titleDraft.trim();
@@ -58,10 +63,13 @@ export default function EventDetailModal({ event, workspaces, users, onClose, on
         {/* Same "where did this come from" tell as the ClickUp reference screenshot (Google icon
             + "in <account email>") — shown for any event synced to Google, whether it originated
             there or was pushed out from Siqt, not just imports. */}
-        {syncOwnerEmail && (
+        {syncedForViewer && (
           <div className="px-5 pt-3 flex items-center gap-1.5 text-[10px] text-neutral-500">
             <GoogleIcon className="w-3 h-3 shrink-0" />
-            <span>{event.importedFromGoogle ? 'Google Calendar event' : 'Synced to Google Calendar'} · in {syncOwnerEmail}</span>
+            <span>
+              {event.importedFromGoogle ? 'Google Calendar event' : 'Synced to your Google Calendar'}
+              {viewerGoogleEmail ? ` · ${viewerGoogleEmail}` : ''}
+            </span>
           </div>
         )}
         <div className="px-5 py-4 border-b border-neutral-800 flex items-center justify-between">

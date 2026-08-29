@@ -4,6 +4,7 @@ import { cascadeTask } from '@/lib/trashCascade';
 import { getCurrentUserId } from '@/lib/auth/session';
 import { getWorkspaceRole, canManageWorkspace } from '@/lib/auth/access';
 import { ensureTaskAccess } from '@/lib/auth/resourceAccess';
+import { syncTaskForAllRelevantUsers, deleteTaskGoogleSyncs } from '@/lib/google/calendarSync';
 
 export async function PATCH(req: Request, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
@@ -16,6 +17,7 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
   if (body.restore === true) {
     await cascadeTask(id, null);
     const task = await prisma.task.findUniqueOrThrow({ where: { id }, include: { assignees: { select: publicUserSelect } } });
+    syncTaskForAllRelevantUsers(task.id).catch(() => {});
     return NextResponse.json(task);
   }
 
@@ -163,6 +165,19 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
     }
   }
 
+  // Fire-and-forget Google Calendar mirror sync — only worth the API calls when something
+  // sync-relevant actually changed (assignees, dates, title/description, or archived status).
+  if (
+    body.assigneeIds !== undefined ||
+    body.startDate !== undefined ||
+    body.dueDate !== undefined ||
+    body.title !== undefined ||
+    body.description !== undefined ||
+    body.archived !== undefined
+  ) {
+    syncTaskForAllRelevantUsers(task.id).catch(() => {});
+  }
+
   return NextResponse.json(task);
 }
 
@@ -174,9 +189,15 @@ export async function DELETE(req: Request, { params }: { params: Promise<{ id: s
 
   const permanent = new URL(req.url).searchParams.get('permanent') === 'true';
   if (permanent) {
+    // Read the Google-side copies (and remove them) before the cascade delete wipes the rows
+    // that would otherwise be the only record of their googleEventId.
+    await deleteTaskGoogleSyncs(id);
     await prisma.task.delete({ where: { id } });
   } else {
     await cascadeTask(id, new Date());
+    // Soft delete — task row (and its sync rows) still exist; syncTaskForAllRelevantUsers sees
+    // deletedAt now set and removes every assignee's calendar copy the normal way.
+    syncTaskForAllRelevantUsers(id).catch(() => {});
   }
   return NextResponse.json({ ok: true });
 }

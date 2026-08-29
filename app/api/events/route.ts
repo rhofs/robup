@@ -2,7 +2,7 @@ import { NextResponse } from 'next/server';
 import { prisma, publicUserSelect } from '@/lib/prisma';
 import { getCurrentUserId } from '@/lib/auth/session';
 import { getAccessContext } from '@/lib/auth/access';
-import { pushEventToGoogle } from '@/lib/google/calendarSync';
+import { syncEventForAllRelevantUsers } from '@/lib/google/calendarSync';
 
 // No isPrivate/accessJson concept on Event (unlike Task/Space/Folder/List) — not asked for, and
 // an Event has no natural "owning" hierarchy level to inherit privacy from the way a Task does
@@ -16,11 +16,13 @@ export async function GET() {
 
   const events = await prisma.event.findMany({
     where: { deletedAt: null, workspace: { memberships: { some: { userId } } } },
-    include: { assignees: { select: publicUserSelect } },
+    include: { assignees: { select: publicUserSelect }, googleSyncs: { select: { userId: true } } },
     orderBy: { startDate: 'asc' },
   });
 
-  return NextResponse.json(events);
+  const mapped = events.map(({ googleSyncs, ...e }) => ({ ...e, googleSyncedUserIds: googleSyncs.map((s) => s.userId) }));
+
+  return NextResponse.json(mapped);
 }
 
 export async function POST(req: Request) {
@@ -42,17 +44,16 @@ export async function POST(req: Request) {
       color: body.color ?? null,
       spaceId: body.spaceId ?? null,
       workspaceId: body.workspaceId,
-      // Fixed at creation — only this person's Google connection will ever read/write this
-      // event's calendar sync (see calendarSync.ts's own comment on why).
-      googleSyncOwnerId: userId,
       ...(body.assigneeIds ? { assignees: { connect: body.assigneeIds.map((id: string) => ({ id })) } } : {}),
     },
     include: { assignees: { select: publicUserSelect } },
   });
 
-  // Fire-and-forget — never blocks the response, and is a silent no-op if the creator hasn't
-  // connected Google (see pushEventToGoogle's own comment).
-  pushEventToGoogle(event.id).catch(() => {});
+  // Fire-and-forget — never blocks the response, and is a silent no-op for any assignee who
+  // hasn't connected Google (see syncEventForUser's own comment). Not reflected in this
+  // response's own googleSyncedUserIds (empty at creation, populated moments later) — the
+  // client picks it up on the next refetch, same as every other async side effect here.
+  syncEventForAllRelevantUsers(event.id).catch(() => {});
 
-  return NextResponse.json(event);
+  return NextResponse.json({ ...event, googleSyncedUserIds: [] });
 }

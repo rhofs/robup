@@ -57,6 +57,10 @@ export type Task = PrismaTask & {
 // why this is a standalone model rather than a Task variant.
 export type Event = PrismaEvent & {
   assignees: AppUser[];
+  // Which of this Event's assignees currently have their own Google Calendar copy — per-user
+  // now (see EventGoogleSync in schema.prisma), not a single "owner." The UI only needs to know
+  // whether *the viewer* is among them (see EventDetailModal's own badge), so just the ids.
+  googleSyncedUserIds: string[];
 };
 
 export type TaskComment = {

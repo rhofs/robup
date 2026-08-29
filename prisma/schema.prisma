@@ -379,7 +379,12 @@ model User {
   // pullChangesFromGoogle fetch only what changed since last time instead of the whole calendar
   // on every poll.
   googleCalendarSyncToken String? @map("google_calendar_sync_token")
-  googleSyncedEvents      Event[] @relation("EventGoogleSyncOwner")
+  // Per-assignee calendar mirroring (both Task and Event) — replaces the earlier single-"owner"
+  // model. Each Google-connected assignee gets their own personal calendar copy, matching
+  // ClickUp's own behavior the user pointed to: "I have to be assigned to that task" for it to
+  // show up, not "I have to be the one who created it." See TaskGoogleSync/EventGoogleSync below.
+  taskGoogleSyncs  TaskGoogleSync[]
+  eventGoogleSyncs EventGoogleSync[]
   // Personal profile ("Me" zone) — avatarUrl is a plain URL string, same "no upload, just a
   // URL" precedent as Space.coverImageUrl (this app has no file/blob storage).
   avatarUrl     String?   @map("avatar_url")
@@ -487,6 +492,9 @@ model Task {
   isPrivate  Boolean @default(false) @map("is_private")
   accessJson String  @default("[]") @map("access_json")
 
+  // Google Calendar mirroring, per assignee — see TaskGoogleSync below and lib/google/calendarSync.ts.
+  googleSyncs TaskGoogleSync[]
+
   createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime @updatedAt @map("updated_at")
 }
@@ -516,24 +524,62 @@ model Event {
   workspace   Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
   assignees   User[]    @relation("EventAssignees")
   comments    Comment[]
-  // Google Calendar two-way sync (backlog #13). googleEventId is null until the first successful
-  // push — unique since it's the join key `pullChangesFromGoogle` looks events up by on the way
-  // back in. googleSyncOwnerId is fixed at creation to whoever created the Event in Siqt (the
-  // caller of POST /api/events) — only THEIR Google connection can read/write this event via the
-  // Calendar API; other assignees are added as Calendar *attendees* (their own email, an ordinary
-  // invite) rather than each needing their own OAuth connection. If the sync owner later
-  // disconnects Google, this event simply stops syncing — not an error state, no cleanup needed.
-  googleEventId     String? @unique @map("google_event_id")
-  googleSyncOwnerId String? @map("google_sync_owner_id")
-  googleSyncOwner   User?   @relation("EventGoogleSyncOwner", fields: [googleSyncOwnerId], references: [id], onDelete: SetNull)
+  // Google Calendar two-way sync (backlog #13), per assignee — replaces an earlier single-"owner"
+  // design (whoever created the Event) with one row per Google-connected assignee, each pointing
+  // at *their own* primary calendar's copy of this Event. Matches Task's identical shape/reasoning
+  // (see TaskGoogleSync) — "assigned," not "created," is what earns you a calendar copy now.
+  googleSyncs EventGoogleSync[]
   // true only for an Event that was CREATED by pulling it in from Google (it existed there
   // first) — never set for a Siqt-created Event, even after it's pushed and gets its own
-  // googleEventId too. Drives the small Google-icon badge in the UI, same "mark where this came
-  // from" treatment the ClickUp reference screenshot showed.
+  // EventGoogleSync row too. Drives the small Google-icon badge in the UI, same "mark where this
+  // came from" treatment the ClickUp reference screenshot showed.
   importedFromGoogle Boolean @default(false) @map("imported_from_google")
   deletedAt   DateTime? @map("deleted_at")
   createdAt   DateTime  @default(now()) @map("created_at")
   updatedAt   DateTime  @updatedAt @map("updated_at")
+}
+
+// One row per (Task, assignee) who's Google-connected — the Task itself is the single source of
+// truth (title/dates/etc.), this just tracks which of its assignees have their own mirrored copy
+// on Google and what that copy's own event id is, so lib/google/calendarSync.ts knows whether to
+// create/update/delete on each sync pass. Deliberately push-only (no pull-back into the Task) —
+// unlike Event's genuine two-way sync, a Task can have several independently-Google-connected
+// assignees each with their own calendar copy of the *same* Task, and letting edits on any one of
+// those copies write back to the shared Task would be real, unresolved multi-writer conflict
+// territory (whose edit wins?) that a v1 pass deliberately doesn't take on. Task edits happen in
+// Siqt; Google just mirrors them outward.
+model TaskGoogleSync {
+  id            String   @id @default(uuid())
+  taskId        String   @map("task_id")
+  task          Task     @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  userId        String   @map("user_id")
+  user          User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  googleEventId String   @map("google_event_id")
+  updatedAt     DateTime @updatedAt @map("updated_at")
+
+  @@unique([taskId, userId])
+  // A given user's own Google Calendar never has two Siqt rows claiming the same event id —
+  // lets pullChangesFromGoogle-style lookups (if ever extended to Tasks) match unambiguously
+  // scoped to one user, without assuming Google event ids are globally unique across everyone's
+  // separate calendars (they aren't guaranteed to be).
+  @@unique([userId, googleEventId])
+  @@map("task_google_syncs")
+}
+
+// Same shape as TaskGoogleSync, for Event — but Event's own two-way pull (pullChangesFromGoogle)
+// DOES use this table as its match key now (previously the removed Event.googleEventId column).
+model EventGoogleSync {
+  id            String   @id @default(uuid())
+  eventId       String   @map("event_id")
+  event         Event    @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  userId        String   @map("user_id")
+  user          User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  googleEventId String   @map("google_event_id")
+  updatedAt     DateTime @updatedAt @map("updated_at")
+
+  @@unique([eventId, userId])
+  @@unique([userId, googleEventId])
+  @@map("event_google_syncs")
 }
 
 // 9. Kommentarer OG aktivitetslogg på en task (skilt med "type")
