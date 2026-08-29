@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { Archive, ChevronDown, Download, Settings, Trash2 } from 'lucide-react';
+import { Archive, ChevronDown, Download, Plus, Settings, Trash2 } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
 import type { MenuTile } from './navTypes';
 import type { HierarchyWorkspace } from '../../store/useTaskStore';
@@ -42,6 +42,11 @@ type Props = {
   realWorkspaces: HierarchyWorkspace[];
   activeWorkspaceId: string | null;
   onSelectWorkspace: (workspaceId: string) => void;
+  // There was previously no way at all to *create* a real workspace from mobile — the desktop
+  // sidebar's own switcher dropdown (the only place that form lived) is entirely `hidden md:flex`.
+  // Opens app/page.tsx's own mobile "New workspace" modal (same handleCreateWorkspace/state as the
+  // desktop form) rather than duplicating the form here, so there's exactly one place that owns it.
+  onCreateWorkspace: () => void;
 };
 
 type TileProps = {
@@ -101,6 +106,7 @@ export default function AppLauncherGridContent({
   realWorkspaces,
   activeWorkspaceId,
   onSelectWorkspace,
+  onCreateWorkspace,
 }: Props) {
   // Only ever a real actionable tile on Chrome/Edge-family browsers that fired
   // `beforeinstallprompt` (see useInstallPrompt.ts) — iOS has no programmatic install prompt at
@@ -119,6 +125,21 @@ export default function AppLauncherGridContent({
 
   return (
     <div>
+      <button
+        onClick={() => {
+          hapticTapStrong();
+          onNavigate();
+          onClose();
+          onCreateWorkspace();
+        }}
+        className="w-full flex items-center gap-3 px-2 py-1.5 rounded-lg text-left transition cursor-pointer hover:bg-neutral-800/60 text-blue-400"
+      >
+        <span className="w-7 h-7 rounded-lg bg-neutral-800/60 flex items-center justify-center shrink-0">
+          <Plus className="w-4 h-4" />
+        </span>
+        <span className="text-sm font-medium">New workspace</span>
+      </button>
+      <div className="h-px bg-neutral-800/70 my-2" />
       {/* Only shown once there's actually more than one real workspace to switch between
           — a switcher with nothing to switch to is just clutter. One row (the *active*
           workspace, tap to expand the rest) instead of one row per workspace — per direct

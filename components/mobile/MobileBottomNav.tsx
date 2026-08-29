@@ -49,6 +49,7 @@ type Props = {
   realWorkspaces: HierarchyWorkspace[];
   activeWorkspaceId: string | null;
   onSelectWorkspace: (workspaceId: string) => void;
+  onCreateWorkspace: () => void;
 };
 
 // Rough starting guesses only — corrected to the real measured values by a layout effect before
@@ -125,6 +126,7 @@ export default function MobileBottomNav({
   realWorkspaces,
   activeWorkspaceId,
   onSelectWorkspace,
+  onCreateWorkspace,
 }: Props) {
   const primaryTabs = PRIMARY_NAV_TAB_IDS
     .map((id) => navTabs.find((t) => t.id === id))
@@ -279,6 +281,7 @@ export default function MobileBottomNav({
                 realWorkspaces={realWorkspaces}
                 activeWorkspaceId={activeWorkspaceId}
                 onSelectWorkspace={onSelectWorkspace}
+                onCreateWorkspace={onCreateWorkspace}
               />
             </div>
             <div className="h-px bg-neutral-800/70 mx-2.5" />

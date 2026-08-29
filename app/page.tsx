@@ -937,6 +937,31 @@ function PageContent() {
   // metadata captured up front rather than a bare name field, and shown back in Workspace Settings.
   const [newWorkspaceType, setNewWorkspaceType] = useState<'company' | 'personal_project'>('company');
   const [newWorkspaceEmail, setNewWorkspaceEmail] = useState('');
+  // Shared by the desktop workspace-switcher dropdown's own form AND the mobile app-launcher
+  // grid's "New workspace" modal (see the `md:hidden` block near the other mobile sheets below) —
+  // there was previously no mobile entry point into workspace creation at all (the whole switcher
+  // dropdown lives inside `hidden md:flex` chrome), so a brand-new mobile-only user had no way to
+  // get past the personal-workspace-only state. One handler, two triggers.
+  const handleCreateWorkspace = async () => {
+    const trimmed = newWorkspaceDraft.trim();
+    if (!trimmed) return;
+    if (!currentUserId) {
+      showToast('Signed-out session — try reloading the page.');
+      return;
+    }
+    const result = await createWorkspace(trimmed, currentUserId, {
+      orgType: newWorkspaceType,
+      workEmail: newWorkspaceEmail.trim() || null,
+    });
+    if (!result.ok) {
+      showToast(`Could not create workspace: ${result.error}`);
+      return;
+    }
+    setNewWorkspaceDraft('');
+    setNewWorkspaceEmail('');
+    setNewWorkspaceType('company');
+    setCreatingWorkspace(false);
+  };
   const [collapsedSpaceIds, setCollapsedSpaceIds] = useState<Set<string>>(() => readCollapsedSpaces());
   const toggleSpaceCollapsed = (spaceId: string) => {
     setCollapsedSpaceIds((prev) => {
@@ -3256,26 +3281,7 @@ function PageContent() {
                 />
                 <button
                   type="button"
-                  onClick={async () => {
-                    const trimmed = newWorkspaceDraft.trim();
-                    if (!trimmed) return;
-                    if (!currentUserId) {
-                      showToast('Signed-out session — try reloading the page.');
-                      return;
-                    }
-                    const result = await createWorkspace(trimmed, currentUserId, {
-                      orgType: newWorkspaceType,
-                      workEmail: newWorkspaceEmail.trim() || null,
-                    });
-                    if (!result.ok) {
-                      showToast(`Could not create workspace: ${result.error}`);
-                      return;
-                    }
-                    setNewWorkspaceDraft('');
-                    setNewWorkspaceEmail('');
-                    setNewWorkspaceType('company');
-                    setCreatingWorkspace(false);
-                  }}
+                  onClick={handleCreateWorkspace}
                   disabled={!newWorkspaceDraft.trim()}
                   className="w-full bg-blue-600 hover:bg-blue-500 disabled:opacity-40 disabled:cursor-not-allowed text-white text-[11px] py-1.5 rounded font-medium cursor-pointer"
                 >
@@ -4795,6 +4801,7 @@ function PageContent() {
         realWorkspaces={workspaces.filter((w) => !w.isPersonal)}
         activeWorkspaceId={activeWorkspaceId}
         onSelectWorkspace={setActiveWorkspaceId}
+        onCreateWorkspace={() => setCreatingWorkspace(true)}
       />
       )}
 
@@ -6543,6 +6550,75 @@ function PageContent() {
           setActiveView('board');
         }}
       />
+      {/* Mobile's own "New workspace" modal — the desktop form above (in the workspace-switcher
+          dropdown) lives entirely inside `hidden md:flex` chrome, so there was no way to reach it
+          from a phone at all. Same `creatingWorkspace`/`newWorkspace*` state and `handleCreateWorkspace`
+          handler as that desktop form; opened from the app-launcher grid's "New workspace" tile
+          (see MobileBottomNav's onCreateWorkspace prop) instead of a dropdown trigger. */}
+      {creatingWorkspace && (
+        <div
+          className="md:hidden fixed inset-0 z-[70] flex items-end justify-center bg-black/60 px-3 pb-[calc(env(safe-area-inset-bottom)+16px)]"
+          onClick={() => setCreatingWorkspace(false)}
+        >
+          <div
+            className="w-full max-w-sm bg-neutral-900 border border-neutral-800 rounded-2xl p-4 space-y-2.5"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <h2 className="text-sm font-semibold text-white">New workspace</h2>
+            <input
+              autoFocus
+              value={newWorkspaceDraft}
+              onChange={(e) => setNewWorkspaceDraft(e.target.value)}
+              placeholder="Workspace name..."
+              className="w-full bg-neutral-950 border border-blue-500 rounded px-3 py-2 text-sm text-white focus:outline-none"
+            />
+            <div className="flex items-center gap-1 bg-neutral-950 border border-neutral-800 rounded p-0.5">
+              <button
+                type="button"
+                onClick={() => setNewWorkspaceType('company')}
+                className={`flex-1 text-xs py-1.5 rounded cursor-pointer transition ${
+                  newWorkspaceType === 'company' ? 'bg-neutral-800 text-white' : 'text-neutral-500'
+                }`}
+              >
+                Company
+              </button>
+              <button
+                type="button"
+                onClick={() => setNewWorkspaceType('personal_project')}
+                className={`flex-1 text-xs py-1.5 rounded cursor-pointer transition ${
+                  newWorkspaceType === 'personal_project' ? 'bg-neutral-800 text-white' : 'text-neutral-500'
+                }`}
+              >
+                Personal project
+              </button>
+            </div>
+            <input
+              type="email"
+              value={newWorkspaceEmail}
+              onChange={(e) => setNewWorkspaceEmail(e.target.value)}
+              placeholder="Work email (optional)"
+              className="w-full bg-neutral-950 border border-neutral-700 rounded px-3 py-2 text-sm text-white focus:outline-none focus:border-blue-500"
+            />
+            <div className="flex items-center gap-2 pt-1">
+              <button
+                type="button"
+                onClick={() => setCreatingWorkspace(false)}
+                className="flex-1 bg-neutral-800 hover:bg-neutral-700 text-neutral-300 text-sm py-2 rounded-lg font-medium cursor-pointer"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={handleCreateWorkspace}
+                disabled={!newWorkspaceDraft.trim()}
+                className="flex-1 bg-blue-600 hover:bg-blue-500 disabled:opacity-40 disabled:cursor-not-allowed text-white text-sm py-2 rounded-lg font-medium cursor-pointer"
+              >
+                Create workspace
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
       {currentSpace && activeStandaloneDoc && docBookRoot && docBookHasPages && (
         <MobileDocPagesSheet
           open={mobileDocPagesOpen}
