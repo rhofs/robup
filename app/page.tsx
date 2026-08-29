@@ -4805,6 +4805,28 @@ function PageContent() {
       />
       )}
 
+      {/* Standalone "zero real workspace" fallback — a fixed floating pill, always visible and
+          always tappable regardless of which mobile-only overlay (Spaces sheet, popup menu,
+          Chat/Planner filter sheets) happens to be open on top of everything else, since none of
+          those are guaranteed reachable yet when there's no real workspace to browse (the whole
+          popup-menu's dynamic 4th-slot shortcut/open-grid behavior depends on activeView/pinned-tile
+          state that's easy to get stuck in an unexpected combination the very first time a fresh
+          account has nothing to land on). z-[65]: above the popup menu's own island (z-50) and its
+          backdrop (z-40), and above MobileSpacesSheet (z-30) — this needs to stay tappable no matter
+          what's already showing underneath it. Gone the moment a real workspace exists; this is
+          strictly the "how do I even get started" bootstrap, not a permanent nav element. */}
+      {!hasRealWorkspace && (
+        <button
+          onClick={() => {
+            setMobileMenuOpen(false);
+            setCreatingWorkspace(true);
+          }}
+          className="md:hidden fixed z-[65] right-4 bottom-[calc(env(safe-area-inset-bottom)+92px)] bg-blue-600 hover:bg-blue-500 text-white text-xs font-semibold pl-3 pr-4 py-2.5 rounded-full shadow-xl shadow-black/50 flex items-center gap-1.5 cursor-pointer"
+        >
+          <Plus className="w-3.5 h-3.5" /> New workspace
+        </button>
+      )}
+
       {/* ================= BULK ACTION BAR ================= */}
       {selectedIds.size > 0 && (
         <div className="fixed bottom-6 left-1/2 -tranneutral-x-1/2 z-40 bg-neutral-900 border border-neutral-700 rounded shadow-2xl px-4 py-2.5 flex items-center gap-3">
