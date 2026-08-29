@@ -2,12 +2,40 @@
 
 import { useEffect, useRef, useState } from 'react';
 import Papa from 'papaparse';
-import { X, Settings, Check, Trash2, Plus, Link2, Upload } from 'lucide-react';
-import { useTaskStore, type HierarchyWorkspace } from '../store/useTaskStore';
+import { X, Settings, Check, Trash2, Plus, Link2, Upload, Share2, Download } from 'lucide-react';
+import { useTaskStore, type HierarchyWorkspace, type AppUser } from '../store/useTaskStore';
 import { useChatStore } from '../store/useChatStore';
 import { getPushStatus, enablePush, disablePush } from '../lib/pushClient';
+import { useInstallPrompt } from '../hooks/useInstallPrompt';
 import ColorSwatchPicker from './ColorSwatchPicker';
 import { copyToClipboard } from '../lib/copyToClipboard';
+
+// Moved here from the now-deleted AccountSettingsPanel.tsx along with the rest of the Account
+// tab's content (see the tab === 'account' branch below).
+function InstallRow() {
+  const { canInstall, isStandalone, isIOS, promptInstall } = useInstallPrompt();
+  if (isStandalone) return null;
+  if (canInstall) {
+    return (
+      <button
+        onClick={promptInstall}
+        className="w-full flex items-center gap-2.5 px-3 py-2.5 rounded hover:bg-neutral-800/60 cursor-pointer text-left transition"
+      >
+        <Download className="w-3.5 h-3.5 text-neutral-400 shrink-0" />
+        <span className="text-xs text-neutral-300">Install Siqt as an app</span>
+      </button>
+    );
+  }
+  if (isIOS) {
+    return (
+      <div className="flex items-center gap-2.5 px-3 py-2.5 text-left">
+        <Download className="w-3.5 h-3.5 text-neutral-500 shrink-0" />
+        <span className="text-xs text-neutral-500">On iPhone/iPad: tap Share, then &quot;Add to Home Screen&quot;</span>
+      </div>
+    );
+  }
+  return null;
+}
 
 const HIDDEN_NAV_TABS_STORAGE_KEY = 'siqt.hiddenNavTabs';
 
@@ -135,21 +163,26 @@ function buildImportPreview(rows: ClickUpRow[], memberNames: Set<string>): Impor
 export default function SettingsPanel({
   workspace,
   canManage,
+  user,
+  onCopyCalendarLink,
   onClose,
   onChange,
   initialTab = 'general',
 }: {
   workspace: HierarchyWorkspace;
   canManage: boolean;
+  // Account tab's own data — personal, not workspace-scoped (see that tab's own comment below).
+  user: AppUser | null;
+  onCopyCalendarLink: () => void;
   onClose: () => void;
   onChange: () => void;
   // Lets a caller land directly on a specific tab — e.g. Office's own "Invite" entry point opens
   // straight to 'invite' instead of making someone click through from 'general' every time.
-  initialTab?: 'general' | 'roles' | 'invite' | 'import';
+  initialTab?: 'general' | 'roles' | 'invite' | 'import' | 'account';
 }) {
   const { createRole, updateRole, deleteRole, assignRole, unassignRole, updateWorkspaceDetails, sendWorkspaceMemberInvite } = useTaskStore();
   const { connections, fetchConnections } = useChatStore();
-  const [tab, setTab] = useState<'general' | 'roles' | 'invite' | 'import'>(initialTab);
+  const [tab, setTab] = useState<'general' | 'roles' | 'invite' | 'import' | 'account'>(initialTab);
   const [hidden, setHidden] = useState(() => readHiddenNavTabs());
   const [weekNumbersHidden, setWeekNumbersHidden] = useState(() => readHideWeekNumbers());
 
@@ -291,7 +324,7 @@ export default function SettingsPanel({
       <div onClick={(e) => e.stopPropagation()} className="w-[440px] bg-neutral-900 border border-neutral-800 rounded shadow-2xl overflow-hidden">
         <div className="px-5 py-4 border-b border-neutral-800 flex items-center justify-between">
           <h3 className="font-bold text-sm text-white flex items-center gap-1.5">
-            <Settings className="w-4 h-4" /> Workspace Settings
+            <Settings className="w-4 h-4" /> Settings
           </h3>
           <button onClick={onClose} className="text-neutral-400 hover:text-white cursor-pointer">
             <X className="w-3.5 h-3.5" />
@@ -332,6 +365,14 @@ export default function SettingsPanel({
               Import
             </button>
           )}
+          {/* Personal/account-level, so open to everyone regardless of canManage — unlike every
+              other tab here, it has nothing to do with *this* workspace specifically. */}
+          <button
+            onClick={() => setTab('account')}
+            className={`flex-1 text-xs py-2 cursor-pointer transition ${tab === 'account' ? 'text-white border-b-2 border-blue-500' : 'text-neutral-500 hover:text-neutral-300'}`}
+          >
+            Account
+          </button>
         </div>
 
         {tab === 'general' ? (
@@ -680,7 +721,7 @@ export default function SettingsPanel({
               )}
             </div>
           </div>
-        ) : (
+        ) : tab === 'import' ? (
           <div className="p-5 space-y-3 max-h-96 overflow-y-auto">
             <p className="text-[11px] text-neutral-500">
               Import a ClickUp CSV export (Everything view → Export). Spaces, Folders, Lists, and Statuses referenced in the file are matched by name or created; existing ones are reused, never duplicated.
@@ -725,6 +766,43 @@ export default function SettingsPanel({
                   <div className="text-neutral-500">{importResult.skippedRows.length} rows skipped</div>
                 )}
               </div>
+            )}
+          </div>
+        ) : (
+          // Account tab — personal/account-level settings, not workspace-scoped like every tab
+          // above it (still lives in this same panel per explicit request: one Settings surface,
+          // not two separate ones). Absorbed from the now-deleted standalone
+          // AccountSettingsPanel.tsx, which had its own real problem: its only trigger lived in
+          // the desktop-only sidebar user-menu dropdown, so mobile had no way to reach Connect
+          // Google at all. This tab is reachable from the exact same "Settings" entry point every
+          // other tab already is, on both desktop and mobile.
+          <div className="p-3 space-y-1">
+            {user ? (
+              <>
+                <button
+                  onClick={onCopyCalendarLink}
+                  className="w-full flex items-center gap-2.5 px-3 py-2.5 rounded hover:bg-neutral-800/60 cursor-pointer text-left transition"
+                >
+                  <Link2 className="w-3.5 h-3.5 text-neutral-400 shrink-0" />
+                  <span className="text-xs text-neutral-300">Copy personal calendar feed link</span>
+                </button>
+                <a
+                  href={user.googleEmail ? undefined : '/api/google/oauth/start'}
+                  className={`w-full flex items-center gap-2.5 px-3 py-2.5 rounded text-left transition ${
+                    user.googleEmail ? '' : 'hover:bg-neutral-800/60 cursor-pointer'
+                  }`}
+                >
+                  <Share2 className={`w-3.5 h-3.5 shrink-0 ${user.googleEmail ? 'text-green-500' : 'text-neutral-400'}`} />
+                  <span className="text-xs text-neutral-300">
+                    {user.googleEmail
+                      ? `Google connected as ${user.googleEmail} — Docs export & Calendar sync`
+                      : 'Connect Google account for Docs export & Calendar sync'}
+                  </span>
+                </a>
+                <InstallRow />
+              </>
+            ) : (
+              <p className="text-xs text-neutral-500 px-1 py-1">Signed-out session — try reloading the page.</p>
             )}
           </div>
         )}

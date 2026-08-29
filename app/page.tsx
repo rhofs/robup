@@ -111,7 +111,6 @@ import MobileDocPagesSheet from '../components/mobile/MobileDocPagesSheet';
 import MobileCalendarFilterSheet from '../components/mobile/MobileCalendarFilterSheet';
 import { useIsMobile } from '../hooks/useIsMobile';
 import AccessControlPanel from '../components/AccessControlPanel';
-import AccountSettingsPanel from '../components/AccountSettingsPanel';
 import MentionText from '../components/MentionText';
 import MentionTextarea from '../components/MentionTextarea';
 
@@ -816,7 +815,6 @@ function PageContent() {
 
   const [memberToRemove, setMemberToRemove] = useState<AppUser | null>(null);
   const [userMenuOpen, setUserMenuOpen] = useState(false);
-  const [accountSettingsOpen, setAccountSettingsOpen] = useState(false);
   // Shared by Space/Folder/List/Task's own "Manage access" trigger — see AccessControlPanel.
   const [accessControlTarget, setAccessControlTarget] = useState<{
     kind: 'space' | 'folder' | 'list' | 'task';
@@ -844,7 +842,7 @@ function PageContent() {
   const [creatingSpace, setCreatingSpace] = useState(false);
   const [trashOpen, setTrashOpen] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
-  const [settingsInitialTab, setSettingsInitialTab] = useState<'general' | 'roles' | 'invite' | 'import'>('general');
+  const [settingsInitialTab, setSettingsInitialTab] = useState<'general' | 'roles' | 'invite' | 'import' | 'account'>('general');
   const [hiddenNavTabs, setHiddenNavTabs] = useState<Set<NavTabId>>(() => new Set());
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   // Whichever grid tile (AppLauncherGrid.tsx) the user last picked — remembered across reloads so
@@ -1637,20 +1635,8 @@ function PageContent() {
         onClick: () => setActiveView('profile'),
         active: activeView === 'profile',
       },
-      // Account-level settings (copy calendar feed link, Connect Google for Docs export +
-      // Calendar sync) previously had no mobile entry point at all — the only trigger for
-      // setAccountSettingsOpen(true) lived in the desktop-only `hidden md:flex` sidebar's own
-      // user-menu dropdown. Named "Account" here, distinct from the grid's separate "Settings"
-      // tile (workspace-wide nav/visibility settings, a different panel entirely).
-      {
-        id: 'account-settings',
-        label: 'Account',
-        icon: Settings,
-        onClick: () => setAccountSettingsOpen(true),
-        active: accountSettingsOpen,
-      },
     ],
-    [currentUserId, currentWorkspace, activeView, workspaces, mobilePersonalSpacesOpen, ensurePersonalWorkspace, setActiveWorkspaceId, setActiveView, accountSettingsOpen]
+    [currentUserId, currentWorkspace, activeView, workspaces, mobilePersonalSpacesOpen, ensurePersonalWorkspace, setActiveWorkspaceId, setActiveView]
   );
 
   // Everything not already pinned to the bottom nav's 3 fixed slots — shared between
@@ -3463,7 +3449,8 @@ function PageContent() {
                     </button>
                     <button
                       onClick={() => {
-                        setAccountSettingsOpen(true);
+                        setSettingsInitialTab('account');
+                        setSettingsOpen(true);
                         setUserMenuOpen(false);
                       }}
                       className="w-full flex items-center gap-2.5 px-3 py-2 text-left hover:bg-neutral-800/60 cursor-pointer"
@@ -6684,6 +6671,8 @@ function PageContent() {
         <SettingsPanel
           workspace={currentWorkspace}
           canManage={canManageCurrentWorkspace}
+          user={users.find((u) => u.id === currentUserId) ?? null}
+          onCopyCalendarLink={handleCopyCalendarLink}
           initialTab={settingsInitialTab}
           onClose={() => {
             setSettingsOpen(false);
@@ -6695,12 +6684,6 @@ function PageContent() {
           }}
         />
       )}
-      {accountSettingsOpen &&
-        (() => {
-          const me = users.find((u) => u.id === currentUserId);
-          if (!me) return null;
-          return <AccountSettingsPanel user={me} onClose={() => setAccountSettingsOpen(false)} onCopyCalendarLink={handleCopyCalendarLink} />;
-        })()}
 
       {accessControlTarget && currentWorkspace && (
         <AccessControlPanel

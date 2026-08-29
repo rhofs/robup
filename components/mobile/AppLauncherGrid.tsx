@@ -110,7 +110,7 @@ export default function AppLauncherGridContent({
 }: Props) {
   // Only ever a real actionable tile on Chrome/Edge-family browsers that fired
   // `beforeinstallprompt` (see useInstallPrompt.ts) — iOS has no programmatic install prompt at
-  // all, so it gets a longer text hint in AccountSettingsPanel.tsx instead of a dead tile here.
+  // all, so it gets a longer text hint in SettingsPanel.tsx's Account tab instead of a dead tile here.
   const { canInstall, promptInstall } = useInstallPrompt();
   const pinnableTiles = [...contentTiles, ...meItems];
   // Accordion, not one row per workspace — a row-per-workspace list was the biggest single
