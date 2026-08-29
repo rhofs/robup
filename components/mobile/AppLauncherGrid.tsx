@@ -125,29 +125,17 @@ export default function AppLauncherGridContent({
 
   return (
     <div>
-      <button
-        onClick={() => {
-          hapticTapStrong();
-          onNavigate();
-          onClose();
-          onCreateWorkspace();
-        }}
-        className="w-full flex items-center gap-3 px-2 py-1.5 rounded-lg text-left transition cursor-pointer hover:bg-neutral-800/60 text-blue-400"
-      >
-        <span className="w-7 h-7 rounded-lg bg-neutral-800/60 flex items-center justify-center shrink-0">
-          <Plus className="w-4 h-4" />
-        </span>
-        <span className="text-sm font-medium">New workspace</span>
-      </button>
-      <div className="h-px bg-neutral-800/70 my-2" />
-      {/* Only shown once there's actually more than one real workspace to switch between
-          — a switcher with nothing to switch to is just clutter. One row (the *active*
-          workspace, tap to expand the rest) instead of one row per workspace — per direct
-          feedback that a full list ate too much of the panel for anyone in several
-          workspaces. Matches MobileSpacesSheet.tsx's own Space-row shape rather than the
-          square icon grid below, since a workspace name is free text of unpredictable
-          length. */}
-      {realWorkspaces.length > 1 && activeWorkspace && (
+      {/* The header row always reflects the *current* real workspace by name (not a generic
+          "+ New workspace" label) the moment one exists — tapping it expands an accordion
+          listing every other real workspace, with "+ New workspace" always the last row in
+          that list so creating another is never more than one tap further than switching.
+          Shown regardless of how many real workspaces exist (previously gated behind
+          `length > 1`, which meant anyone with exactly one workspace — including a brand-new
+          one they'd just created — saw no indication of which workspace they were even in,
+          just a bare create button). Only the true zero-real-workspace case (no
+          `activeWorkspace` to name) falls back to a plain "+ New workspace" row instead of a
+          switcher with nothing real to show as "current." */}
+      {activeWorkspace ? (
         <>
           <button
             onClick={() => {
@@ -185,11 +173,40 @@ export default function AppLauncherGridContent({
                     <span className="min-w-0 flex-1 text-sm text-neutral-300 truncate">{ws.name}</span>
                   </button>
                 ))}
+              <button
+                onClick={() => {
+                  hapticTapStrong();
+                  onNavigate();
+                  onClose();
+                  onCreateWorkspace();
+                }}
+                className="w-full flex items-center gap-3 px-2 py-1.5 rounded-lg text-left transition cursor-pointer hover:bg-neutral-800/60 text-blue-400"
+              >
+                <span className="w-6 h-6 rounded-md bg-neutral-800/60 flex items-center justify-center shrink-0">
+                  <Plus className="w-3.5 h-3.5" />
+                </span>
+                <span className="text-sm font-medium">New workspace</span>
+              </button>
             </div>
           )}
-          <div className="h-px bg-neutral-800/70 my-2" />
         </>
+      ) : (
+        <button
+          onClick={() => {
+            hapticTapStrong();
+            onNavigate();
+            onClose();
+            onCreateWorkspace();
+          }}
+          className="w-full flex items-center gap-3 px-2 py-1.5 rounded-lg text-left transition cursor-pointer hover:bg-neutral-800/60 text-blue-400"
+        >
+          <span className="w-7 h-7 rounded-lg bg-neutral-800/60 flex items-center justify-center shrink-0">
+            <Plus className="w-4 h-4" />
+          </span>
+          <span className="text-sm font-medium">New workspace</span>
+        </button>
       )}
+      <div className="h-px bg-neutral-800/70 my-2" />
 
       {/* No `selected` ring on the pinned tile here any more — whichever tile is pinned
           already gets its own highlighted state down in the nav pill's 4th slot
