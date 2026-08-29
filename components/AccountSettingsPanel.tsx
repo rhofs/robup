@@ -46,8 +46,8 @@ export default function AccountSettingsPanel({
   const connected = !!user.googleEmail;
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-neutral-950/70 backdrop-blur-xs" onClick={onClose}>
-      <div onClick={(e) => e.stopPropagation()} className="w-[380px] bg-neutral-900 border border-neutral-800 rounded shadow-2xl overflow-hidden">
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-neutral-950/70 backdrop-blur-xs px-3" onClick={onClose}>
+      <div onClick={(e) => e.stopPropagation()} className="w-full max-w-[380px] bg-neutral-900 border border-neutral-800 rounded shadow-2xl overflow-hidden">
         <div className="px-5 py-4 border-b border-neutral-800 flex items-center justify-between">
           <h3 className="font-bold text-sm text-white flex items-center gap-1.5">
             <Settings className="w-4 h-4" /> Settings

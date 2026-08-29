@@ -1637,8 +1637,20 @@ function PageContent() {
         onClick: () => setActiveView('profile'),
         active: activeView === 'profile',
       },
+      // Account-level settings (copy calendar feed link, Connect Google for Docs export +
+      // Calendar sync) previously had no mobile entry point at all — the only trigger for
+      // setAccountSettingsOpen(true) lived in the desktop-only `hidden md:flex` sidebar's own
+      // user-menu dropdown. Named "Account" here, distinct from the grid's separate "Settings"
+      // tile (workspace-wide nav/visibility settings, a different panel entirely).
+      {
+        id: 'account-settings',
+        label: 'Account',
+        icon: Settings,
+        onClick: () => setAccountSettingsOpen(true),
+        active: accountSettingsOpen,
+      },
     ],
-    [currentUserId, currentWorkspace, activeView, workspaces, mobilePersonalSpacesOpen, ensurePersonalWorkspace, setActiveWorkspaceId, setActiveView]
+    [currentUserId, currentWorkspace, activeView, workspaces, mobilePersonalSpacesOpen, ensurePersonalWorkspace, setActiveWorkspaceId, setActiveView, accountSettingsOpen]
   );
 
   // Everything not already pinned to the bottom nav's 3 fixed slots — shared between
