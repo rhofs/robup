@@ -371,13 +371,17 @@ model User {
   googleRefreshToken String? @map("google_refresh_token")
   googleEmail        String? @map("google_email")
   // Google Calendar two-way sync (backlog #13) — same "connect your Google account" flow/token as
-  // Docs export above (one refresh token, a wider scope grant), just its own field. Syncs
-  // directly against the user's real *primary* Google Calendar (not a separate dedicated one —
-  // matches the reference behavior the user pointed to: a Google-native event just shows up,
-  // same as ClickUp's own Calendar integration). googleCalendarSyncToken is Google Calendar
-  // API's own incremental-sync cursor (events.list's nextSyncToken) — lets
-  // pullChangesFromGoogle fetch only what changed since last time instead of the whole calendar
-  // on every poll.
+  // Docs export above (one refresh token, a scope grant covering both). Syncs against a
+  // dedicated secondary "Siqt" calendar this app creates for the user (googleCalendarId, lazily
+  // created on first sync via calendars.insert) — deliberately NOT the user's real primary
+  // calendar, per their own explicit privacy ask: the calendar.app.created scope this now
+  // requests physically cannot see or touch any calendar Siqt didn't itself create, unlike an
+  // earlier draft that merged straight into 'primary'. Shows up as its own calendar in the
+  // user's Google Calendar list — same "ClickUp calendar" look the user pointed to as the
+  // reference. googleCalendarSyncToken is Google Calendar API's own incremental-sync cursor
+  // (events.list's nextSyncToken, scoped to googleCalendarId) — lets pullChangesFromGoogle fetch
+  // only what changed since last time instead of the whole calendar on every poll.
+  googleCalendarId        String? @map("google_calendar_id")
   googleCalendarSyncToken String? @map("google_calendar_sync_token")
   // Per-assignee calendar mirroring (both Task and Event) — replaces the earlier single-"owner"
   // model. Each Google-connected assignee gets their own personal calendar copy, matching

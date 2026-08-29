@@ -33,12 +33,19 @@ export function createGoogleOAuthClient() {
 //   this app created or the user explicitly opened with it" scope — both of those Docs API calls
 //   are explicitly supported under it, so nothing breaks, but the consent text becomes "...only
 //   the specific Google Drive files you use with this app" instead.
-// - `calendar.events` (not the full `calendar`) — lib/google/calendarSync.ts only ever calls
-//   `events.list/insert/update/delete` against `calendarId: 'primary'` (an existing calendar the
-//   user already has); it never creates/deletes/manages a Calendar resource itself, which is the
-//   only thing the full `calendar` scope adds on top of `calendar.events`.
+// - `calendar.app.created` (not `calendar.events`, and genuinely not any of the "owned"
+//   variants either — verified directly against Google's own scope docs, since guessing wrong
+//   here risks another invalid_client-shaped outage the same way the OAuth client id itself did)
+//   — per the user's own explicit ask, matching what they actually see in ClickUp: a real,
+//   isolated secondary "Siqt" calendar the app creates and owns, showing up as its own calendar
+//   in Google Calendar's list, with *zero* API access to any of the user's other calendars —
+//   `calendar.events`/`calendar.events.owned` would both still see and be able to edit every
+//   existing event on the user's real primary calendar, which is exactly the exposure the user
+//   flagged. lib/google/calendarSync.ts creates this dedicated calendar once per user
+//   (`calendars.insert`, stored as User.googleCalendarId) and does all event
+//   list/insert/update/delete against that calendar id specifically, never `'primary'`.
 export const GOOGLE_EXPORT_SCOPES = [
   'https://www.googleapis.com/auth/drive.file',
   'https://www.googleapis.com/auth/userinfo.email',
-  'https://www.googleapis.com/auth/calendar.events',
+  'https://www.googleapis.com/auth/calendar.app.created',
 ];

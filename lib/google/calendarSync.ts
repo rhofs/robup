@@ -5,8 +5,17 @@ import { createGoogleOAuthClient } from './oauthClient';
 // Google Calendar sync (backlog #13), per-assignee — matches the ClickUp behavior the user
 // pointed to directly: each person connects their *own* Google account (Account Settings), and
 // whatever's assigned to *them* — Task or Event, with at least one date set — shows up on *their*
-// own primary Google Calendar. Not "whoever created it." See TaskGoogleSync/EventGoogleSync in
-// schema.prisma for the per-(item, assignee) join rows this drives off of.
+// own dedicated "Siqt" calendar (a real, separate calendar in their Google Calendar list — not
+// merged into their primary one). Not "whoever created it." See TaskGoogleSync/EventGoogleSync
+// in schema.prisma for the per-(item, assignee) join rows this drives off of.
+//
+// Deliberately isolated from the user's real primary calendar, per their own explicit privacy
+// ask after seeing how broad `documents`/`calendar.events` sounded in Google's consent screen:
+// this app requests `calendar.app.created` (see oauthClient.ts), a scope that can only ever see
+// or touch calendars it itself created — Siqt has no API-level way to read, edit, or delete
+// anything on the user's other calendars, full stop, not just "the code doesn't do that."
+// getConnectedClient() below creates this dedicated calendar lazily (calendars.insert) the first
+// time a given user is synced, and caches its id on User.googleCalendarId from then on.
 //
 // Task sync is push-only (Siqt -> Google): a Task can have several independently-connected
 // assignees, each with their own calendar copy — letting edits on any one of those copies write
@@ -27,10 +36,24 @@ function toCalendarClient(refreshToken: string) {
   return google.calendar({ version: 'v3', auth: oauth2Client });
 }
 
-async function getConnectedUser(userId: string) {
+// Resolves everything a sync call needs for one user in one place: their Calendar client, and
+// the id of their dedicated "Siqt" calendar — created lazily on first use (calendars.insert) and
+// cached on User.googleCalendarId from then on. Deliberately never 'primary' — see
+// oauthClient.ts's own comment on why (calendar.app.created, the scope this app actually
+// requests, can't even see 'primary' in the first place; this calendar is the only one Siqt has
+// any access to at all).
+async function getConnectedClient(userId: string) {
   const user = await prisma.user.findUnique({ where: { id: userId } });
   if (!user?.googleRefreshToken) return null;
-  return user;
+  const client = toCalendarClient(user.googleRefreshToken);
+
+  if (user.googleCalendarId) return { user, client, calendarId: user.googleCalendarId };
+
+  const created = await client.calendars.insert({ requestBody: { summary: 'Siqt' } });
+  const calendarId = created.data.id;
+  if (!calendarId) return null;
+  await prisma.user.update({ where: { id: userId }, data: { googleCalendarId: calendarId } });
+  return { user, client, calendarId };
 }
 
 // Same find-or-create-by-unique-owner shape as POST /api/workspaces/personal — reused here
@@ -58,11 +81,10 @@ function isNotFoundError(err: any): boolean {
 }
 
 async function deleteGoogleEvent(userId: string, googleEventId: string): Promise<void> {
-  const owner = await getConnectedUser(userId);
-  if (!owner) return;
-  const client = toCalendarClient(owner.googleRefreshToken!);
+  const connected = await getConnectedClient(userId);
+  if (!connected) return;
   try {
-    await client.events.delete({ calendarId: 'primary', eventId: googleEventId });
+    await connected.client.events.delete({ calendarId: connected.calendarId, eventId: googleEventId });
   } catch (err: any) {
     if (!isNotFoundError(err)) console.error('deleteGoogleEvent failed:', err?.message || err);
   }
@@ -123,10 +145,9 @@ export async function syncTaskForUser(taskId: string, userId: string): Promise<v
     return;
   }
 
-  const owner = await getConnectedUser(userId);
-  if (!owner) return; // not (or no longer) Google-connected — nothing to push
+  const connected = await getConnectedClient(userId);
+  if (!connected) return; // not (or no longer) Google-connected — nothing to push
 
-  const client = toCalendarClient(owner.googleRefreshToken!);
   const requestBody: calendar_v3.Schema$Event = {
     summary: (task as SyncableTask).title,
     description: (task as SyncableTask).description ?? undefined,
@@ -135,9 +156,9 @@ export async function syncTaskForUser(taskId: string, userId: string): Promise<v
 
   try {
     if (syncRow) {
-      await client.events.update({ calendarId: 'primary', eventId: syncRow.googleEventId, requestBody });
+      await connected.client.events.update({ calendarId: connected.calendarId, eventId: syncRow.googleEventId, requestBody });
     } else {
-      const created = await client.events.insert({ calendarId: 'primary', requestBody });
+      const created = await connected.client.events.insert({ calendarId: connected.calendarId, requestBody });
       if (created.data.id) {
         await prisma.taskGoogleSync.create({ data: { taskId, userId, googleEventId: created.data.id } });
       }
@@ -228,10 +249,9 @@ export async function syncEventForUser(eventId: string, userId: string): Promise
     return;
   }
 
-  const owner = await getConnectedUser(userId);
-  if (!owner) return;
+  const connected = await getConnectedClient(userId);
+  if (!connected) return;
 
-  const client = toCalendarClient(owner.googleRefreshToken!);
   const ev = event as SyncableEvent;
   const attendees = ev.assignees
     .filter((a) => a.id !== userId)
@@ -249,9 +269,9 @@ export async function syncEventForUser(eventId: string, userId: string): Promise
 
   try {
     if (syncRow) {
-      await client.events.update({ calendarId: 'primary', eventId: syncRow.googleEventId, requestBody });
+      await connected.client.events.update({ calendarId: connected.calendarId, eventId: syncRow.googleEventId, requestBody });
     } else {
-      const created = await client.events.insert({ calendarId: 'primary', requestBody });
+      const created = await connected.client.events.insert({ calendarId: connected.calendarId, requestBody });
       if (created.data.id) {
         await prisma.eventGoogleSync.create({ data: { eventId, userId, googleEventId: created.data.id } });
       }
@@ -305,17 +325,16 @@ function fromGoogleDateFields(gEvent: calendar_v3.Schema$Event): { startDate: Da
 const INITIAL_SYNC_PAST_DAYS = 30;
 const INITIAL_SYNC_FUTURE_DAYS = 365;
 
-// Pulls whatever changed on this user's real Google Calendar since the last call (Google's own
-// incremental-sync cursor, googleCalendarSyncToken) and applies it: updates/deletes for Events
-// this user is already synced to (matched via EventGoogleSync, scoped to just their own
-// calendar), and a real new Siqt Event — landed in the user's personal ("My tasks") workspace,
-// with them as its sole assignee and flagged importedFromGoogle — for anything genuinely new on
-// the Google side.
+// Pulls whatever changed on this user's dedicated "Siqt" Google calendar since the last call
+// (Google's own incremental-sync cursor, googleCalendarSyncToken) and applies it: updates/deletes
+// for Events this user is already synced to (matched via EventGoogleSync), and a real new Siqt
+// Event — landed in the user's personal ("My tasks") workspace, with them as its sole assignee
+// and flagged importedFromGoogle — for anything genuinely new on the Google side (i.e. an event
+// the user added directly on the Siqt calendar in Google Calendar itself).
 export async function pullChangesFromGoogle(userId: string): Promise<{ created: number; updated: number; deleted: number }> {
-  const user = await getConnectedUser(userId);
-  if (!user) return { created: 0, updated: 0, deleted: 0 };
-
-  const client = toCalendarClient(user.googleRefreshToken!);
+  const connected = await getConnectedClient(userId);
+  if (!connected) return { created: 0, updated: 0, deleted: 0 };
+  const { user, client, calendarId } = connected;
   let created = 0;
   let updated = 0;
   let deleted = 0;
@@ -327,7 +346,7 @@ export async function pullChangesFromGoogle(userId: string): Promise<{ created: 
     let page;
     try {
       page = await client.events.list({
-        calendarId: 'primary',
+        calendarId,
         syncToken: user.googleCalendarSyncToken ?? undefined,
         pageToken,
         showDeleted: true,
