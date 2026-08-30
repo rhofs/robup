@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { Archive, ChevronDown, Download, Plus, Settings, Trash2 } from 'lucide-react';
+import { Archive, ChevronDown, Download, LayoutGrid, Plus, Settings, Trash2 } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
 import type { MenuTile } from './navTypes';
 import type { HierarchyWorkspace } from '../../store/useTaskStore';
@@ -121,21 +121,26 @@ export default function AppLauncherGridContent({
   useEffect(() => {
     if (!menuOpen) setWorkspacePickerOpen(false);
   }, [menuOpen]);
+  // Undefined whenever the *personal* workspace is what's active ("My Tasks"), since
+  // realWorkspaces deliberately excludes it — which used to collapse this whole switcher down to
+  // a bare "+ New workspace" row, hiding every real workspace the user actually has. Reported
+  // live: "jeg har lagd en workspace, men den er ikke i lista." The picker below now keys off
+  // `realWorkspaces.length` instead, and only the *header label* depends on this.
   const activeWorkspace = realWorkspaces.find((w) => w.id === activeWorkspaceId);
 
   return (
     <div>
-      {/* The header row always reflects the *current* real workspace by name (not a generic
-          "+ New workspace" label) the moment one exists — tapping it expands an accordion
-          listing every other real workspace, with "+ New workspace" always the last row in
-          that list so creating another is never more than one tap further than switching.
-          Shown regardless of how many real workspaces exist (previously gated behind
-          `length > 1`, which meant anyone with exactly one workspace — including a brand-new
-          one they'd just created — saw no indication of which workspace they were even in,
-          just a bare create button). Only the true zero-real-workspace case (no
-          `activeWorkspace` to name) falls back to a plain "+ New workspace" row instead of a
-          switcher with nothing real to show as "current." */}
-      {activeWorkspace ? (
+      {/* The header row names the *current* real workspace whenever one is active — tapping it
+          expands an accordion listing every other real workspace, with "+ New workspace" always
+          the last row in that list so creating another is never more than one tap further than
+          switching. Gated on `realWorkspaces.length`, NOT on there being an active real
+          workspace: the personal workspace ("My Tasks") is legitimately active a lot of the
+          time and is deliberately excluded from realWorkspaces, which used to collapse this
+          whole switcher to a bare "+ New workspace" row and hide every real workspace the user
+          had. In that case the header shows a neutral "Workspaces" label instead of naming one
+          — claiming a real workspace is current while My Tasks is actually on screen would just
+          be wrong. Only the true zero-real-workspace case falls back to the plain create row. */}
+      {realWorkspaces.length > 0 ? (
         <>
           <button
             onClick={() => {
@@ -144,10 +149,14 @@ export default function AppLauncherGridContent({
             }}
             className="w-full flex items-center gap-3 px-2 py-1.5 rounded-lg text-left transition cursor-pointer hover:bg-neutral-800/60"
           >
-            <span className="w-7 h-7 rounded-lg bg-blue-600 flex items-center justify-center shrink-0 text-white text-[11px] font-bold">
-              {activeWorkspace.name.slice(0, 1).toUpperCase()}
+            <span
+              className={`w-7 h-7 rounded-lg flex items-center justify-center shrink-0 text-white text-[11px] font-bold ${
+                activeWorkspace ? 'bg-blue-600' : 'bg-neutral-700'
+              }`}
+            >
+              {activeWorkspace ? activeWorkspace.name.slice(0, 1).toUpperCase() : <LayoutGrid className="w-3.5 h-3.5" />}
             </span>
-            <span className="min-w-0 flex-1 text-sm text-neutral-200 truncate">{activeWorkspace.name}</span>
+            <span className="min-w-0 flex-1 text-sm text-neutral-200 truncate">{activeWorkspace?.name ?? 'Workspaces'}</span>
             <ChevronDown
               className={`w-4 h-4 text-neutral-500 shrink-0 transition-transform ${workspacePickerOpen ? 'rotate-180' : ''}`}
             />
