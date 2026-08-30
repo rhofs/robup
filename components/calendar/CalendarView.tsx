@@ -414,8 +414,16 @@ export default function CalendarView({ tasks, events, statuses, workspaces, show
     }
     const d = weekDrag;
     if (d) {
-      const start = task.startDate ? new Date(task.startDate) : null;
-      const due = task.dueDate ? new Date(task.dueDate) : null;
+      // Normalized to local midnight, same as `ranges` above (range.start/end both run through
+      // startOfDay) — this used to read the raw stored value instead, which agrees with `ranges`
+      // for a date that's already exactly local midnight but silently disagrees by a fractional
+      // day for one that isn't (e.g. a task seeded/imported with some other time-of-day
+      // component). The day-count anchor math in handleDragStart/handleDragMove is built entirely
+      // off `range.start`, so re-deriving from the raw value here instead of the same normalized
+      // one is exactly a whole-day-off bug waiting for a task whose stored date isn't already
+      // midnight-clean — confirmed live ("moved to 4th, landed on 3rd," a fixed one-day offset).
+      const start = task.startDate ? startOfDay(new Date(task.startDate)) : null;
+      const due = task.dueDate ? startOfDay(new Date(task.dueDate)) : null;
       let newStart = start;
       let newDue = due;
       if (d.deltaDays !== 0) {
