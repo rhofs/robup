@@ -142,11 +142,33 @@ function taskDateRange(task: { startDate: Date | null; dueDate: Date | null }): 
 // Tasks have no explicit time-of-day concept (unlike Event's own allDay flag) — mirrored as a
 // plain all-day (date-only) Google event spanning startDate..dueDate inclusive, or a single day
 // if only one of the two is set.
+// Extracts a Google-Calendar-style "date-only" string (YYYY-MM-DD) from a Date's own LOCAL
+// calendar day — deliberately NOT `d.toISOString().slice(0, 10)`, which reads the UTC day
+// instead. This app's own all-day dates are stored as local midnight (same convention
+// DayTimeline.tsx's own hasTimeOfDay comment documents); for anyone in a positive UTC-offset
+// timezone (Norway included), local midnight is still the *previous* calendar day in UTC, so the
+// ISO-slice version silently sent the wrong day to Google on every all-day Task/Event push.
+// Confirmed live: a Task showing "the 4th" in Siqt landed on "the 3rd" in Google Calendar.
+function localDateOnly(d: Date): string {
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, '0');
+  const day = String(d.getDate()).padStart(2, '0');
+  return `${y}-${m}-${day}`;
+}
+
+// Inverse of localDateOnly, for the pull direction — builds a Date at LOCAL midnight for a given
+// Google "date-only" string, instead of UTC midnight (`new Date(dateOnly + 'T00:00:00.000Z')`),
+// so a date pulled in from Google reads back as the same calendar day in this app's own
+// local-midnight convention regardless of which side of UTC the viewer's timezone falls on.
+function localMidnightFromDateOnly(dateOnly: string): Date {
+  const [y, m, d] = dateOnly.split('-').map(Number);
+  return new Date(y, m - 1, d);
+}
+
 function toGoogleAllDayFields(start: Date, endInclusive: Date) {
   const endExclusive = new Date(endInclusive);
   endExclusive.setDate(endExclusive.getDate() + 1);
-  const dateOnly = (d: Date) => d.toISOString().slice(0, 10);
-  return { start: { date: dateOnly(start) }, end: { date: dateOnly(endExclusive) } };
+  return { start: { date: localDateOnly(start) }, end: { date: localDateOnly(endExclusive) } };
 }
 
 // Creates, updates, or removes ONE assignee's own calendar copy of a Task, based on its current
@@ -257,8 +279,7 @@ function toGoogleDateFields(event: { startDate: Date; endDate: Date; allDay: boo
     // ganttLayout.ts/clipRangeToWeek already use for Task ranges) — add one day going out.
     const endExclusive = new Date(event.endDate);
     endExclusive.setDate(endExclusive.getDate() + 1);
-    const dateOnly = (d: Date) => d.toISOString().slice(0, 10);
-    return { start: { date: dateOnly(event.startDate) }, end: { date: dateOnly(endExclusive) } };
+    return { start: { date: localDateOnly(event.startDate) }, end: { date: localDateOnly(endExclusive) } };
   }
   return {
     start: { dateTime: event.startDate.toISOString() },
@@ -355,8 +376,8 @@ function fromGoogleDateFields(gEvent: calendar_v3.Schema$Event): { startDate: Da
   if (gEvent.start?.date) {
     // All-day, Google's end is exclusive — subtract a day to get back to Siqt's inclusive
     // convention.
-    const start = new Date(gEvent.start.date + 'T00:00:00.000Z');
-    const endExclusive = new Date((gEvent.end?.date ?? gEvent.start.date) + 'T00:00:00.000Z');
+    const start = localMidnightFromDateOnly(gEvent.start.date);
+    const endExclusive = localMidnightFromDateOnly(gEvent.end?.date ?? gEvent.start.date);
     const end = new Date(endExclusive);
     end.setDate(end.getDate() - 1);
     return { startDate: start, endDate: end < start ? start : end, allDay: true };
