@@ -209,7 +209,7 @@ export default function ChatThreadPanel({
       onDrop={handleDrop}
     >
       {dragActive && (
-        <div className="absolute inset-0 z-10 flex items-center justify-center bg-neutral-950/85 border-2 border-dashed border-blue-500 rounded-lg pointer-events-none">
+        <div className="absolute inset-0 z-10 flex items-center justify-center bg-scrim/85 border-2 border-dashed border-blue-500 rounded-lg pointer-events-none">
           <div className="flex flex-col items-center gap-1.5 text-blue-400">
             <UploadCloud className="w-6 h-6" />
             <span className="text-xs font-medium">Drop to attach</span>
@@ -353,7 +353,7 @@ export default function ChatThreadPanel({
           placeholder="Reply in thread..."
           rows={1}
           style={{ maxHeight: COMPOSER_MAX_HEIGHT_PX }}
-          className="flex-1 bg-transparent text-[12px] text-white placeholder:text-neutral-500 resize-none focus:outline-none py-1 overflow-y-auto"
+          className="flex-1 bg-transparent text-[12px] text-app-strong placeholder:text-neutral-500 resize-none focus:outline-none py-1 overflow-y-auto"
         />
         <button
           onClick={handleSend}

@@ -145,7 +145,7 @@ export default function ChatSidebar({ workspaceId }: ChatSidebarProps) {
                   onClick={() => setActiveChannelId(c.id)}
                   className={`w-full text-left py-1.5 pr-11 rounded text-xs font-medium transition flex items-center gap-1.5 cursor-pointer border-l-2 ${
                     activeChannelId === c.id
-                      ? 'bg-neutral-800 text-white border-blue-500 pl-2'
+                      ? 'bg-neutral-800 text-app-strong border-blue-500 pl-2'
                       : 'text-neutral-400 hover:bg-neutral-800/40 hover:text-neutral-200 border-transparent pl-2.5'
                   }`}
                 >
@@ -199,7 +199,7 @@ export default function ChatSidebar({ workspaceId }: ChatSidebarProps) {
                 onClick={() => setActiveChannelId(dm.id)}
                 className={`w-full text-left py-1.5 pl-2 pr-6 rounded text-xs font-medium transition flex items-center gap-1.5 cursor-pointer border-l-2 ${
                   activeChannelId === dm.id
-                    ? 'bg-neutral-800 text-white border-blue-500'
+                    ? 'bg-neutral-800 text-app-strong border-blue-500'
                     : 'text-neutral-400 hover:bg-neutral-800/40 hover:text-neutral-200 border-transparent'
                 }`}
               >
@@ -269,7 +269,7 @@ function NewChannelForm({ onCreate }: { onCreate: (name: string) => void }) {
           if (e.key === 'Enter') submit();
         }}
         placeholder="e.g. marketing"
-        className="w-full bg-neutral-950 border border-neutral-800 rounded px-2 py-1.5 text-xs text-white placeholder:text-neutral-600 focus:outline-none focus:border-blue-500"
+        className="w-full bg-neutral-950 border border-neutral-800 rounded px-2 py-1.5 text-xs text-app-strong placeholder:text-neutral-600 focus:outline-none focus:border-blue-500"
       />
       <button
         onClick={submit}
@@ -294,7 +294,7 @@ function ChannelRenameInput({ channel, onCommit }: { channel: ChatChannel; onCom
         if (e.key === 'Enter') (e.target as HTMLInputElement).blur();
         if (e.key === 'Escape') onCommit(null);
       }}
-      className="w-full bg-neutral-950 border border-blue-500 rounded px-2 py-1 text-[11px] text-white focus:outline-none"
+      className="w-full bg-neutral-950 border border-blue-500 rounded px-2 py-1 text-[11px] text-app-strong focus:outline-none"
     />
   );
 }

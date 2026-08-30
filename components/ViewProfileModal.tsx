@@ -57,7 +57,7 @@ export default function ViewProfileModal({ userId, onClose, onStartDM }: ViewPro
           animate={{ opacity: 1 }}
           exit={{ opacity: 0 }}
           transition={{ duration: 0.15 }}
-          className="fixed inset-0 z-[60] flex items-center justify-center bg-neutral-950/70 backdrop-blur-xs"
+          className="fixed inset-0 z-[60] flex items-center justify-center bg-scrim/70 backdrop-blur-xs"
           onClick={onClose}
         >
           <motion.div
@@ -70,7 +70,7 @@ export default function ViewProfileModal({ userId, onClose, onStartDM }: ViewPro
           >
             <div className="flex items-start justify-between">
               <span className="text-[10px] font-bold text-neutral-500 uppercase tracking-wider">Profile</span>
-              <button onClick={onClose} className="text-neutral-500 hover:text-white cursor-pointer -mt-1 -mr-1 p-1">
+              <button onClick={onClose} className="text-neutral-500 hover:text-app-strong cursor-pointer -mt-1 -mr-1 p-1">
                 <X className="w-4 h-4" />
               </button>
             </div>
@@ -91,7 +91,7 @@ export default function ViewProfileModal({ userId, onClose, onStartDM }: ViewPro
                     </span>
                   )}
                   <div className="min-w-0">
-                    <div className="text-base font-semibold text-white truncate">{profile.name}</div>
+                    <div className="text-base font-semibold text-app-strong truncate">{profile.name}</div>
                     {profile.title && <div className="text-xs text-neutral-500 truncate">{profile.title}</div>}
                   </div>
                 </div>

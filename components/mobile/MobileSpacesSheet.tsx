@@ -174,7 +174,7 @@ export default function MobileSpacesSheet({
               cancelNewSpace below for how the draft row itself now offers a real, discoverable way
               to back out instead. */}
           <div className="h-14 flex items-center justify-between px-4 shrink-0">
-            <span className="text-lg font-semibold text-white">{title}</span>
+            <span className="text-lg font-semibold text-app-strong">{title}</span>
             {workspaceId && (
               <button
                 onClick={() => setCreatingSpace(true)}
@@ -243,7 +243,7 @@ export default function MobileSpacesSheet({
                   if (e.key === 'Escape') cancelNewSpace();
                 }}
                 placeholder="Space name..."
-                className="flex-1 bg-neutral-950 border border-blue-500 rounded px-3 py-1.5 text-sm text-white focus:outline-none"
+                className="flex-1 bg-neutral-950 border border-blue-500 rounded px-3 py-1.5 text-sm text-app-strong focus:outline-none"
               />
               <button
                 onMouseDown={(e) => e.preventDefault()}
@@ -277,7 +277,7 @@ export default function MobileSpacesSheet({
               }`}
             >
               <span className="w-8 h-8 rounded-lg bg-neutral-700 flex items-center justify-center shrink-0">
-                <Globe className="w-4 h-4 text-white" />
+                <Globe className="w-4 h-4 text-app-strong" />
               </span>
               <span className="min-w-0 flex-1">
                 <span className="block text-sm text-neutral-200 truncate">
@@ -299,9 +299,9 @@ export default function MobileSpacesSheet({
                   >
                     <span className="w-8 h-8 rounded-lg flex items-center justify-center shrink-0" style={{ backgroundColor: space.color || '#6366f1' }}>
                       {Icon ? (
-                        <Icon className="w-4 h-4 text-white" />
+                        <Icon className="w-4 h-4 text-app-strong" />
                       ) : (
-                        <span className="text-white text-xs font-bold">{space.name.slice(0, 1).toUpperCase()}</span>
+                        <span className="text-app-strong text-xs font-bold">{space.name.slice(0, 1).toUpperCase()}</span>
                       )}
                     </span>
                     <span className="min-w-0 flex-1 text-sm text-neutral-200 truncate">{space.name}</span>
@@ -502,7 +502,7 @@ function NewFolderOrListRow({
             if (e.key === 'Escape') cancel();
           }}
           placeholder={mode === 'folder' ? 'Folder name...' : mode === 'list' ? 'List name...' : 'Doc title...'}
-          className="flex-1 min-w-0 bg-neutral-950 border border-blue-500 rounded px-2 py-1 text-[13px] text-white focus:outline-none"
+          className="flex-1 min-w-0 bg-neutral-950 border border-blue-500 rounded px-2 py-1 text-[13px] text-app-strong focus:outline-none"
         />
         <button
           onMouseDown={(e) => e.preventDefault()}

@@ -31,7 +31,7 @@ export default function ConfirmDialog({
           animate={{ opacity: 1 }}
           exit={{ opacity: 0 }}
           transition={{ duration: 0.15 }}
-          className="fixed inset-0 z-[60] flex items-center justify-center bg-neutral-950/70 backdrop-blur-xs"
+          className="fixed inset-0 z-[60] flex items-center justify-center bg-scrim/70 backdrop-blur-xs"
           onClick={onCancel}
         >
           <motion.div
@@ -42,12 +42,12 @@ export default function ConfirmDialog({
             onClick={(e) => e.stopPropagation()}
             className="w-[340px] bg-neutral-900 border border-neutral-800 rounded shadow-2xl p-5"
           >
-            <h3 className="font-bold text-sm text-white mb-1.5">{title}</h3>
+            <h3 className="font-bold text-sm text-app-strong mb-1.5">{title}</h3>
             <p className="text-xs text-neutral-400 mb-4">{message}</p>
             <div className="flex justify-end gap-2">
               <button
                 onClick={onCancel}
-                className="text-xs text-neutral-300 hover:text-white px-3 py-1.5 rounded hover:bg-neutral-800 cursor-pointer"
+                className="text-xs text-neutral-300 hover:text-app-strong px-3 py-1.5 rounded hover:bg-neutral-800 cursor-pointer"
               >
                 {cancelLabel}
               </button>

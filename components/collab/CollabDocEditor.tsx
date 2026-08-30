@@ -302,7 +302,7 @@ export default function CollabDocEditor({
                   }}
                   placeholder="Add a comment..."
                   rows={2}
-                  className="w-full bg-neutral-950 border border-neutral-800 rounded px-2 py-1 text-[11px] text-white focus:outline-none focus:border-blue-500 resize-none"
+                  className="w-full bg-neutral-950 border border-neutral-800 rounded px-2 py-1 text-[11px] text-app-strong focus:outline-none focus:border-blue-500 resize-none"
                 />
                 <div className="flex items-center justify-end gap-1.5">
                   <button
@@ -335,7 +335,7 @@ export default function CollabDocEditor({
                     if (e.key === 'Escape') setLinkDraft(null);
                   }}
                   placeholder="https://..."
-                  className="w-full bg-neutral-950 border border-neutral-800 rounded px-2 py-1 text-[11px] text-white focus:outline-none focus:border-blue-500"
+                  className="w-full bg-neutral-950 border border-neutral-800 rounded px-2 py-1 text-[11px] text-app-strong focus:outline-none focus:border-blue-500"
                 />
                 <div className="flex items-center justify-end gap-1.5">
                   {editor.isActive('link') && (
@@ -392,13 +392,13 @@ export default function CollabDocEditor({
       )}
       {imageUrlDraft !== null && (
         <div
-          className="fixed inset-0 z-50 flex items-center justify-center bg-neutral-950/70 backdrop-blur-xs"
+          className="fixed inset-0 z-50 flex items-center justify-center bg-scrim/70 backdrop-blur-xs"
           onClick={closeImageModal}
         >
           <div onClick={(e) => e.stopPropagation()} className="w-[380px] bg-neutral-900 border border-neutral-800 rounded shadow-2xl overflow-hidden">
             <div className="px-5 py-4 border-b border-neutral-800 flex items-center justify-between">
-              <h3 className="font-bold text-sm text-white">Insert Image</h3>
-              <button onClick={closeImageModal} className="text-neutral-400 hover:text-white cursor-pointer">
+              <h3 className="font-bold text-sm text-app-strong">Insert Image</h3>
+              <button onClick={closeImageModal} className="text-neutral-400 hover:text-app-strong cursor-pointer">
                 <X className="w-3.5 h-3.5" />
               </button>
             </div>
@@ -413,7 +413,7 @@ export default function CollabDocEditor({
                 }}
                 placeholder="Paste an image URL..."
                 disabled={imageUploading}
-                className="w-full bg-neutral-950 border border-neutral-700 rounded px-3 py-2 text-xs text-white focus:outline-none focus:border-blue-500 disabled:opacity-50"
+                className="w-full bg-neutral-950 border border-neutral-700 rounded px-3 py-2 text-xs text-app-strong focus:outline-none focus:border-blue-500 disabled:opacity-50"
               />
               <button
                 onClick={submitImage}

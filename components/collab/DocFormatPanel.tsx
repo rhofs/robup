@@ -327,7 +327,7 @@ export default function DocFormatPanel({
                 }}
                 placeholder="Paste an image URL..."
                 disabled={coverUploading}
-                className="w-full bg-neutral-950 border border-neutral-700 rounded px-2 py-1 text-[11px] text-white focus:outline-none focus:border-blue-500 disabled:opacity-50"
+                className="w-full bg-neutral-950 border border-neutral-700 rounded px-2 py-1 text-[11px] text-app-strong focus:outline-none focus:border-blue-500 disabled:opacity-50"
               />
               <button
                 type="button"

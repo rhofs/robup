@@ -200,7 +200,7 @@ function CoverBanner({ space, onCommit }: { space: HierarchySpace; onCommit: (ur
       }
     >
       {editing ? (
-        <div className="absolute inset-0 bg-neutral-950/80 flex items-center justify-center gap-2 p-4">
+        <div className="absolute inset-0 bg-scrim/80 flex items-center justify-center gap-2 p-4">
           <input
             autoFocus
             value={draft}
@@ -213,7 +213,7 @@ function CoverBanner({ space, onCommit }: { space: HierarchySpace; onCommit: (ur
               }
             }}
             placeholder="Paste an image URL…"
-            className="w-full max-w-md bg-neutral-950 border border-blue-500 rounded px-3 py-1.5 text-xs text-white focus:outline-none"
+            className="w-full max-w-md bg-neutral-950 border border-blue-500 rounded px-3 py-1.5 text-xs text-app-strong focus:outline-none"
           />
           <button onClick={commit} className="text-[11px] bg-blue-600 hover:bg-blue-500 text-white px-2.5 py-1.5 rounded cursor-pointer">
             Save
@@ -223,7 +223,7 @@ function CoverBanner({ space, onCommit }: { space: HierarchySpace; onCommit: (ur
               setDraft(space.coverImageUrl || '');
               setEditing(false);
             }}
-            className="text-neutral-400 hover:text-white cursor-pointer"
+            className="text-neutral-400 hover:text-app-strong cursor-pointer"
           >
             <X className="w-4 h-4" />
           </button>
@@ -266,7 +266,7 @@ function DescriptionBlock({ value, onCommit }: { value: string | null; onCommit:
         }}
         rows={3}
         placeholder="Add a description…"
-        className="w-full bg-neutral-900/60 border border-blue-500 rounded px-3 py-2 text-xs text-white focus:outline-none resize-none"
+        className="w-full bg-neutral-900/60 border border-blue-500 rounded px-3 py-2 text-xs text-app-strong focus:outline-none resize-none"
       />
     );
   }

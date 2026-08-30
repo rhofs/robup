@@ -221,7 +221,7 @@ function UsernameLookup({
             if (e.key === 'Enter') submit();
           }}
           placeholder="Enter their exact username..."
-          className="w-full bg-neutral-950 border border-neutral-800 rounded pl-8 pr-16 py-1.5 text-xs text-white placeholder:text-neutral-600 focus:outline-none focus:border-blue-500"
+          className="w-full bg-neutral-950 border border-neutral-800 rounded pl-8 pr-16 py-1.5 text-xs text-app-strong placeholder:text-neutral-600 focus:outline-none focus:border-blue-500"
         />
         <button
           onClick={submit}

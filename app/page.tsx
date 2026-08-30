@@ -291,7 +291,7 @@ function SortableStatusRow({
           onKeyDown={(e) => {
             if (e.key === 'Enter') (e.target as HTMLInputElement).blur();
           }}
-          className="flex-1 min-w-0 bg-neutral-950 border border-neutral-700 rounded px-2 py-1 text-[11px] text-white focus:outline-none focus:border-blue-500"
+          className="flex-1 min-w-0 bg-neutral-950 border border-neutral-700 rounded px-2 py-1 text-[11px] text-app-strong focus:outline-none focus:border-blue-500"
         />
         <button onClick={onDelete} className="text-neutral-500 hover:text-red-400 text-xs cursor-pointer shrink-0">
           <Trash2 className="w-3.5 h-3.5" />
@@ -359,7 +359,7 @@ function SortableFieldOption({
         <input
           value={option.label}
           onChange={(e) => onChangeLabel(e.target.value)}
-          className="flex-1 min-w-0 bg-neutral-950 border border-neutral-700 rounded px-2 py-1 text-xs text-white focus:outline-none focus:border-blue-500"
+          className="flex-1 min-w-0 bg-neutral-950 border border-neutral-700 rounded px-2 py-1 text-xs text-app-strong focus:outline-none focus:border-blue-500"
         />
         <button onClick={onDelete} className="text-neutral-500 hover:text-red-400 text-xs cursor-pointer shrink-0">
           <Trash2 className="w-3.5 h-3.5" />
@@ -3145,7 +3145,7 @@ function PageContent() {
           <div className="hidden md:flex w-8 h-8 rounded bg-gradient-to-br from-blue-500 to-blue-700 items-center justify-center font-black text-white shadow-lg shadow-blue-500/20 shrink-0">
             S
           </div>
-          <span className="md:hidden text-lg font-semibold text-white shrink-0">{mobileHeaderTitle}</span>
+          <span className="md:hidden text-lg font-semibold text-app-strong shrink-0">{mobileHeaderTitle}</span>
           <FloatingPopover
             open={workspaceSwitcherOpen}
             onClose={() => {
@@ -3160,7 +3160,7 @@ function PageContent() {
                 title="Switch workspace"
               >
                 <div className="min-w-0 text-left">
-                  <h1 className="font-bold tracking-tight text-white leading-tight text-sm truncate">
+                  <h1 className="font-bold tracking-tight text-app-strong leading-tight text-sm truncate">
                     {currentWorkspace?.name ?? 'No workspace'}
                   </h1>
                 </div>
@@ -3242,14 +3242,14 @@ function PageContent() {
                     }
                   }}
                   placeholder="Workspace name..."
-                  className="w-full bg-neutral-950 border border-blue-500 rounded px-2 py-1 text-xs text-white focus:outline-none"
+                  className="w-full bg-neutral-950 border border-blue-500 rounded px-2 py-1 text-xs text-app-strong focus:outline-none"
                 />
                 <div className="flex items-center gap-1 bg-neutral-950 border border-neutral-800 rounded p-0.5">
                   <button
                     type="button"
                     onClick={() => setNewWorkspaceType('company')}
                     className={`flex-1 text-[10px] py-1 rounded cursor-pointer transition ${
-                      newWorkspaceType === 'company' ? 'bg-neutral-800 text-white' : 'text-neutral-500 hover:text-neutral-300'
+                      newWorkspaceType === 'company' ? 'bg-neutral-800 text-app-strong' : 'text-neutral-500 hover:text-neutral-300'
                     }`}
                   >
                     Company
@@ -3258,7 +3258,7 @@ function PageContent() {
                     type="button"
                     onClick={() => setNewWorkspaceType('personal_project')}
                     className={`flex-1 text-[10px] py-1 rounded cursor-pointer transition ${
-                      newWorkspaceType === 'personal_project' ? 'bg-neutral-800 text-white' : 'text-neutral-500 hover:text-neutral-300'
+                      newWorkspaceType === 'personal_project' ? 'bg-neutral-800 text-app-strong' : 'text-neutral-500 hover:text-neutral-300'
                     }`}
                   >
                     Personal project
@@ -3275,7 +3275,7 @@ function PageContent() {
                     }
                   }}
                   placeholder="Work email (optional)"
-                  className="w-full bg-neutral-950 border border-neutral-700 rounded px-2 py-1 text-xs text-white focus:outline-none focus:border-blue-500"
+                  className="w-full bg-neutral-950 border border-neutral-700 rounded px-2 py-1 text-xs text-app-strong focus:outline-none focus:border-blue-500"
                 />
                 <button
                   type="button"
@@ -3433,7 +3433,7 @@ function PageContent() {
                         </span>
                       )}
                       <div className="min-w-0">
-                        <div className="text-xs font-medium text-white truncate">{me.name}</div>
+                        <div className="text-xs font-medium text-app-strong truncate">{me.name}</div>
                         {me.email && <div className="text-[10px] text-neutral-500 truncate">{me.email}</div>}
                       </div>
                     </div>
@@ -3641,7 +3641,7 @@ function PageContent() {
                     }
                   }}
                   placeholder="Space name..."
-                  className="w-full bg-neutral-950 border border-blue-500 rounded px-2 py-1 text-[11px] text-white focus:outline-none"
+                  className="w-full bg-neutral-950 border border-blue-500 rounded px-2 py-1 text-[11px] text-app-strong focus:outline-none"
                 />
               )}
               {[...(currentWorkspace?.spaces ?? [])].sort((a, b) => a.order - b.order).map((space: HierarchySpace) => {
@@ -3719,7 +3719,7 @@ function PageContent() {
                                     // blend into the near-black sidebar — was too small/weak
                                     // to read as "this Space's color" before this pass.
                                     <span
-                                      className="w-3 h-3 rounded-full ring-1 ring-white/15 opacity-100 group-hover:opacity-0 transition"
+                                      className="w-3 h-3 rounded-full ring-1 ring-app-strong/15 opacity-100 group-hover:opacity-0 transition"
                                       style={{ backgroundColor: space.color || '#6366f1' }}
                                     />
                                   );
@@ -3906,7 +3906,7 @@ function PageContent() {
                     }
                   }}
                   title="Back"
-                  className="p-1.5 rounded text-neutral-400 hover:text-white hover:bg-neutral-800/60 cursor-pointer"
+                  className="p-1.5 rounded text-neutral-400 hover:text-app-strong hover:bg-neutral-800/60 cursor-pointer"
                 >
                   <ArrowLeft className="w-4 h-4" />
                 </button>
@@ -3920,7 +3920,7 @@ function PageContent() {
                 <button
                   onClick={() => setActiveChatChannelId(null)}
                   title="Back"
-                  className="p-1.5 rounded text-neutral-400 hover:text-white hover:bg-neutral-800/60 cursor-pointer"
+                  className="p-1.5 rounded text-neutral-400 hover:text-app-strong hover:bg-neutral-800/60 cursor-pointer"
                 >
                   <ArrowLeft className="w-4 h-4" />
                 </button>
@@ -4022,7 +4022,7 @@ function PageContent() {
               {activeView === 'board' && activeListIds.size > 0 && (
                 <>
                   <span className="text-neutral-600">/</span>
-                  <span className="text-white font-semibold flex items-center gap-1.5">
+                  <span className="text-app-strong font-semibold flex items-center gap-1.5">
                     <span className="w-2 h-2 rounded-full bg-neutral-400"></span>
                     {activeListIds.size === 1
                       ? currentSpace?.lists.find((l) => l.id === [...activeListIds][0])?.name
@@ -4202,7 +4202,7 @@ function PageContent() {
                               value={newFieldName}
                               onChange={(e) => setNewFieldName(e.target.value)}
                               placeholder="Field name (e.g. Budget)"
-                              className="w-full bg-neutral-950 border border-neutral-700 rounded px-2 py-1 text-[11px] text-white focus:outline-none"
+                              className="w-full bg-neutral-950 border border-neutral-700 rounded px-2 py-1 text-[11px] text-app-strong focus:outline-none"
                             />
                             <select
                               value={newFieldType}
@@ -4361,7 +4361,7 @@ function PageContent() {
                       />
                       <button
                         onClick={() => updateSpaceDoc(activeStandaloneDoc.id, currentSpace.id, { coverImageUrl: null })}
-                        className="absolute top-2 right-2 text-[10px] bg-neutral-900/80 hover:bg-neutral-900 text-neutral-300 hover:text-white px-2 py-1 rounded opacity-0 group-hover/cover:opacity-100 transition cursor-pointer"
+                        className="absolute top-2 right-2 text-[10px] bg-neutral-900/80 hover:bg-neutral-900 text-neutral-300 hover:text-app-strong px-2 py-1 rounded opacity-0 group-hover/cover:opacity-100 transition cursor-pointer"
                       >
                         Remove cover
                       </button>
@@ -4370,7 +4370,7 @@ function PageContent() {
                   <input
                     value={activeStandaloneDoc.title}
                     onChange={(e) => updateSpaceDoc(activeStandaloneDoc.id, currentSpace.id, { title: e.target.value })}
-                    className="w-full bg-transparent text-lg font-semibold text-white focus:outline-none"
+                    className="w-full bg-transparent text-lg font-semibold text-app-strong focus:outline-none"
                     placeholder="Document title"
                   />
                   {activeStandaloneDoc.subtitle !== null && (
@@ -4745,7 +4745,7 @@ function PageContent() {
                         if (e.key === 'Enter') handleQuickAdd();
                         if (e.key === 'Escape') setActiveAdd(false);
                       }}
-                      className="flex-1 bg-neutral-900 border border-blue-500/80 rounded px-3 py-1 text-xs text-white focus:outline-none"
+                      className="flex-1 bg-neutral-900 border border-blue-500/80 rounded px-3 py-1 text-xs text-app-strong focus:outline-none"
                     />
                     <button onClick={handleQuickAdd} className="bg-blue-600 text-white text-xs px-3 py-1 rounded font-medium cursor-pointer">
                       Add
@@ -4831,7 +4831,7 @@ function PageContent() {
         <div className="fixed bottom-6 left-1/2 -tranneutral-x-1/2 z-40 bg-neutral-900 border border-neutral-700 rounded shadow-2xl px-4 py-2.5 flex items-center gap-3">
           <span className="text-xs text-neutral-300 font-medium">{selectedIds.size} selected</span>
           <div className="w-px h-5 bg-neutral-700"></div>
-          <button onClick={() => bulkArchive(true)} className="text-xs text-neutral-300 hover:text-white px-2 py-1 rounded hover:bg-neutral-800 cursor-pointer flex items-center gap-1.5">
+          <button onClick={() => bulkArchive(true)} className="text-xs text-neutral-300 hover:text-app-strong px-2 py-1 rounded hover:bg-neutral-800 cursor-pointer flex items-center gap-1.5">
             <Archive className="w-3.5 h-3.5" /> Archive
           </button>
           <div className="relative">
@@ -4840,7 +4840,7 @@ function PageContent() {
                 e.stopPropagation();
                 setBulkMoveOpen(!bulkMoveOpen);
               }}
-              className="text-xs text-neutral-300 hover:text-white px-2 py-1 rounded hover:bg-neutral-800 cursor-pointer flex items-center gap-1.5"
+              className="text-xs text-neutral-300 hover:text-app-strong px-2 py-1 rounded hover:bg-neutral-800 cursor-pointer flex items-center gap-1.5"
             >
               <FolderInput className="w-3.5 h-3.5" /> Move to...
             </button>
@@ -5198,11 +5198,11 @@ function PageContent() {
 
       {/* ================= EDIT SPACE MODAL ================= */}
       {spaceEditTarget && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-neutral-950/70 backdrop-blur-xs" onClick={() => setSpaceEditTarget(null)}>
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-scrim/70 backdrop-blur-xs" onClick={() => setSpaceEditTarget(null)}>
           <div onClick={(e) => e.stopPropagation()} className="w-[380px] bg-neutral-900 border border-neutral-800 rounded shadow-2xl overflow-hidden">
             <div className="px-5 py-4 border-b border-neutral-800 flex items-center justify-between">
-              <h3 className="font-bold text-sm text-white">Edit Space</h3>
-              <button onClick={() => setSpaceEditTarget(null)} className="text-neutral-400 hover:text-white cursor-pointer">
+              <h3 className="font-bold text-sm text-app-strong">Edit Space</h3>
+              <button onClick={() => setSpaceEditTarget(null)} className="text-neutral-400 hover:text-app-strong cursor-pointer">
                 <X className="w-3.5 h-3.5" />
               </button>
             </div>
@@ -5213,7 +5213,7 @@ function PageContent() {
                   value={editSpaceName}
                   onChange={(e) => setEditSpaceName(e.target.value)}
                   placeholder="🚀 Product Dev"
-                  className="w-full bg-neutral-950 border border-neutral-700 rounded px-3 py-2 text-xs text-white focus:outline-none focus:border-blue-500"
+                  className="w-full bg-neutral-950 border border-neutral-700 rounded px-3 py-2 text-xs text-app-strong focus:outline-none focus:border-blue-500"
                 />
               </div>
               <div>
@@ -5275,7 +5275,7 @@ function PageContent() {
                   value={editSpaceCoverUrl}
                   onChange={(e) => setEditSpaceCoverUrl(e.target.value)}
                   placeholder="https://..."
-                  className="w-full bg-neutral-950 border border-neutral-700 rounded px-3 py-2 text-xs text-white focus:outline-none focus:border-blue-500"
+                  className="w-full bg-neutral-950 border border-neutral-700 rounded px-3 py-2 text-xs text-app-strong focus:outline-none focus:border-blue-500"
                 />
               </div>
               <button onClick={saveSpaceEdit} className="w-full bg-blue-600 hover:bg-blue-500 text-white text-xs py-2 rounded font-medium cursor-pointer">
@@ -5288,11 +5288,11 @@ function PageContent() {
 
       {/* ================= EDIT FOLDER MODAL ================= */}
       {folderEditTarget && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-neutral-950/70 backdrop-blur-xs" onClick={() => setFolderEditTarget(null)}>
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-scrim/70 backdrop-blur-xs" onClick={() => setFolderEditTarget(null)}>
           <div onClick={(e) => e.stopPropagation()} className="w-[380px] bg-neutral-900 border border-neutral-800 rounded shadow-2xl overflow-hidden">
             <div className="px-5 py-4 border-b border-neutral-800 flex items-center justify-between">
-              <h3 className="font-bold text-sm text-white">Edit Folder</h3>
-              <button onClick={() => setFolderEditTarget(null)} className="text-neutral-400 hover:text-white cursor-pointer">
+              <h3 className="font-bold text-sm text-app-strong">Edit Folder</h3>
+              <button onClick={() => setFolderEditTarget(null)} className="text-neutral-400 hover:text-app-strong cursor-pointer">
                 <X className="w-3.5 h-3.5" />
               </button>
             </div>
@@ -5303,7 +5303,7 @@ function PageContent() {
                   value={editFolderName}
                   onChange={(e) => setEditFolderName(e.target.value)}
                   placeholder="Folder name"
-                  className="w-full bg-neutral-950 border border-neutral-700 rounded px-3 py-2 text-xs text-white focus:outline-none focus:border-blue-500"
+                  className="w-full bg-neutral-950 border border-neutral-700 rounded px-3 py-2 text-xs text-app-strong focus:outline-none focus:border-blue-500"
                 />
               </div>
               <div>
@@ -5313,10 +5313,10 @@ function PageContent() {
                     onClick={() => setEditFolderColor(null)}
                     title="Default"
                     className={`w-6 h-6 rounded-full cursor-pointer bg-neutral-700 flex items-center justify-center shrink-0 ${
-                      editFolderColor === null ? 'ring-2 ring-white' : ''
+                      editFolderColor === null ? 'ring-2 ring-app-strong' : ''
                     }`}
                   >
-                    {editFolderColor === null && <Check className="w-3 h-3 text-white" />}
+                    {editFolderColor === null && <Check className="w-3 h-3 text-app-strong" />}
                   </button>
                   <ColorSwatchPicker value={editFolderColor} onChange={setEditFolderColor} choices={FIELD_COLOR_CHOICES} />
                 </div>
@@ -5328,10 +5328,10 @@ function PageContent() {
                     onClick={() => setEditFolderTextColor(null)}
                     title="Default"
                     className={`w-6 h-6 rounded-full cursor-pointer bg-neutral-700 flex items-center justify-center shrink-0 ${
-                      editFolderTextColor === null ? 'ring-2 ring-white' : ''
+                      editFolderTextColor === null ? 'ring-2 ring-app-strong' : ''
                     }`}
                   >
-                    {editFolderTextColor === null && <Check className="w-3 h-3 text-white" />}
+                    {editFolderTextColor === null && <Check className="w-3 h-3 text-app-strong" />}
                   </button>
                   <ColorSwatchPicker value={editFolderTextColor} onChange={setEditFolderTextColor} choices={FIELD_COLOR_CHOICES} />
                 </div>
@@ -5381,11 +5381,11 @@ function PageContent() {
 
       {/* ================= EDIT LIST MODAL ================= */}
       {listEditTarget && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-neutral-950/70 backdrop-blur-xs" onClick={() => setListEditTarget(null)}>
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-scrim/70 backdrop-blur-xs" onClick={() => setListEditTarget(null)}>
           <div onClick={(e) => e.stopPropagation()} className="w-[380px] bg-neutral-900 border border-neutral-800 rounded shadow-2xl overflow-hidden">
             <div className="px-5 py-4 border-b border-neutral-800 flex items-center justify-between">
-              <h3 className="font-bold text-sm text-white">Edit List</h3>
-              <button onClick={() => setListEditTarget(null)} className="text-neutral-400 hover:text-white cursor-pointer">
+              <h3 className="font-bold text-sm text-app-strong">Edit List</h3>
+              <button onClick={() => setListEditTarget(null)} className="text-neutral-400 hover:text-app-strong cursor-pointer">
                 <X className="w-3.5 h-3.5" />
               </button>
             </div>
@@ -5396,7 +5396,7 @@ function PageContent() {
                   value={editListName}
                   onChange={(e) => setEditListName(e.target.value)}
                   placeholder="List name"
-                  className="w-full bg-neutral-950 border border-neutral-700 rounded px-3 py-2 text-xs text-white focus:outline-none focus:border-blue-500"
+                  className="w-full bg-neutral-950 border border-neutral-700 rounded px-3 py-2 text-xs text-app-strong focus:outline-none focus:border-blue-500"
                 />
               </div>
               <div>
@@ -5406,10 +5406,10 @@ function PageContent() {
                     onClick={() => setEditListColor(null)}
                     title="Default"
                     className={`w-6 h-6 rounded-full cursor-pointer bg-neutral-700 flex items-center justify-center shrink-0 ${
-                      editListColor === null ? 'ring-2 ring-white' : ''
+                      editListColor === null ? 'ring-2 ring-app-strong' : ''
                     }`}
                   >
-                    {editListColor === null && <Check className="w-3 h-3 text-white" />}
+                    {editListColor === null && <Check className="w-3 h-3 text-app-strong" />}
                   </button>
                   <ColorSwatchPicker value={editListColor} onChange={setEditListColor} choices={FIELD_COLOR_CHOICES} />
                 </div>
@@ -5421,10 +5421,10 @@ function PageContent() {
                     onClick={() => setEditListTextColor(null)}
                     title="Default"
                     className={`w-6 h-6 rounded-full cursor-pointer bg-neutral-700 flex items-center justify-center shrink-0 ${
-                      editListTextColor === null ? 'ring-2 ring-white' : ''
+                      editListTextColor === null ? 'ring-2 ring-app-strong' : ''
                     }`}
                   >
-                    {editListTextColor === null && <Check className="w-3 h-3 text-white" />}
+                    {editListTextColor === null && <Check className="w-3 h-3 text-app-strong" />}
                   </button>
                   <ColorSwatchPicker value={editListTextColor} onChange={setEditListTextColor} choices={FIELD_COLOR_CHOICES} />
                 </div>
@@ -5474,11 +5474,11 @@ function PageContent() {
 
       {/* ================= EDIT DOC (color only — icon is fixed, rename is inline) ================= */}
       {docEditTarget && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-neutral-950/70 backdrop-blur-xs" onClick={() => setDocEditTarget(null)}>
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-scrim/70 backdrop-blur-xs" onClick={() => setDocEditTarget(null)}>
           <div onClick={(e) => e.stopPropagation()} className="w-[380px] bg-neutral-900 border border-neutral-800 rounded shadow-2xl overflow-hidden">
             <div className="px-5 py-4 border-b border-neutral-800 flex items-center justify-between">
-              <h3 className="font-bold text-sm text-white">Edit Doc</h3>
-              <button onClick={() => setDocEditTarget(null)} className="text-neutral-400 hover:text-white cursor-pointer">
+              <h3 className="font-bold text-sm text-app-strong">Edit Doc</h3>
+              <button onClick={() => setDocEditTarget(null)} className="text-neutral-400 hover:text-app-strong cursor-pointer">
                 <X className="w-3.5 h-3.5" />
               </button>
             </div>
@@ -5490,10 +5490,10 @@ function PageContent() {
                     onClick={() => setEditDocColor(null)}
                     title="Default"
                     className={`w-6 h-6 rounded-full cursor-pointer bg-neutral-700 flex items-center justify-center shrink-0 ${
-                      editDocColor === null ? 'ring-2 ring-white' : ''
+                      editDocColor === null ? 'ring-2 ring-app-strong' : ''
                     }`}
                   >
-                    {editDocColor === null && <Check className="w-3 h-3 text-white" />}
+                    {editDocColor === null && <Check className="w-3 h-3 text-app-strong" />}
                   </button>
                   <ColorSwatchPicker value={editDocColor} onChange={setEditDocColor} choices={FIELD_COLOR_CHOICES} />
                 </div>
@@ -5505,10 +5505,10 @@ function PageContent() {
                     onClick={() => setEditDocTextColor(null)}
                     title="Default"
                     className={`w-6 h-6 rounded-full cursor-pointer bg-neutral-700 flex items-center justify-center shrink-0 ${
-                      editDocTextColor === null ? 'ring-2 ring-white' : ''
+                      editDocTextColor === null ? 'ring-2 ring-app-strong' : ''
                     }`}
                   >
-                    {editDocTextColor === null && <Check className="w-3 h-3 text-white" />}
+                    {editDocTextColor === null && <Check className="w-3 h-3 text-app-strong" />}
                   </button>
                   <ColorSwatchPicker value={editDocTextColor} onChange={setEditDocTextColor} choices={FIELD_COLOR_CHOICES} />
                 </div>
@@ -5529,11 +5529,11 @@ function PageContent() {
 
       {/* ================= EDIT FIELD MODAL ================= */}
       {fieldEditTarget && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-neutral-950/70 backdrop-blur-xs" onClick={() => setFieldEditTarget(null)}>
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-scrim/70 backdrop-blur-xs" onClick={() => setFieldEditTarget(null)}>
           <div onClick={(e) => e.stopPropagation()} className="w-[420px] bg-neutral-900 border border-neutral-800 rounded shadow-2xl overflow-hidden">
             <div className="px-5 py-4 border-b border-neutral-800 flex items-center justify-between">
-              <h3 className="font-bold text-sm text-white">Edit field</h3>
-              <button onClick={() => setFieldEditTarget(null)} className="text-neutral-400 hover:text-white cursor-pointer">
+              <h3 className="font-bold text-sm text-app-strong">Edit field</h3>
+              <button onClick={() => setFieldEditTarget(null)} className="text-neutral-400 hover:text-app-strong cursor-pointer">
                 <X className="w-3.5 h-3.5" />
               </button>
             </div>
@@ -5543,7 +5543,7 @@ function PageContent() {
                 <input
                   value={fieldNameDraft}
                   onChange={(e) => setFieldNameDraft(e.target.value)}
-                  className="w-full bg-neutral-950 border border-neutral-700 rounded px-3 py-2 text-xs text-white focus:outline-none focus:border-blue-500"
+                  className="w-full bg-neutral-950 border border-neutral-700 rounded px-3 py-2 text-xs text-app-strong focus:outline-none focus:border-blue-500"
                 />
               </div>
 
@@ -5586,11 +5586,11 @@ function PageContent() {
 
       {/* ================= MANAGE STATUSES MODAL (opens via right-click on the Status column) ================= */}
       {statusMenuOpen && currentSpace && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-neutral-950/70 backdrop-blur-xs" onClick={() => setStatusMenuOpen(false)}>
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-scrim/70 backdrop-blur-xs" onClick={() => setStatusMenuOpen(false)}>
           <div onClick={(e) => e.stopPropagation()} className="w-[380px] bg-neutral-900 border border-neutral-800 rounded shadow-2xl overflow-hidden">
             <div className="px-5 py-4 border-b border-neutral-800 flex items-center justify-between">
-              <h3 className="font-bold text-sm text-white">Manage statuses</h3>
-              <button onClick={() => setStatusMenuOpen(false)} className="text-neutral-400 hover:text-white cursor-pointer">
+              <h3 className="font-bold text-sm text-app-strong">Manage statuses</h3>
+              <button onClick={() => setStatusMenuOpen(false)} className="text-neutral-400 hover:text-app-strong cursor-pointer">
                 <X className="w-3.5 h-3.5" />
               </button>
             </div>
@@ -5628,7 +5628,7 @@ function PageContent() {
                   value={newStatusName}
                   onChange={(e) => setNewStatusName(e.target.value)}
                   placeholder="New status (e.g. Blocked)"
-                  className="w-full bg-neutral-950 border border-neutral-700 rounded px-2 py-1.5 text-xs text-white focus:outline-none focus:border-blue-500"
+                  className="w-full bg-neutral-950 border border-neutral-700 rounded px-2 py-1.5 text-xs text-app-strong focus:outline-none focus:border-blue-500"
                 />
                 <ColorSwatchPicker value={newStatusColor} onChange={setNewStatusColor} choices={FIELD_COLOR_CHOICES} size="sm" />
                 <button onClick={handleAddStatus} className="w-full bg-blue-600 hover:bg-blue-500 text-white text-xs py-1.5 rounded cursor-pointer">
@@ -5648,7 +5648,7 @@ function PageContent() {
           initial={{ opacity: 0 }}
           animate={{ opacity: 1 }}
           transition={{ duration: 0.15 }}
-          className="fixed inset-0 z-50 flex items-center justify-center bg-neutral-950/55 backdrop-blur-[3px] p-6 md:p-10"
+          className="fixed inset-0 z-50 flex items-center justify-center bg-scrim/55 backdrop-blur-[3px] p-6 md:p-10"
           onClick={() => setModalTaskStack([])}
         >
           {/* Plain fade-in, no shared-layout zoom from the row (dropped layoutId here — TaskRow.tsx
@@ -5771,11 +5771,11 @@ function PageContent() {
                         if (e.key === 'Enter') (e.target as HTMLInputElement).blur();
                         if (e.key === 'Escape') setEditingModalTitle(false);
                       }}
-                      className="w-full text-2xl font-extrabold text-white tracking-tight bg-neutral-950/60 border border-blue-500 rounded px-2 py-1 focus:outline-none"
+                      className="w-full text-2xl font-extrabold text-app-strong tracking-tight bg-neutral-950/60 border border-blue-500 rounded px-2 py-1 focus:outline-none"
                     />
                   ) : (
                     <h2
-                      className="text-2xl font-extrabold text-white tracking-tight cursor-text hover:opacity-90"
+                      className="text-2xl font-extrabold text-app-strong tracking-tight cursor-text hover:opacity-90"
                       title="Click to rename"
                       onClick={() => {
                         setModalTitleDraft(activeModalTask.title);
@@ -6053,7 +6053,7 @@ function PageContent() {
                             onChange={(e) => activeModalTaskId && updateDoc(activeDocId, activeModalTaskId, { title: e.target.value })}
                             onFocus={captureDocEditBaseline}
                             onBlur={() => commitDocEditActivity()}
-                            className="flex-1 min-w-0 bg-transparent text-sm font-semibold text-white focus:outline-none"
+                            className="flex-1 min-w-0 bg-transparent text-sm font-semibold text-app-strong focus:outline-none"
                             placeholder="Document title"
                           />
                           <DocExportMenu docId={activeDocId} onToast={showToast} />
@@ -6149,7 +6149,7 @@ function PageContent() {
                           onBlur={() => {
                             if (!newSubtaskTitle.trim()) setSubtaskAddOpen(false);
                           }}
-                          className="flex-1 bg-transparent border-b border-neutral-700 focus:border-blue-500 px-1 py-1.5 text-xs text-white focus:outline-none"
+                          className="flex-1 bg-transparent border-b border-neutral-700 focus:border-blue-500 px-1 py-1.5 text-xs text-app-strong focus:outline-none"
                         />
                         <button
                           onClick={() => handleAddSubtask(activeModalTask)}
@@ -6232,7 +6232,7 @@ function PageContent() {
                     }}
                     placeholder="Write a comment... (Enter to send, Shift+Enter for new line, @ to mention)"
                     rows={2}
-                    className="w-full bg-neutral-950 border border-neutral-800 rounded px-3 py-2 text-xs text-white focus:outline-none focus:border-blue-500 resize-none"
+                    className="w-full bg-neutral-950 border border-neutral-800 rounded px-3 py-2 text-xs text-app-strong focus:outline-none focus:border-blue-500 resize-none"
                   />
                   <button
                     onClick={() => {
@@ -6586,20 +6586,20 @@ function PageContent() {
             className="w-full max-w-sm bg-neutral-900 border border-neutral-800 rounded-2xl p-4 space-y-2.5"
             onClick={(e) => e.stopPropagation()}
           >
-            <h2 className="text-sm font-semibold text-white">New workspace</h2>
+            <h2 className="text-sm font-semibold text-app-strong">New workspace</h2>
             <input
               autoFocus
               value={newWorkspaceDraft}
               onChange={(e) => setNewWorkspaceDraft(e.target.value)}
               placeholder="Workspace name..."
-              className="w-full bg-neutral-950 border border-blue-500 rounded px-3 py-2 text-sm text-white focus:outline-none"
+              className="w-full bg-neutral-950 border border-blue-500 rounded px-3 py-2 text-sm text-app-strong focus:outline-none"
             />
             <div className="flex items-center gap-1 bg-neutral-950 border border-neutral-800 rounded p-0.5">
               <button
                 type="button"
                 onClick={() => setNewWorkspaceType('company')}
                 className={`flex-1 text-xs py-1.5 rounded cursor-pointer transition ${
-                  newWorkspaceType === 'company' ? 'bg-neutral-800 text-white' : 'text-neutral-500'
+                  newWorkspaceType === 'company' ? 'bg-neutral-800 text-app-strong' : 'text-neutral-500'
                 }`}
               >
                 Company
@@ -6608,7 +6608,7 @@ function PageContent() {
                 type="button"
                 onClick={() => setNewWorkspaceType('personal_project')}
                 className={`flex-1 text-xs py-1.5 rounded cursor-pointer transition ${
-                  newWorkspaceType === 'personal_project' ? 'bg-neutral-800 text-white' : 'text-neutral-500'
+                  newWorkspaceType === 'personal_project' ? 'bg-neutral-800 text-app-strong' : 'text-neutral-500'
                 }`}
               >
                 Personal project
@@ -6619,7 +6619,7 @@ function PageContent() {
               value={newWorkspaceEmail}
               onChange={(e) => setNewWorkspaceEmail(e.target.value)}
               placeholder="Work email (optional)"
-              className="w-full bg-neutral-950 border border-neutral-700 rounded px-3 py-2 text-sm text-white focus:outline-none focus:border-blue-500"
+              className="w-full bg-neutral-950 border border-neutral-700 rounded px-3 py-2 text-sm text-app-strong focus:outline-none focus:border-blue-500"
             />
             <div className="flex items-center gap-2 pt-1">
               <button

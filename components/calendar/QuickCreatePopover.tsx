@@ -122,7 +122,7 @@ export default function QuickCreatePopover({
     // first one) stays visible above the keyboard regardless, and the card can scroll internally
     // if there's still more content than fits. Desktop keeps the original centered look.
     <div
-      className="fixed inset-0 z-50 flex items-start md:items-center justify-center bg-neutral-950/70 backdrop-blur-xs overflow-y-auto p-4"
+      className="fixed inset-0 z-50 flex items-start md:items-center justify-center bg-scrim/70 backdrop-blur-xs overflow-y-auto p-4"
       onClick={onClose}
     >
       <div
@@ -130,8 +130,8 @@ export default function QuickCreatePopover({
         className="w-full max-w-[420px] my-6 md:my-0 max-h-[85vh] bg-neutral-900 border border-neutral-800 rounded shadow-2xl overflow-y-auto"
       >
         <div className="px-5 py-4 border-b border-neutral-800 flex items-center justify-between">
-          <h3 className="font-bold text-sm text-white">New</h3>
-          <button onClick={onClose} className="text-neutral-400 hover:text-white cursor-pointer">
+          <h3 className="font-bold text-sm text-app-strong">New</h3>
+          <button onClick={onClose} className="text-neutral-400 hover:text-app-strong cursor-pointer">
             <X className="w-3.5 h-3.5" />
           </button>
         </div>
@@ -159,7 +159,7 @@ export default function QuickCreatePopover({
               onChange={(e) => setTitle(e.target.value)}
               onKeyDown={(e) => e.key === 'Enter' && canCreate && handleCreate()}
               placeholder={tab === 'task' ? 'Task title...' : 'Event title...'}
-              className="w-full bg-neutral-950 border border-neutral-700 rounded px-3 py-2 text-xs text-white focus:outline-none focus:border-blue-500"
+              className="w-full bg-neutral-950 border border-neutral-700 rounded px-3 py-2 text-xs text-app-strong focus:outline-none focus:border-blue-500"
             />
           </div>
 
@@ -174,7 +174,7 @@ export default function QuickCreatePopover({
                       setSpaceId(e.target.value);
                       setListId('');
                     }}
-                    className="w-full bg-neutral-950 border border-neutral-700 rounded px-2 py-2 text-xs text-white focus:outline-none focus:border-blue-500"
+                    className="w-full bg-neutral-950 border border-neutral-700 rounded px-2 py-2 text-xs text-app-strong focus:outline-none focus:border-blue-500"
                   >
                     <option value="">Select a space...</option>
                     {spaces.map((s) => (
@@ -191,7 +191,7 @@ export default function QuickCreatePopover({
                     value={listId}
                     onChange={(e) => setListId(e.target.value)}
                     disabled={!selectedSpace}
-                    className="w-full bg-neutral-950 border border-neutral-700 rounded px-2 py-2 text-xs text-white focus:outline-none focus:border-blue-500 disabled:opacity-40 disabled:cursor-not-allowed"
+                    className="w-full bg-neutral-950 border border-neutral-700 rounded px-2 py-2 text-xs text-app-strong focus:outline-none focus:border-blue-500 disabled:opacity-40 disabled:cursor-not-allowed"
                   >
                     <option value="">{selectedSpace ? 'Select a list...' : 'Pick a space first'}</option>
                     {selectedSpace?.lists.map((l) => (
@@ -243,7 +243,7 @@ export default function QuickCreatePopover({
                 <select
                   value={eventSpaceId}
                   onChange={(e) => setEventSpaceId(e.target.value)}
-                  className="w-full bg-neutral-950 border border-neutral-700 rounded px-2 py-2 text-xs text-white focus:outline-none focus:border-blue-500"
+                  className="w-full bg-neutral-950 border border-neutral-700 rounded px-2 py-2 text-xs text-app-strong focus:outline-none focus:border-blue-500"
                 >
                   <option value="">No space</option>
                   {spaces.map((s) => (
@@ -291,7 +291,7 @@ export default function QuickCreatePopover({
                   value={eventLocation}
                   onChange={setEventLocation}
                   placeholder="Add a location..."
-                  className="w-full bg-neutral-950 border border-neutral-700 rounded px-3 py-2 text-xs text-white focus:outline-none focus:border-blue-500"
+                  className="w-full bg-neutral-950 border border-neutral-700 rounded px-3 py-2 text-xs text-app-strong focus:outline-none focus:border-blue-500"
                 />
                 {eventLocation.trim() && (
                   <a

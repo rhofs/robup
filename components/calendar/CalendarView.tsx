@@ -569,7 +569,7 @@ export default function CalendarView({ tasks, events, statuses, workspaces, show
           air between "New task" and the month label without shrinking anything. */}
       <div className="flex flex-col gap-1.5 md:gap-2 md:flex-row md:items-center md:justify-between px-1 pb-2 md:pb-3 shrink-0">
         <div className="flex items-center gap-2">
-          <button onClick={() => step(-1)} className="p-1.5 rounded text-neutral-400 hover:text-white hover:bg-neutral-800/60 cursor-pointer">
+          <button onClick={() => step(-1)} className="p-1.5 rounded text-neutral-400 hover:text-app-strong hover:bg-neutral-800/60 cursor-pointer">
             <ChevronLeft className="w-4 h-4" />
           </button>
           <button
@@ -578,10 +578,10 @@ export default function CalendarView({ tasks, events, statuses, workspaces, show
           >
             Today
           </button>
-          <button onClick={() => step(1)} className="p-1.5 rounded text-neutral-400 hover:text-white hover:bg-neutral-800/60 cursor-pointer">
+          <button onClick={() => step(1)} className="p-1.5 rounded text-neutral-400 hover:text-app-strong hover:bg-neutral-800/60 cursor-pointer">
             <ChevronRight className="w-4 h-4" />
           </button>
-          <span className="text-sm font-semibold text-white ml-1">{headerLabel}</span>
+          <span className="text-sm font-semibold text-app-strong ml-1">{headerLabel}</span>
         </div>
 
         <div className="flex items-center gap-2">
@@ -652,7 +652,7 @@ export default function CalendarView({ tasks, events, statuses, workspaces, show
                 <div key={i} className="flex flex-col items-center justify-center gap-0">
                   <span className={`text-[9px] font-semibold tracking-wide ${isToday ? 'text-blue-400' : 'text-neutral-500'}`}>{label}</span>
                   {day && (
-                    <span className={`text-base font-bold leading-tight ${isToday ? 'text-blue-400' : 'text-white'}`}>{day.getDate()}</span>
+                    <span className={`text-base font-bold leading-tight ${isToday ? 'text-blue-400' : 'text-app-strong'}`}>{day.getDate()}</span>
                   )}
                 </div>
               );

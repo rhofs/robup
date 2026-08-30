@@ -108,7 +108,7 @@ export default function DatePickerPopover({ value, onChange, placeholder = 'Not 
             selected
               ? badgeColorHex
                 ? 'hover:bg-neutral-800/70'
-                : 'text-neutral-300 hover:bg-neutral-800/70 hover:text-white'
+                : 'text-neutral-300 hover:bg-neutral-800/70 hover:text-app-strong'
               : 'text-neutral-500 hover:bg-neutral-800/70 hover:text-neutral-300'
           }`}
           style={selected && badgeColorHex ? { color: badgeColorHex } : undefined}
@@ -144,14 +144,14 @@ export default function DatePickerPopover({ value, onChange, placeholder = 'Not 
             <button
               type="button"
               onClick={() => setViewMonth((m) => new Date(m.getFullYear(), m.getMonth() - 1, 1))}
-              className="text-neutral-400 hover:text-white px-1 cursor-pointer"
+              className="text-neutral-400 hover:text-app-strong px-1 cursor-pointer"
             >
               <ChevronLeft className="w-3.5 h-3.5" />
             </button>
             <button
               type="button"
               onClick={() => setViewMonth((m) => new Date(m.getFullYear(), m.getMonth() + 1, 1))}
-              className="text-neutral-400 hover:text-white px-1 cursor-pointer"
+              className="text-neutral-400 hover:text-app-strong px-1 cursor-pointer"
             >
               <ChevronRight className="w-3.5 h-3.5" />
             </button>
@@ -201,7 +201,7 @@ export default function DatePickerPopover({ value, onChange, placeholder = 'Not 
                   onChange(null);
                   setShowTimeInput(false);
                 }}
-                className="text-neutral-400 hover:text-white cursor-pointer"
+                className="text-neutral-400 hover:text-app-strong cursor-pointer"
               >
                 <X className="w-3 h-3" />
               </button>

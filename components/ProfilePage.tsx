@@ -32,11 +32,11 @@ export default function ProfilePage({ currentUser, onUpdate, onSetUsername }: Pr
 
   return (
     <div className="max-w-xl mx-auto space-y-4">
-      <h2 className="text-sm font-semibold text-white">My Profile</h2>
+      <h2 className="text-sm font-semibold text-app-strong">My Profile</h2>
       <div className="bg-neutral-900/60 border border-neutral-800/80 rounded p-5 space-y-4">
         <div className="flex items-center gap-4">
           <AvatarEditor user={currentUser} onCommit={(url) => onUpdate({ avatarUrl: url })} />
-          <div className="text-lg font-semibold text-white">{currentUser.name}</div>
+          <div className="text-lg font-semibold text-app-strong">{currentUser.name}</div>
         </div>
 
         <BioBlock value={currentUser.bio} onCommit={(value) => onUpdate({ bio: value })} />
@@ -156,7 +156,7 @@ function DangerZone({ user }: { user: AppUser }) {
               placeholder="Confirm your password"
               value={password}
               onChange={(e) => setPassword(e.target.value)}
-              className="w-full bg-neutral-950 border border-neutral-700 rounded px-3 py-2 text-xs text-white focus:outline-none focus:border-red-500"
+              className="w-full bg-neutral-950 border border-neutral-700 rounded px-3 py-2 text-xs text-app-strong focus:outline-none focus:border-red-500"
             />
           ) : (
             <input
@@ -165,7 +165,7 @@ function DangerZone({ user }: { user: AppUser }) {
               placeholder={`Type "${user.email ?? 'your email'}" to confirm`}
               value={confirmEmail}
               onChange={(e) => setConfirmEmail(e.target.value)}
-              className="w-full bg-neutral-950 border border-neutral-700 rounded px-3 py-2 text-xs text-white focus:outline-none focus:border-red-500"
+              className="w-full bg-neutral-950 border border-neutral-700 rounded px-3 py-2 text-xs text-app-strong focus:outline-none focus:border-red-500"
             />
           )}
           {error && <p className="text-[11px] text-red-400">{error}</p>}
@@ -212,7 +212,7 @@ function AvatarEditor({ user, onCommit }: { user: AppUser; onCommit: (url: strin
             }
           }}
           placeholder="Paste an image URL…"
-          className="w-56 bg-neutral-950 border border-blue-500 rounded px-2 py-1 text-xs text-white focus:outline-none"
+          className="w-56 bg-neutral-950 border border-blue-500 rounded px-2 py-1 text-xs text-app-strong focus:outline-none"
         />
         <button onClick={commit} className="text-[11px] bg-blue-600 hover:bg-blue-500 text-white px-2 py-1 rounded cursor-pointer">
           Save
@@ -222,7 +222,7 @@ function AvatarEditor({ user, onCommit }: { user: AppUser; onCommit: (url: strin
             setDraft(user.avatarUrl || '');
             setEditing(false);
           }}
-          className="text-neutral-400 hover:text-white cursor-pointer"
+          className="text-neutral-400 hover:text-app-strong cursor-pointer"
         >
           <X className="w-4 h-4" />
         </button>
@@ -242,8 +242,8 @@ function AvatarEditor({ user, onCommit }: { user: AppUser; onCommit: (url: strin
           {user.initials}
         </span>
       )}
-      <span className="absolute inset-0 rounded-full bg-neutral-950/0 group-hover:bg-neutral-950/50 flex items-center justify-center transition">
-        <ImageIcon className="w-4 h-4 text-white opacity-0 group-hover:opacity-100" />
+      <span className="absolute inset-0 rounded-full bg-scrim/0 group-hover:bg-scrim/50 flex items-center justify-center transition">
+        <ImageIcon className="w-4 h-4 text-app-strong opacity-0 group-hover:opacity-100" />
       </span>
     </button>
   );
@@ -306,7 +306,7 @@ function UsernameField({
               }
             }}
             placeholder="username"
-            className="flex-1 bg-neutral-950 border border-blue-500 rounded px-2 py-1 text-xs text-white focus:outline-none disabled:opacity-50"
+            className="flex-1 bg-neutral-950 border border-blue-500 rounded px-2 py-1 text-xs text-app-strong focus:outline-none disabled:opacity-50"
           />
           <button
             onClick={commit}
@@ -361,7 +361,7 @@ function BioBlock({ value, onCommit }: { value: string | null; onCommit: (value:
         }}
         rows={3}
         placeholder="Write a short bio…"
-        className="w-full bg-neutral-950/60 border border-blue-500 rounded px-3 py-2 text-xs text-white focus:outline-none resize-none"
+        className="w-full bg-neutral-950/60 border border-blue-500 rounded px-3 py-2 text-xs text-app-strong focus:outline-none resize-none"
       />
     );
   }

@@ -231,7 +231,7 @@ export default function CommandPalette({ open, onClose, onOpenTask, scopeKind }:
           animate={{ opacity: 1 }}
           exit={{ opacity: 0 }}
           transition={{ duration: 0.15 }}
-          className="fixed inset-0 z-[80] flex items-start justify-center bg-neutral-950/70 backdrop-blur-xs pt-[15vh]"
+          className="fixed inset-0 z-[80] flex items-start justify-center bg-scrim/70 backdrop-blur-xs pt-[15vh]"
           onClick={onClose}
         >
           <motion.div
@@ -259,7 +259,7 @@ export default function CommandPalette({ open, onClose, onOpenTask, scopeKind }:
                     ? 'Search chats and channels...'
                     : 'Search tasks, docs, people, spaces & lists...'
                 }
-                className="flex-1 bg-transparent text-sm text-white placeholder:text-neutral-500 focus:outline-none"
+                className="flex-1 bg-transparent text-sm text-app-strong placeholder:text-neutral-500 focus:outline-none"
               />
             </div>
 

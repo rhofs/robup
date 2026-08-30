@@ -106,10 +106,10 @@ function LoginPageContent() {
             <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-blue-500 to-blue-700 text-white font-black flex items-center justify-center shrink-0 shadow-lg shadow-blue-500/20">
               S
             </div>
-            <span className="text-white font-bold tracking-tight text-lg">Siqt</span>
+            <span className="text-app-strong font-bold tracking-tight text-lg">Siqt</span>
           </div>
 
-          <h1 className="text-4xl sm:text-5xl font-bold text-white tracking-tight leading-[1.1] mb-5">
+          <h1 className="text-4xl sm:text-5xl font-bold text-app-strong tracking-tight leading-[1.1] mb-5">
             Tasks, planning, docs, and chat — <span className="text-blue-400">one place</span>.
           </h1>
           <p className="text-neutral-400 text-base leading-relaxed mb-14 max-w-md">
@@ -124,7 +124,7 @@ function LoginPageContent() {
                   <f.icon className="w-4.5 h-4.5 text-blue-400" />
                 </div>
                 <div className="min-w-0">
-                  <h3 className="text-sm font-semibold text-white mb-0.5">{f.title}</h3>
+                  <h3 className="text-sm font-semibold text-app-strong mb-0.5">{f.title}</h3>
                   <p className="text-xs text-neutral-500 leading-relaxed">{f.description}</p>
                 </div>
               </div>
@@ -147,7 +147,7 @@ function LoginPageContent() {
                 setError(null);
               }}
               className={`flex-1 text-xs py-1.5 cursor-pointer transition ${
-                mode === 'signin' ? 'bg-neutral-800 text-white' : 'text-neutral-400 hover:text-neutral-200'
+                mode === 'signin' ? 'bg-neutral-800 text-app-strong' : 'text-neutral-400 hover:text-neutral-200'
               }`}
             >
               Sign in
@@ -159,7 +159,7 @@ function LoginPageContent() {
                 setError(null);
               }}
               className={`flex-1 text-xs py-1.5 cursor-pointer transition ${
-                mode === 'signup' ? 'bg-neutral-800 text-white' : 'text-neutral-400 hover:text-neutral-200'
+                mode === 'signup' ? 'bg-neutral-800 text-app-strong' : 'text-neutral-400 hover:text-neutral-200'
               }`}
             >
               Create account
@@ -169,7 +169,7 @@ function LoginPageContent() {
           <button
             type="button"
             onClick={() => signIn('google', { redirectTo: callbackUrl })}
-            className="w-full flex items-center justify-center gap-2 bg-neutral-950 border border-neutral-700 rounded px-3 py-2 text-xs text-white hover:bg-neutral-800/60 transition cursor-pointer mb-4"
+            className="w-full flex items-center justify-center gap-2 bg-neutral-950 border border-neutral-700 rounded px-3 py-2 text-xs text-app-strong hover:bg-neutral-800/60 transition cursor-pointer mb-4"
           >
             Continue with Google
           </button>
@@ -187,7 +187,7 @@ function LoginPageContent() {
                 placeholder="Name"
                 value={name}
                 onChange={(e) => setName(e.target.value)}
-                className="w-full bg-neutral-950 border border-neutral-700 rounded px-3 py-2 text-xs text-white focus:outline-none focus:border-blue-500"
+                className="w-full bg-neutral-950 border border-neutral-700 rounded px-3 py-2 text-xs text-app-strong focus:outline-none focus:border-blue-500"
               />
             )}
             <input
@@ -196,7 +196,7 @@ function LoginPageContent() {
               required
               value={email}
               onChange={(e) => setEmail(e.target.value)}
-              className="w-full bg-neutral-950 border border-neutral-700 rounded px-3 py-2 text-xs text-white focus:outline-none focus:border-blue-500"
+              className="w-full bg-neutral-950 border border-neutral-700 rounded px-3 py-2 text-xs text-app-strong focus:outline-none focus:border-blue-500"
             />
             <input
               type="password"
@@ -205,7 +205,7 @@ function LoginPageContent() {
               minLength={mode === 'signup' ? 8 : undefined}
               value={password}
               onChange={(e) => setPassword(e.target.value)}
-              className="w-full bg-neutral-950 border border-neutral-700 rounded px-3 py-2 text-xs text-white focus:outline-none focus:border-blue-500"
+              className="w-full bg-neutral-950 border border-neutral-700 rounded px-3 py-2 text-xs text-app-strong focus:outline-none focus:border-blue-500"
             />
             {error && <p className="text-[11px] text-red-400">{error}</p>}
             <button

@@ -361,7 +361,7 @@ function FolderLevel(props: FolderTreeProps & { parentId: string | null; depth: 
             }
           }}
           placeholder={addMode === 'list' ? 'List name...' : addMode === 'doc' ? 'Doc title...' : 'Folder name...'}
-          className="w-full bg-neutral-950 border border-blue-500 rounded px-2 py-1 text-[11px] text-white focus:outline-none"
+          className="w-full bg-neutral-950 border border-blue-500 rounded px-2 py-1 text-[11px] text-app-strong focus:outline-none"
         />
       ) : (
         // ClickUp-style single "+" instead of three separate buttons — one anchor, a small
@@ -492,7 +492,7 @@ function DocRow({
           }
         }}
         onClick={(e) => e.stopPropagation()}
-        className="w-full bg-neutral-950 border border-blue-500 rounded px-2 py-1 text-[11px] text-white focus:outline-none"
+        className="w-full bg-neutral-950 border border-blue-500 rounded px-2 py-1 text-[11px] text-app-strong focus:outline-none"
       />
     );
   }
@@ -628,7 +628,7 @@ function FolderRow(props: FolderTreeProps & { folder: HierarchyFolder; parentId:
             setEditing(false);
           }
         }}
-        className="w-full bg-neutral-950 border border-blue-500 rounded px-2 py-1 text-[11px] text-white focus:outline-none mb-0.5"
+        className="w-full bg-neutral-950 border border-blue-500 rounded px-2 py-1 text-[11px] text-app-strong focus:outline-none mb-0.5"
       />
     );
   }
@@ -795,7 +795,7 @@ function FolderRow(props: FolderTreeProps & { folder: HierarchyFolder; parentId:
             }
           }}
           placeholder={childAddMode === 'list' ? 'List name...' : childAddMode === 'doc' ? 'Doc title...' : 'Folder name...'}
-          className="ml-6 w-[calc(100%-1.5rem)] bg-neutral-950 border border-blue-500 rounded px-2 py-1 text-[11px] text-white focus:outline-none"
+          className="ml-6 w-[calc(100%-1.5rem)] bg-neutral-950 border border-blue-500 rounded px-2 py-1 text-[11px] text-app-strong focus:outline-none"
         />
       )}
       {expanded && <FolderLevel {...props} parentId={folder.id} depth={props.depth + 1} />}
@@ -879,7 +879,7 @@ function ListRow({
           }
         }}
         onClick={(e) => e.stopPropagation()}
-        className="w-full bg-neutral-950 border border-blue-500 rounded px-2 py-1 text-[11px] text-white focus:outline-none"
+        className="w-full bg-neutral-950 border border-blue-500 rounded px-2 py-1 text-[11px] text-app-strong focus:outline-none"
       />
     );
   }

@@ -167,7 +167,7 @@ export default function ManageableAvatar({
                   className="w-full flex items-center gap-2 py-1 rounded hover:bg-neutral-800/60 cursor-pointer text-left"
                 >
                   <span className={`w-3.5 h-3.5 rounded border flex items-center justify-center shrink-0 ${has ? 'bg-blue-600 border-blue-600' : 'border-neutral-700'}`}>
-                    {has && <Check className="w-2.5 h-2.5 text-white" />}
+                    {has && <Check className="w-2.5 h-2.5 text-app-strong" />}
                   </span>
                   <span className="w-2 h-2 rounded-full shrink-0" style={{ backgroundColor: r.color }} />
                   <span className="text-xs text-neutral-300 truncate">{r.name}</span>

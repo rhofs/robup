@@ -161,7 +161,7 @@ export default function OfficePage({
         </span>
         <div className="min-w-0 flex-1 space-y-0.5">
           <div className="flex items-center gap-2">
-            <span className="text-lg font-semibold text-white">{activeUser.name}</span>
+            <span className="text-lg font-semibold text-app-strong">{activeUser.name}</span>
             {activeUser.status && <span className="text-xs">{activeUser.status}</span>}
           </div>
           <EditableField
@@ -271,7 +271,7 @@ export function EditableField({
           }
         }}
         placeholder={placeholder}
-        className="bg-neutral-950 border border-blue-500 rounded px-2 py-1 text-xs text-white focus:outline-none"
+        className="bg-neutral-950 border border-blue-500 rounded px-2 py-1 text-xs text-app-strong focus:outline-none"
       />
     );
   }

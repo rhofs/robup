@@ -92,16 +92,16 @@ export default function TrashPanel({ onClose }: { onClose: () => void }) {
   }
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-neutral-950/70 backdrop-blur-xs" onClick={onClose}>
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-scrim/70 backdrop-blur-xs" onClick={onClose}>
       <div
         onClick={(e) => e.stopPropagation()}
         className="w-[560px] max-h-[70vh] bg-neutral-900 border border-neutral-800 rounded shadow-2xl overflow-hidden flex flex-col"
       >
         <div className="px-5 py-4 border-b border-neutral-800 flex items-center justify-between shrink-0">
-          <h3 className="font-bold text-sm text-white flex items-center gap-2">
+          <h3 className="font-bold text-sm text-app-strong flex items-center gap-2">
             <Trash2 className="w-4 h-4" /> Trash
           </h3>
-          <button onClick={onClose} className="text-neutral-400 hover:text-white cursor-pointer">
+          <button onClick={onClose} className="text-neutral-400 hover:text-app-strong cursor-pointer">
             <X className="w-3.5 h-3.5" />
           </button>
         </div>

@@ -160,7 +160,7 @@ function ReplyInput({ onSubmit }: { onSubmit: (body: string) => void }) {
         if (e.key === 'Enter') submit();
       }}
       placeholder="Reply..."
-      className="w-full bg-neutral-950 border border-neutral-800 rounded px-2 py-1 text-[10px] text-white focus:outline-none focus:border-blue-500"
+      className="w-full bg-neutral-950 border border-neutral-800 rounded px-2 py-1 text-[10px] text-app-strong focus:outline-none focus:border-blue-500"
     />
   );
 }

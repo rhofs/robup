@@ -162,7 +162,7 @@ function PageRow({
         }}
         onClick={(e) => e.stopPropagation()}
         style={{ marginLeft: 6 + depth * 14 }}
-        className="block bg-neutral-950 border border-blue-500 rounded px-2 py-1 text-[11px] text-white focus:outline-none"
+        className="block bg-neutral-950 border border-blue-500 rounded px-2 py-1 text-[11px] text-app-strong focus:outline-none"
       />
     );
   }

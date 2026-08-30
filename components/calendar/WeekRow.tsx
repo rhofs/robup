@@ -233,7 +233,18 @@ export default function WeekRow({
             // dimmest/most muted signal, today is the strongest, weekend is a subtle in-between
             // tint (same idea as Google Calendar/Notion's faint weekend column shading) — never
             // combined, so the grid doesn't get visually noisy.
-            const cellBg = outOfMonth ? 'bg-neutral-950/30' : isToday ? 'bg-blue-500/[0.035]' : isWeekend ? 'bg-white/[0.015]' : '';
+            // The out-of-month and weekend washes read from CSS variables rather than neutral
+            // utilities: both are low-opacity tints that must stay *darker* than the cell behind
+            // them, which an inverted neutral (see globals.css) would turn into "lighter than
+            // white," i.e. invisible in light mode. Today's blue tint is chromatic, so it works
+            // unchanged in both themes.
+            const cellBg = outOfMonth
+              ? 'bg-[var(--cell-tint-out-of-month)]'
+              : isToday
+                ? 'bg-blue-500/[0.035]'
+                : isWeekend
+                  ? 'bg-[var(--cell-tint-weekend)]'
+                  : '';
             return (
               <div key={i} className="relative group/day">
                 <button
@@ -558,7 +569,7 @@ function TaskBar({
               </span>
             ))}
             {assignees.length > 1 && (
-              <span className="w-3.5 h-3.5 rounded-full border border-neutral-900/60 bg-neutral-700 text-[7px] font-bold flex items-center justify-center text-white shrink-0">
+              <span className="w-3.5 h-3.5 rounded-full border border-neutral-900/60 bg-neutral-700 text-[7px] font-bold flex items-center justify-center text-app-strong shrink-0">
                 +{assignees.length - 1}
               </span>
             )}
@@ -594,7 +605,7 @@ function TaskBar({
             onUnpinLane(task.id);
           }}
           title="Manually pinned to this lane — click to let it auto-arrange again"
-          className="absolute -top-1 -right-1 z-10 w-3 h-3 rounded-full bg-neutral-900 border border-neutral-600 text-neutral-300 hover:text-white hover:border-white flex items-center justify-center opacity-0 group-hover/bar:opacity-100 transition cursor-pointer"
+          className="absolute -top-1 -right-1 z-10 w-3 h-3 rounded-full bg-neutral-900 border border-neutral-600 text-neutral-300 hover:text-app-strong hover:border-app-strong flex items-center justify-center opacity-0 group-hover/bar:opacity-100 transition cursor-pointer"
         >
           <Pin className="w-2 h-2" />
         </button>

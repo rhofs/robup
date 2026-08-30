@@ -93,7 +93,7 @@ export default function EventActivityPanel({ eventId }: { eventId: string }) {
             if (e.key === 'Enter') submit();
           }}
           placeholder="Add a comment..."
-          className="flex-1 bg-neutral-950 border border-neutral-700 rounded px-2 py-1.5 text-xs text-white focus:outline-none focus:border-blue-500"
+          className="flex-1 bg-neutral-950 border border-neutral-700 rounded px-2 py-1.5 text-xs text-app-strong focus:outline-none focus:border-blue-500"
         />
         <button
           onClick={submit}

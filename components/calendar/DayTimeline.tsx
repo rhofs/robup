@@ -364,7 +364,7 @@ function DayEventBlock({
         // Dashed border + CalendarClock icon — same Task-vs-Event tell as WeekRow.tsx's EventBar,
         // kept visually consistent across every Planner granularity.
         className={`relative w-full h-full rounded-md px-2.5 py-1.5 text-[10px] font-medium truncate cursor-grab active:cursor-grabbing text-left border border-dashed transition-colors flex items-center gap-1 ${
-          isDraggingThis ? 'opacity-70 ring-2 ring-white/70' : ''
+          isDraggingThis ? 'opacity-70 ring-2 ring-app-strong/70' : ''
         }`}
         style={{
           backgroundColor: withAlpha(color, hovered ? HOVER_BG_ALPHA : BASE_BG_ALPHA),
@@ -440,7 +440,7 @@ function DayTaskBlock({
         onMouseLeave={() => setHovered(false)}
         title={task.title}
         className={`relative h-full rounded-md px-2.5 py-1.5 text-[10px] font-medium cursor-grab active:cursor-grabbing select-none flex flex-col border transition-colors ${
-          isDraggingThis ? 'opacity-70 ring-2 ring-white/70' : ''
+          isDraggingThis ? 'opacity-70 ring-2 ring-app-strong/70' : ''
         }`}
         style={{
           backgroundColor: withAlpha(color, hovered ? HOVER_BG_ALPHA : BASE_BG_ALPHA),
@@ -462,7 +462,7 @@ function DayTaskBlock({
               </span>
             ))}
             {task.assignees.length > 3 && (
-              <span className="w-3.5 h-3.5 rounded-full border border-neutral-900/60 bg-neutral-700 text-[7px] font-bold flex items-center justify-center text-white shrink-0">
+              <span className="w-3.5 h-3.5 rounded-full border border-neutral-900/60 bg-neutral-700 text-[7px] font-bold flex items-center justify-center text-app-strong shrink-0">
                 +{task.assignees.length - 3}
               </span>
             )}

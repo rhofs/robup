@@ -44,7 +44,7 @@ export default function MyTasksPage({ currentUser, currentWorkspace, tasks, stat
 
   return (
     <div className="max-w-3xl mx-auto space-y-4">
-      <h2 className="text-sm font-semibold text-white">My Assigned Tasks</h2>
+      <h2 className="text-sm font-semibold text-app-strong">My Assigned Tasks</h2>
       <div className="space-y-2">
         <h3 className="text-xs font-bold text-neutral-400 uppercase tracking-wider">
           In {currentWorkspace?.name ?? 'this workspace'} ({myTasks.length})

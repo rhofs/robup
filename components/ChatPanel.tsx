@@ -356,7 +356,7 @@ export default function ChatPanel() {
       onDrop={handleDrop}
     >
       {dragActive && (
-        <div className="absolute inset-0 z-10 flex items-center justify-center bg-neutral-950/85 border-2 border-dashed border-blue-500 rounded-xl pointer-events-none">
+        <div className="absolute inset-0 z-10 flex items-center justify-center bg-scrim/85 border-2 border-dashed border-blue-500 rounded-xl pointer-events-none">
           <div className="flex flex-col items-center gap-2 text-blue-400">
             <UploadCloud className="w-8 h-8" />
             <span className="text-sm font-medium">Drop to attach</span>

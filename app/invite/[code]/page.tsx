@@ -46,7 +46,7 @@ export default function InvitePage() {
           <div className="w-10 h-10 rounded bg-blue-500 text-white font-bold flex items-center justify-center mx-auto mb-3">
             S
           </div>
-          <h1 className="text-lg font-semibold text-white">Siqt</h1>
+          <h1 className="text-lg font-semibold text-app-strong">Siqt</h1>
         </div>
 
         <div className="bg-neutral-900 border border-neutral-800 rounded-lg p-5 text-center">
@@ -57,7 +57,7 @@ export default function InvitePage() {
           ) : (
             <>
               <p className="text-xs text-neutral-400 mb-1">You've been invited to join</p>
-              <p className="text-base font-semibold text-white mb-4">{invite.workspaceName}</p>
+              <p className="text-base font-semibold text-app-strong mb-4">{invite.workspaceName}</p>
 
               {error && <p className="text-[11px] text-red-400 mb-3">{error}</p>}
 

@@ -58,7 +58,7 @@ export default function EventDetailModal({ event, workspaces, users, currentUser
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-neutral-950/70 backdrop-blur-xs" onClick={onClose}>
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-scrim/70 backdrop-blur-xs" onClick={onClose}>
       <div onClick={(e) => e.stopPropagation()} className="w-[420px] bg-neutral-900 border border-neutral-800 rounded shadow-2xl overflow-hidden">
         {/* Same "where did this come from" tell as the ClickUp reference screenshot (Google icon
             + "in <account email>") — shown for any event synced to Google, whether it originated
@@ -86,14 +86,14 @@ export default function EventDetailModal({ event, workspaces, users, currentUser
                   setEditingTitle(false);
                 }
               }}
-              className="flex-1 bg-neutral-950 border border-blue-500 rounded px-2 py-1 text-sm text-white focus:outline-none mr-2"
+              className="flex-1 bg-neutral-950 border border-blue-500 rounded px-2 py-1 text-sm text-app-strong focus:outline-none mr-2"
             />
           ) : (
-            <button onClick={() => setEditingTitle(true)} className="font-bold text-sm text-white cursor-text text-left truncate mr-2">
+            <button onClick={() => setEditingTitle(true)} className="font-bold text-sm text-app-strong cursor-text text-left truncate mr-2">
               {event.title}
             </button>
           )}
-          <button onClick={onClose} className="text-neutral-400 hover:text-white cursor-pointer shrink-0">
+          <button onClick={onClose} className="text-neutral-400 hover:text-app-strong cursor-pointer shrink-0">
             <X className="w-3.5 h-3.5" />
           </button>
         </div>
@@ -152,7 +152,7 @@ export default function EventDetailModal({ event, workspaces, users, currentUser
             <select
               value={event.spaceId ?? ''}
               onChange={(e) => onUpdate({ spaceId: e.target.value || null })}
-              className="w-full bg-neutral-950 border border-neutral-700 rounded px-2 py-2 text-xs text-white focus:outline-none focus:border-blue-500"
+              className="w-full bg-neutral-950 border border-neutral-700 rounded px-2 py-2 text-xs text-app-strong focus:outline-none focus:border-blue-500"
             >
               <option value="">No space</option>
               {spaces.map((s) => (
@@ -178,7 +178,7 @@ export default function EventDetailModal({ event, workspaces, users, currentUser
               value={event.location ?? ''}
               onChange={(v) => onUpdate({ location: v || null })}
               placeholder="Add a location..."
-              className="w-full bg-neutral-950 border border-neutral-700 rounded px-3 py-2 text-xs text-white focus:outline-none focus:border-blue-500"
+              className="w-full bg-neutral-950 border border-neutral-700 rounded px-3 py-2 text-xs text-app-strong focus:outline-none focus:border-blue-500"
             />
             {event.location && (
               <a
@@ -199,7 +199,7 @@ export default function EventDetailModal({ event, workspaces, users, currentUser
               onChange={(e) => onUpdate({ description: e.target.value || null })}
               rows={3}
               placeholder="Add a description..."
-              className="w-full bg-neutral-950 border border-neutral-700 rounded px-3 py-2 text-xs text-white focus:outline-none focus:border-blue-500 resize-none"
+              className="w-full bg-neutral-950 border border-neutral-700 rounded px-3 py-2 text-xs text-app-strong focus:outline-none focus:border-blue-500 resize-none"
             />
           </div>
 

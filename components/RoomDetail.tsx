@@ -70,12 +70,12 @@ export default function RoomDetail({ room, members, workspace, currentUserId, ca
                     setEditingName(false);
                   }
                 }}
-                className="bg-neutral-950 border border-blue-500 rounded px-2 py-1 text-lg font-semibold text-white focus:outline-none w-full"
+                className="bg-neutral-950 border border-blue-500 rounded px-2 py-1 text-lg font-semibold text-app-strong focus:outline-none w-full"
               />
             ) : (
               <button
                 onClick={() => setEditingName(true)}
-                className="text-lg font-semibold text-white cursor-text text-left"
+                className="text-lg font-semibold text-app-strong cursor-text text-left"
                 style={{ color: room.textColor || undefined }}
               >
                 {room.name}

@@ -68,7 +68,7 @@ export default function ColorSwatchPicker({ value, onChange, choices, size = 'md
             key={c}
             type="button"
             onClick={() => onChange(c)}
-            className={`${dim} rounded-full cursor-pointer shrink-0 ${value === c ? 'ring-2 ring-white' : ''}`}
+            className={`${dim} rounded-full cursor-pointer shrink-0 ${value === c ? 'ring-2 ring-app-strong' : ''}`}
             style={{ backgroundColor: c }}
           />
         ))}
@@ -82,13 +82,13 @@ export default function ColorSwatchPicker({ value, onChange, choices, size = 'md
               e.preventDefault();
               removeSavedColor(c);
             }}
-            className={`${dim} rounded-full cursor-pointer shrink-0 ring-1 ring-neutral-700 ${value === c ? 'ring-2 ring-white' : ''}`}
+            className={`${dim} rounded-full cursor-pointer shrink-0 ring-1 ring-neutral-700 ${value === c ? 'ring-2 ring-app-strong' : ''}`}
             style={{ backgroundColor: c }}
           />
         ))}
         <label
           title="Pick a custom color"
-          className={`${dim} rounded-full cursor-pointer shrink-0 relative overflow-hidden ring-1 ring-neutral-600 ${isCustom ? 'ring-2 ring-white' : ''}`}
+          className={`${dim} rounded-full cursor-pointer shrink-0 relative overflow-hidden ring-1 ring-neutral-600 ${isCustom ? 'ring-2 ring-app-strong' : ''}`}
           // A flat swatch showing whatever color is already selected reads as just another
           // (redundant) preset dot, not as "click me for more" — a conic-gradient spectrum is
           // the standard "more colors..." affordance and stays visually distinct from every

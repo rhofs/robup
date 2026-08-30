@@ -1,8 +1,38 @@
 @import "tailwindcss";
 
+/* Dark is this app's base, not its alternate — every one of the ~1700 `neutral-*` utility classes
+   across the UI was written assuming a dark canvas, so the bare `:root` values here are the dark
+   ones and [data-theme="light"] further down is what overrides them. (This used to be the other
+   way round, with a `prefers-color-scheme: dark` media query — but that only ever drove `body`'s
+   own background/color, never the neutral scale the actual UI paints itself with, so the app
+   rendered dark regardless of system preference. Now that light mode is real, the theme is
+   decided in exactly one place: `data-theme` on <html>, set before first paint by layout.tsx's
+   inline script.)
+
+   Dark gray, not nearly-black — matches ClickUp's own dark theme base rather than Tailwind's
+   neutral-950 (#0a0a0a), which reads as pure black next to the neutral-900 cards/panels
+   elevated on top of it. Sits strictly between neutral-950 and neutral-900 (barely 5 raw
+   levels apart, #121212 -> #171717) so that elevation hierarchy (page canvas darker than the
+   cards on it) stays intact — too little headroom there to meaningfully soften this by just
+   nudging the gray value up. Given a very slight cool undertone instead, per direct feedback
+   that the flat neutral gray felt "too harsh"/reads as pure black across every screen (Spaces,
+   Planner, Chat) — same luminance in that same narrow band, but a hint of blue reads as
+   noticeably less flat/stark than an equally-dark true gray, the same trick Linear/Vercel-style
+   dark UIs lean on. */
 :root {
-  --background: #ffffff;
-  --foreground: #171717;
+  --background: #101218;
+  --foreground: #ededed;
+  --scrollbar-thumb: #525252;
+  --scrollbar-thumb-hover: #737373;
+  --editor-code-bg: #18181b;
+  --editor-code-border: #27272a;
+  --editor-placeholder: #525252;
+  /* Planner day-cell tints (WeekRow.tsx). These can't ride the neutral scale like everything
+     else: they're low-opacity washes whose whole job is to sit *slightly darker* than the cell
+     behind them, and an inverted neutral would flip them to "slightly lighter than white" —
+     i.e. invisible. Expressed as explicit rgba per theme instead. */
+  --cell-tint-out-of-month: rgb(10 10 10 / 0.3);
+  --cell-tint-weekend: rgb(255 255 255 / 0.015);
 }
 
 @theme inline {
@@ -12,21 +42,84 @@
   --font-mono: var(--font-geist-mono);
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    /* Dark gray, not nearly-black — matches ClickUp's own dark theme base rather than Tailwind's
-       neutral-950 (#0a0a0a), which reads as pure black next to the neutral-900 cards/panels
-       elevated on top of it. Sits strictly between neutral-950 and neutral-900 (barely 5 raw
-       levels apart, #121212 -> #171717) so that elevation hierarchy (page canvas darker than the
-       cards on it) stays intact — too little headroom there to meaningfully soften this by just
-       nudging the gray value up. Given a very slight cool undertone instead, per direct feedback
-       that the flat neutral gray felt "too harsh"/reads as pure black across every screen (Spaces,
-       Planner, Chat) — same luminance in that same narrow band, but a hint of blue reads as
-       noticeably less flat/stark than an equally-dark true gray, the same trick Linear/Vercel-style
-       dark UIs lean on. */
-    --background: #101218;
-    --foreground: #ededed;
-  }
+/* `text-white` is genuinely ambiguous in this codebase: about 112 of its ~275 uses sit on a
+   chromatic button/badge (bg-blue-600, bg-red-500, a user's own avatar color) where white is
+   correct in BOTH themes, while the other 163 sit on neutral surfaces where it has to darken.
+   Since one class can't be both, the ones on neutral surfaces were rewritten to `text-app-strong`
+   (scripted, scoped per JSX element — see the light-theme block below) and the chromatic ones
+   deliberately left alone as `text-white`.
+   Registered through `@theme` rather than written as a plain `.text-app-strong` rule so Tailwind
+   generates the real utility *and* its variants — 28 of those call sites are `hover:text-white`,
+   and a hand-written class can't be composed with `hover:`. */
+@theme {
+  --color-app-strong: #ffffff;
+  /* Modal/sheet scrim. Deliberately NOT overridden by the light theme: a scrim's job is to dim
+     whatever is behind it, and it stays a dark wash in light mode for the same reason every other
+     app's does. These call sites used to be `bg-neutral-950/70`, which worked only because
+     neutral-950 happened to be the darkest surface — under the light theme that variable becomes
+     pure white, turning every backdrop into a wash-out instead of a dim. Split into its own token
+     so the two meanings ("darkest surface" vs. "overlay that dims") can't drift again.
+     Only applied to the ~20 call sites that are genuinely full-screen backdrops (fixed/inset-0);
+     the other `bg-neutral-950/xx` uses are inset surfaces sitting on a panel, where following the
+     neutral scale into light mode is exactly right. */
+  --color-scrim: #0a0a0a;
+}
+
+/* ============================================================================
+   LIGHT THEME
+   ============================================================================
+   This app was built dark-only: ~1700 hardcoded `neutral-*` utility classes across 50 files
+   encode the entire visual hierarchy, where a LOW number means a DARK surface (neutral-950 =
+   page canvas, -900 = panels/cards, -800 = borders) and a HIGH number means BRIGHT text
+   (-300/-200 = primary copy).
+
+   Rather than rewrite all 1700 call sites to semantic names, this remaps what the neutral scale
+   itself *means* when the light theme is active. Tailwind v4 compiles `bg-neutral-900` to
+   `background-color: var(--color-neutral-900)` (verified against this project's own built CSS,
+   not assumed), so overriding those variables in a scoped selector flips every usage at once, at
+   runtime, with no per-file churn.
+
+   The mapping is therefore an INVERSION of the scale, not a re-tint: the same class that painted
+   the darkest surface must now paint the lightest one, or the app's whole figure/ground
+   relationship breaks. Read `neutral-950` as "furthest back" and `neutral-100` as "most
+   prominent" rather than literally as "almost black"/"almost white" — that indirection is the
+   deliberate cost of not touching 1700 call sites, and is why this block is commented at length.
+
+   Values are hand-picked rather than a mechanical reverse of Tailwind's own ramp: a straight flip
+   makes light mode far too contrasty (pure #fff panels on a #0a0a0a-equivalent canvas), so the
+   surface end is compressed into a narrow, soft range while the text end keeps enough spread to
+   stay legible. */
+/* `html[data-theme=...]` rather than a bare `[data-theme=...]`: Tailwind emits its own theme
+   variables on `:root`, which has identical specificity to a bare attribute selector, making the
+   override depend purely on source order. Adding the element name lifts specificity to (0,1,1) so
+   this block wins outright regardless of where the framework's output lands. */
+html[data-theme='light'] {
+  /* Surfaces, back to front. */
+  --color-neutral-950: #ffffff; /* page canvas */
+  --color-neutral-900: #f7f7f8; /* panels, cards, sheets */
+  --color-neutral-800: #e4e4e7; /* borders, dividers */
+  --color-neutral-700: #d4d4d8; /* stronger borders, inactive chips */
+
+  /* Text and icons, faintest to most prominent. */
+  --color-neutral-600: #a1a1aa; /* disabled */
+  --color-neutral-500: #71717a; /* muted labels — near-unchanged, reads on both themes */
+  --color-neutral-400: #52525b; /* secondary text */
+  --color-neutral-300: #3f3f46; /* body text */
+  --color-neutral-200: #27272a; /* emphasised text */
+  --color-neutral-100: #18181b; /* strongest text */
+  --color-neutral-50: #09090b;
+
+  --background: #ffffff;
+  --foreground: #18181b;
+  --color-app-strong: #18181b;
+
+  --scrollbar-thumb: #c4c4c8;
+  --scrollbar-thumb-hover: #a1a1aa;
+  --editor-code-bg: #f4f4f5;
+  --editor-code-border: #e4e4e7;
+  --editor-placeholder: #a1a1aa;
+  --cell-tint-out-of-month: rgb(0 0 0 / 0.04);
+  --cell-tint-weekend: rgb(0 0 0 / 0.022);
 }
 
 body {
@@ -37,7 +130,7 @@ body {
 
 * {
   scrollbar-width: thin;
-  scrollbar-color: #525252 transparent;
+  scrollbar-color: var(--scrollbar-thumb) transparent;
 }
 
 *::-webkit-scrollbar {
@@ -50,14 +143,14 @@ body {
 }
 
 *::-webkit-scrollbar-thumb {
-  background-color: #525252;
+  background-color: var(--scrollbar-thumb);
   border-radius: 8px;
   border: 2px solid transparent;
   background-clip: padding-box;
 }
 
 *::-webkit-scrollbar-thumb:hover {
-  background-color: #737373;
+  background-color: var(--scrollbar-thumb-hover);
 }
 
 /* Collaborative Doc editor (Tiptap) — placeholder text and remote-cursor carets, neither of
@@ -88,8 +181,8 @@ body {
    code block would render as plain unstyled paragraph text with nothing to show it's a code
    block at all, learned the first time round with headings. */
 .collab-doc-editor .ProseMirror pre {
-  background: #18181b;
-  border: 1px solid #27272a;
+  background: var(--editor-code-bg);
+  border: 1px solid var(--editor-code-border);
   border-radius: 4px;
   padding: 0.75em 1em;
   margin: 0.5em 0;
@@ -179,7 +272,7 @@ body {
   float: left;
   height: 0;
   pointer-events: none;
-  color: #525252;
+  color: var(--editor-placeholder);
   font-style: italic;
 }
 

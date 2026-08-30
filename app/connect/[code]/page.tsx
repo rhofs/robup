@@ -45,7 +45,7 @@ export default function ConnectPage() {
       <div className="w-full max-w-sm">
         <div className="text-center mb-6">
           <div className="w-10 h-10 rounded bg-blue-500 text-white font-bold flex items-center justify-center mx-auto mb-3">S</div>
-          <h1 className="text-lg font-semibold text-white">Siqt</h1>
+          <h1 className="text-lg font-semibold text-app-strong">Siqt</h1>
         </div>
 
         <div className="bg-neutral-900 border border-neutral-800 rounded-lg p-5 text-center">
@@ -56,7 +56,7 @@ export default function ConnectPage() {
           ) : outcome === 'connected' ? (
             <>
               <p className="text-xs text-neutral-400 mb-1">You&apos;re now connected with</p>
-              <p className="text-base font-semibold text-white mb-4">{invite.name}</p>
+              <p className="text-base font-semibold text-app-strong mb-4">{invite.name}</p>
               <button
                 onClick={() => router.push('/?view=directMessages')}
                 className="w-full bg-blue-600 hover:bg-blue-500 rounded px-3 py-2 text-xs font-medium text-white transition cursor-pointer"
@@ -67,7 +67,7 @@ export default function ConnectPage() {
           ) : outcome === 'requested' ? (
             <>
               <p className="text-xs text-neutral-400 mb-1">Connection request sent to</p>
-              <p className="text-base font-semibold text-white mb-4">{invite.name}</p>
+              <p className="text-base font-semibold text-app-strong mb-4">{invite.name}</p>
               <p className="text-[11px] text-neutral-500 mb-4">They&apos;ll need to accept it before you can message each other.</p>
               <button
                 onClick={() => router.push('/?view=directMessages')}
@@ -79,7 +79,7 @@ export default function ConnectPage() {
           ) : (
             <>
               <p className="text-xs text-neutral-400 mb-1">Connect with</p>
-              <p className="text-base font-semibold text-white mb-4">{invite.name}</p>
+              <p className="text-base font-semibold text-app-strong mb-4">{invite.name}</p>
               {error && <p className="text-[11px] text-red-400 mb-3">{error}</p>}
               {status === 'loading' ? (
                 <p className="text-xs text-neutral-500">Checking your session…</p>

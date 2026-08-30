@@ -2,7 +2,8 @@
 
 import { useEffect, useRef, useState } from 'react';
 import Papa from 'papaparse';
-import { X, Settings, Check, Trash2, Plus, Link2, Upload, Share2, Download } from 'lucide-react';
+import { X, Settings, Check, Trash2, Plus, Link2, Upload, Share2, Download, Monitor, Sun, Moon } from 'lucide-react';
+import { readThemePreference, setThemePreference, type ThemePreference } from '../lib/theme';
 import { useTaskStore, type HierarchyWorkspace, type AppUser } from '../store/useTaskStore';
 import { useChatStore } from '../store/useChatStore';
 import { getPushStatus, enablePush, disablePush } from '../lib/pushClient';
@@ -92,6 +93,12 @@ export function setHideWeekNumbers(hidden: boolean) {
 }
 
 const ROLE_COLOR_CHOICES = ['#6366F1', '#3B82F6', '#10B981', '#F59E0B', '#EF4444', '#EC4899', '#8B5CF6', '#94A3B8'];
+
+const THEME_OPTIONS: { value: ThemePreference; label: string; icon: typeof Monitor }[] = [
+  { value: 'system', label: 'Auto', icon: Monitor },
+  { value: 'light', label: 'Light', icon: Sun },
+  { value: 'dark', label: 'Dark', icon: Moon },
+];
 
 type InviteRow = { id: string; role: 'admin' | 'member'; createdAt: string; createdBy: { name: string } };
 type ClickUpRow = Record<string, string>;
@@ -185,6 +192,10 @@ export default function SettingsPanel({
   const [tab, setTab] = useState<'general' | 'roles' | 'invite' | 'import' | 'account'>(initialTab);
   const [hidden, setHidden] = useState(() => readHiddenNavTabs());
   const [weekNumbersHidden, setWeekNumbersHidden] = useState(() => readHideWeekNumbers());
+  // Lazy initializer, not a useState(default) + useEffect correction — this panel is mounted
+  // fresh each time it opens, and a one-tick-late correction would visibly flip the selected
+  // segment (same class of bug as useIsMobile's own documented flash-of-wrong-value).
+  const [themePref, setThemePref] = useState<ThemePreference>(() => readThemePreference());
 
   // --- Workspace identity (backlog #2) --- org type + work email, set at creation, editable
   // here by Owner/Admin only (server-enforced too, see PATCH /api/workspaces/[id]/route.ts).
@@ -320,13 +331,13 @@ export default function SettingsPanel({
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-neutral-950/70 backdrop-blur-xs" onClick={onClose}>
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-scrim/70 backdrop-blur-xs" onClick={onClose}>
       <div onClick={(e) => e.stopPropagation()} className="w-[440px] bg-neutral-900 border border-neutral-800 rounded shadow-2xl overflow-hidden">
         <div className="px-5 py-4 border-b border-neutral-800 flex items-center justify-between">
-          <h3 className="font-bold text-sm text-white flex items-center gap-1.5">
+          <h3 className="font-bold text-sm text-app-strong flex items-center gap-1.5">
             <Settings className="w-4 h-4" /> Settings
           </h3>
-          <button onClick={onClose} className="text-neutral-400 hover:text-white cursor-pointer">
+          <button onClick={onClose} className="text-neutral-400 hover:text-app-strong cursor-pointer">
             <X className="w-3.5 h-3.5" />
           </button>
         </div>
@@ -334,14 +345,14 @@ export default function SettingsPanel({
         <div className="flex border-b border-neutral-800">
           <button
             onClick={() => setTab('general')}
-            className={`flex-1 text-xs py-2 cursor-pointer transition ${tab === 'general' ? 'text-white border-b-2 border-blue-500' : 'text-neutral-500 hover:text-neutral-300'}`}
+            className={`flex-1 text-xs py-2 cursor-pointer transition ${tab === 'general' ? 'text-app-strong border-b-2 border-blue-500' : 'text-neutral-500 hover:text-neutral-300'}`}
           >
             General
           </button>
           {canManage && (
             <button
               onClick={() => setTab('roles')}
-              className={`flex-1 text-xs py-2 cursor-pointer transition ${tab === 'roles' ? 'text-white border-b-2 border-blue-500' : 'text-neutral-500 hover:text-neutral-300'}`}
+              className={`flex-1 text-xs py-2 cursor-pointer transition ${tab === 'roles' ? 'text-app-strong border-b-2 border-blue-500' : 'text-neutral-500 hover:text-neutral-300'}`}
             >
               Roles
             </button>
@@ -352,7 +363,7 @@ export default function SettingsPanel({
           {canManage && !workspace.isPersonal && (
             <button
               onClick={() => setTab('invite')}
-              className={`flex-1 text-xs py-2 cursor-pointer transition ${tab === 'invite' ? 'text-white border-b-2 border-blue-500' : 'text-neutral-500 hover:text-neutral-300'}`}
+              className={`flex-1 text-xs py-2 cursor-pointer transition ${tab === 'invite' ? 'text-app-strong border-b-2 border-blue-500' : 'text-neutral-500 hover:text-neutral-300'}`}
             >
               Invite
             </button>
@@ -360,7 +371,7 @@ export default function SettingsPanel({
           {canManage && (
             <button
               onClick={() => setTab('import')}
-              className={`flex-1 text-xs py-2 cursor-pointer transition ${tab === 'import' ? 'text-white border-b-2 border-blue-500' : 'text-neutral-500 hover:text-neutral-300'}`}
+              className={`flex-1 text-xs py-2 cursor-pointer transition ${tab === 'import' ? 'text-app-strong border-b-2 border-blue-500' : 'text-neutral-500 hover:text-neutral-300'}`}
             >
               Import
             </button>
@@ -369,7 +380,7 @@ export default function SettingsPanel({
               other tab here, it has nothing to do with *this* workspace specifically. */}
           <button
             onClick={() => setTab('account')}
-            className={`flex-1 text-xs py-2 cursor-pointer transition ${tab === 'account' ? 'text-white border-b-2 border-blue-500' : 'text-neutral-500 hover:text-neutral-300'}`}
+            className={`flex-1 text-xs py-2 cursor-pointer transition ${tab === 'account' ? 'text-app-strong border-b-2 border-blue-500' : 'text-neutral-500 hover:text-neutral-300'}`}
           >
             Account
           </button>
@@ -388,7 +399,7 @@ export default function SettingsPanel({
                         <button
                           onClick={() => updateWorkspaceDetails(workspace.id, { orgType: 'company' })}
                           className={`flex-1 text-[10px] py-1 rounded cursor-pointer transition ${
-                            workspace.orgType === 'company' ? 'bg-neutral-800 text-white' : 'text-neutral-500 hover:text-neutral-300'
+                            workspace.orgType === 'company' ? 'bg-neutral-800 text-app-strong' : 'text-neutral-500 hover:text-neutral-300'
                           }`}
                         >
                           Company
@@ -396,7 +407,7 @@ export default function SettingsPanel({
                         <button
                           onClick={() => updateWorkspaceDetails(workspace.id, { orgType: 'personal_project' })}
                           className={`flex-1 text-[10px] py-1 rounded cursor-pointer transition ${
-                            workspace.orgType === 'personal_project' ? 'bg-neutral-800 text-white' : 'text-neutral-500 hover:text-neutral-300'
+                            workspace.orgType === 'personal_project' ? 'bg-neutral-800 text-app-strong' : 'text-neutral-500 hover:text-neutral-300'
                           }`}
                         >
                           Personal project
@@ -427,13 +438,13 @@ export default function SettingsPanel({
                             setEditingEmail(false);
                           }
                         }}
-                        className="flex-1 bg-neutral-950 border border-blue-500 rounded px-2 py-1 text-xs text-white focus:outline-none"
+                        className="flex-1 bg-neutral-950 border border-blue-500 rounded px-2 py-1 text-xs text-app-strong focus:outline-none"
                       />
                     ) : (
                       <button
                         onClick={() => canManage && setEditingEmail(true)}
                         disabled={!canManage}
-                        className={`flex-1 text-left text-xs px-1 ${canManage ? 'text-neutral-300 hover:text-white cursor-pointer' : 'text-neutral-500 cursor-default'}`}
+                        className={`flex-1 text-left text-xs px-1 ${canManage ? 'text-neutral-300 hover:text-app-strong cursor-pointer' : 'text-neutral-500 cursor-default'}`}
                       >
                         {workspace.workEmail || (canManage ? 'Not set — click to add' : 'Not set')}
                       </button>
@@ -442,6 +453,22 @@ export default function SettingsPanel({
                 </div>
               </>
             )}
+
+            <div className="text-[10px] uppercase tracking-wide text-neutral-500 px-1 pb-1">Appearance</div>
+            <div className="flex items-center gap-1 bg-neutral-950 border border-neutral-800 rounded p-0.5 mb-3">
+              {THEME_OPTIONS.map(({ value, label, icon: Icon }) => (
+                <button
+                  key={value}
+                  onClick={() => setThemePref(setThemePreference(value))}
+                  className={`flex-1 flex items-center justify-center gap-1.5 text-[11px] py-1.5 rounded cursor-pointer transition ${
+                    themePref === value ? 'bg-neutral-800 text-app-strong' : 'text-neutral-500 hover:text-neutral-300'
+                  }`}
+                >
+                  <Icon className="w-3.5 h-3.5" />
+                  {label}
+                </button>
+              ))}
+            </div>
 
             <div className="text-[10px] uppercase tracking-wide text-neutral-500 px-1 pb-1">Visible tabs</div>
             {NAV_TABS.map((navTab) => {
@@ -458,7 +485,7 @@ export default function SettingsPanel({
                       visible ? 'bg-blue-600 border-blue-600' : 'border-neutral-700'
                     }`}
                   >
-                    {visible && <Check className="w-3 h-3 text-white" />}
+                    {visible && <Check className="w-3 h-3 text-app-strong" />}
                   </span>
                 </button>
               );
@@ -475,7 +502,7 @@ export default function SettingsPanel({
                   !weekNumbersHidden ? 'bg-blue-600 border-blue-600' : 'border-neutral-700'
                 }`}
               >
-                {!weekNumbersHidden && <Check className="w-3 h-3 text-white" />}
+                {!weekNumbersHidden && <Check className="w-3 h-3 text-app-strong" />}
               </span>
             </button>
 
@@ -579,7 +606,7 @@ export default function SettingsPanel({
                     if (e.key === 'Escape') setCreatingRole(false);
                   }}
                   placeholder="Role name..."
-                  className="w-full bg-neutral-950 border border-blue-500 rounded px-2 py-1.5 text-xs text-white focus:outline-none"
+                  className="w-full bg-neutral-950 border border-blue-500 rounded px-2 py-1.5 text-xs text-app-strong focus:outline-none"
                 />
                 <ColorSwatchPicker value={newRoleColor} onChange={setNewRoleColor} choices={ROLE_COLOR_CHOICES} size="sm" />
                 <button
@@ -612,7 +639,7 @@ export default function SettingsPanel({
               value={directQuery}
               onChange={(e) => setDirectQuery(e.target.value)}
               placeholder="Search your Network..."
-              className="w-full bg-neutral-950 border border-neutral-700 rounded px-2 py-1.5 text-xs text-white focus:outline-none focus:border-blue-500"
+              className="w-full bg-neutral-950 border border-neutral-700 rounded px-2 py-1.5 text-xs text-app-strong focus:outline-none focus:border-blue-500"
             />
             {directInviteError && <p className="text-[11px] text-red-400">{directInviteError}</p>}
             <div className="space-y-1 max-h-32 overflow-y-auto">
@@ -683,7 +710,7 @@ export default function SettingsPanel({
               <select
                 value={newInviteRole}
                 onChange={(e) => setNewInviteRole(e.target.value as 'admin' | 'member')}
-                className="bg-neutral-950 border border-neutral-700 rounded px-2 py-1.5 text-xs text-white focus:outline-none"
+                className="bg-neutral-950 border border-neutral-700 rounded px-2 py-1.5 text-xs text-app-strong focus:outline-none"
               >
                 <option value="member">Joins as Member</option>
                 <option value="admin">Joins as Admin</option>
