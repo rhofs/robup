@@ -37,11 +37,9 @@ type DayTimelineProps = {
   taskColorOf: (task: Task) => string;
   onOpenTask: (id: string) => void;
   onCommitTaskDates: (taskId: string, startISO: string | null, dueISO: string | null) => void;
-  // Timed Events can be resized (stretch/shrink either edge) same as timed Tasks, via
+  // Timed Events move and resize (stretch/shrink either edge) exactly like timed Tasks now, via
   // onCommitEventDates below — all-day Events (AllDayChip) stay click-only, same as all-day
-  // Tasks, since "resize" has no meaning for a day-wide chip. Never move-draggable either way,
-  // matching WeekRow.tsx's EventBar (a deliberate edit via the resize handle, not something that
-  // drifts from an accidental drag on the whole block).
+  // Tasks, since neither move nor resize has meaning for a day-wide chip.
   events: Event[];
   eventColorOf: (event: Event) => string;
   onOpenEvent: (id: string) => void;
@@ -207,9 +205,10 @@ export default function DayTimeline({
               let startMin = minutesOfDay(start);
               let endMin = Math.max(minutesOfDay(end), startMin + 30);
               if (isDraggingThis) {
-                // No 'move' branch — Events don't move-drag here (see DayTimelineProps' own
-                // comment), only the two resize modes ever apply to an event id.
-                if (drag!.mode === 'resize-start') {
+                if (drag!.mode === 'move') {
+                  startMin += drag!.deltaMin;
+                  endMin += drag!.deltaMin;
+                } else if (drag!.mode === 'resize-start') {
                   startMin = Math.min(startMin + drag!.deltaMin, endMin - 15);
                 } else if (drag!.mode === 'resize-end') {
                   endMin = Math.max(endMin + drag!.deltaMin, startMin + 15);
@@ -357,13 +356,16 @@ function DayEventBlock({
   return (
     <div className="absolute" style={style}>
       <button
-        onClick={() => onOpenEvent(event.id)}
+        onClick={isMobile ? () => onOpenEvent(event.id) : undefined}
+        onPointerDown={isMobile ? undefined : (e) => onStartInteraction(e, event.id, 'move')}
+        onPointerMove={isMobile ? undefined : (e) => onMoveInteraction(e, event.id)}
+        onPointerUp={isMobile ? undefined : (e) => onEndInteraction(e, event.id, start, end)}
         onMouseEnter={() => setHovered(true)}
         onMouseLeave={() => setHovered(false)}
         title={event.title}
         // Dashed border + CalendarClock icon — same Task-vs-Event tell as WeekRow.tsx's EventBar,
         // kept visually consistent across every Planner granularity.
-        className={`relative w-full h-full rounded-md px-2.5 py-1.5 text-[10px] font-medium truncate cursor-pointer text-left border border-dashed transition-colors flex items-center gap-1 ${
+        className={`relative w-full h-full rounded-md px-2.5 py-1.5 text-[10px] font-medium truncate cursor-grab active:cursor-grabbing text-left border border-dashed transition-colors flex items-center gap-1 ${
           isDraggingThis ? 'opacity-70 ring-2 ring-white/70' : ''
         }`}
         style={{
@@ -380,10 +382,9 @@ function DayEventBlock({
         )}
         <span className="truncate">{event.title}</span>
       </button>
-      {/* Resize only (stretch/shrink either edge) — no move handler on the body, same
-          deliberate-edit-only reasoning as WeekRow.tsx's EventBar. Skipped on mobile — a 6px-tall
-          edge strip isn't a workable touch target, and the button above already opens the event
-          on tap. */}
+      {/* Resize (stretch/shrink either edge), same as DayTaskBlock — the button above already
+          handles move. Skipped on mobile — a 6px-tall edge strip isn't a workable touch target,
+          and the button above already opens the event on tap there. */}
       {!isMobile && (
         <div
           onPointerDown={(e) => onStartInteraction(e, event.id, 'resize-start')}

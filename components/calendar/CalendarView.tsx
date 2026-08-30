@@ -477,18 +477,21 @@ export default function CalendarView({ tasks, events, statuses, workspaces, show
     setWeekDrag(null);
   };
 
-  // Events only ever resize (EventBar wires up resize-start/resize-end but never a move handler
-  // on the body — see that component's own comment), so this only needs the two resize branches,
-  // no move/lane-pin handling at all (Event has no calendarLane field to pin). Mirrors the Task
-  // resize math above exactly, just against startDate/endDate directly instead of the
-  // startDate-falls-back-to-dueDate juggling Task needs (an Event always has both).
+  // Events now move and resize exactly like Tasks (per the user's explicit ask) — mirrors the
+  // Task drag math above, just against startDate/endDate directly instead of the
+  // startDate-falls-back-to-dueDate juggling Task needs (an Event always has both). No lane-pin
+  // handling — Event has no calendarLane field, so a vertical drag only ever affects the live
+  // ghost preview, never anything persisted.
   const handleEventDragEnd = (eventId: string, mode: DragMode) => {
     const event = eventsById.get(eventId);
     const d = weekDrag;
     if (event && d && d.deltaDays !== 0) {
       let newStart = new Date(event.startDate);
       let newEnd = new Date(event.endDate);
-      if (mode === 'resize-start') {
+      if (mode === 'move') {
+        newStart = addDays(newStart, d.deltaDays);
+        newEnd = addDays(newEnd, d.deltaDays);
+      } else if (mode === 'resize-start') {
         newStart = addDays(newStart, d.deltaDays);
         if (newStart > newEnd) newStart = new Date(newEnd);
       } else if (mode === 'resize-end') {

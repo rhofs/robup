@@ -33,8 +33,9 @@ type WeekRowProps = {
   tasksById: Map<string, Task>;
   taskColorOf: (task: Task) => string;
   // Events share the exact same segment list/lane packing as Tasks (see CalendarView.tsx's
-  // merged `ranges`) but never drag — a segment whose id isn't in tasksById is looked up here
-  // instead and rendered as a plain clickable bar, no pointer handlers wired up at all.
+  // merged `ranges`) and, per the user's explicit ask, the exact same move/resize drag gestures
+  // too (desktop only) — a segment whose id isn't in tasksById is looked up here instead and
+  // rendered as an EventBar rather than a TaskBar.
   eventsById: Map<string, Event>;
   eventColorOf: (event: Event) => string;
   onOpenEvent: (id: string) => void;
@@ -351,8 +352,7 @@ export default function WeekRow({
               paddingRight: 2,
             };
 
-            // Events can be resized (stretch/shrink either edge) but never moved by dragging the
-            // body — see EventBar's own comment on why the split.
+            // Events move and resize exactly like Tasks now (see EventBar's own comment).
             if (event) {
               return (
                 <EventBar
@@ -434,14 +434,17 @@ function EventBar({
   return (
     <div className="absolute pointer-events-auto" style={{ ...barStyle, opacity: isDraggingThis ? 0.35 : 1 }}>
       <button
-        onClick={() => onOpenEvent(event.id)}
+        onClick={isMobile ? () => onOpenEvent(event.id) : undefined}
+        onPointerDown={isMobile ? undefined : (e) => onStartInteraction(e, event.id, 'move')}
+        onPointerMove={isMobile ? undefined : (e) => onMoveInteraction(e, event.id)}
+        onPointerUp={isMobile ? undefined : (e) => onEndInteraction(e, event.id, 'move')}
         onMouseEnter={() => setHovered(true)}
         onMouseLeave={() => setHovered(false)}
         title={event.title}
         // Dashed border (Tasks are always solid) is the at-a-glance Task-vs-Event tell in every
         // Planner granularity, alongside the CalendarClock icon — a plain color difference alone
         // isn't reliable since either can be given any color.
-        className={`relative w-full h-full flex items-center gap-1 text-[10px] leading-none font-medium truncate cursor-pointer select-none border border-dashed transition-colors ${
+        className={`relative w-full h-full flex items-center gap-1 text-[10px] leading-none font-medium truncate cursor-grab active:cursor-grabbing select-none border border-dashed transition-colors ${
           seg.isStartEdge ? 'rounded-l-md pl-2.5' : 'pl-1.5'
         } ${seg.isEndEdge ? 'rounded-r-md pr-2' : 'pr-1'}`}
         style={{
@@ -461,11 +464,10 @@ function EventBar({
         )}
         <span className="truncate">{event.title}</span>
       </button>
-      {/* Resizable (stretch/shrink either edge, same gesture as a Task bar) but never draggable
-          by the body — an Event's date range is meant to be a deliberate edit, not something that
-          drifts from an accidental drag on the whole bar the way a Task's due-date-driven bar
-          does. Skipped on mobile entirely — a 2px-wide edge strip isn't a workable touch target,
-          and the button above already opens the event on tap. */}
+      {/* Resizable (stretch/shrink either edge), same as a Task bar — per the user's explicit
+          ask to have Events drag/resize exactly like Tasks do, desktop only. Skipped on mobile
+          entirely — a 2px-wide edge strip isn't a workable touch target, and the button above
+          already opens the event on tap there. */}
       {!isMobile && seg.isStartEdge && (
         <div
           onPointerDown={(e) => onStartInteraction(e, event.id, 'resize-start')}

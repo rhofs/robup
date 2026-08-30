@@ -105,7 +105,15 @@ export default function EventDetailModal({ event, workspaces, users, currentUser
               <div className="bg-neutral-950 border border-neutral-700 rounded px-1 py-0.5 inline-block">
                 <DatePickerPopover
                   value={new Date(event.startDate).toISOString()}
-                  onChange={(v) => v && onUpdate({ startDate: v })}
+                  onChange={(v) => {
+                    if (!v) return;
+                    // Dragging start past the current end (or vice versa below) used to leave the
+                    // event with start > end — a real "went back in time" state nothing else in
+                    // this app expects. Snapping the other edge to match, rather than rejecting
+                    // the change, mirrors what the Planner drag-resize handlers already do
+                    // (CalendarView.tsx's handleEventDragEnd).
+                    onUpdate(new Date(v) > new Date(event.endDate) ? { startDate: v, endDate: v } : { startDate: v });
+                  }}
                   placeholder="Not set"
                 />
               </div>
@@ -115,7 +123,10 @@ export default function EventDetailModal({ event, workspaces, users, currentUser
               <div className="bg-neutral-950 border border-neutral-700 rounded px-1 py-0.5 inline-block">
                 <DatePickerPopover
                   value={new Date(event.endDate).toISOString()}
-                  onChange={(v) => v && onUpdate({ endDate: v })}
+                  onChange={(v) => {
+                    if (!v) return;
+                    onUpdate(new Date(v) < new Date(event.startDate) ? { startDate: v, endDate: v } : { endDate: v });
+                  }}
                   placeholder="Not set"
                 />
               </div>
