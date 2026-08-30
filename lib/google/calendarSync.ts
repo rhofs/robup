@@ -41,6 +41,15 @@ function toCalendarClient(refreshToken: string) {
   return google.calendar({ version: 'v3', auth: oauth2Client });
 }
 
+// Keyed by `${userId}:${workspaceId}` — an in-process mutex so two near-simultaneous sync calls
+// for the same (user, workspace) (e.g. a drag-move and a modal edit fired moments apart, both
+// still fire-and-forget in flight when the DB has no calendar row yet) don't each independently
+// call calendars.insert before either has a chance to write the row. The DB's own unique
+// constraint (see the try/catch below) is what makes this actually *correct* if it's ever raced
+// across more than one process — this Map is purely a fast-path that avoids ever creating the
+// wasteful duplicate Google-side calendar in the far more common single-process case.
+const calendarCreationLocks = new Map<string, Promise<Awaited<ReturnType<typeof prisma.userWorkspaceGoogleCalendar.create>>>>();
+
 // Resolves everything a sync call needs for one (user, workspace) pair: their Calendar client,
 // and the id of their dedicated calendar for that workspace — created lazily on first use and
 // cached in UserWorkspaceGoogleCalendar from then on. Deliberately never 'primary' — see the
@@ -53,24 +62,39 @@ async function getWorkspaceCalendarClient(userId: string, workspaceId: string) {
   const existing = await prisma.userWorkspaceGoogleCalendar.findUnique({ where: { userId_workspaceId: { userId, workspaceId } } });
   if (existing) return { client, calendarId: existing.googleCalendarId, calendarRow: existing };
 
-  const workspace = await prisma.workspace.findUnique({ where: { id: workspaceId }, select: { name: true } });
-  const created = await client.calendars.insert({ requestBody: { summary: `Siqt - ${workspace?.name ?? 'Workspace'}` } });
-  const calendarId = created.data.id;
-  if (!calendarId) return null;
-  // The find-then-create above isn't atomic — two sync calls for the same (user, workspace) can
-  // both see "no row yet" and both get this far (e.g. the on-demand Planner-open pull racing a
-  // task edit's own fire-and-forget sync on the same page load), each creating its own real
-  // Google calendar before either writes to the DB. The unique constraint on (userId, workspaceId)
-  // is what actually decides the winner; catch the loser's P2002 and defer to whichever row won,
-  // rather than crashing. The loser's own just-created Google calendar is left orphaned (a
-  // harmless, low-odds duplicate) instead of risking a second race trying to clean it up.
+  const lockKey = `${userId}:${workspaceId}`;
+  const inFlight = calendarCreationLocks.get(lockKey);
+  if (inFlight) {
+    // Someone else in this same process is already creating this exact calendar — wait for it
+    // rather than racing to create a second one.
+    const row = await inFlight;
+    return { client, calendarId: row.googleCalendarId, calendarRow: row };
+  }
+
+  const creation = (async () => {
+    const workspace = await prisma.workspace.findUnique({ where: { id: workspaceId }, select: { name: true } });
+    const created = await client.calendars.insert({ requestBody: { summary: `Siqt - ${workspace?.name ?? 'Workspace'}` } });
+    const calendarId = created.data.id;
+    if (!calendarId) throw new Error('Google did not return a calendar id from calendars.insert');
+    // The lock above only covers this one process — the unique constraint on (userId,
+    // workspaceId) is the real, always-correct tie-breaker if this ever races across more than
+    // one (e.g. a deploy mid-request). Catch the loser's P2002 and defer to whichever row
+    // actually won rather than crashing; that loser's own just-created Google calendar is left
+    // orphaned (rare once the in-process lock above is doing its job) instead of risking a
+    // second race trying to clean it up.
+    try {
+      return await prisma.userWorkspaceGoogleCalendar.create({ data: { userId, workspaceId, googleCalendarId: calendarId } });
+    } catch (err: any) {
+      if (err?.code !== 'P2002') throw err;
+      return prisma.userWorkspaceGoogleCalendar.findUniqueOrThrow({ where: { userId_workspaceId: { userId, workspaceId } } });
+    }
+  })();
+  calendarCreationLocks.set(lockKey, creation);
   try {
-    const calendarRow = await prisma.userWorkspaceGoogleCalendar.create({ data: { userId, workspaceId, googleCalendarId: calendarId } });
-    return { client, calendarId, calendarRow };
-  } catch (err: any) {
-    if (err?.code !== 'P2002') throw err;
-    const winner = await prisma.userWorkspaceGoogleCalendar.findUniqueOrThrow({ where: { userId_workspaceId: { userId, workspaceId } } });
-    return { client, calendarId: winner.googleCalendarId, calendarRow: winner };
+    const calendarRow = await creation;
+    return { client, calendarId: calendarRow.googleCalendarId, calendarRow };
+  } finally {
+    calendarCreationLocks.delete(lockKey);
   }
 }
 
