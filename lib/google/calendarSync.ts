@@ -142,27 +142,55 @@ function taskDateRange(task: { startDate: Date | null; dueDate: Date | null }): 
 // Tasks have no explicit time-of-day concept (unlike Event's own allDay flag) — mirrored as a
 // plain all-day (date-only) Google event spanning startDate..dueDate inclusive, or a single day
 // if only one of the two is set.
-// Extracts a Google-Calendar-style "date-only" string (YYYY-MM-DD) from a Date's own LOCAL
-// calendar day — deliberately NOT `d.toISOString().slice(0, 10)`, which reads the UTC day
-// instead. This app's own all-day dates are stored as local midnight (same convention
-// DayTimeline.tsx's own hasTimeOfDay comment documents); for anyone in a positive UTC-offset
-// timezone (Norway included), local midnight is still the *previous* calendar day in UTC, so the
-// ISO-slice version silently sent the wrong day to Google on every all-day Task/Event push.
-// Confirmed live: a Task showing "the 4th" in Siqt landed on "the 3rd" in Google Calendar.
+//
+// Both helpers below are deliberately independent of the SERVER PROCESS's own OS/`TZ` setting —
+// an earlier version used `d.getFullYear()/getMonth()/getDate()` ("local" meaning whatever
+// timezone the Node process itself is running in), on the assumption that the production
+// container's `TZ` env var would actually be set to Europe/Oslo. In practice this app's real
+// infrastructure proved unable to make that stick (the container kept reporting Europe/London —
+// itself only 1 hour off from Oslo — even after setting the panel variable to Europe/Oslo,
+// saving, restarting, *and* reinstalling), which is exactly the same 1-day-early bug from a
+// different angle: Oslo midnight still falls on the *previous* calendar day when read back
+// through a London-local clock. Intl.DateTimeFormat's own `timeZone` option does its own IANA
+// timezone-database lookup regardless of the process's default, so pinning APP_TIMEZONE in code
+// makes this correct without needing the server's own environment to cooperate at all.
+const APP_TIMEZONE = 'Europe/Oslo';
+const dateOnlyFormatter = new Intl.DateTimeFormat('en-CA', { timeZone: APP_TIMEZONE, year: 'numeric', month: '2-digit', day: '2-digit' });
+
+// Extracts a Google-Calendar-style "date-only" string (YYYY-MM-DD) for APP_TIMEZONE's own
+// calendar day at this Date's real absolute instant. Confirmed live before this fix: a Task
+// showing "the 4th" in Siqt landed on "the 3rd" in Google Calendar.
 function localDateOnly(d: Date): string {
-  const y = d.getFullYear();
-  const m = String(d.getMonth() + 1).padStart(2, '0');
-  const day = String(d.getDate()).padStart(2, '0');
-  return `${y}-${m}-${day}`;
+  return dateOnlyFormatter.format(d);
 }
 
-// Inverse of localDateOnly, for the pull direction — builds a Date at LOCAL midnight for a given
-// Google "date-only" string, instead of UTC midnight (`new Date(dateOnly + 'T00:00:00.000Z')`),
-// so a date pulled in from Google reads back as the same calendar day in this app's own
-// local-midnight convention regardless of which side of UTC the viewer's timezone falls on.
+// How far APP_TIMEZONE's wall clock sits from UTC, in ms, at roughly the given instant —
+// computed per-date (not a fixed constant) so it comes out right on either side of a DST
+// transition. Standard trick: format the instant in APP_TIMEZONE, re-parse those same digits as
+// if they were UTC, and diff against the real UTC instant.
+function appTimezoneOffsetMs(atUtc: Date): number {
+  const dtf = new Intl.DateTimeFormat('en-US', {
+    timeZone: APP_TIMEZONE,
+    hourCycle: 'h23',
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+    second: '2-digit',
+  });
+  const parts: Record<string, string> = {};
+  for (const p of dtf.formatToParts(atUtc)) if (p.type !== 'literal') parts[p.type] = p.value;
+  const wallClockAsUtc = Date.UTC(+parts.year, +parts.month - 1, +parts.day, +parts.hour, +parts.minute, +parts.second);
+  return wallClockAsUtc - atUtc.getTime();
+}
+
+// Inverse of localDateOnly, for the pull direction — the real absolute instant that's midnight
+// in APP_TIMEZONE for a given Google "date-only" string, same TZ-independent approach.
 function localMidnightFromDateOnly(dateOnly: string): Date {
   const [y, m, d] = dateOnly.split('-').map(Number);
-  return new Date(y, m - 1, d);
+  const utcGuess = new Date(Date.UTC(y, m - 1, d));
+  return new Date(utcGuess.getTime() - appTimezoneOffsetMs(utcGuess));
 }
 
 function toGoogleAllDayFields(start: Date, endInclusive: Date) {
