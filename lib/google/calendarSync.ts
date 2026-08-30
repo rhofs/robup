@@ -57,8 +57,21 @@ async function getWorkspaceCalendarClient(userId: string, workspaceId: string) {
   const created = await client.calendars.insert({ requestBody: { summary: `Siqt - ${workspace?.name ?? 'Workspace'}` } });
   const calendarId = created.data.id;
   if (!calendarId) return null;
-  const calendarRow = await prisma.userWorkspaceGoogleCalendar.create({ data: { userId, workspaceId, googleCalendarId: calendarId } });
-  return { client, calendarId, calendarRow };
+  // The find-then-create above isn't atomic — two sync calls for the same (user, workspace) can
+  // both see "no row yet" and both get this far (e.g. the on-demand Planner-open pull racing a
+  // task edit's own fire-and-forget sync on the same page load), each creating its own real
+  // Google calendar before either writes to the DB. The unique constraint on (userId, workspaceId)
+  // is what actually decides the winner; catch the loser's P2002 and defer to whichever row won,
+  // rather than crashing. The loser's own just-created Google calendar is left orphaned (a
+  // harmless, low-odds duplicate) instead of risking a second race trying to clean it up.
+  try {
+    const calendarRow = await prisma.userWorkspaceGoogleCalendar.create({ data: { userId, workspaceId, googleCalendarId: calendarId } });
+    return { client, calendarId, calendarRow };
+  } catch (err: any) {
+    if (err?.code !== 'P2002') throw err;
+    const winner = await prisma.userWorkspaceGoogleCalendar.findUniqueOrThrow({ where: { userId_workspaceId: { userId, workspaceId } } });
+    return { client, calendarId: winner.googleCalendarId, calendarRow: winner };
+  }
 }
 
 function isNotFoundError(err: any): boolean {
