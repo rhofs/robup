@@ -16,13 +16,24 @@ export const HAPTIC_STORAGE_KEY = 'siqt.hapticStrength';
 // Durations in ms, per strength, for the two call sites this app distinguishes:
 // [ordinary tap, deliberate/menu tap].
 //
-// The original values (10 / 20) were chosen conservatively and turned out to be too weak to
-// reliably register — modern phones use LRA motors that need time to spin up, so a 10ms pulse
-// often can't be felt at all. Raised after direct feedback ("sterkere haptisk feedback"); 'light'
-// preserves roughly the old feel for anyone who preferred it.
+// IMPORTANT: `navigator.vibrate()` controls DURATION ONLY — the Web Vibration API has no
+// amplitude parameter at all. Native apps get their crisp, strong tick from Android's
+// VibrationEffect (EFFECT_CLICK and friends), which the web platform simply cannot reach. So
+// "stronger" here can only ever be approximated through duration, and the first attempt at that
+// got it backwards: raising these to 30/55ms made the pulse *longer*, which reads as a buzz
+// rather than a firmer click. Reported directly against ClickUp's own feel — "short like the
+// softer one in our app, but more strong."
+//
+// The useful range comes from how the motor itself behaves. An LRA takes roughly 15-20ms to spin
+// up to full amplitude, so:
+//   - under ~15ms it never reaches peak      -> feels weak (the original 10-12ms values)
+//   - around 25-30ms it hits peak and stops  -> reads as a single sharp click  <- what we want
+//   - beyond ~45ms it sustains at peak       -> reads as a buzz, i.e. long, not strong
+// Everything below therefore stays inside that short-but-peaking band; going higher again would
+// undo the very thing this is tuned for.
 const DURATIONS: Record<Exclude<HapticStrength, 'off'>, { tap: number; strong: number }> = {
-  light: { tap: 12, strong: 22 },
-  strong: { tap: 30, strong: 55 },
+  light: { tap: 12, strong: 20 },
+  strong: { tap: 25, strong: 32 },
 };
 
 const DEFAULT_STRENGTH: HapticStrength = 'strong';
