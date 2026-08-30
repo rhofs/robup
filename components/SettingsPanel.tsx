@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from 'react';
 import Papa from 'papaparse';
 import { X, Settings, Check, Trash2, Plus, Link2, Upload, Share2, Download, Monitor, Sun, Moon } from 'lucide-react';
 import { readThemePreference, setThemePreference, type ThemePreference } from '../lib/theme';
+import { readHapticStrength, setHapticStrength, type HapticStrength } from '../lib/haptics';
 import { useTaskStore, type HierarchyWorkspace, type AppUser } from '../store/useTaskStore';
 import { useChatStore } from '../store/useChatStore';
 import { getPushStatus, enablePush, disablePush } from '../lib/pushClient';
@@ -98,6 +99,12 @@ const THEME_OPTIONS: { value: ThemePreference; label: string; icon: typeof Monit
   { value: 'system', label: 'Auto', icon: Monitor },
   { value: 'light', label: 'Light', icon: Sun },
   { value: 'dark', label: 'Dark', icon: Moon },
+];
+
+const HAPTIC_OPTIONS: { value: HapticStrength; label: string }[] = [
+  { value: 'off', label: 'Off' },
+  { value: 'light', label: 'Light' },
+  { value: 'strong', label: 'Strong' },
 ];
 
 type InviteRow = { id: string; role: 'admin' | 'member'; createdAt: string; createdBy: { name: string } };
@@ -196,6 +203,7 @@ export default function SettingsPanel({
   // fresh each time it opens, and a one-tick-late correction would visibly flip the selected
   // segment (same class of bug as useIsMobile's own documented flash-of-wrong-value).
   const [themePref, setThemePref] = useState<ThemePreference>(() => readThemePreference());
+  const [haptics, setHaptics] = useState<HapticStrength>(() => readHapticStrength());
 
   // --- Workspace identity (backlog #2) --- org type + work email, set at creation, editable
   // here by Owner/Admin only (server-enforced too, see PATCH /api/workspaces/[id]/route.ts).
@@ -469,6 +477,33 @@ export default function SettingsPanel({
                 </button>
               ))}
             </div>
+
+            {/* Vibration on tap — Android/Chrome only (including installed PWAs); iOS has no
+                navigator.vibrate at all, so the row is hidden there rather than offering a
+                control that provably can't do anything. Picking an option fires a pulse at that
+                strength immediately (see setHapticStrength), so the difference is felt while
+                choosing instead of only on some later tap. */}
+            {typeof navigator !== 'undefined' && 'vibrate' in navigator && (
+              <>
+                <div className="text-[10px] uppercase tracking-wide text-neutral-500 px-1 pb-1">Haptics</div>
+                <div className="flex items-center gap-1 bg-neutral-950 border border-neutral-800 rounded p-0.5 mb-3">
+                  {HAPTIC_OPTIONS.map(({ value, label }) => (
+                    <button
+                      key={value}
+                      onClick={() => {
+                        setHapticStrength(value);
+                        setHaptics(value);
+                      }}
+                      className={`flex-1 text-[11px] py-1.5 rounded cursor-pointer transition ${
+                        haptics === value ? 'bg-neutral-800 text-app-strong' : 'text-neutral-500 hover:text-neutral-300'
+                      }`}
+                    >
+                      {label}
+                    </button>
+                  ))}
+                </div>
+              </>
+            )}
 
             <div className="text-[10px] uppercase tracking-wide text-neutral-500 px-1 pb-1">Visible tabs</div>
             {NAV_TABS.map((navTab) => {
