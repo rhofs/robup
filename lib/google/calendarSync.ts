@@ -2,33 +2,38 @@ import { calendar_v3, google } from 'googleapis';
 import { prisma } from '@/lib/prisma';
 import { createGoogleOAuthClient } from './oauthClient';
 
-// Google Calendar sync (backlog #13), per-assignee — matches the ClickUp behavior the user
-// pointed to directly: each person connects their *own* Google account (Account Settings), and
-// whatever's assigned to *them* — Task or Event, with at least one date set — shows up on *their*
-// own dedicated "Siqt" calendar (a real, separate calendar in their Google Calendar list — not
-// merged into their primary one). Not "whoever created it." See TaskGoogleSync/EventGoogleSync
-// in schema.prisma for the per-(item, assignee) join rows this drives off of.
+// Google Calendar sync (backlog #13), per-assignee AND per-workspace — matches the ClickUp
+// behavior the user pointed to directly, on two separate axes:
+// 1. Assignment, not creation: each person connects their *own* Google account (Account
+//    Settings), and whatever's assigned to *them* — Task or Event, with at least one date set —
+//    shows up on *their* own calendar. Not "whoever created it."
+// 2. One calendar per workspace, not one global calendar: this person gets a SEPARATE dedicated
+//    "Siqt - <workspace name>" calendar for each workspace they're in, created lazily
+//    (calendars.insert) the first time they need one — so they can color-code/hide/mute each
+//    workspace's calendar independently in Google Calendar, same as ClickUp's own per-List/
+//    per-Space sync. See UserWorkspaceGoogleCalendar in schema.prisma.
 //
 // Deliberately isolated from the user's real primary calendar, per their own explicit privacy
 // ask after seeing how broad `documents`/`calendar.events` sounded in Google's consent screen:
 // this app requests `calendar.app.created` (see oauthClient.ts), a scope that can only ever see
 // or touch calendars it itself created — Siqt has no API-level way to read, edit, or delete
 // anything on the user's other calendars, full stop, not just "the code doesn't do that."
-// getConnectedClient() below creates this dedicated calendar lazily (calendars.insert) the first
-// time a given user is synced, and caches its id on User.googleCalendarId from then on.
 //
 // Task sync is push-only (Siqt -> Google): a Task can have several independently-connected
 // assignees, each with their own calendar copy — letting edits on any one of those copies write
 // back to the single shared Task would be genuine, unresolved multi-writer conflict territory a
-// v1 pass doesn't take on. Event sync stays genuinely two-way (pullChangesFromGoogle below), same
-// as before, just re-keyed off EventGoogleSync instead of a single owner field.
+// v1 pass doesn't take on. Event sync stays genuinely two-way (pullChangesFromGoogle below),
+// scoped per (user, workspace) same as everything else here — an event added directly to a real
+// (non-personal) workspace's own dedicated calendar pulls back into THAT workspace, visible to
+// its other members, exactly like adding it there from inside Siqt would be; only the Personal
+// workspace's own calendar stays private by construction (nobody else is ever a member of it).
 //
 // **Polling, not real-time push webhooks**, for the Google -> Siqt direction. Google's
 // `events.watch` push-notification channels need a public HTTPS callback (siqt.no has one now)
 // but also expire (max 7 days for Calendar) and need active renewal, plus header-signature
 // verification — real infrastructure on top of what's here. Polling (pullChangesFromGoogle, run
 // on a schedule — see scripts/syncGoogleCalendar.ts, plus an on-demand call whenever Planner
-// opens) is simpler and correct, just not instant.
+// opens for a given workspace) is simpler and correct, just not instant.
 
 function toCalendarClient(refreshToken: string) {
   const oauth2Client = createGoogleOAuthClient();
@@ -36,58 +41,43 @@ function toCalendarClient(refreshToken: string) {
   return google.calendar({ version: 'v3', auth: oauth2Client });
 }
 
-// Resolves everything a sync call needs for one user in one place: their Calendar client, and
-// the id of their dedicated "Siqt" calendar — created lazily on first use (calendars.insert) and
-// cached on User.googleCalendarId from then on. Deliberately never 'primary' — see
-// oauthClient.ts's own comment on why (calendar.app.created, the scope this app actually
-// requests, can't even see 'primary' in the first place; this calendar is the only one Siqt has
-// any access to at all).
-async function getConnectedClient(userId: string) {
+// Resolves everything a sync call needs for one (user, workspace) pair: their Calendar client,
+// and the id of their dedicated calendar for that workspace — created lazily on first use and
+// cached in UserWorkspaceGoogleCalendar from then on. Deliberately never 'primary' — see the
+// file-level comment above.
+async function getWorkspaceCalendarClient(userId: string, workspaceId: string) {
   const user = await prisma.user.findUnique({ where: { id: userId } });
   if (!user?.googleRefreshToken) return null;
   const client = toCalendarClient(user.googleRefreshToken);
 
-  if (user.googleCalendarId) return { user, client, calendarId: user.googleCalendarId };
+  const existing = await prisma.userWorkspaceGoogleCalendar.findUnique({ where: { userId_workspaceId: { userId, workspaceId } } });
+  if (existing) return { client, calendarId: existing.googleCalendarId, calendarRow: existing };
 
-  const created = await client.calendars.insert({ requestBody: { summary: 'Siqt' } });
+  const workspace = await prisma.workspace.findUnique({ where: { id: workspaceId }, select: { name: true } });
+  const created = await client.calendars.insert({ requestBody: { summary: `Siqt - ${workspace?.name ?? 'Workspace'}` } });
   const calendarId = created.data.id;
   if (!calendarId) return null;
-  await prisma.user.update({ where: { id: userId }, data: { googleCalendarId: calendarId } });
-  return { user, client, calendarId };
-}
-
-// Same find-or-create-by-unique-owner shape as POST /api/workspaces/personal — reused here
-// (not imported from that route, which is Next's own request-handler export, not a plain
-// function) so a Google-native event pulled in for someone who has never once opened "My tasks"
-// still has a real home to land in. A personal workspace is single-member by construction, so
-// there's no ambiguity about who else could see it.
-async function ensurePersonalWorkspaceId(userId: string): Promise<string> {
-  const workspace = await prisma.workspace.upsert({
-    where: { personalOwnerId: userId },
-    update: {},
-    create: {
-      name: 'Personal',
-      isPersonal: true,
-      personalOwnerId: userId,
-      memberships: { create: { userId, role: 'owner' } },
-      spaces: { create: [{ name: 'Personal', lists: { create: [{ name: 'My tasks' }] } }] },
-    },
-  });
-  return workspace.id;
+  const calendarRow = await prisma.userWorkspaceGoogleCalendar.create({ data: { userId, workspaceId, googleCalendarId: calendarId } });
+  return { client, calendarId, calendarRow };
 }
 
 function isNotFoundError(err: any): boolean {
   return err?.code === 404 || err?.response?.status === 404 || err?.code === 410 || err?.response?.status === 410;
 }
 
-async function deleteGoogleEvent(userId: string, googleEventId: string): Promise<void> {
-  const connected = await getConnectedClient(userId);
-  if (!connected) return;
+async function deleteGoogleEventById(client: calendar_v3.Calendar, calendarId: string, googleEventId: string): Promise<void> {
   try {
-    await connected.client.events.delete({ calendarId: connected.calendarId, eventId: googleEventId });
+    await client.events.delete({ calendarId, eventId: googleEventId });
   } catch (err: any) {
-    if (!isNotFoundError(err)) console.error('deleteGoogleEvent failed:', err?.message || err);
+    if (!isNotFoundError(err)) console.error('deleteGoogleEventById failed:', err?.message || err);
   }
+}
+
+// Task.workspaceId isn't a direct column — walks listId -> List.spaceId -> Space.workspaceId,
+// the same chain every other Task-adjacent workspace lookup in this app uses.
+async function getTaskWorkspaceId(taskId: string): Promise<string | null> {
+  const task = await prisma.task.findUnique({ where: { id: taskId }, select: { list: { select: { space: { select: { workspaceId: true } } } } } });
+  return task?.list.space.workspaceId ?? null;
 }
 
 // ---------------------------------------------------------------------------
@@ -125,27 +115,32 @@ function toGoogleAllDayFields(start: Date, endInclusive: Date) {
 // Creates, updates, or removes ONE assignee's own calendar copy of a Task, based on its current
 // state — the single function every Task-mutating route calls (for every potentially-affected
 // user) after a change to assignees, dates, title/description, or archived/deleted status.
+// NOTE: if a Task moves to a List in a *different* workspace between syncs, this resolves the
+// calendar for its new workspace — the old calendar's now-orphaned copy isn't cleaned up (a rare
+// edge case a v1 pass doesn't chase; it just sits stale on the old calendar).
 export async function syncTaskForUser(taskId: string, userId: string): Promise<void> {
-  const [task, syncRow] = await Promise.all([
+  const [task, syncRow, workspaceId] = await Promise.all([
     prisma.task.findUnique({
       where: { id: taskId },
       select: { id: true, title: true, description: true, startDate: true, dueDate: true, archived: true, deletedAt: true, assignees: { select: { id: true } } },
     }),
     prisma.taskGoogleSync.findUnique({ where: { taskId_userId: { taskId, userId } } }),
+    getTaskWorkspaceId(taskId),
   ]);
 
   const range = task ? taskDateRange(task) : null;
-  const shouldSync = !!task && !task.deletedAt && !task.archived && !!range && task.assignees.some((a) => a.id === userId);
+  const shouldSync = !!task && !!workspaceId && !task.deletedAt && !task.archived && !!range && task.assignees.some((a) => a.id === userId);
 
   if (!shouldSync) {
-    if (syncRow) {
-      await deleteGoogleEvent(userId, syncRow.googleEventId);
+    if (syncRow && workspaceId) {
+      const connected = await getWorkspaceCalendarClient(userId, workspaceId);
+      if (connected) await deleteGoogleEventById(connected.client, connected.calendarId, syncRow.googleEventId);
       await prisma.taskGoogleSync.delete({ where: { id: syncRow.id } }).catch(() => {});
     }
     return;
   }
 
-  const connected = await getConnectedClient(userId);
+  const connected = await getWorkspaceCalendarClient(userId, workspaceId!);
   if (!connected) return; // not (or no longer) Google-connected — nothing to push
 
   const requestBody: calendar_v3.Schema$Event = {
@@ -189,11 +184,17 @@ export async function syncTaskForAllRelevantUsers(taskId: string): Promise<void>
 
 // Called right before permanently deleting a Task (or soft-deleting it — see the route for why
 // that path re-syncs instead) — removes every assignee's Google-side copy while the sync rows
-// (and their googleEventId) are still readable, since a cascading DB delete wouldn't leave
-// anything to look up afterward.
+// (and their googleEventId, and the Task's own workspace chain) are still readable, since a
+// cascading DB delete wouldn't leave anything to look up afterward.
 export async function deleteTaskGoogleSyncs(taskId: string): Promise<void> {
-  const rows = await prisma.taskGoogleSync.findMany({ where: { taskId } });
-  await Promise.all(rows.map((row) => deleteGoogleEvent(row.userId, row.googleEventId)));
+  const [workspaceId, rows] = await Promise.all([getTaskWorkspaceId(taskId), prisma.taskGoogleSync.findMany({ where: { taskId } })]);
+  if (!workspaceId || rows.length === 0) return;
+  await Promise.all(
+    rows.map(async (row) => {
+      const connected = await getWorkspaceCalendarClient(row.userId, workspaceId);
+      if (connected) await deleteGoogleEventById(connected.client, connected.calendarId, row.googleEventId);
+    })
+  );
 }
 
 // ---------------------------------------------------------------------------
@@ -209,6 +210,7 @@ type SyncableEvent = {
   endDate: Date;
   allDay: boolean;
   deletedAt: Date | null;
+  workspaceId: string;
   assignees: { id: string; email: string | null; googleEmail: string | null }[];
 };
 
@@ -228,8 +230,9 @@ function toGoogleDateFields(event: { startDate: Date; endDate: Date; allDay: boo
 }
 
 // Same shape as syncTaskForUser — creates/updates/removes ONE assignee's own calendar copy of an
-// Event. Other assignees are still listed as Calendar attendees on each copy (so everyone can see
-// who else is on it), same as the original single-owner version did.
+// Event, on that workspace's own dedicated calendar (Event.workspaceId is a direct column, no
+// chain to walk). Other assignees are still listed as Calendar attendees on each copy (so
+// everyone can see who else is on it), same as the original single-owner version did.
 export async function syncEventForUser(eventId: string, userId: string): Promise<void> {
   const [event, syncRow] = await Promise.all([
     prisma.event.findUnique({
@@ -242,14 +245,15 @@ export async function syncEventForUser(eventId: string, userId: string): Promise
   const shouldSync = !!event && !event.deletedAt && event.assignees.some((a) => a.id === userId);
 
   if (!shouldSync) {
-    if (syncRow) {
-      await deleteGoogleEvent(userId, syncRow.googleEventId);
+    if (syncRow && event) {
+      const connected = await getWorkspaceCalendarClient(userId, event.workspaceId);
+      if (connected) await deleteGoogleEventById(connected.client, connected.calendarId, syncRow.googleEventId);
       await prisma.eventGoogleSync.delete({ where: { id: syncRow.id } }).catch(() => {});
     }
     return;
   }
 
-  const connected = await getConnectedClient(userId);
+  const connected = await getWorkspaceCalendarClient(userId, event.workspaceId);
   if (!connected) return;
 
   const ev = event as SyncableEvent;
@@ -297,8 +301,17 @@ export async function syncEventForAllRelevantUsers(eventId: string): Promise<voi
 
 // Same "read before cascade deletes it" reasoning as deleteTaskGoogleSyncs.
 export async function deleteEventGoogleSyncs(eventId: string): Promise<void> {
-  const rows = await prisma.eventGoogleSync.findMany({ where: { eventId } });
-  await Promise.all(rows.map((row) => deleteGoogleEvent(row.userId, row.googleEventId)));
+  const [event, rows] = await Promise.all([
+    prisma.event.findUnique({ where: { id: eventId }, select: { workspaceId: true } }),
+    prisma.eventGoogleSync.findMany({ where: { eventId } }),
+  ]);
+  if (!event || rows.length === 0) return;
+  await Promise.all(
+    rows.map(async (row) => {
+      const connected = await getWorkspaceCalendarClient(row.userId, event.workspaceId);
+      if (connected) await deleteGoogleEventById(connected.client, connected.calendarId, row.googleEventId);
+    })
+  );
 }
 
 function fromGoogleDateFields(gEvent: calendar_v3.Schema$Event): { startDate: Date; endDate: Date; allDay: boolean } {
@@ -316,38 +329,39 @@ function fromGoogleDateFields(gEvent: calendar_v3.Schema$Event): { startDate: Da
   return { startDate: start, endDate: end, allDay: false };
 }
 
-// A brand-new user's very first sync would otherwise pull in their *entire* Google Calendar
-// history — every event they've ever had, going back years. Bounded to a reasonable rolling
-// window instead: recent past (in case something just got moved) through a year out. Only
-// applies to the initial full sync (no syncToken yet) — once a syncToken exists, Google's own
-// incremental-sync API doesn't accept timeMin/timeMax alongside it (the token already encodes
-// the scope established by that first call), so every later poll just uses the token as-is.
+// A brand-new calendar's very first sync would otherwise pull in every event ever created on
+// it — never actually a concern in practice (this app creates the calendar itself, empty), but
+// kept as a defensive bound matching the original design in case a calendar somehow already had
+// history (e.g. re-linked to a pre-existing one by hand later).
 const INITIAL_SYNC_PAST_DAYS = 30;
 const INITIAL_SYNC_FUTURE_DAYS = 365;
 
-// Pulls whatever changed on this user's dedicated "Siqt" Google calendar since the last call
-// (Google's own incremental-sync cursor, googleCalendarSyncToken) and applies it: updates/deletes
-// for Events this user is already synced to (matched via EventGoogleSync), and a real new Siqt
-// Event — landed in the user's personal ("My tasks") workspace, with them as its sole assignee
-// and flagged importedFromGoogle — for anything genuinely new on the Google side (i.e. an event
-// the user added directly on the Siqt calendar in Google Calendar itself).
-export async function pullChangesFromGoogle(userId: string): Promise<{ created: number; updated: number; deleted: number }> {
-  const connected = await getConnectedClient(userId);
+// Pulls whatever changed on this (user, workspace)'s dedicated Google calendar since the last
+// call (Google's own incremental-sync cursor, stored per-calendar on UserWorkspaceGoogleCalendar)
+// and applies it: updates/deletes for Events this user is already synced to (matched via
+// EventGoogleSync), and a real new Siqt Event — landed in THIS workspace, with them as its sole
+// assignee and flagged importedFromGoogle — for anything genuinely new on the Google side (i.e.
+// an event the user added directly on this workspace's calendar in Google Calendar itself). A
+// non-personal workspace's calendar is visible to its other members once pulled in, same as
+// adding the event from inside Siqt would be — only the Personal workspace's own calendar stays
+// private, since nobody else is ever a member of it.
+export async function pullChangesFromGoogle(userId: string, workspaceId: string): Promise<{ created: number; updated: number; deleted: number }> {
+  const connected = await getWorkspaceCalendarClient(userId, workspaceId);
   if (!connected) return { created: 0, updated: 0, deleted: 0 };
-  const { user, client, calendarId } = connected;
+  const { client, calendarId, calendarRow } = connected;
   let created = 0;
   let updated = 0;
   let deleted = 0;
   let pageToken: string | undefined;
   let nextSyncToken: string | undefined;
-  const isInitialSync = !user.googleCalendarSyncToken;
+  const isInitialSync = !calendarRow.googleSyncToken;
 
   do {
     let page;
     try {
       page = await client.events.list({
         calendarId,
-        syncToken: user.googleCalendarSyncToken ?? undefined,
+        syncToken: calendarRow.googleSyncToken ?? undefined,
         pageToken,
         showDeleted: true,
         ...(isInitialSync
@@ -362,8 +376,8 @@ export async function pullChangesFromGoogle(userId: string): Promise<{ created: 
       // changed in a way Google no longer has history for) — the only correct recovery per
       // Google's own docs is to drop it and do one full resync from scratch.
       if (err?.code === 410 || err?.response?.status === 410) {
-        await prisma.user.update({ where: { id: userId }, data: { googleCalendarSyncToken: null } });
-        return pullChangesFromGoogle(userId);
+        await prisma.userWorkspaceGoogleCalendar.update({ where: { id: calendarRow.id }, data: { googleSyncToken: null } });
+        return pullChangesFromGoogle(userId, workspaceId);
       }
       throw err;
     }
@@ -375,7 +389,6 @@ export async function pullChangesFromGoogle(userId: string): Promise<{ created: 
       if (!existingSync) {
         if (gEvent.status === 'cancelled') continue; // never knew about it, nothing to delete
         const { startDate, endDate, allDay } = fromGoogleDateFields(gEvent);
-        const workspaceId = await ensurePersonalWorkspaceId(userId);
         await prisma.event.create({
           data: {
             title: gEvent.summary || 'Untitled event',
@@ -432,7 +445,7 @@ export async function pullChangesFromGoogle(userId: string): Promise<{ created: 
   } while (pageToken);
 
   if (nextSyncToken) {
-    await prisma.user.update({ where: { id: userId }, data: { googleCalendarSyncToken: nextSyncToken } });
+    await prisma.userWorkspaceGoogleCalendar.update({ where: { id: calendarRow.id }, data: { googleSyncToken: nextSyncToken } });
   }
   return { created, updated, deleted };
 }

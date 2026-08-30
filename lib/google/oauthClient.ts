@@ -41,9 +41,10 @@ export function createGoogleOAuthClient() {
 //   in Google Calendar's list, with *zero* API access to any of the user's other calendars —
 //   `calendar.events`/`calendar.events.owned` would both still see and be able to edit every
 //   existing event on the user's real primary calendar, which is exactly the exposure the user
-//   flagged. lib/google/calendarSync.ts creates this dedicated calendar once per user
-//   (`calendars.insert`, stored as User.googleCalendarId) and does all event
-//   list/insert/update/delete against that calendar id specifically, never `'primary'`.
+//   flagged. lib/google/calendarSync.ts creates one such calendar per (user, workspace) pair —
+//   not one global calendar — so each workspace's events land on their own separate calendar
+//   (`calendars.insert`, stored on UserWorkspaceGoogleCalendar), and does all event
+//   list/insert/update/delete against that specific calendar id, never `'primary'`.
 export const GOOGLE_EXPORT_SCOPES = [
   'https://www.googleapis.com/auth/drive.file',
   'https://www.googleapis.com/auth/userinfo.email',

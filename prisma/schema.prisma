@@ -53,6 +53,28 @@ model Workspace {
   // existing personal workspace" and both created one). Null for every non-personal workspace.
   personalOwnerId String?  @unique @map("personal_owner_id")
   createdAt       DateTime @default(now()) @map("created_at")
+  userGoogleCalendars UserWorkspaceGoogleCalendar[]
+}
+
+// One dedicated Google Calendar per (user, workspace) pair — created lazily (calendars.insert,
+// named "Siqt - <workspace name>") the first time this user needs a calendar copy of something
+// in this specific workspace. Per the user's own explicit ask, matching ClickUp: not one single
+// calendar for everything, a separate one per workspace, so they can color-code/hide each
+// independently in Google Calendar. googleSyncToken is Google's own incremental-sync cursor
+// (events.list's nextSyncToken) for THIS calendar specifically — each calendar needs its own,
+// unlike the single global token an earlier one-calendar-per-user draft used.
+model UserWorkspaceGoogleCalendar {
+  id               String    @id @default(uuid())
+  userId           String    @map("user_id")
+  user             User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  workspaceId      String    @map("workspace_id")
+  workspace        Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  googleCalendarId String    @map("google_calendar_id")
+  googleSyncToken  String?   @map("google_sync_token")
+  createdAt        DateTime  @default(now()) @map("created_at")
+
+  @@unique([userId, workspaceId])
+  @@map("user_workspace_google_calendars")
 }
 
 // Workspace membership + role tier (owner/admin/member) — governs who can manage the workspace
@@ -371,18 +393,13 @@ model User {
   googleRefreshToken String? @map("google_refresh_token")
   googleEmail        String? @map("google_email")
   // Google Calendar two-way sync (backlog #13) — same "connect your Google account" flow/token as
-  // Docs export above (one refresh token, a scope grant covering both). Syncs against a
-  // dedicated secondary "Siqt" calendar this app creates for the user (googleCalendarId, lazily
-  // created on first sync via calendars.insert) — deliberately NOT the user's real primary
-  // calendar, per their own explicit privacy ask: the calendar.app.created scope this now
-  // requests physically cannot see or touch any calendar Siqt didn't itself create, unlike an
-  // earlier draft that merged straight into 'primary'. Shows up as its own calendar in the
-  // user's Google Calendar list — same "ClickUp calendar" look the user pointed to as the
-  // reference. googleCalendarSyncToken is Google Calendar API's own incremental-sync cursor
-  // (events.list's nextSyncToken, scoped to googleCalendarId) — lets pullChangesFromGoogle fetch
-  // only what changed since last time instead of the whole calendar on every poll.
-  googleCalendarId        String? @map("google_calendar_id")
-  googleCalendarSyncToken String? @map("google_calendar_sync_token")
+  // Docs export above (one refresh token, a scope grant covering both). Per the user's own
+  // explicit ask (matching ClickUp), this person gets a SEPARATE dedicated calendar per
+  // workspace they're in — see UserWorkspaceGoogleCalendar below — not one single global
+  // calendar. Deliberately never the user's real primary calendar either way: the
+  // calendar.app.created scope this app requests physically cannot see or touch any calendar it
+  // didn't itself create.
+  workspaceGoogleCalendars UserWorkspaceGoogleCalendar[]
   // Per-assignee calendar mirroring (both Task and Event) — replaces the earlier single-"owner"
   // model. Each Google-connected assignee gets their own personal calendar copy, matching
   // ClickUp's own behavior the user pointed to: "I have to be assigned to that task" for it to

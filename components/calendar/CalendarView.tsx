@@ -76,6 +76,7 @@ export default function CalendarView({ tasks, events, statuses, workspaces, show
     calendarFocusDate: focusDate,
     setCalendarGranularity: setGranularity,
     setCalendarFocusDate: setFocusDate,
+    activeWorkspaceId,
   } = useTaskStore();
   const [weekDrag, setWeekDrag] = useState<DragState | null>(null);
   const isMobile = useIsMobile();
@@ -88,18 +89,25 @@ export default function CalendarView({ tasks, events, statuses, workspaces, show
     if (isMobile && granularity === 'week') setGranularity('month');
   }, [isMobile, granularity, setGranularity]);
 
-  // On-demand Google Calendar pull (backlog #13) — once when Planner is opened, so a change made
-  // on the Google side doesn't wait for the next scheduled scripts/syncGoogleCalendar.ts run
-  // before showing up here. Silent no-op server-side if Google isn't connected.
+  // On-demand Google Calendar pull (backlog #13) — once when Planner is opened for a given
+  // workspace (and again on switching workspace, since each has its own dedicated calendar now —
+  // see UserWorkspaceGoogleCalendar), so a change made on the Google side doesn't wait for the
+  // next scheduled scripts/syncGoogleCalendar.ts run before showing up here. Silent no-op
+  // server-side if Google isn't connected, or if this workspace has no calendar yet.
   useEffect(() => {
-    fetch('/api/google/calendar/sync', { method: 'POST' })
+    if (!activeWorkspaceId) return;
+    fetch('/api/google/calendar/sync', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ workspaceId: activeWorkspaceId }),
+    })
       .then((res) => (res.ok ? res.json() : null))
       .then((result) => {
         if (result && (result.created > 0 || result.updated > 0 || result.deleted > 0)) refetchEvents();
       })
       .catch(() => {});
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [activeWorkspaceId]);
   const gridContainerRef = useRef<HTMLDivElement | null>(null);
   // Mirrors gridContainerRef.current into state, purely so the ResizeObserver effect below can
   // depend on "the actual DOM node" and re-run when it changes — a plain useRef's own reassignment
