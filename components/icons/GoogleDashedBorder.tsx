@@ -4,24 +4,33 @@
 // possible directly (border-color is one flat color, and border-image ignores both border-style
 // and border-radius in every browser) — four separate absolutely-positioned strips, each a
 // repeating-linear-gradient along its own edge, is the reliable way to get an actual dashed line
-// in more than one color. rounded-[inherit] + overflow-hidden on the wrapper clips the strips to
-// whatever border-radius the parent bar already has, so this doesn't need to know which corners
-// are actually rounded.
+// in more than one color.
+//
+// Two adjustments per direct user feedback ("ser ugly ut", the rounded corners looking
+// "knøttete"): (1) each color carries real alpha now (~55%) instead of full saturation, so four
+// competing brand colors read as a subdued tell rather than a clashing rainbow, especially at the
+// 14px bar height Month/Week view uses; (2) every strip is now inset a few px from each end
+// (CORNER_INSET) rather than running the full edge — a straight strip has no way to actually bend
+// around a rounded corner, so running it flush into one made the dash pattern visibly collide
+// with itself right where two strips met the curve. Insetting leaves the curve itself clean and
+// only dashes the flat middle portion of each edge.
 const GOOGLE_BLUE = '#4285F4';
 const GOOGLE_RED = '#EA4335';
 const GOOGLE_YELLOW = '#FBBC05';
 const GOOGLE_GREEN = '#34A853';
+const ALPHA = 'B0'; // ~69% — visible but clearly subdued, not full brand saturation
+const CORNER_INSET = 4;
 
-const dash = (color: string) => `repeating-linear-gradient(to right, ${color} 0 4px, transparent 4px 7px)`;
-const dashVertical = (color: string) => `repeating-linear-gradient(to bottom, ${color} 0 4px, transparent 4px 7px)`;
+const dash = (color: string) => `repeating-linear-gradient(to right, ${color}${ALPHA} 0 4px, transparent 4px 7px)`;
+const dashVertical = (color: string) => `repeating-linear-gradient(to bottom, ${color}${ALPHA} 0 4px, transparent 4px 7px)`;
 
 export default function GoogleDashedBorder() {
   return (
     <div className="absolute inset-0 rounded-[inherit] overflow-hidden pointer-events-none">
-      <div className="absolute top-0 left-0 right-0 h-[1.5px]" style={{ backgroundImage: dash(GOOGLE_BLUE) }} />
-      <div className="absolute top-0 bottom-0 right-0 w-[1.5px]" style={{ backgroundImage: dashVertical(GOOGLE_RED) }} />
-      <div className="absolute bottom-0 left-0 right-0 h-[1.5px]" style={{ backgroundImage: dash(GOOGLE_YELLOW) }} />
-      <div className="absolute top-0 bottom-0 left-0 w-[1.5px]" style={{ backgroundImage: dashVertical(GOOGLE_GREEN) }} />
+      <div className="absolute top-0 h-[1.5px]" style={{ left: CORNER_INSET, right: CORNER_INSET, backgroundImage: dash(GOOGLE_BLUE) }} />
+      <div className="absolute right-0 w-[1.5px]" style={{ top: CORNER_INSET, bottom: CORNER_INSET, backgroundImage: dashVertical(GOOGLE_RED) }} />
+      <div className="absolute bottom-0 h-[1.5px]" style={{ left: CORNER_INSET, right: CORNER_INSET, backgroundImage: dash(GOOGLE_YELLOW) }} />
+      <div className="absolute left-0 w-[1.5px]" style={{ top: CORNER_INSET, bottom: CORNER_INSET, backgroundImage: dashVertical(GOOGLE_GREEN) }} />
     </div>
   );
 }

@@ -425,6 +425,14 @@ export async function pullChangesFromGoogle(userId: string, workspaceId: string)
 
       if (!existingSync) {
         if (gEvent.status === 'cancelled') continue; // never knew about it, nothing to delete
+        // A Task pushed to this same calendar (TaskGoogleSync — a separate table, since Task
+        // sync is push-only/one-way, see the file-level comment) is invisible to the
+        // EventGoogleSync check above by design. Without this second check, pulling would treat
+        // every Task's own pushed copy as a brand-new Google-native event on every single poll,
+        // phantom-reimporting it as a duplicate Event — confirmed live ("test task 1" showing up
+        // twice, once as the real Task, once as a reimported Event with the Google badge).
+        const isTasksOwnCopy = await prisma.taskGoogleSync.findUnique({ where: { userId_googleEventId: { userId, googleEventId: gEvent.id } } });
+        if (isTasksOwnCopy) continue;
         const { startDate, endDate, allDay } = fromGoogleDateFields(gEvent);
         await prisma.event.create({
           data: {
