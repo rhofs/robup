@@ -194,7 +194,16 @@ export default function SettingsPanel({
   // straight to 'invite' instead of making someone click through from 'general' every time.
   initialTab?: 'general' | 'roles' | 'invite' | 'import' | 'account';
 }) {
-  const { createRole, updateRole, deleteRole, assignRole, unassignRole, updateWorkspaceDetails, sendWorkspaceMemberInvite } = useTaskStore();
+  const {
+    createRole,
+    updateRole,
+    deleteRole,
+    assignRole,
+    unassignRole,
+    updateWorkspaceDetails,
+    sendWorkspaceMemberInvite,
+    sendWorkspaceMemberInviteByEmail,
+  } = useTaskStore();
   const { connections, fetchConnections } = useChatStore();
   const [tab, setTab] = useState<'general' | 'roles' | 'invite' | 'import' | 'account'>(initialTab);
   const [hidden, setHidden] = useState(() => readHiddenNavTabs());
@@ -253,6 +262,10 @@ export default function SettingsPanel({
   >(null);
   const [directInviteError, setDirectInviteError] = useState<string | null>(null);
   const [directInviteBusyId, setDirectInviteBusyId] = useState<string | null>(null);
+  // Invite-by-email form — shares directInviteError with the Network picker below, since only one
+  // of the two is ever being used at a time and both report into the same spot.
+  const [inviteEmail, setInviteEmail] = useState('');
+  const [emailInviteBusy, setEmailInviteBusy] = useState(false);
 
   const refetchDirectPending = () => {
     fetch(`/api/workspaces/${workspace.id}/member-invites`)
@@ -676,6 +689,48 @@ export default function SettingsPanel({
           </div>
         ) : tab === 'invite' ? (
           <div className="p-5 space-y-2 max-h-96 overflow-y-auto">
+            {/* Invite by email — for someone whose address you know but who isn't in your
+                Network, which the picker below can't reach. No email is sent (this app has no
+                mail infrastructure): an existing account gets the invite in-app, and if no
+                account uses that address the error says so and points at the shareable link
+                further down. Added per direct feedback: "bør også kunne skrive inn eposten." */}
+            <p className="text-[10px] uppercase tracking-wide text-neutral-500 font-semibold">Invite by email</p>
+            <form
+              onSubmit={async (e) => {
+                e.preventDefault();
+                const email = inviteEmail.trim();
+                if (!email) return;
+                setDirectInviteError(null);
+                setEmailInviteBusy(true);
+                const result = await sendWorkspaceMemberInviteByEmail(workspace.id, email, newInviteRole);
+                setEmailInviteBusy(false);
+                if (result.ok) {
+                  setInviteEmail('');
+                  refetchDirectPending();
+                } else {
+                  setDirectInviteError(result.error ?? 'Could not send invite');
+                }
+              }}
+              className="flex items-center gap-1.5"
+            >
+              <input
+                type="email"
+                value={inviteEmail}
+                onChange={(e) => setInviteEmail(e.target.value)}
+                placeholder="name@example.com"
+                className="flex-1 bg-neutral-950 border border-neutral-700 rounded px-2 py-1.5 text-xs text-app-strong focus:outline-none focus:border-blue-500"
+              />
+              <button
+                type="submit"
+                disabled={!inviteEmail.trim() || emailInviteBusy}
+                className="bg-blue-600 hover:bg-blue-500 disabled:opacity-40 disabled:cursor-not-allowed text-white text-[11px] px-3 py-1.5 rounded font-medium cursor-pointer shrink-0"
+              >
+                {emailInviteBusy ? 'Sending…' : 'Invite'}
+              </button>
+            </form>
+
+            <div className="h-px bg-neutral-800/70 my-2" />
+
             {/* Discord-style targeted invite via Network (backlog #8) — pick someone from your
                 Connections/coworkers directly, rather than only ever sharing a link. */}
             <p className="text-[10px] uppercase tracking-wide text-neutral-500 font-semibold">Invite from your Network</p>

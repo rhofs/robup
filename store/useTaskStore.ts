@@ -440,6 +440,14 @@ interface TaskStore {
     toUserId: string,
     role: 'admin' | 'member'
   ) => Promise<{ ok: boolean; error?: string }>;
+  // Same endpoint, addressed by email instead of by a Network pick — for inviting someone whose
+  // address you know but who isn't in your Network. Returns the route's own error text (including
+  // "no account uses that email yet", which is the useful answer, not a failure to hide).
+  sendWorkspaceMemberInviteByEmail: (
+    workspaceId: string,
+    email: string,
+    role: 'admin' | 'member'
+  ) => Promise<{ ok: boolean; error?: string }>;
   // Owner/Admin only server-side (see app/api/workspaces/[id]/members/[userId]/route.ts PATCH) —
   // promote a 'member' to 'admin' or demote back, never targets/produces 'owner'.
   changeWorkspaceMemberRole: (workspaceId: string, userId: string, role: 'admin' | 'member') => Promise<void>;
@@ -1706,6 +1714,19 @@ export const useTaskStore = create<TaskStore>((set, get) => {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ toUserId, role }),
+      });
+      if (!res.ok) {
+        const data = await res.json().catch(() => null);
+        return { ok: false, error: data?.error || 'Could not send invite' };
+      }
+      return { ok: true };
+    },
+
+    sendWorkspaceMemberInviteByEmail: async (workspaceId, email, role) => {
+      const res = await fetch(`/api/workspaces/${workspaceId}/member-invites`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email, role }),
       });
       if (!res.ok) {
         const data = await res.json().catch(() => null);

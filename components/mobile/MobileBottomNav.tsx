@@ -225,7 +225,7 @@ export default function MobileBottomNav({
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
-            transition={{ duration: 0.18 }}
+            transition={{ duration: 0.12 }}
             style={{ bottom: reservedHeight }}
             className="fixed inset-x-0 top-0 z-40 md:hidden bg-black/60"
             onClick={onCloseMenu}
@@ -244,7 +244,11 @@ export default function MobileBottomNav({
           // is the external safe-area + air gap (ISLAND_BOTTOM_OFFSET), not 0 — see that constant's
           // comment for why the island no longer sits flush against the screen's true edge.
           animate={{ height: menuOpen ? islandHeightPx : closedHeightPx }}
-          transition={{ type: 'spring', stiffness: 300, damping: 28, mass: 0.9 }}
+          // Stiffer and lighter than the original 300/28/0.9, which took long enough to settle
+          // that opening the menu read as a lag between the tap and the panel arriving ("litt
+          // delay når du trykker på menyene"). Damping raised alongside stiffness so the faster
+          // spring still lands without overshooting into a bounce.
+          transition={{ type: 'spring', stiffness: 520, damping: 36, mass: 0.6 }}
           style={{ bottom: ISLAND_BOTTOM_OFFSET }}
           // Translucent + blurred, not opaque — this island now floats directly over scrolled
           // content (see the file's own top comment) instead of sitting on empty reserved space,
