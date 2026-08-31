@@ -648,6 +648,14 @@ export const useTaskStore = create<TaskStore>((set, get) => {
             // as setActiveWorkspaceId's own comment above.
             (workspaces.find((w: HierarchyWorkspace) => w.id === previousLastRealWorkspaceId)?.id ??
               workspaces.find((w: HierarchyWorkspace) => !w.isPersonal)?.id ??
+              // Last resort: the personal workspace. Previously this fell through to `null`,
+              // which meant someone who has no *real* workspace yet (every brand-new account, now
+              // that a personal one is created at signup) landed with no active workspace at all
+              // — and since Settings, the Spaces tree and most nav tabs key off having one,
+              // essentially nothing worked. Reported live: "Ny lagd bruker. Ingenting funka."
+              // Deliberately still last, so anyone who *does* have a real workspace keeps landing
+              // there rather than in My Tasks.
+              workspaces.find((w: HierarchyWorkspace) => w.isPersonal)?.id ??
               null);
         const activeWorkspace = workspaces.find((w: HierarchyWorkspace) => w.id === activeWorkspaceId);
         const firstSpaceId = activeWorkspace?.spaces[0]?.id || 'everything';

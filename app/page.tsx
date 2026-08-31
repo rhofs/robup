@@ -1372,7 +1372,14 @@ function PageContent() {
   // "which workspace" call site in this file should read this instead of workspaces[0] directly.
   // A personal workspace (the hidden one behind "My tasks") is never "the current workspace."
   const currentWorkspace = useMemo(
-    () => workspaces.find((w) => w.id === activeWorkspaceId) ?? workspaces.find((w) => !w.isPersonal),
+    () =>
+      workspaces.find((w) => w.id === activeWorkspaceId) ??
+      workspaces.find((w) => !w.isPersonal) ??
+      // Falls back to the personal workspace rather than undefined — an account with no *real*
+      // workspace (every brand-new one) otherwise left this undefined, which gated off Settings
+      // and every other surface guarded by `currentWorkspace &&`. Reported live: "Settings fantes
+      // ikke før workspace." Still last in the chain, so a real workspace always wins.
+      workspaces.find((w) => w.isPersonal),
     [workspaces, activeWorkspaceId]
   );
   // Mobile-only header title (replaces the generic "S" logo — see the header's own comment) — same

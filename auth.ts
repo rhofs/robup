@@ -4,6 +4,7 @@ import Credentials from 'next-auth/providers/credentials';
 import { PrismaAdapter } from '@auth/prisma-adapter';
 import bcrypt from 'bcryptjs';
 import { prisma } from '@/lib/prisma';
+import { ensurePersonalWorkspace } from '@/lib/personalWorkspace';
 
 // Single config file, not split into an Edge-safe auth.config.ts + a full auth.ts like most
 // Auth.js tutorials show — that split exists to keep OAuth-only checks usable in an Edge-runtime
@@ -91,6 +92,11 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
         ? ((parts[0][0] ?? '') + (parts.length > 1 ? parts[parts.length - 1][0] : parts[0][1] ?? '')).toUpperCase()
         : '?';
       await prisma.user.update({ where: { id: user.id }, data: { initials } }).catch(() => {});
+      // Same up-front personal workspace the email/password signup route creates — this is the
+      // *other* account-creation path (first-ever Google sign-in), and a new account arriving
+      // through it would otherwise land in the app with zero workspaces and almost everything
+      // gated off. See lib/personalWorkspace.ts.
+      await ensurePersonalWorkspace(user.id).catch(() => {});
     },
   },
 });

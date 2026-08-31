@@ -357,7 +357,12 @@ export default function SettingsPanel({
           >
             General
           </button>
-          {canManage && (
+          {/* Roles/Invite/Import are all workspace-governance surfaces, and a personal workspace
+              has nobody else in it to govern — roles to assign, people to invite, or a shared
+              board to import into. Hidden there rather than shown as three dead tabs, which is
+              what an account with only a personal workspace (every brand-new one) would now see
+              otherwise, since Settings became reachable without a real workspace. */}
+          {canManage && !workspace.isPersonal && (
             <button
               onClick={() => setTab('roles')}
               className={`flex-1 text-xs py-2 cursor-pointer transition ${tab === 'roles' ? 'text-app-strong border-b-2 border-blue-500' : 'text-neutral-500 hover:text-neutral-300'}`}
@@ -376,7 +381,7 @@ export default function SettingsPanel({
               Invite
             </button>
           )}
-          {canManage && (
+          {canManage && !workspace.isPersonal && (
             <button
               onClick={() => setTab('import')}
               className={`flex-1 text-xs py-2 cursor-pointer transition ${tab === 'import' ? 'text-app-strong border-b-2 border-blue-500' : 'text-neutral-500 hover:text-neutral-300'}`}
@@ -478,12 +483,16 @@ export default function SettingsPanel({
               ))}
             </div>
 
-            {/* Vibration on tap — Android/Chrome only (including installed PWAs); iOS has no
-                navigator.vibrate at all, so the row is hidden there rather than offering a
-                control that provably can't do anything. Picking an option fires a pulse at that
-                strength immediately (see setHapticStrength), so the difference is felt while
-                choosing instead of only on some later tap. */}
-            {typeof navigator !== 'undefined' && 'vibrate' in navigator && (
+            {/* Vibration on tap. Requires BOTH a vibrate API and an actual touchscreen: desktop
+                Chrome does expose navigator.vibrate, so checking for the API alone (as this first
+                did) left a control on desktop that provably can nothing — reported directly,
+                "haptics settings trenger ikke være på desktop." maxTouchPoints is what separates
+                a phone/tablet from a mouse-driven browser that merely ships the API. iOS has no
+                navigator.vibrate at all, so it's excluded by the first half regardless.
+                Picking an option fires a pulse at that strength immediately (see
+                setHapticStrength), so the difference is felt while choosing rather than only on
+                some later unrelated tap. */}
+            {typeof navigator !== 'undefined' && 'vibrate' in navigator && navigator.maxTouchPoints > 0 && (
               <>
                 <div className="text-[10px] uppercase tracking-wide text-neutral-500 px-1 pb-1">Haptics</div>
                 <div className="flex items-center gap-1 bg-neutral-950 border border-neutral-800 rounded p-0.5 mb-3">

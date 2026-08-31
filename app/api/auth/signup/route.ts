@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import bcrypt from 'bcryptjs';
 import { prisma } from '@/lib/prisma';
 import { checkRateLimit, getClientIp } from '@/lib/rateLimit';
+import { ensurePersonalWorkspace } from '@/lib/personalWorkspace';
 
 // Hand-rolled validation rather than adding zod for something this small — matches the project's
 // existing "skip a dependency for a small need" precedent (pdfkit over Puppeteer).
@@ -34,9 +35,15 @@ export async function POST(req: Request) {
     ? ((parts[0][0] ?? '') + (parts.length > 1 ? parts[parts.length - 1][0] : parts[0][1] ?? '')).toUpperCase()
     : '?';
 
-  await prisma.user.create({
+  const user = await prisma.user.create({
     data: { email, password: await bcrypt.hash(password, 10), name, initials },
   });
+
+  // Given up front, not lazily on the first "My Tasks" click — without it a brand-new account
+  // loads with zero workspaces and essentially the whole app is gated off (see
+  // lib/personalWorkspace.ts). Awaited rather than fire-and-forget: the very next thing this user
+  // does is sign in and load the app, so it genuinely needs to exist by then.
+  await ensurePersonalWorkspace(user.id);
 
   return NextResponse.json({ ok: true });
 }
