@@ -47,6 +47,12 @@ function LoginPageContent() {
   const callbackUrl = rawCallbackUrl.replace(/^https?:\/\/[^/]+/, '') || '/';
   const [mode, setMode] = useState<'signin' | 'signup'>(searchParams.get('mode') === 'signup' ? 'signup' : 'signin');
   const [email, setEmail] = useState('');
+  // Forgot-password request, inline under the sign-in form. `forgotSent` is set regardless of the
+  // response, since the route deliberately answers identically whether or not the address exists.
+  const [forgotOpen, setForgotOpen] = useState(false);
+  const [forgotEmail, setForgotEmail] = useState('');
+  const [forgotBusy, setForgotBusy] = useState(false);
+  const [forgotSent, setForgotSent] = useState(false);
   const [password, setPassword] = useState('');
   const [name, setName] = useState('');
   const [error, setError] = useState<string | null>(null);
@@ -221,6 +227,69 @@ function LoginPageContent() {
             >
               {mode === 'signin' ? 'Sign in' : 'Create account'}
             </button>
+
+            {/* Sign-in only — there's nothing to recover while creating an account. Kept inline
+                rather than on its own page: the request is a single field, and the confirmation
+                is deliberately the same whether or not the address exists (see the route), so
+                there's no follow-up state worth a separate route for. */}
+            {mode === 'signin' && (
+              <div className="pt-1 text-center">
+                {forgotSent ? (
+                  <p className="text-[11px] text-neutral-400">
+                    If an account uses that email, a reset link is on its way.
+                  </p>
+                ) : forgotOpen ? (
+                  <div className="space-y-2">
+                    <input
+                      type="email"
+                      value={forgotEmail}
+                      onChange={(e) => setForgotEmail(e.target.value)}
+                      placeholder="Your email address"
+                      className="w-full bg-neutral-950 border border-neutral-700 rounded px-3 py-2 text-xs text-app-strong focus:outline-none focus:border-blue-500"
+                    />
+                    <div className="flex items-center gap-2">
+                      <button
+                        type="button"
+                        onClick={() => setForgotOpen(false)}
+                        className="flex-1 border border-neutral-700 hover:border-neutral-600 rounded px-3 py-1.5 text-[11px] text-neutral-300 cursor-pointer"
+                      >
+                        Cancel
+                      </button>
+                      <button
+                        type="button"
+                        disabled={!forgotEmail.trim() || forgotBusy}
+                        onClick={async () => {
+                          setForgotBusy(true);
+                          await fetch('/api/auth/forgot-password', {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({ email: forgotEmail.trim() }),
+                          }).catch(() => {});
+                          setForgotBusy(false);
+                          // Shown regardless of the response, matching the route's own
+                          // deliberately identical answer either way.
+                          setForgotSent(true);
+                        }}
+                        className="flex-1 bg-neutral-800 hover:bg-neutral-700 disabled:opacity-40 disabled:cursor-not-allowed rounded px-3 py-1.5 text-[11px] text-app-strong font-medium cursor-pointer"
+                      >
+                        {forgotBusy ? 'Sending…' : 'Send reset link'}
+                      </button>
+                    </div>
+                  </div>
+                ) : (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setForgotEmail(email);
+                      setForgotOpen(true);
+                    }}
+                    className="text-[11px] text-neutral-500 hover:text-neutral-300 cursor-pointer"
+                  >
+                    Forgot your password?
+                  </button>
+                )}
+              </div>
+            )}
           </form>
           </div>
         </div>

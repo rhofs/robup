@@ -13,6 +13,10 @@ export const config = {
   // link's whole point is showing "you're invited to X" to someone who doesn't have a session
   // yet, so that page has to be reachable before auth, not gated behind it.
   //
+  // /reset-password is excluded for the same reason as /invite: someone following a password
+  // reset link is by definition unable to sign in, so gating that page behind a session would
+  // bounce them to the very login form they can't get past.
+  //
   // Also excludes the PWA manifest/icon routes (app/manifest.ts, app/icon.tsx, app/apple-icon.tsx,
   // app/pwa-icon-*/route.tsx) and the push service worker script (public/sw.js) — these are asset-
   // like, not real pages, and must stay reachable with no session at all: the browser's own
@@ -20,6 +24,6 @@ export const config = {
   // too, and a redirected (HTML) response in place of the real sw.js script fails service worker
   // registration outright rather than just looking wrong.
   matcher: [
-    '/((?!api|login|invite|connect|_next/static|_next/image|favicon.ico|manifest.webmanifest|icon|apple-icon|pwa-icon-192|pwa-icon-512|pwa-icon-512-maskable|sw.js).*)',
+    '/((?!api|login|reset-password|invite|connect|_next/static|_next/image|favicon.ico|manifest.webmanifest|icon|apple-icon|pwa-icon-192|pwa-icon-512|pwa-icon-512-maskable|sw.js).*)',
   ],
 };

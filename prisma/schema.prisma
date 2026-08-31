@@ -434,7 +434,27 @@ model User {
   chatMessages  ChatMessage[]
   chatReactions ChatReaction[]
   pushSubscriptions PushSubscription[]
+  passwordResetTokens PasswordResetToken[]
   createdAt     DateTime  @default(now()) @map("created_at")
+}
+
+// Password reset. There was no recovery path at all before this: a forgotten password could only
+// be fixed by editing the database by hand, which is tolerable for one person and not for a team.
+//
+// `token` stores a SHA-256 hash, never the token itself — the raw value exists only in the emailed
+// link. A leaked database therefore can't be used to reset anyone's password, the same reasoning
+// that makes User.password a bcrypt hash rather than the password. Single-use (usedAt) and
+// short-lived (expiresAt), so an old link found in a mailbox months later is inert.
+model PasswordResetToken {
+  id        String    @id @default(uuid())
+  token     String    @unique
+  userId    String    @map("user_id")
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  expiresAt DateTime  @map("expires_at")
+  usedAt    DateTime? @map("used_at")
+  createdAt DateTime  @default(now()) @map("created_at")
+
+  @@map("password_reset_tokens")
 }
 
 // One row per subscribed browser/device (a user can have several — phone, laptop, etc.), keyed
