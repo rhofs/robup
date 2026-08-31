@@ -12,7 +12,7 @@
     "start:custom": "tsx server/customServer.ts",
     "collab:start:prod": "tsx server/collabServer.ts",
     "start:prod": "concurrently -n next,collab -c blue,magenta \"npm:start:custom\" \"npm:collab:start:prod\"",
-    "deploy:prod": "npm run backup:db:prod || true && npx prisma db push --accept-data-loss && npm run start:prod",
+    "deploy:prod": "npm run backup:db:prod || true && npx prisma migrate deploy && npm run start:prod",
     "lint": "next lint",
     "seed": "ts-node --compiler-options {\"module\":\"CommonJS\"} prisma/seed.ts",
     "backfill:dm-keys": "tsx --env-file=.env.local scripts/backfillDmKeys.ts",
