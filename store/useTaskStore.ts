@@ -410,6 +410,13 @@ interface TaskStore {
   // Marks the first-run walkthrough done. Optimistic so the panel closes instantly; the write is
   // a plain timestamp with nothing to roll back if it fails.
   markOnboarded: (userId: string) => Promise<void>;
+  // Duplicate / paste. One store action per kind, each hitting the matching /duplicate route —
+  // passing a target id turns 'duplicate here' into 'paste there' (see those routes). Refetch
+  // rather than splice: a duplicate can bring a whole subtask or subpage tree with it, and
+  // reconstructing that shape locally is exactly the kind of hand-maintained mirror that drifts.
+  duplicateTask: (taskId: string, targetListId?: string) => Promise<void>;
+  duplicateList: (listId: string, targetSpaceId?: string) => Promise<void>;
+  duplicateSpaceDoc: (docId: string, targetSpaceId?: string) => Promise<void>;
   deleteUser: (userId: string) => Promise<void>;
 
   // Office "rooms" — purely organizational/visual grouping of team members, unrelated to the
@@ -1503,6 +1510,36 @@ export const useTaskStore = create<TaskStore>((set, get) => {
           redo: () => get().updateUser(userId, patch),
         });
       }
+    },
+
+    duplicateTask: async (taskId, targetListId) => {
+      const res = await fetch(`/api/tasks/${taskId}/duplicate`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(targetListId ? { targetListId } : {}),
+      });
+      if (!res.ok) return;
+      await get().refetchTasks();
+    },
+
+    duplicateList: async (listId, targetSpaceId) => {
+      const res = await fetch(`/api/lists/${listId}/duplicate`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(targetSpaceId ? { targetSpaceId } : {}),
+      });
+      if (!res.ok) return;
+      await Promise.all([get().refetchWorkspaces(), get().refetchTasks()]);
+    },
+
+    duplicateSpaceDoc: async (docId, targetSpaceId) => {
+      const res = await fetch(`/api/docs/${docId}/duplicate`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(targetSpaceId ? { targetSpaceId } : {}),
+      });
+      if (!res.ok) return;
+      await get().refetchWorkspaces();
     },
 
     markOnboarded: async (userId) => {

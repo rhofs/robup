@@ -598,6 +598,9 @@ function PageContent() {
     updateUser,
     setUsername,
     markOnboarded,
+    duplicateTask,
+    duplicateList,
+    duplicateSpaceDoc,
     createRoom,
     updateRoom,
     deleteRoom,
@@ -4927,6 +4930,15 @@ function PageContent() {
             </button>
             <button
               onClick={() => {
+                duplicateTask(taskMenu.task.id);
+                setTaskMenu(null);
+              }}
+              className="w-full text-left px-3 py-1.5 text-xs text-neutral-300 hover:bg-neutral-800/60 cursor-pointer flex items-center gap-2"
+            >
+              <Copy className="w-3.5 h-3.5" /> Duplicate
+            </button>
+            <button
+              onClick={() => {
                 // Same picker the drag-and-drop "dropped on a Folder/Space with several Lists"
                 // flow already uses (taskListPicker) — offered here as a direct, no-drag way to
                 // move a task to any List, which also happens to be the easiest way to pull a
@@ -5061,6 +5073,15 @@ function PageContent() {
             >
               <Pencil className="w-3.5 h-3.5" /> Rename
             </button>
+            <button
+              onClick={() => {
+                duplicateList(listMenu.list.id);
+                setListMenu(null);
+              }}
+              className="w-full text-left px-3 py-1.5 text-xs text-neutral-300 hover:bg-neutral-800/60 cursor-pointer flex items-center gap-2"
+            >
+              <Copy className="w-3.5 h-3.5" /> Duplicate
+            </button>
             {canManageCurrentWorkspace && (
               <button
                 onClick={() => {
@@ -5121,6 +5142,15 @@ function PageContent() {
               className="w-full text-left px-3 py-1.5 text-xs text-neutral-300 hover:bg-neutral-800/60 cursor-pointer flex items-center gap-2"
             >
               <Pencil className="w-3.5 h-3.5" /> Rename
+            </button>
+            <button
+              onClick={() => {
+                duplicateSpaceDoc(docMenu.doc.id);
+                setDocMenu(null);
+              }}
+              className="w-full text-left px-3 py-1.5 text-xs text-neutral-300 hover:bg-neutral-800/60 cursor-pointer flex items-center gap-2"
+            >
+              <Copy className="w-3.5 h-3.5" /> Duplicate
             </button>
             <button
               onClick={() => {
