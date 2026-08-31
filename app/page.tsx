@@ -6273,8 +6273,8 @@ function PageContent() {
         onCreateTask={({ title, spaceId, listId, startDate, dueDate }) => {
           optimisticCreateTask(title, listId, spaceId, null, startDate, dueDate);
         }}
-        onCreateEvent={({ title, startDate, endDate, allDay, spaceId, workspaceId, assigneeIds, location }) => {
-          optimisticCreateEvent({ title, startDate, endDate, allDay, spaceId, workspaceId, assigneeIds, location });
+        onCreateEvent={({ title, startDate, endDate, allDay, spaceId, workspaceId, assigneeIds, location, description, color }) => {
+          optimisticCreateEvent({ title, startDate, endDate, allDay, spaceId, workspaceId, assigneeIds, location, description, color });
         }}
       />
 

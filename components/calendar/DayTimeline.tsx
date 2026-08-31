@@ -1,6 +1,6 @@
 'use client';
 
-import { useRef, useState } from 'react';
+import { useLayoutEffect, useRef, useState } from 'react';
 import { CalendarClock } from 'lucide-react';
 import GoogleIcon from '../icons/GoogleIcon';
 import { isSameDay } from '../../lib/calendarDates';
@@ -64,6 +64,20 @@ export default function DayTimeline({
   const [drag, setDrag] = useState<DayDragState | null>(null);
   const draggedRef = useRef(false);
   const today = new Date();
+
+  // The timeline is a full 24h tall, so it always opened at midnight — hours of empty night to
+  // scroll past before reaching anything ("kan den starte rundt der dagen i dag er?"). Scrolls to
+  // put the current hour near the top, with a little context above it. useLayoutEffect so it
+  // lands before the first paint rather than as a visible jump afterwards. Re-runs when the day
+  // changes; for a day that isn't today there's no "now" to aim at, so it starts at a sensible
+  // working hour instead of midnight.
+  const scrollRef = useRef<HTMLDivElement | null>(null);
+  useLayoutEffect(() => {
+    const node = scrollRef.current;
+    if (!node) return;
+    const anchorHour = isSameDay(day, new Date()) ? new Date().getHours() : 8;
+    node.scrollTop = Math.max(0, (anchorHour - 1) * HOUR_H);
+  }, [day]);
 
   const allDayTasks: Task[] = [];
   const timedTasks: { task: Task; start: Date; end: Date }[] = [];
@@ -142,7 +156,7 @@ export default function DayTimeline({
   };
 
   return (
-    <div className="flex flex-col h-full overflow-y-auto">
+    <div ref={scrollRef} className="flex flex-col h-full overflow-y-auto">
       {(allDayTasks.length > 0 || allDayEvents.length > 0) && (
         <div className="shrink-0 border-b border-neutral-800 px-3 py-2 space-y-1">
           <div className="text-[9px] uppercase tracking-wider text-neutral-500 mb-1">All day</div>

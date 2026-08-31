@@ -318,6 +318,9 @@ interface TaskStore {
     workspaceId: string;
     assigneeIds?: string[];
     location?: string | null;
+    // POST /api/events already persisted this; it just had no way in from the create popover
+    // until that gained a Description field.
+    description?: string | null;
     id?: string;
   }) => Promise<Event | null>;
   updateEvent: (

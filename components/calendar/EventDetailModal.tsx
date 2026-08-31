@@ -11,7 +11,10 @@ import GoogleIcon from '../icons/GoogleIcon';
 import { googleMapsSearchUrl } from '../../lib/googleMapsUrl';
 import LocationAutocompleteInput from '../LocationAutocompleteInput';
 
-const EVENT_COLOR_CHOICES = ['#c89642', '#618cd1', '#9a61d1', '#349f7c', '#cd6565', '#31a0b3', '#cb6798', '#8d97a5'];
+// Exported so QuickCreatePopover offers the exact same palette when creating an event as this
+// modal does when editing one — they were previously separate concerns only because the create
+// popover had no color field at all.
+export const EVENT_COLOR_CHOICES = ['#c89642', '#618cd1', '#9a61d1', '#349f7c', '#cd6565', '#31a0b3', '#cb6798', '#8d97a5'];
 
 type EventDetailModalProps = {
   event: Event | null;

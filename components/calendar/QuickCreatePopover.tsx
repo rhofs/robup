@@ -5,6 +5,8 @@ import { X, Check, MapPin } from 'lucide-react';
 import { HierarchyWorkspace, AppUser } from '../../store/useTaskStore';
 import DatePickerPopover from '../DatePickerPopover';
 import FloatingPopover from '../FloatingPopover';
+import ColorSwatchPicker from '../ColorSwatchPicker';
+import { EVENT_COLOR_CHOICES } from './EventDetailModal';
 import { startDateColor, dueDateColor, DATE_BADGE_COLOR_HEX, startDateTooltip, dueDateTooltip } from '../../lib/dateBadgeColor';
 import { googleMapsSearchUrl } from '../../lib/googleMapsUrl';
 import LocationAutocompleteInput from '../LocationAutocompleteInput';
@@ -26,6 +28,8 @@ type QuickCreatePopoverProps = {
     workspaceId: string;
     assigneeIds: string[];
     location: string | null;
+    description: string | null;
+    color: string | null;
   }) => void;
 };
 
@@ -66,6 +70,12 @@ export default function QuickCreatePopover({
   const [eventLocation, setEventLocation] = useState('');
   const [assigneeIds, setAssigneeIds] = useState<string[]>([]);
   const [assigneePickerOpen, setAssigneePickerOpen] = useState(false);
+  // Description and color were the two fields EventDetailModal offered but this popover didn't,
+  // so creating an event and *then* opening it revealed options that hadn't been available a
+  // moment earlier — reported directly ("ikke alle valgene der. Men de er der om man lager, så
+  // trykker seg inn på den").
+  const [eventDescription, setEventDescription] = useState('');
+  const [eventColor, setEventColor] = useState<string | null>(null);
 
   useEffect(() => {
     if (open) {
@@ -81,6 +91,8 @@ export default function QuickCreatePopover({
       setAllDay(true);
       setEventLocation('');
       setAssigneeIds([]);
+      setEventDescription('');
+      setEventColor(null);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open]);
@@ -107,6 +119,8 @@ export default function QuickCreatePopover({
         workspaceId: activeWorkspaceId,
         assigneeIds,
         location: eventLocation.trim() || null,
+        description: eventDescription.trim() || null,
+        color: eventColor,
       });
     }
     onClose();
@@ -304,6 +318,26 @@ export default function QuickCreatePopover({
                     <MapPin className="w-2.5 h-2.5" /> View on Google Maps
                   </a>
                 )}
+              </div>
+
+              {/* Color and Description mirror EventDetailModal's own fields so nothing new
+                  appears only after the event already exists. Color sits next to the Space
+                  selector's purpose (Space cascades a color when none is set explicitly), same
+                  relationship the detail modal has. */}
+              <div className="space-y-1.5">
+                <label className="text-[10px] uppercase tracking-wide text-neutral-500 font-semibold">Color</label>
+                <ColorSwatchPicker value={eventColor} onChange={setEventColor} choices={EVENT_COLOR_CHOICES} size="sm" />
+              </div>
+
+              <div className="space-y-1.5">
+                <label className="text-[10px] uppercase tracking-wide text-neutral-500 font-semibold">Description</label>
+                <textarea
+                  value={eventDescription}
+                  onChange={(e) => setEventDescription(e.target.value)}
+                  rows={2}
+                  placeholder="Add a description..."
+                  className="w-full bg-neutral-950 border border-neutral-700 rounded px-3 py-2 text-xs text-app-strong focus:outline-none focus:border-blue-500 resize-none"
+                />
               </div>
 
               <div className="space-y-1.5">

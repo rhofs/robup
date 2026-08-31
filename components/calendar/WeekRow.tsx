@@ -5,6 +5,7 @@ import { Plus, Pin, CalendarClock } from 'lucide-react';
 import GoogleIcon from '../icons/GoogleIcon';
 import { getISOWeek, isSameDay } from '../../lib/calendarDates';
 import { withAlpha } from '../../lib/colorAlpha';
+import { hapticTap } from '../../lib/haptics';
 import type { ClippedSegment, DragMode, DragState } from '../../lib/ganttLayout';
 import type { Task, Event } from '../../store/useTaskStore';
 
@@ -99,6 +100,16 @@ export default function WeekRow({
   // with one cell at a time.
   const longPressTimerRef = useRef<number | null>(null);
   const longPressFiredRef = useRef(false);
+  // Set by the timer once the hold threshold is reached, CONSUMED on pointerup — the popover is
+  // deliberately not opened from inside the timer itself any more. It used to be, which meant the
+  // create popover mounted (and its title input autofocused, raising the keyboard) while the
+  // finger was still down; the touch sequence then finished on top of freshly-mounted UI and the
+  // resulting focus/blur fight made the keyboard slide up and straight back down, or never appear,
+  // depending on exactly how long the hold lasted. Reported on a Galaxy S25: "hoppa keyboardet opp
+  // så ned igjen... noen ganger ikke det hele tatt, basert på hvor lenge de holder inne."
+  // Opening on release instead means focus is only ever requested once the touch is completely
+  // over, so there's nothing left to steal it back.
+  const longPressReadyRef = useRef(false);
   const longPressStartRef = useRef({ x: 0, y: 0 });
   const LONG_PRESS_MS = 500;
   const LONG_PRESS_MOVE_TOLERANCE = 8;
@@ -108,6 +119,13 @@ export default function WeekRow({
       window.clearTimeout(longPressTimerRef.current);
       longPressTimerRef.current = null;
     }
+  };
+
+  // Cancels an in-flight hold outright (finger left the cell, gesture interrupted) — distinct
+  // from a completed hold, which pointerup consumes.
+  const abandonLongPress = () => {
+    clearLongPressTimer();
+    longPressReadyRef.current = false;
   };
 
   // assignLanes (lib/ganttLayout.ts) gives every segment ONE lane for its whole clipped width in
@@ -262,11 +280,17 @@ export default function WeekRow({
                     isMobile
                       ? (e) => {
                           longPressFiredRef.current = false;
+                          longPressReadyRef.current = false;
                           longPressStartRef.current = { x: e.clientX, y: e.clientY };
                           clearLongPressTimer();
                           longPressTimerRef.current = window.setTimeout(() => {
-                            longPressFiredRef.current = true;
-                            onQuickAddDay(day);
+                            // Only ARMS the gesture — the popover itself opens on release (see
+                            // longPressReadyRef). The haptic tick fires here rather than on
+                            // release so the hold still confirms itself at the moment the
+                            // threshold is crossed, which is what makes it feel responsive
+                            // despite the actual action being deferred.
+                            longPressReadyRef.current = true;
+                            hapticTap();
                           }, LONG_PRESS_MS);
                         }
                       : undefined
@@ -277,12 +301,25 @@ export default function WeekRow({
                           if (longPressTimerRef.current === null) return;
                           const dx = e.clientX - longPressStartRef.current.x;
                           const dy = e.clientY - longPressStartRef.current.y;
-                          if (Math.abs(dx) > LONG_PRESS_MOVE_TOLERANCE || Math.abs(dy) > LONG_PRESS_MOVE_TOLERANCE) clearLongPressTimer();
+                          if (Math.abs(dx) > LONG_PRESS_MOVE_TOLERANCE || Math.abs(dy) > LONG_PRESS_MOVE_TOLERANCE) abandonLongPress();
                         }
                       : undefined
                   }
-                  onPointerUp={isMobile ? clearLongPressTimer : undefined}
-                  onPointerLeave={isMobile ? clearLongPressTimer : undefined}
+                  onPointerUp={
+                    isMobile
+                      ? () => {
+                          clearLongPressTimer();
+                          if (!longPressReadyRef.current) return;
+                          longPressReadyRef.current = false;
+                          // Marks the trailing click for swallowing (below) so releasing doesn't
+                          // also drill into Day view behind the popover that's about to open.
+                          longPressFiredRef.current = true;
+                          onQuickAddDay(day);
+                        }
+                      : undefined
+                  }
+                  onPointerCancel={isMobile ? abandonLongPress : undefined}
+                  onPointerLeave={isMobile ? abandonLongPress : undefined}
                   // Vertical separators kept, but deliberately faint — the grid should register
                   // subconsciously, not read as a spreadsheet of boxed cells. The week-row
                   // boundary (this same border-b, once per row) stays clearly stronger so weeks
@@ -363,11 +400,25 @@ export default function WeekRow({
             };
 
             // Events move and resize exactly like Tasks now (see EventBar's own comment).
+            // On mobile a bar can be only a few pixels tall and a day wide, which makes opening
+            // the task/event straight from it a genuinely awkward target — reported directly
+            // ("siden de barsa er så små på mobil"). Tapping drills into that day's own view
+            // instead, where the same item is a full-width row that's easy to hit. Resolves to
+            // the day actually tapped (not the segment's start) by mapping the tap's position
+            // across the bar onto its own day span, so a multi-day bar behaves predictably.
+            const drillToTappedDay = (e: React.MouseEvent<HTMLElement>) => {
+              const rect = e.currentTarget.getBoundingClientRect();
+              const frac = rect.width > 0 ? (e.clientX - rect.left) / rect.width : 0;
+              const offset = Math.max(0, Math.min(seg.colSpan - 1, Math.floor(frac * seg.colSpan)));
+              onDrillDay(weekDays[seg.colStart + offset]);
+            };
+
             if (event) {
               return (
                 <EventBar
                   key={seg.taskId}
                   event={event}
+                  onMobileTap={drillToTappedDay}
                   seg={seg}
                   barStyle={barStyle}
                   color={eventColorOf(event)}
@@ -385,6 +436,7 @@ export default function WeekRow({
               <TaskBar
                 key={seg.taskId}
                 task={task!}
+                onMobileTap={drillToTappedDay}
                 seg={seg}
                 barStyle={barStyle}
                 color={taskColorOf(task!)}
@@ -424,6 +476,7 @@ function EventBar({
   color,
   isDraggingThis,
   onOpenEvent,
+  onMobileTap,
   onStartInteraction,
   onMoveInteraction,
   onEndInteraction,
@@ -435,6 +488,7 @@ function EventBar({
   color: string;
   isDraggingThis: boolean;
   onOpenEvent: (id: string) => void;
+  onMobileTap: (e: React.MouseEvent<HTMLElement>) => void;
   onStartInteraction: (e: React.PointerEvent, id: string, mode: DragMode) => void;
   onMoveInteraction: (e: React.PointerEvent, id: string) => void;
   onEndInteraction: (e: React.PointerEvent, id: string, mode: DragMode) => void;
@@ -444,7 +498,7 @@ function EventBar({
   return (
     <div className="absolute pointer-events-auto" style={{ ...barStyle, opacity: isDraggingThis ? 0.35 : 1 }}>
       <button
-        onClick={isMobile ? () => onOpenEvent(event.id) : undefined}
+        onClick={isMobile ? onMobileTap : undefined}
         onPointerDown={isMobile ? undefined : (e) => onStartInteraction(e, event.id, 'move')}
         onPointerMove={isMobile ? undefined : (e) => onMoveInteraction(e, event.id)}
         onPointerUp={isMobile ? undefined : (e) => onEndInteraction(e, event.id, 'move')}
@@ -501,6 +555,7 @@ function TaskBar({
   color,
   isDraggingThis,
   onOpenTask,
+  onMobileTap,
   onStartInteraction,
   onMoveInteraction,
   onEndInteraction,
@@ -513,6 +568,7 @@ function TaskBar({
   color: string;
   isDraggingThis: boolean;
   onOpenTask: (id: string) => void;
+  onMobileTap: (e: React.MouseEvent<HTMLElement>) => void;
   onStartInteraction: (e: React.PointerEvent, id: string, mode: DragMode) => void;
   onMoveInteraction: (e: React.PointerEvent, id: string) => void;
   onEndInteraction: (e: React.PointerEvent, id: string, mode: DragMode) => void;
@@ -529,7 +585,7 @@ function TaskBar({
         onPointerDown={isMobile ? undefined : (e) => onStartInteraction(e, task.id, 'move')}
         onPointerMove={isMobile ? undefined : (e) => onMoveInteraction(e, task.id)}
         onPointerUp={isMobile ? undefined : (e) => onEndInteraction(e, task.id, 'move')}
-        onClick={isMobile ? () => onOpenTask(task.id) : undefined}
+        onClick={isMobile ? onMobileTap : undefined}
         onMouseEnter={() => setHovered(true)}
         onMouseLeave={() => setHovered(false)}
         title={task.title}
