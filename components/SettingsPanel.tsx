@@ -9,6 +9,7 @@ import { useTaskStore, type HierarchyWorkspace, type AppUser } from '../store/us
 import { useChatStore } from '../store/useChatStore';
 import { getPushStatus, enablePush, disablePush } from '../lib/pushClient';
 import { useInstallPrompt } from '../hooks/useInstallPrompt';
+import { useIsMobile } from '../hooks/useIsMobile';
 import ColorSwatchPicker from './ColorSwatchPicker';
 import { copyToClipboard } from '../lib/copyToClipboard';
 
@@ -213,6 +214,7 @@ export default function SettingsPanel({
   // segment (same class of bug as useIsMobile's own documented flash-of-wrong-value).
   const [themePref, setThemePref] = useState<ThemePreference>(() => readThemePreference());
   const [haptics, setHaptics] = useState<HapticStrength>(() => readHapticStrength());
+  const isMobile = useIsMobile();
 
   // --- Workspace identity (backlog #2) --- org type + work email, set at creation, editable
   // here by Owner/Admin only (server-enforced too, see PATCH /api/workspaces/[id]/route.ts).
@@ -496,16 +498,19 @@ export default function SettingsPanel({
               ))}
             </div>
 
-            {/* Vibration on tap. Requires BOTH a vibrate API and an actual touchscreen: desktop
-                Chrome does expose navigator.vibrate, so checking for the API alone (as this first
-                did) left a control on desktop that provably can nothing — reported directly,
-                "haptics settings trenger ikke være på desktop." maxTouchPoints is what separates
-                a phone/tablet from a mouse-driven browser that merely ships the API. iOS has no
-                navigator.vibrate at all, so it's excluded by the first half regardless.
+            {/* Vibration on tap. Gated on the app's own useIsMobile() rather than a navigator
+                probe: desktop Chrome exposes navigator.vibrate (so checking the API alone left the
+                control visible on desktop), and maxTouchPoints — the second attempt — is no better,
+                since plenty of Windows desktops report a nonzero value with no touchscreen
+                attached. Reported twice: "haptics settings trenger ikke være på desktop."
+                useIsMobile matches viewport width OR a coarse pointer, which is the same signal
+                every other mobile/desktop split in this app already uses, so this can't drift from
+                them. Still ANDed with the API check because iOS is touch but has no
+                navigator.vibrate at all.
                 Picking an option fires a pulse at that strength immediately (see
                 setHapticStrength), so the difference is felt while choosing rather than only on
                 some later unrelated tap. */}
-            {typeof navigator !== 'undefined' && 'vibrate' in navigator && navigator.maxTouchPoints > 0 && (
+            {isMobile && typeof navigator !== 'undefined' && 'vibrate' in navigator && (
               <>
                 <div className="text-[10px] uppercase tracking-wide text-neutral-500 px-1 pb-1">Haptics</div>
                 <div className="flex items-center gap-1 bg-neutral-950 border border-neutral-800 rounded p-0.5 mb-3">

@@ -3429,7 +3429,7 @@ function PageContent() {
                           </span>
                         )}
                         <div className="min-w-0 text-left flex-1">
-                          <div className="text-xs font-semibold text-white truncate">{me.name}</div>
+                          <div className="text-xs font-semibold text-app-strong truncate">{me.name}</div>
                           <div className="text-[10px] text-neutral-500">View profile</div>
                         </div>
                         <ChevronDown className="w-3.5 h-3.5 text-neutral-500 shrink-0" />

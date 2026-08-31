@@ -541,7 +541,7 @@ export default function ChatPanel() {
           placeholder={activeChannel ? `Message ${isDM ? activeChannelLabel : `#${activeChannel.name}`}` : 'Message...'}
           rows={1}
           style={{ maxHeight: COMPOSER_MAX_HEIGHT_PX }}
-          className="flex-1 bg-transparent text-[13px] text-white placeholder:text-neutral-500 resize-none focus:outline-none py-1 overflow-y-auto"
+          className="flex-1 bg-transparent text-[13px] text-app-strong placeholder:text-neutral-500 resize-none focus:outline-none py-1 overflow-y-auto"
         />
         <button
           onClick={handleSend}
