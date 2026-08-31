@@ -26,8 +26,13 @@ then-current schema.
 
 # The production database lives inside the git working tree
 
-`DATABASE_URL` is `file:./siqt.db`, i.e. the live database sits in the repo root, and the
-Pterodactyl install script ends with `git clean -fd`. `git clean` deletes untracked files but
-spares ignored ones, so the `.gitignore` entry for `/siqt.db` is what keeps every Re-install from
+`DATABASE_URL` is `file:./siqt.db`, which reads like the repo root but is not: **Prisma resolves a
+relative SQLite path against the schema file's directory**, so the live database is at
+`prisma/siqt.db`. A first attempt at protecting it ignored `/siqt.db` and therefore protected
+nothing at all — verify the real path on the server (`find … -name '*.db'`) rather than trusting
+how the URL reads.
+
+The Pterodactyl install script ends with `git clean -fd`, which deletes untracked files but spares
+ignored ones, so the `/prisma/*.db` entry in `.gitignore` is what keeps every Re-install from
 wiping production. Never remove it, and never run `git clean -fdx` (the `-x` also removes ignored
 files) against a production checkout.

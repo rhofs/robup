@@ -42,30 +42,30 @@ next-env.d.ts
 
 /app/generated/prisma
 
-# local SQLite dev database (contains machine-local seed/test data, not source)
-/prisma/dev.db
-
 # rotating DB snapshots written by scripts/backupDb.ts — machine-local data, not source
 /backups
 
 # user-uploaded Doc images — machine-local content, not source (see app/api/uploads/image)
 /public/uploads
 
-# PRODUCTION DATABASE. This is not a tidiness entry — it is load-bearing.
+# DATABASES. This is not a tidiness entry — it is load-bearing.
 #
-# Production's DATABASE_URL is `file:./siqt.db`, i.e. this file sits in the repo root as an
-# UNTRACKED file. The Pterodactyl install script ends with `git clean -fd`, which deletes exactly
-# that: untracked files. `git clean` spares *ignored* files (removing those needs -x), so the only
-# thing standing between this database and every Re-install is this entry.
+# The Pterodactyl install script ends with `git clean -fd`, which deletes untracked files. Ignored
+# files are spared (removing those needs -x), so these entries are the only thing standing between
+# the live database and every Re-install. Without them, each Re-install silently wiped all
+# production data — which is what kept leaving sessions orphaned ("Not authenticated" on every
+# action while apparently logged in) and forced workspaces to be recreated over and over.
 #
-# Without it, every single Re-install silently wiped all production data — which is what kept
-# leaving sessions orphaned ("Not authenticated" on every action, "Sign in to see your tasks"
-# while apparently logged in) and forced workspaces to be recreated over and over. Only
-# /prisma/dev.db was ignored, so local development was protected and production was not.
+# NOTE THE PATH. Production's DATABASE_URL is `file:./siqt.db`, which reads like the repo root but
+# is NOT: Prisma resolves a relative SQLite path against the SCHEMA FILE's directory, so the real
+# database lives at `prisma/siqt.db`. A first attempt at this fix ignored `/siqt.db` and protected
+# nothing at all — caught only by looking for the file on the server and finding it one directory
+# down. Match on the whole directory rather than one filename so a renamed or newly-added database
+# can't silently fall outside this again.
 #
-# Do not remove. Better still, move the database outside the git working tree entirely, or drop
-# `git clean -fd` from the install script — this entry is the minimum fix, not a robust one.
-/siqt.db
-/siqt.db-journal
-/siqt.db-wal
-/siqt.db-shm
+# Never run `git clean -fdx` against a production checkout: `-x` removes ignored files too, which
+# defeats all of this.
+/prisma/*.db
+/prisma/*.db-journal
+/prisma/*.db-wal
+/prisma/*.db-shm
