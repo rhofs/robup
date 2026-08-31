@@ -3393,7 +3393,14 @@ function PageContent() {
 
       {/* ================= LEFT MENU (SIDEBAR) ================= */}
       <aside className="w-64 bg-neutral-900/90 border-r border-neutral-800/80 hidden md:flex flex-col justify-between shrink-0 select-none">
-        <div>
+        {/* flex-1 min-h-0 overflow-y-auto: this column had none of the three, so once a workspace
+            had more Spaces/Lists than fit the viewport the tree simply grew past the bottom of the
+            screen with no way to reach the rest — reported on desktop (mobile uses its own sheet,
+            which is why it looked fine there). `min-h-0` is the load-bearing part: a flex child
+            defaults to min-height:auto and refuses to shrink below its content, so
+            `overflow-y-auto` alone would never actually engage. The Settings/Trash footer below is
+            this element's sibling, so it stays pinned while only the tree scrolls. */}
+        <div className="flex-1 min-h-0 overflow-y-auto">
           {/* Persistent "Me" zone — above the workspace switcher, not a nav-rail tab. Avatar
               opens the profile page; the two lists below split what used to be one cross-
               workspace "My Tasks" nav icon into a private personal list (spans every workspace,
