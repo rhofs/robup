@@ -102,6 +102,7 @@ import DirectMessagesPage from '../components/DirectMessagesPage';
 import ProfilePage from '../components/ProfilePage';
 import CommandPalette from '../components/CommandPalette';
 import TrashPanel from '../components/TrashPanel';
+import OnboardingFlow from '../components/OnboardingFlow';
 import SettingsPanel, { readHiddenNavTabs, readHideWeekNumbers, type NavTabId } from '../components/SettingsPanel';
 import type { NavTab, MenuTile } from '../components/mobile/navTypes';
 import { PRIMARY_NAV_TAB_IDS } from '../components/mobile/navTypes';
@@ -596,6 +597,7 @@ function PageContent() {
     deleteCustomField,
     updateUser,
     setUsername,
+    markOnboarded,
     createRoom,
     updateRoom,
     deleteRoom,
@@ -6609,6 +6611,28 @@ function PageContent() {
           from a phone at all. Same `creatingWorkspace`/`newWorkspace*` state and `handleCreateWorkspace`
           handler as that desktop form; opened from the app-launcher grid's "New workspace" tile
           (see MobileBottomNav's onCreateWorkspace prop) instead of a dropdown trigger. */}
+      {/* First-run walkthrough. Gated on the user record actually having loaded (not just on a
+          session existing), so it can't flash on screen during the initial fetch and then vanish
+          once we learn they've already onboarded. Marked done on any exit — finishing, skipping,
+          or the X — since re-showing it to someone who deliberately dismissed it is worse than
+          not showing it at all. */}
+      {(() => {
+        const me = users.find((u) => u.id === currentUserId);
+        if (!me || me.onboardedAt) return null;
+        return (
+          <OnboardingFlow
+            userName={me.name}
+            hasRealWorkspace={hasRealWorkspace}
+            onFinish={() => markOnboarded(me.id)}
+            onCreateWorkspace={() => setCreatingWorkspace(true)}
+            onGoToMyTasks={() => {
+              const personal = meNavItems.find((i) => i.id === 'my-tasks');
+              personal?.onClick();
+            }}
+          />
+        );
+      })()}
+
       {creatingWorkspace && (
         <div
           className="md:hidden fixed inset-0 z-[70] flex items-end justify-center bg-black/60 px-3 pb-[calc(env(safe-area-inset-bottom)+16px)]"

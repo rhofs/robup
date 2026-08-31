@@ -28,5 +28,6 @@ export const publicUserSelect = {
   bio: true,
   linkedinUrl: true,
   websiteUrl: true,
+  onboardedAt: true,
   createdAt: true,
 } as const;

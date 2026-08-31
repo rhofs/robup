@@ -35,6 +35,19 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
 
   const body = await req.json();
 
+  // Self-only, like username below: whether *you* have finished the first-run walkthrough is
+  // nobody else's to mark done. Boolean in, timestamp out — the client only ever needs to say
+  // "I'm done", and the column records when.
+  if (body.onboarded !== undefined) {
+    if (callerId !== id) return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
+    const user = await prisma.user.update({
+      where: { id },
+      data: { onboardedAt: body.onboarded ? new Date() : null },
+      select: publicUserSelect,
+    });
+    return NextResponse.json(user);
+  }
+
   // username is the one field here that IS self-only — unlike phone/title/status/etc. above,
   // it's the identity someone else looks you up by (app/api/connections/lookup), not a directory
   // detail a teammate might legitimately correct on your behalf. Validated and normalized to

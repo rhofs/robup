@@ -435,6 +435,10 @@ model User {
   chatReactions ChatReaction[]
   pushSubscriptions PushSubscription[]
   passwordResetTokens PasswordResetToken[]
+  // Null until the first-run walkthrough is finished or dismissed. Stored on the user rather than
+  // in localStorage so it follows the person across devices — someone who onboarded on their
+  // laptop shouldn't be walked through it again the first time they open the app on their phone.
+  onboardedAt   DateTime? @map("onboarded_at")
   createdAt     DateTime  @default(now()) @map("created_at")
 }
 

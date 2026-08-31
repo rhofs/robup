@@ -39,6 +39,8 @@ export type AppUser = {
   bio: string | null;
   linkedinUrl: string | null;
   websiteUrl: string | null;
+  // Null until the first-run walkthrough is finished or dismissed (see OnboardingFlow).
+  onboardedAt: string | Date | null;
   // Only ever populated on the entry matching the signed-in caller (see GET /api/users) — used by
   // ProfilePage's account-deletion confirmation to decide between "confirm your password" and
   // "type your email to confirm" (Google-only accounts have no password). Undefined for every
@@ -405,6 +407,9 @@ interface TaskStore {
   // enforced again server-side (PATCH /api/users/[id]) — never call this with anyone but the
   // signed-in caller's own id.
   setUsername: (userId: string, username: string | null) => Promise<{ ok: true } | { ok: false; error: string }>;
+  // Marks the first-run walkthrough done. Optimistic so the panel closes instantly; the write is
+  // a plain timestamp with nothing to roll back if it fails.
+  markOnboarded: (userId: string) => Promise<void>;
   deleteUser: (userId: string) => Promise<void>;
 
   // Office "rooms" — purely organizational/visual grouping of team members, unrelated to the
@@ -1498,6 +1503,15 @@ export const useTaskStore = create<TaskStore>((set, get) => {
           redo: () => get().updateUser(userId, patch),
         });
       }
+    },
+
+    markOnboarded: async (userId) => {
+      set((state) => ({ users: state.users.map((u) => (u.id === userId ? { ...u, onboardedAt: new Date() } : u)) }));
+      await fetch(`/api/users/${userId}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ onboarded: true }),
+      }).catch(() => {});
     },
 
     setUsername: async (userId, username) => {
