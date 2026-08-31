@@ -50,3 +50,22 @@ next-env.d.ts
 
 # user-uploaded Doc images — machine-local content, not source (see app/api/uploads/image)
 /public/uploads
+
+# PRODUCTION DATABASE. This is not a tidiness entry — it is load-bearing.
+#
+# Production's DATABASE_URL is `file:./siqt.db`, i.e. this file sits in the repo root as an
+# UNTRACKED file. The Pterodactyl install script ends with `git clean -fd`, which deletes exactly
+# that: untracked files. `git clean` spares *ignored* files (removing those needs -x), so the only
+# thing standing between this database and every Re-install is this entry.
+#
+# Without it, every single Re-install silently wiped all production data — which is what kept
+# leaving sessions orphaned ("Not authenticated" on every action, "Sign in to see your tasks"
+# while apparently logged in) and forced workspaces to be recreated over and over. Only
+# /prisma/dev.db was ignored, so local development was protected and production was not.
+#
+# Do not remove. Better still, move the database outside the git working tree entirely, or drop
+# `git clean -fd` from the install script — this entry is the minimum fix, not a robust one.
+/siqt.db
+/siqt.db-journal
+/siqt.db-wal
+/siqt.db-shm
