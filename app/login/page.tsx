@@ -100,7 +100,10 @@ function LoginPageContent() {
           Copy trimmed to four features and rewritten to drop every self-hosting/"your own
           infrastructure" claim (see FEATURES' own comment) — simpler and, more importantly,
           actually true. */}
-      <div className="flex-1 flex flex-col justify-center px-6 py-16 sm:px-12 lg:px-20">
+      {/* order-2 on mobile: stacked vertically, this marketing column came first and pushed the
+          sign-in card entirely below the fold — you had to scroll down to log in at all. The card
+          leads on phones now; on lg+ the row order is restored so the layout is unchanged there. */}
+      <div className="order-2 lg:order-1 flex-1 flex flex-col justify-center px-6 py-16 sm:px-12 lg:px-20">
         <div className="max-w-xl">
           <div className="flex items-center gap-2.5 mb-12">
             <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-blue-500 to-blue-700 text-white font-black flex items-center justify-center shrink-0 shadow-lg shadow-blue-500/20">
@@ -112,9 +115,12 @@ function LoginPageContent() {
           <h1 className="text-4xl sm:text-5xl font-bold text-app-strong tracking-tight leading-[1.1] mb-5">
             Tasks, planning, docs, and chat — <span className="text-blue-400">one place</span>.
           </h1>
+          {/* Deliberately plain, not marketing copy: this is a personal tool, and the previous
+              "brings your team's work together..." blurb read as a real commercial product to
+              anyone who landed here without context. Per direct instruction — "så ikke randoms
+              tror det er noe 'ekte'." */}
           <p className="text-neutral-400 text-base leading-relaxed mb-14 max-w-md">
-            Siqt brings your team's work together in a single, focused app — no jumping between
-            four different tools to get one thing done.
+            Robins Project management tool
           </p>
 
           <div className="grid sm:grid-cols-2 gap-x-10 gap-y-8">
@@ -136,7 +142,7 @@ function LoginPageContent() {
       {/* Auth side — the exact same functional sign-in/signup card as before (form/handlers
           untouched), just a slightly more polished shell (rounded-xl, a touch more padding and
           shadow) to match the marketing side's own refresh. */}
-      <div className="w-full lg:w-[420px] shrink-0 flex items-center justify-center border-t lg:border-t-0 lg:border-l border-neutral-800 bg-neutral-900/20 px-4 py-12">
+      <div className="order-1 lg:order-2 w-full lg:w-[420px] shrink-0 flex items-center justify-center border-b lg:border-b-0 lg:border-l border-neutral-800 bg-neutral-900/20 px-4 py-12">
         <div className="w-full max-w-sm">
           <div className="bg-neutral-900 border border-neutral-800 rounded-xl p-6 shadow-2xl shadow-black/40">
           <div className="flex mb-4 border border-neutral-800 rounded overflow-hidden">

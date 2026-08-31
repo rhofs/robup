@@ -14,6 +14,12 @@ export type ParsedNavUrl = {
   spaceId: string | null;
   listIds: string[] | null;
   modalStack: string[];
+  // The Planner's own event-detail modal. Carried in the URL for exactly the reason modalStack
+  // is: without it, opening an event pushed no history entry at all, so a back gesture navigated
+  // whatever nav change came *before* the event was opened — closing the modal but jumping the
+  // view underneath it. Reported live: "trykker seg tilbake... blir man på kalender, men
+  // bakgrunnen går tilbake."
+  eventId: string | null;
   granularity: NavGranularity;
   focusDate: Date;
   docFolderId: string | null;
@@ -28,6 +34,7 @@ export type NavState = {
   spaceId: string;
   listIds: string[];
   modalStack: string[];
+  eventId: string | null;
   granularity: NavGranularity;
   focusDate: Date;
   docFolderId: string | null;
@@ -78,7 +85,8 @@ export function parseNavUrl(params: URLSearchParams): ParsedNavUrl {
   const docId = params.get('doc');
   const officeUserId = params.get('officeUser');
   const officeRoomId = params.get('officeRoom');
-  return { view, workspaceId, spaceId, listIds, modalStack, granularity, focusDate, docFolderId, docId, officeUserId, officeRoomId };
+  const eventId = params.get('event') || null;
+  return { view, workspaceId, spaceId, listIds, modalStack, eventId, granularity, focusDate, docFolderId, docId, officeUserId, officeRoomId };
 }
 
 // Always-explicit canonical serialization of a fully-resolved nav state (as opposed to
@@ -90,6 +98,7 @@ export function buildNavQueryString(state: NavState): string {
   if (state.spaceId !== 'everything') params.set('space', state.spaceId);
   if (state.listIds.length > 0) params.set('lists', [...state.listIds].sort().join(','));
   if (state.modalStack.length > 0) params.set('modal', state.modalStack.join(','));
+  if (state.eventId) params.set('event', state.eventId);
   if (state.granularity !== 'month') params.set('cal', state.granularity);
   if (dateKey(state.focusDate) !== dateKey(startOfDay(new Date()))) params.set('date', dateKey(state.focusDate));
   if (state.docFolderId) params.set('docFolder', state.docFolderId);

@@ -1195,6 +1195,7 @@ function PageContent() {
       spaceId: activeSpaceId,
       listIds: [...activeListIds],
       modalStack: modalTaskStack,
+      eventId: eventDetailId,
       granularity: calendarGranularity,
       focusDate: calendarFocusDate,
       docFolderId: activeDocFolderId,
@@ -1211,6 +1212,7 @@ function PageContent() {
     activeSpaceId,
     urlListIdsKey,
     urlModalStackKey,
+    eventDetailId,
     calendarGranularity,
     urlFocusDateKey,
     urlDocFolderIdKey,
@@ -1265,6 +1267,12 @@ function PageContent() {
 
     const validModalStack = parsed.modalStack.filter((id) => tasks.some((t) => t.id === id));
     if (validModalStack.join(',') !== urlModalStackKey) setModalTaskStack(validModalStack);
+
+    // Same validate-against-real-data shape as the modal stack above: an event id in the URL
+    // that no longer resolves (deleted, or not visible to this identity) resolves to null rather
+    // than leaving a modal trying to render nothing.
+    const validEventId = parsed.eventId && events.some((e) => e.id === parsed.eventId) ? parsed.eventId : null;
+    if (validEventId !== eventDetailId) setEventDetailId(validEventId);
 
     if (parsed.granularity !== calendarGranularity) setCalendarGranularity(parsed.granularity);
     if (dateKey(parsed.focusDate) !== urlFocusDateKey) setCalendarFocusDate(parsed.focusDate);
@@ -4642,6 +4650,16 @@ function PageContent() {
                   setDocsNavigation(folderId, docId);
                 }}
                 onDeleteDocRequest={setSpaceDocToDelete}
+                // Creates it, then navigates straight into the new doc — same
+                // create-and-open behavior the sidebar's own "+ New > Doc" has, so the Docs tab
+                // isn't the one place that leaves you to hunt for what you just made.
+                onCreateDoc={async (spaceId) => {
+                  const doc = await createSpaceDoc(spaceId, null, { title: 'Untitled' });
+                  if (!doc) return;
+                  setModalTaskStack([]);
+                  setNavigation(spaceId, []);
+                  setDocsNavigation(null, doc.id);
+                }}
               />
             ) : activeView === 'calendar' ? (
               <div className="flex-1 min-h-0">
