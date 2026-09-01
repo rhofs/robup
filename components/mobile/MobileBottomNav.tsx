@@ -250,22 +250,49 @@ export default function MobileBottomNav({
           // spring still lands without overshooting into a bounce.
           transition={{ type: 'spring', stiffness: 520, damping: 36, mass: 0.6 }}
           style={{ bottom: ISLAND_BOTTOM_OFFSET }}
-          // Translucent + blurred, not opaque — this island now floats directly over scrolled
-          // content (see the file's own top comment) instead of sitting on empty reserved space,
-          // so it needs to actually read as "floating over" rather than just "a solid box that
-          // happens to be positioned on top." bg-neutral-950, not -900: the scrollable content
-          // sheets behind it (Spaces/Chat/board list/Planner) all became bg-neutral-900 in the
-          // same rounded-corner pass, so a -900 island blended into whatever was scrolled under
-          // it instead of reading as its own distinct piece of chrome. -950 matches the page's own
-          // header/root shade instead, the same darker tone the nav had before any of those
-          // content sheets existed.
-          className="absolute left-1/2 -translate-x-1/2 w-[300px] max-w-[calc(100vw-48px)] rounded-[32px] overflow-hidden flex flex-col justify-end bg-neutral-950/90 backdrop-blur-xl border border-neutral-800/80 shadow-2xl shadow-black/40"
+          // The background/blur itself is NOT on this element — see the static layer below for
+          // why. This box is purely shape (rounding, clipping, border, shadow) plus the animated
+          // height.
+          className="absolute left-1/2 -translate-x-1/2 w-[300px] max-w-[calc(100vw-48px)] rounded-[32px] overflow-hidden flex flex-col justify-end border border-neutral-800/80 shadow-2xl shadow-black/40"
         >
+          {/* Translucent + blurred backdrop, as its own out-of-flow layer at a FIXED height —
+              deliberately not on the animated box above, where it used to live.
+              `backdrop-filter` on an element whose own size is being animated (and which is
+              simultaneously clipped by a border-radius) is a well-known repaint-flicker source in
+              iOS Safari: the blur region is re-sampled against a changing geometry every frame.
+              Reported live on an iPhone 15 — "blinker når du popupper menyen." Pinning the blurred
+              element to the island's full natural height and bottom-anchoring it means its own box
+              never changes at all while the menu opens/closes; only the parent's clip does, so
+              there's no per-frame re-sampling of a resizing filter region. `translateZ(0)` puts it
+              on its own compositing layer, the standard companion to that fix.
+
+              Blur is set inline with an explicit `-webkit-` pair rather than Tailwind's
+              `backdrop-blur-xl`, because iOS Safari still requires the prefixed property and this
+              is exactly the surface where it must not silently no-op.
+
+              If this ever still flickers on a real device, the next honest step is dropping the
+              blur on iOS entirely (a solid bg-neutral-950) rather than adding more compositing
+              hints — the effect is decorative, the flicker isn't.
+
+              Colour rationale unchanged: bg-neutral-950, not -900, because the scrollable content
+              sheets behind it (Spaces/Chat/board list/Planner) are all -900, and a -900 island
+              blended into whatever was scrolled under it instead of reading as its own chrome. */}
+          <div
+            aria-hidden
+            className="absolute inset-x-0 bottom-0 pointer-events-none bg-neutral-950/90"
+            style={{
+              height: islandHeightPx,
+              backdropFilter: 'blur(24px)',
+              WebkitBackdropFilter: 'blur(24px)',
+              transform: 'translateZ(0)',
+            }}
+          />
           {/* Single flex child, measured as a whole (see islandRef above) — its natural content
               height is always the *full* open height regardless of the animated parent's current
               height, since offsetHeight reflects this element's own content-driven size, not
-              whatever the ancestor happens to be clipping it to. */}
-          <div ref={islandRef}>
+              whatever the ancestor happens to be clipping it to. `relative` so it stacks above the
+              backdrop layer, which is absolutely positioned and would otherwise paint over it. */}
+          <div ref={islandRef} className="relative">
             {/* Grid content: always mounted (never conditionally unmounted), so there's no
                 first-open measurement jump. When collapsed, the parent's shrunk height (via
                 overflow-hidden) hides *and* hit-test-disables this whole region, so it's never
