@@ -2922,3 +2922,32 @@ The companion check (`docker exec … ls -la /home/container/backups`) was run b
 not captured, so the files have been confirmed to exist only via the script's own log lines, not
 by listing the directory directly. A trivial gap — the log records each file's path and size on
 write — but recorded rather than glossed over.
+
+## Deferred by explicit decision, 2026-09-01 — off-box backups and SSH hardening
+
+Both raised this session, both understood, both consciously put off. Recorded here so a later
+session treats them as *decided-for-now* rather than overlooked, and knows what would make them
+worth revisiting. The user's own words: "det er ikke kritisk akkurat nå."
+
+**1. Getting a backup copy off the VPS.** Hourly snapshots exist and are confirmed running, but
+they live in `/home/container/backups` on the same disk and the same box as the live database.
+They protect against bad data — a broken migration, a wrong delete, a corrupted table — and not at
+all against losing the machine, which would take the database and all 200 snapshots together.
+Nothing is currently stored anywhere but this one server.
+
+The cheapest way in, when it is picked up: check whether Pterodactyl's own server-level **Backups**
+tab is configured with remote storage on this node (PebbleHost may already provide it) before
+building any custom sync.
+
+**2. SSH hardening on the VPS.** Root logs in directly over SSH, and the login banner reported
+1050 failed attempts since the previous successful login. That volume is ordinary background noise
+for any exposed SSH port and is not evidence of a targeted attack — but this is the machine holding
+production data, and password-authenticated root is the weakest configuration it could have. The
+fix is routine: key-only authentication, direct root login disabled.
+
+**What should trigger revisiting either of these:** right now production holds only test data
+("vi har kun testa hittil") — losing the box would be annoying, not damaging, which is what makes
+deferring reasonable rather than reckless. That changes the moment colleagues put real work in.
+The first time this database holds something nobody can retype from memory, the off-box copy stops
+being a nice-to-have, and an unhardened root SSH login stops being an acceptable shortcut. Neither
+is expensive to do; both are being traded against time, deliberately, while the stakes are low.
