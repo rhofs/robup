@@ -6,10 +6,21 @@ reading the code would reveal. Sessions are short and start with no memory of th
 file is the only reason the next one begins informed instead of re-deriving the same conclusions
 or repeating a mistake that has already been paid for once.
 
-**Every session that changes anything updates it before finishing, without being asked:**
+**Update it as the session goes, not only at the end, and without being asked.** A session that
+runs long, gets interrupted, or hits its context limit before writing anything down loses
+everything it learned — so write each piece down when it is settled, rather than saving it all for
+a final pass that may never happen.
+
+What belongs in it:
 
 - a dated session entry — what was done and *why*, including approaches tried and rejected, and
   anything left unverified
+- **what was discussed and decided, even when nothing was built.** A question the user asked and
+  the answer they got, an idea raised and deferred, an option considered and turned down, a
+  recommendation made and not acted on — with the reasoning. These are the most easily lost and
+  often the most expensive to reconstruct: the next session cannot tell "we decided against this,
+  here is why" apart from "nobody thought of this", and will happily re-litigate a settled
+  question or rebuild something that was deliberately cut.
 - the "Next steps / not built yet" notes and the latest checkpoint, so what is open stays true
 - a new "Known bugs / things to remember" entry for any lesson that cost real debugging time and
   would not be obvious from the code afterwards

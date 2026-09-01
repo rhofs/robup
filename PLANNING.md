@@ -2909,3 +2909,16 @@ user was told, no change was made.
 current, including infrastructure outside the repo. That rule was added the same day as this
 entry, for exactly this reason — the convention had only ever been a habit, mentioned nowhere, so
 it held only when someone remembered to ask.
+
+**Confirmed working 2026-09-01.** `/var/log/siqt-backup.log` shows four consecutive hourly runs
+landing exactly on the hour (13:00–16:00 UTC), each succeeding, each snapshot 1500 KB, with the
+retained count climbing 8 → 9 → 10 → 11. No errors. The count starting in single digits means the
+cron job itself was set up the same day, so retention (200) has not yet been reached and nothing
+has been pruned yet. Sizing at the current database size: 200 × 1.5 MB ≈ 300 MB at full retention
+— negligible, but it scales with the database, so worth re-checking once there is real data in
+production (a 50 MB database would mean roughly 10 GB of snapshots at the same settings).
+
+The companion check (`docker exec … ls -la /home/container/backups`) was run but its output was
+not captured, so the files have been confirmed to exist only via the script's own log lines, not
+by listing the directory directly. A trivial gap — the log records each file's path and size on
+write — but recorded rather than glossed over.
