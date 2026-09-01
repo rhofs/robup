@@ -663,6 +663,10 @@ function PageContent() {
   const chatDms = useChatStore((s) => s.dms);
   const fetchChatChannels = useChatStore((s) => s.fetchChannels);
   const fetchChatDMs = useChatStore((s) => s.fetchDMs);
+  // Drives the Connections badge (desktop Me zone + mobile launcher tile) — see the poll effect
+  // below for why this needed fetching at app level at all.
+  const fetchConnectionRequests = useChatStore((s) => s.fetchConnectionRequests);
+  const connectionRequestsIncoming = useChatStore((s) => s.connectionRequestsIncoming);
   const createOrOpenDM = useChatStore((s) => s.createOrOpenDM);
   const setActiveChatChannelId = useChatStore((s) => s.setActiveChannelId);
   const setActiveChatSidebarTab = useChatStore((s) => s.setActiveChatSidebarTab);
@@ -704,6 +708,18 @@ function PageContent() {
     const interval = setInterval(fetchMemberInvites, 30000);
     return () => clearInterval(interval);
   }, [fetchMemberInvites]);
+
+  // Incoming/outgoing connection requests, same shape again — and this one was a real bug, not
+  // just a freshness improvement: nothing in the app called fetchConnectionRequests on load at
+  // all. The store action and the whole accept/decline UI in DirectMessagesPage existed, but the
+  // list was only ever populated *after* the user themselves accepted, declined, or sent
+  // something — so an incoming request was completely invisible to the person who had to act on
+  // it. Reported live: "Can send request, dont see it anywhere. how do we accept/reject?"
+  useEffect(() => {
+    fetchConnectionRequests();
+    const interval = setInterval(fetchConnectionRequests, 30000);
+    return () => clearInterval(interval);
+  }, [fetchConnectionRequests]);
 
   // Same "poll every 30s, no new infrastructure" shape as the two above — Tasks/Events have no
   // real-time push at all (unlike Chat's Hocuspocus room or Docs' collaborative editing), so a
@@ -1647,6 +1663,10 @@ function PageContent() {
         icon: Users,
         onClick: () => setActiveView('directMessages'),
         active: activeView === 'directMessages',
+        // Pending incoming connection requests — same badge convention as the Chat unread count
+        // and the workspace-invite badge on the switcher. Without this, the only way to discover
+        // someone had requested you was to open this page on a hunch.
+        badge: connectionRequestsIncoming.length,
       },
       {
         id: 'profile',
@@ -1656,7 +1676,7 @@ function PageContent() {
         active: activeView === 'profile',
       },
     ],
-    [currentUserId, currentWorkspace, activeView, workspaces, mobilePersonalSpacesOpen, ensurePersonalWorkspace, setActiveWorkspaceId, setActiveView]
+    [currentUserId, currentWorkspace, activeView, workspaces, mobilePersonalSpacesOpen, connectionRequestsIncoming, ensurePersonalWorkspace, setActiveWorkspaceId, setActiveView]
   );
 
   // Everything not already pinned to the bottom nav's 3 fixed slots — shared between
@@ -3546,6 +3566,13 @@ function PageContent() {
                     }`}
                   >
                     <MessageCircle className="w-3 h-3" /> Connections
+                    {/* Pending incoming connection requests — the desktop half of the same badge
+                        the mobile launcher tile carries (meNavItems above). */}
+                    {connectionRequestsIncoming.length > 0 && (
+                      <span className="ml-auto min-w-[16px] h-4 px-1 rounded-full bg-red-500 text-white text-[9px] font-bold flex items-center justify-center leading-none">
+                        {connectionRequestsIncoming.length > 99 ? '99+' : connectionRequestsIncoming.length}
+                      </span>
+                    )}
                   </button>
                 </div>
               );
@@ -4850,8 +4877,16 @@ function PageContent() {
           account has nothing to land on). z-[65]: above the popup menu's own island (z-50) and its
           backdrop (z-40), and above MobileSpacesSheet (z-30) — this needs to stay tappable no matter
           what's already showing underneath it. Gone the moment a real workspace exists; this is
-          strictly the "how do I even get started" bootstrap, not a permanent nav element. */}
-      {!hasRealWorkspace && (
+          strictly the "how do I even get started" bootstrap, not a permanent nav element.
+
+          `!mobileMenuOpen`: the one overlay it must NOT sit on top of is the popup menu itself —
+          reported live on an iPhone 15 ("+ workspace above popupmenu (the blue button)"), where
+          it floated over the open menu panel as a stray blue pill. The menu is exactly the surface
+          that already offers "New workspace" (AppLauncherGrid's own switcher accordion), so
+          keeping this visible there is pure duplication on top of the visual clash — while the
+          z-[65] stacking above every *other* overlay is still what makes this a reliable
+          bootstrap. */}
+      {!hasRealWorkspace && !mobileMenuOpen && (
         <button
           onClick={() => {
             setMobileMenuOpen(false);

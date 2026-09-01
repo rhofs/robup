@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { signOut } from 'next-auth/react';
 import { Image as ImageIcon, Pencil, Link2, Globe, AtSign, X, AlertTriangle, ChevronRight } from 'lucide-react';
 import { AppUser } from '../store/useTaskStore';
@@ -265,6 +265,40 @@ function UsernameField({
   const [draft, setDraft] = useState(value || '');
   const [error, setError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
+  // Live "is this handle free" hint while typing (GET /api/users/username-available). Advisory
+  // only — the unique constraint on User.username plus PATCH's own P2002 catch stay the real
+  // guarantee, since someone else can always claim a name between this check and the save. What
+  // this fixes is only *when* you find out: before, a taken username failed at Save with no
+  // warning while choosing it.
+  const [availability, setAvailability] = useState<'idle' | 'checking' | 'available' | 'taken' | 'invalid'>('idle');
+
+  const trimmedDraft = draft.trim().toLowerCase();
+  const unchanged = trimmedDraft === (value || '');
+
+  useEffect(() => {
+    if (!editing || !trimmedDraft || unchanged) {
+      setAvailability('idle');
+      return;
+    }
+    setAvailability('checking');
+    // Debounced, not per-keystroke: an availability lookup mid-word ("ro", "rob", "robi") answers
+    // a question nobody asked yet, and every one of those is a real round trip.
+    const timer = setTimeout(async () => {
+      try {
+        const res = await fetch(`/api/users/username-available?username=${encodeURIComponent(trimmedDraft)}`);
+        if (!res.ok) {
+          setAvailability('idle');
+          return;
+        }
+        const data = await res.json();
+        setAvailability(data.available ? 'available' : data.reason === 'invalid' ? 'invalid' : 'taken');
+      } catch {
+        // A failed check says nothing about the name — stay quiet rather than claim it's taken.
+        setAvailability('idle');
+      }
+    }, 400);
+    return () => clearTimeout(timer);
+  }, [editing, trimmedDraft, unchanged]);
 
   const commit = async () => {
     const trimmed = draft.trim().toLowerCase();
@@ -310,13 +344,21 @@ function UsernameField({
           />
           <button
             onClick={commit}
-            disabled={saving}
+            // Blocked on a known-taken name rather than letting it fail at the server: the check
+            // is advisory, but there's no reason to send a write we already know will 409.
+            disabled={saving || availability === 'taken' || availability === 'checking'}
             className="text-[11px] text-blue-400 hover:text-blue-300 disabled:opacity-50 cursor-pointer shrink-0"
           >
             Save
           </button>
         </div>
         {error && <p className="text-[10px] text-red-400 pl-5">{error}</p>}
+        {!error && availability === 'checking' && <p className="text-[10px] text-neutral-500 pl-5">Checking…</p>}
+        {!error && availability === 'available' && <p className="text-[10px] text-green-400 pl-5">@{trimmedDraft} is available</p>}
+        {!error && availability === 'taken' && <p className="text-[10px] text-red-400 pl-5">@{trimmedDraft} is already taken</p>}
+        {!error && availability === 'invalid' && (
+          <p className="text-[10px] text-neutral-500 pl-5">3–20 characters: lowercase letters, numbers, underscores.</p>
+        )}
       </div>
     );
   }

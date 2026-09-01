@@ -27,8 +27,10 @@ export default function DirectMessagesPage() {
     regenerateConnectionInvite,
     acceptConnectionRequest,
     declineConnectionRequest,
-    lookupUserByUsername,
+    lookupUser,
     sendConnectionRequestTo,
+    fetchConnections,
+    fetchConnectionRequests,
     removeConnection,
     createOrOpenDM,
     setActiveChannelId,
@@ -39,9 +41,17 @@ export default function DirectMessagesPage() {
   const [copied, setCopied] = useState(false);
   const [viewingProfileId, setViewingProfileId] = useState<string | null>(null);
 
+  // fetchConnectionRequests was the real gap behind "can send a request, don't see it anywhere":
+  // nothing in the app ever called it on load — only accept/decline/send did, *after* the fact —
+  // so connectionRequestsIncoming started empty and stayed empty, and the Requests block below
+  // (which only renders when it's non-empty) never appeared for the recipient at all. Fetched
+  // here on mount as well as by the app-level poll in page.tsx, so opening this page is always
+  // up to date regardless of where the poll happens to be in its cycle.
   useEffect(() => {
     fetchConnectionInvite();
-  }, [fetchConnectionInvite]);
+    fetchConnections();
+    fetchConnectionRequests();
+  }, [fetchConnectionInvite, fetchConnections, fetchConnectionRequests]);
 
   // Same createOrOpenDM + setActiveChannelId + setActiveChatSidebarTab shape
   // app/page.tsx's handleStartDMFromOffice uses for the identical "jump straight into the
@@ -66,8 +76,8 @@ export default function DirectMessagesPage() {
     <div className="h-[75vh] overflow-y-auto">
       <div className="max-w-xl mx-auto space-y-6 py-2">
         <div>
-          <p className="text-[10px] font-bold text-neutral-500 uppercase tracking-wider mb-1.5">Add by username</p>
-          <UsernameLookup onLookup={lookupUserByUsername} onSendRequest={sendConnectionRequestTo} />
+          <p className="text-[10px] font-bold text-neutral-500 uppercase tracking-wider mb-1.5">Add by username or email</p>
+          <UsernameLookup onLookup={lookupUser} onSendRequest={sendConnectionRequestTo} />
         </div>
 
         <div>
@@ -183,7 +193,7 @@ function UsernameLookup({
   onLookup,
   onSendRequest,
 }: {
-  onLookup: (username: string) => Promise<ConnectionSearchResult[]>;
+  onLookup: (query: string) => Promise<ConnectionSearchResult[]>;
   onSendRequest: (userId: string) => Promise<{ status: string } | null>;
 }) {
   const [query, setQuery] = useState('');
@@ -220,7 +230,7 @@ function UsernameLookup({
           onKeyDown={(e) => {
             if (e.key === 'Enter') submit();
           }}
-          placeholder="Enter their exact username..."
+          placeholder="Their exact username or email..."
           className="w-full bg-neutral-950 border border-neutral-800 rounded pl-8 pr-16 py-1.5 text-xs text-app-strong placeholder:text-neutral-600 focus:outline-none focus:border-blue-500"
         />
         <button
@@ -232,7 +242,9 @@ function UsernameLookup({
         </button>
       </div>
       {!loading && searched && results.length === 0 && (
-        <p className="text-[11px] text-neutral-500 px-0.5">No one with that username.</p>
+        <p className="text-[11px] text-neutral-500 px-0.5">
+          {query.includes('@') ? 'No account uses that email.' : 'No one with that username.'}
+        </p>
       )}
       <div className="space-y-0.5">
         {results.map((u) => {

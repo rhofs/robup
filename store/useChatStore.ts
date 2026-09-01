@@ -143,12 +143,13 @@ interface ChatStore {
   // this for the former. Sharing a workspace still counts as connected either way — this can't
   // "un-coworker" two people, only remove an *explicit* connection between them.
   removeConnection: (userId: string) => Promise<void>;
-  // Exact-username lookup (app/api/connections/lookup/route.ts) — replaced the old free-text name
-  // search across every user, which the user later flagged as a real privacy problem ("random
-  // people cannot search you"). Returns 0 or 1 results now, never a browsable list; the personal
-  // connect-link (fetchConnectionInvite/regenerateConnectionInvite above) remains the other way
-  // in. Not cached in store state (a transient lookup-box result), just returned to the caller.
-  lookupUserByUsername: (username: string) => Promise<ConnectionSearchResult[]>;
+  // Exact lookup by username *or* email (app/api/connections/lookup/route.ts) — replaced the old
+  // free-text name search across every user, which the user later flagged as a real privacy
+  // problem ("random people cannot search you"). Returns 0 or 1 results, never a browsable list;
+  // the personal connect-link (fetchConnectionInvite/regenerateConnectionInvite above) remains the
+  // other way in. Not cached in store state (a transient lookup-box result), just returned to the
+  // caller.
+  lookupUser: (query: string) => Promise<ConnectionSearchResult[]>;
   sendConnectionRequestTo: (userId: string) => Promise<{ status: string } | null>;
   fetchMessages: (channelId: string) => Promise<void>;
   postMessage: (
@@ -347,8 +348,8 @@ export const useChatStore = create<ChatStore>((set, get) => ({
     await fetch(`/api/connections/${userId}`, { method: 'DELETE' });
   },
 
-  lookupUserByUsername: async (username) => {
-    const res = await fetch(`/api/connections/lookup?username=${encodeURIComponent(username)}`);
+  lookupUser: async (query) => {
+    const res = await fetch(`/api/connections/lookup?q=${encodeURIComponent(query)}`);
     if (!res.ok) return [];
     return res.json();
   },
