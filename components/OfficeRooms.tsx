@@ -51,7 +51,20 @@ export default function OfficeRooms({
   onStartDM,
   onOpenInviteSettings,
 }: OfficeRoomsProps) {
-  const { createRoom, addWorkspaceMember } = useTaskStore();
+  // sendWorkspaceMemberInvite, NOT addWorkspaceMember: this button is labelled "Invite" and used
+  // to call the latter, which writes a WorkspaceMembership row directly — the person was simply
+  // in the workspace, with no request and nothing to accept or decline. Reported live: "jeg adda
+  // Yang som connection, og når jeg invita henne til Workspacen ble hun bare lagt til, ingenting
+  // å bekrefte/avslå." That contradicted both the label and WorkspaceMemberInvite's own stated
+  // design ("a real accept step ... not an instant membership"), and it matters beyond wording:
+  // joining a workspace exposes all of its content to you and makes you assignable in it, so it
+  // is not something anyone should be able to do to someone else unilaterally. Settings' own
+  // Invite tab already used the invite route; this surface was the odd one out.
+  const { createRoom, sendWorkspaceMemberInvite } = useTaskStore();
+  // Per-user feedback inside the popover — an invite that vanishes silently is indistinguishable
+  // from a tap that did nothing, which is exactly what the old direct-add never had to solve
+  // because the person appeared in the room immediately.
+  const [inviteResult, setInviteResult] = useState<{ userId: string; text: string; ok: boolean } | null>(null);
   const [creatingRoom, setCreatingRoom] = useState(false);
   const [newRoomDraft, setNewRoomDraft] = useState('');
   const [inviteOpen, setInviteOpen] = useState(false);
@@ -93,21 +106,34 @@ export default function OfficeRooms({
           >
             {nonMemberUsers.length > 0 && (
               <>
-                <div className="text-[10px] uppercase tracking-wide text-neutral-500 px-3 py-1">Add existing user</div>
+                <div className="text-[10px] uppercase tracking-wide text-neutral-500 px-3 py-1">Invite to workspace</div>
                 <div className="max-h-40 overflow-y-auto">
                   {nonMemberUsers.map((u) => (
                     <button
                       key={u.id}
-                      onClick={() => {
-                        addWorkspaceMember(workspace.id, u.id);
-                        setInviteOpen(false);
+                      onClick={async () => {
+                        setInviteResult({ userId: u.id, text: 'Sending…', ok: true });
+                        const res = await sendWorkspaceMemberInvite(workspace.id, u.id, 'member');
+                        // Deliberately does not close the popover on success: the person does not
+                        // appear anywhere until they accept, so closing immediately would leave no
+                        // evidence the invite was sent at all.
+                        setInviteResult({
+                          userId: u.id,
+                          text: res.ok ? 'Invite sent — waiting for them to accept' : res.error || 'Could not send invite',
+                          ok: res.ok,
+                        });
                       }}
                       className="w-full text-left px-3 py-1.5 text-xs text-neutral-300 hover:bg-neutral-800/60 cursor-pointer flex items-center gap-2"
                     >
                       <span className="w-5 h-5 rounded-full text-[8px] font-bold flex items-center justify-center text-white shrink-0" style={{ backgroundColor: u.color }}>
                         {u.initials}
                       </span>
-                      <span className="truncate">{u.name}</span>
+                      <span className="truncate flex-1">{u.name}</span>
+                      {inviteResult?.userId === u.id && (
+                        <span className={`text-[9px] shrink-0 ${inviteResult.ok ? 'text-green-400' : 'text-red-400'}`}>
+                          {inviteResult.text}
+                        </span>
+                      )}
                     </button>
                   ))}
                 </div>

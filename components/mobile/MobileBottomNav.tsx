@@ -69,6 +69,24 @@ const ISLAND_HEIGHT_GUESS_PX = 300;
 const ISLAND_EXTRA_BOTTOM_GAP_PX = 10;
 const ISLAND_BOTTOM_OFFSET = `calc(env(safe-area-inset-bottom) + ${ISLAND_EXTRA_BOTTOM_GAP_PX}px)`;
 
+// iOS Safari specifically: `backdrop-filter` is supported but repaints badly whenever anything
+// around it animates, and no amount of layering has fixed it. Moving the blur onto its own
+// fixed-size compositing layer (the previous attempt) did not help — the user still reported it
+// "nesten som et blink" on an iPhone 15, while the same build looks correct on Android. So the
+// blur is simply dropped there, per the plan recorded when that attempt shipped: the effect is
+// decorative, the flicker is not. Android/desktop keep it.
+//
+// Detected from the user agent rather than a feature query, because the problem is not a missing
+// feature — the property works, it just performs badly on one engine. iPadOS 13+ reports itself as
+// a Mac, hence the maxTouchPoints half.
+function isIosLike(): boolean {
+  if (typeof navigator === 'undefined') return false;
+  return (
+    /iP(hone|ad|od)/.test(navigator.userAgent) ||
+    (/Mac/.test(navigator.userAgent) && navigator.maxTouchPoints > 1)
+  );
+}
+
 // Mobile-only bottom nav (md:hidden) AND the "more" popup panel it opens — merged into one single
 // box after several rounds of trying to make two independently-bordered/rounded/animated elements
 // (a separate floating pill + a separate floating panel) *look* like one continuous shape by
@@ -175,12 +193,32 @@ export default function MobileBottomNav({
   // extraction needed here at all. Re-measures on resize (rotation, dynamic type size) since this
   // is a real layout fact, not a one-time constant. useLayoutEffect (not useEffect) so the
   // correction lands before the browser's first paint, not one frame after it.
+  // Read once on mount rather than per render — the user agent cannot change mid-session, and a
+  // lazy initializer keeps this correct on the very first paint (this file's own useIsMobile
+  // lesson: a useState(false)-then-useEffect correction can visibly paint the wrong frame first).
+  const [blurDisabled] = useState(isIosLike);
+
+  // True once the real measured heights have replaced the guesses above. Until then the island's
+  // height animation is suppressed (see `transition` on the motion.div below), because the very
+  // first correction — guess to measured — is not a state change anyone asked to see animated.
+  //
+  // This is what produced the "rar lukke-animasjon" reported when backing out of a DM: the whole
+  // nav is *unmounted* while a conversation is open (that is how full-screen chat works — see
+  // app/page.tsx's MobileBottomNav mount condition), so returning to the DM list remounts it, the
+  // height starts at CLOSED_HEIGHT_GUESS_PX again, and the spring plays the difference every
+  // single time. It reads as the chat closing with an animation, but nothing about chat is
+  // animated at all — there is not one motion component in ChatPanel or ChatSidebar.
+  const [measured, setMeasured] = useState(false);
+
   const tabRowRef = useRef<HTMLElement | null>(null);
   const [closedHeightPx, setClosedHeightPx] = useState(CLOSED_HEIGHT_GUESS_PX);
   useLayoutEffect(() => {
     const node = tabRowRef.current;
     if (!node) return;
-    const measure = () => setClosedHeightPx(node.offsetHeight);
+    const measure = () => {
+      setClosedHeightPx(node.offsetHeight);
+      setMeasured(true);
+    };
     measure();
     const observer = new ResizeObserver(measure);
     observer.observe(node);
@@ -233,6 +271,29 @@ export default function MobileBottomNav({
         )}
       </AnimatePresence>
 
+      {/* The island floats ISLAND_BOTTOM_OFFSET above the true screen edge, and the backdrop above
+          deliberately stops short of the island so it never darkens the tab row through the
+          island's own translucency. That leaves the gap *below* the island covered by neither —
+          showing the page itself, undimmed. Invisible while the app was dark-only (dark on dark),
+          and a hard white band the moment light mode shipped: reported with a screenshot as "en
+          hvit bar nederst som ikke ser så bra ut, når menyen popper."
+          Dimmed by its own strip rather than by extending the main backdrop down: the island sits
+          above the backdrop in z-order but is translucent, so anything painted behind it bleeds
+          through and darkens it. This strip stops exactly where the island's bottom edge begins,
+          so it can't. */}
+      <AnimatePresence>
+        {menuOpen && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            transition={{ duration: 0.12 }}
+            style={{ height: ISLAND_BOTTOM_OFFSET }}
+            className="fixed inset-x-0 bottom-0 z-40 md:hidden bg-black/60 pointer-events-none"
+          />
+        )}
+      </AnimatePresence>
+
       <div className="fixed inset-x-0 bottom-0 z-50 md:hidden">
         <motion.div
           // Only `height` is ever animated here — a plain number, not a shape/string — and the
@@ -248,7 +309,10 @@ export default function MobileBottomNav({
           // that opening the menu read as a lag between the tap and the panel arriving ("litt
           // delay når du trykker på menyene"). Damping raised alongside stiffness so the faster
           // spring still lands without overshooting into a bounce.
-          transition={{ type: 'spring', stiffness: 520, damping: 36, mass: 0.6 }}
+          // No animation until the first real measurement has landed — otherwise every remount of
+          // this component (which happens on every exit from a full-screen chat conversation)
+          // springs from the guess height to the measured one in full view.
+          transition={measured ? { type: 'spring', stiffness: 520, damping: 36, mass: 0.6 } : { duration: 0 }}
           style={{ bottom: ISLAND_BOTTOM_OFFSET }}
           // The background/blur itself is NOT on this element — see the static layer below for
           // why. This box is purely shape (rounding, clipping, border, shadow) plus the animated
@@ -279,11 +343,14 @@ export default function MobileBottomNav({
               blended into whatever was scrolled under it instead of reading as its own chrome. */}
           <div
             aria-hidden
-            className="absolute inset-x-0 bottom-0 pointer-events-none bg-neutral-950/90"
+            className={`absolute inset-x-0 bottom-0 pointer-events-none ${blurDisabled ? 'bg-neutral-950' : 'bg-neutral-950/90'}`}
             style={{
               height: islandHeightPx,
-              backdropFilter: 'blur(24px)',
-              WebkitBackdropFilter: 'blur(24px)',
+              // Opaque instead of translucent where the blur is dropped: a see-through panel with
+              // nothing blurring behind it reads as a rendering fault, not a style choice.
+              ...(blurDisabled
+                ? {}
+                : { backdropFilter: 'blur(24px)', WebkitBackdropFilter: 'blur(24px)' }),
               transform: 'translateZ(0)',
             }}
           />

@@ -3048,3 +3048,75 @@ setting the value to `false` and reinstalling reverts to polling with no other c
 check the editor's own connection-status warning. That is the cheapest existing probe of whether
 the `/collab` proxy in `server/customServer.ts` is genuinely working end to end, and it predates
 this flag entirely.
+
+## Today's session (2026-09-01, continued a third time) — Feedback round after a real deploy: two root causes found from one screenshot, a consent bug found by reading, and one hypothesis that was simply wrong
+
+Real-device feedback on both an iPhone 15 and an Android phone after the reinstall. **Real-time
+chat confirmed working** — the `.env.production` flag reached the build exactly as intended, which
+also validates that mechanism for any future `NEXT_PUBLIC_*` value.
+
+**The white bar under the popup menu — root-caused from the screenshot, fixed.** Reported on
+Android: "en 'hvit bar' nederst som ikke ser så bra ut, når menyen popper." The dimming backdrop
+deliberately stops short of the island (`bottom: reservedHeight`) so it never darkens the tab row
+through the island's own translucency. But the island also floats `ISLAND_BOTTOM_OFFSET` above the
+true screen edge, and that gap is covered by neither backdrop nor island — so the page shows
+through it undimmed. Invisible for the app's whole dark-only life (dark on dark) and a hard white
+band the moment light mode shipped. Fixed with a second backdrop strip occupying exactly that gap,
+rather than extending the main backdrop downward: the island sits above the backdrop in z-order but
+is translucent, so anything painted behind it bleeds through and darkens it — which is the very
+thing the original cutoff existed to prevent.
+
+**The iOS "blink" — blur dropped on iOS entirely, as planned.** The previous round's fix (moving
+the blur to its own fixed-size compositing layer) did not work; the user still reported it as
+"nesten som et blink" on an iPhone 15, while the same build looks correct on Android. That was
+already recorded as the trigger for the fallback plan, so it was taken rather than attempting a
+third layering trick: `backdrop-filter` is skipped on iOS-like user agents, with the panel going
+fully opaque there (a see-through panel with nothing blurring behind it reads as a fault, not a
+style). Detected by user agent rather than a feature query on purpose — the property is supported,
+it just performs badly on one engine.
+
+**The "rar lukke-animasjon" leaving a DM — found by elimination, and it is not chat.** There is not
+a single motion component in `ChatPanel.tsx` or `ChatSidebar.tsx`, so nothing about chat is
+animated at all. The nav is *unmounted* while a conversation is open (that is how full-screen chat
+works, see `app/page.tsx`'s mount condition), so leaving one remounts it — `closedHeightPx` starts
+at `CLOSED_HEIGHT_GUESS_PX` again and the spring plays the guess-to-measured difference in full
+view, every time. Fixed by suppressing the height transition until the first real measurement
+lands (`measured` flag), so the correction is instant and only genuine open/close animates.
+
+**Inviting someone to a workspace silently made them a member — a real consent bug.** Reported:
+"jeg adda Yang som connection, og når jeg invita henne til Workspacen ble hun bare lagt til,
+ingenting å bekrefte/avslå." Two parallel mechanisms existed with different semantics, and the more
+prominent one had the wrong one: Office's blue **Invite** button called `addWorkspaceMember` →
+`POST /api/workspaces/[id]/members`, which upserts a `WorkspaceMembership` row directly. Settings'
+own Invite tab used the invite route, which correctly creates a pending `WorkspaceMemberInvite`
+with an accept/decline step — exactly what that model's own schema comment promises ("a real accept
+step ... not an instant membership"). The Office surface was the odd one out, and its label said
+"Invite" while its behaviour was "Add". This is not only wording: joining a workspace exposes all
+of its content and makes you assignable in it, so it should never be doable to someone
+unilaterally. Now sends a real invite, with inline per-row feedback (the popover deliberately stays
+open on success, since the person does not appear anywhere until they accept — closing immediately
+would leave no evidence anything happened). `addWorkspaceMember` had exactly one caller and now has
+none; `app/page.tsx` still destructures it without calling it, and the route itself is untouched.
+
+**The chat cropping hypothesis was wrong.** The previous round's `min-w-0` + `overflow-x-hidden`
+change did not fix it — "chatten er fortsatt croppa og må scrolles på ios". Recorded as a failed
+hypothesis rather than quietly moved past: the changes are still correct in themselves and were
+kept, but they are not the cause, so the cause remains unknown. A screenshot of the chat screen
+scrolled sideways was requested; a video was attempted but this session cannot accept video.
+
+**Open, needs data before any further guessing:**
+- The chat cropping/sideways-scroll on iOS. Do not attempt a third fix without seeing the actual
+  overflowing element.
+- A colleague on an iPhone 15 sees no Spaces at all under the Spaces sheet — only "All Tasks",
+  which works and shows tasks. Read the code rather than guessed: `GET /api/tasks` and
+  `GET /api/workspaces` apply *identical* visibility rules (space → folder chain → list → task,
+  via `getTaskVisibilityContext`/`buildFolderChainVisibility`), so this is NOT an access-filtering
+  mismatch and NOT a leak. The likelier candidate is `realSheetWorkspace` (`app/page.tsx`)
+  resolving to a different workspace than the one whose tasks are shown — it falls back through
+  `lastRealWorkspaceId` and then `workspaces.find(w => !w.isPersonal)`, and yields `undefined`
+  (empty space list, workspace name "Workspace") for anyone with no real workspace at all. The
+  decisive question, asked but not yet answered: what does the label next to "All Tasks" say on her
+  phone, and is she actually a member of the workspace.
+
+Verified with `npx tsc --noEmit` and a clean `npm run build`. None of the four fixes has been seen
+on a device.
