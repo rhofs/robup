@@ -2842,3 +2842,70 @@ Direct feedback batch, four fixes plus one question.
 **Question answered, no code change: two workspaces with the exact same name.** Nothing collides. `Workspace.name` has no unique constraint and nothing in the app ever looks a workspace up by name — every route, store action, and membership check is keyed on the uuid (verified by grepping for any name-based lookup; there are none). Two identically-named workspaces are two completely separate workspaces with separate members, spaces, and data. The cost is purely cosmetic ambiguity in the places that display only the name: the desktop/mobile switcher lists two identical labels, and Google Calendar sync would create two calendars both displayed as "Siqt - <name>" (distinct calendars with distinct ids, but indistinguishable at a glance). Worth a disambiguator in the switcher if this ever actually bites in practice — not built, since it's a display concern and nothing is broken underneath it.
 
 **Verification**: `npx tsc --noEmit -p .` clean, `npm run build` clean, and the changed query logic exercised against a real scratch database with migrations applied — 11 checks covering the email branch (exact match, a stored mixed-case address found via a lowercased query, a mixed-case *input*, unknown address), the username branch (exact, uppercase input, unknown), the availability rule (taken by someone else / free / your own current name reads as free), and that the DB itself still rejects a duplicate username with `P2002`. All passed. The UI halves (badge placement, the availability hint's feel, and both iPhone items) have **not** been seen on a device.
+
+## Infrastructure that lives outside this repo — host cron, and the backup story as it actually stands (recorded 2026-09-01)
+
+Written down because none of it is visible in `git log` or anywhere in this repo, and one piece of
+it was genuinely lost: an hourly database backup had been running on the host for some time, set
+up over SSH in a session that never recorded it. Nobody could say what it was or whether it
+worked. Found only by going looking on the server itself.
+
+**Hourly database snapshot — a root cron job on the VPS**, not a Pterodactyl Schedule:
+
+```
+0 * * * * /usr/bin/docker exec -e BACKUP_RETENTION_COUNT=200 <server-container-uuid> \
+  sh -c "cd /home/container && npm run backup:db:prod" >> /var/log/siqt-backup.log 2>&1
+```
+
+This is the right shape, and worth understanding before anyone "improves" it: a Pterodactyl
+**Schedule** with a "Send command" task would NOT work here. That task type writes to the running
+process's stdin — fine for a Minecraft server, useless for a Node app, where the text would land
+in the Node process rather than being executed. Going in through `docker exec` from the host's own
+crontab gets a real shell inside the container instead, and runs independently of whether the app
+restarts. An earlier note in this file recommended the Schedule route; that recommendation was
+wrong and is superseded by this entry.
+
+What it produces: `scripts/backupDb.ts` writes a `VACUUM INTO` snapshot (SQLite's own
+consistent-while-live snapshot, not a file copy that could land mid-write) to
+`/home/container/backups`, then prunes to the newest `BACKUP_RETENTION_COUNT`. At 200 retained and
+one per hour that is roughly 8 days of hourly history. `/backups` is gitignored — verified with
+`git check-ignore` — so the install script's `git clean -fd` spares it, the same protection the
+live database itself needed (see AGENTS.md).
+
+Alongside it, `deploy:prod` takes its own snapshot at every container start, before migrations run.
+So there are two triggers: hourly, and once per deploy/restart.
+
+**Three real weaknesses, none of them fixed:**
+
+1. **Everything is on the same disk as the live database.** These snapshots protect against bad
+   data — a bad migration, a wrong delete, a corrupted table. They do nothing about losing the
+   VPS or its volume, which takes the backups with it. An off-box copy is still owed, and is the
+   one genuinely missing layer. Check whether Pterodactyl's own server-level Backups tab is
+   configured with remote storage on this node before building anything custom.
+2. **The container UUID is hardcoded in the cron line.** A Pterodactyl *reinstall* keeps the UUID,
+   but deleting and recreating the server does not — and that has happened on this box before (see
+   the 2026-08-29 session's zombie-container note, whose UUID no longer matched the live server).
+   If it ever changes, this job fails silently every hour into a log nobody reads.
+3. **Nothing alerts on failure.** `/var/log/siqt-backup.log` is the only signal, and only if
+   someone looks.
+
+**To check it is actually running** (as root on the VPS, both read-only):
+
+```
+tail -20 /var/log/siqt-backup.log
+docker exec <server-container-uuid> sh -c "ls -la /home/container/backups | tail -5; du -sh /home/container/backups"
+```
+
+**Also on this host, unrelated to backups:** `* * * * * php /var/www/pterodactyl/artisan
+schedule:run` — Pterodactyl's own scheduler, part of the panel install, not ours. Leave it alone.
+
+**Noted while reading the server, not acted on:** root logs in over SSH directly, and the last
+login banner reported 1050 failed attempts since the previous successful one. That volume is
+ordinary internet background noise for an exposed SSH port, but on the machine holding production
+data it is worth moving to key-only authentication and disabling direct root login. Not done — the
+user was told, no change was made.
+
+**Why this entry exists at all:** AGENTS.md now instructs every session to keep PLANNING.md
+current, including infrastructure outside the repo. That rule was added the same day as this
+entry, for exactly this reason — the convention had only ever been a habit, mentioned nowhere, so
+it held only when someone remembered to ask.

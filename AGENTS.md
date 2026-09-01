@@ -1,3 +1,27 @@
+# Keep PLANNING.md current — it is this project's memory
+
+`PLANNING.md` is the running record of the project: what is built, what each session actually did,
+what is still open, and the hard-won lessons ("Known bugs / things to remember") that no amount of
+reading the code would reveal. Sessions are short and start with no memory of the last one; this
+file is the only reason the next one begins informed instead of re-deriving the same conclusions
+or repeating a mistake that has already been paid for once.
+
+**Every session that changes anything updates it before finishing, without being asked:**
+
+- a dated session entry — what was done and *why*, including approaches tried and rejected, and
+  anything left unverified
+- the "Next steps / not built yet" notes and the latest checkpoint, so what is open stays true
+- a new "Known bugs / things to remember" entry for any lesson that cost real debugging time and
+  would not be obvious from the code afterwards
+
+Write for a reader who was not in the conversation. State plainly what is *not* done and what is
+*not* confirmed — an entry that makes something sound more finished than it is costs more than no
+entry at all.
+
+Infrastructure that lives outside this repo belongs here too — the Pterodactyl egg config, cron
+jobs on the host, panel settings. None of it appears in `git log`, and there is nowhere else it is
+written down. An automated job nobody remembers exists is one nobody notices has stopped working.
+
 <!-- BEGIN:nextjs-agent-rules -->
 # This is NOT the Next.js you know
 
