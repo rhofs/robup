@@ -349,7 +349,14 @@ export default function ChatPanel() {
       // MobileBottomNav mount), so this composer is the literal last thing on screen and needs its
       // own safe-area clearance instead of borrowing the nav's. Resolves to 0 wherever there's no
       // inset (desktop, non-notched devices), so it's harmless to always apply.
-      className="relative flex flex-col h-full pb-[env(safe-area-inset-bottom)]"
+      // min-w-0: this is a flex child, and a flex item defaults to min-width:auto — it refuses to
+      // shrink below its own content, so anything unexpectedly wide inside (a long unbroken link,
+      // a wide code block, an attachment) can push the whole column past the viewport instead of
+      // being constrained by it. That widens the composer along with everything else, which is the
+      // leading suspect behind "må scrolle til siden på ios for å trykke send" — the Send button
+      // isn't mispositioned, the entire panel is simply wider than the screen. Same class of bug
+      // as the desktop sidebar's missing min-h-0, one axis over.
+      className="relative flex flex-col h-full min-w-0 pb-[env(safe-area-inset-bottom)]"
       onDragEnter={handleDragEnter}
       onDragLeave={handleDragLeave}
       onDragOver={handleDragOver}
@@ -363,7 +370,17 @@ export default function ChatPanel() {
           </div>
         </div>
       )}
-      <div className="flex-1 overflow-y-auto px-1 py-3 space-y-4" onClick={() => setHeldMessageId(null)}>
+      {/* overflow-x-hidden alongside the existing overflow-y-auto: safe to add here specifically
+          because this element already establishes a scroll container on one axis (CSS forces the
+          other to auto anyway once either is non-visible), so it can't introduce a surprise second
+          scrollbar the way it would on the panel root. Stops the message list from being
+          sideways-scrollable at all — which on iOS is not just cosmetic: a horizontal drag near the
+          screen edge gets interpreted as the browser's back gesture, which pops history and closes
+          the conversation. That is very likely the same report as "når jeg scroller havner jeg
+          ut". Genuinely wide content keeps its own escape hatch — code blocks carry their own
+          overflow-x-auto (lib/chatFormat.tsx), so they scroll within themselves rather than
+          widening the page. */}
+      <div className="flex-1 overflow-y-auto overflow-x-hidden px-1 py-3 space-y-4" onClick={() => setHeldMessageId(null)}>
         {messages.length === 0 && (
           <p className="text-[11px] text-neutral-500 px-2">
             No messages yet {isDM ? `with ${activeChannelLabel}` : `in #${activeChannelLabel}`} — say hello.

@@ -2951,3 +2951,58 @@ deferring reasonable rather than reckless. That changes the moment colleagues pu
 The first time this database holds something nobody can retype from memory, the off-box copy stops
 being a nice-to-have, and an unhardened root SSH login stops being an acceptable shortcut. Neither
 is expensive to do; both are being traded against time, deliberately, while the stakes are low.
+
+## Today's session (2026-09-01, continued) — Three iOS chat reports: one root-caused and fixed, two addressed on a strong hypothesis
+
+Reported together after real use on an iPhone: (1) "Må scrolle til siden på ios for å trykke send
+i chat", (2) "Må refreshe for å se meldinger poppe opp. Og når jeg scroller havner jeg ut", (3)
+"Fade animasjonen ser dårlig ut på ios."
+
+**(2a) Messages never arriving without a reload — root-caused, not guessed.** `useChatChannelConnection`
+gates its entire WebSocket lifecycle behind `isCollabRealtimeEnabled()`, which on HTTPS requires
+`NEXT_PUBLIC_COLLAB_WS_ENABLED === 'true'`. That variable has never been set in production (it is
+listed as still-off in the 2026-08-29 handoff), so the effect returns immediately, `onMessageSignal`
+is never called, and an open conversation genuinely cannot update until the page is reloaded. Chat
+has therefore only ever been real-time on localhost — the one place it matters least. This was a
+known-and-recorded deferral finally biting a real user.
+
+Fixed with a polling fallback inside the same hook, which runs **only** when realtime is off: a 6s
+`onMessageSignal()` tick, skipped while `document.hidden` and re-fired on `visibilitychange` so a
+backgrounded conversation costs nothing and catches up the instant it returns. 6s rather than the
+30s used by the unread-badge and invite polls elsewhere — those keep a number in a corner roughly
+fresh, this is someone waiting for a reply, and 30s reads as broken. Both `ChatPanel` and
+`ChatThreadPanel` already pass a `useCallback`-stable `onRealtimeSignal`, so the interval doesn't
+churn. Deliberately does not replace the WebSocket: enabling `NEXT_PUBLIC_COLLAB_WS_ENABLED` is
+still the better answer (instant instead of up-to-6s, and it carries typing indicators, which
+polling cannot), and this fallback switches itself off the moment that happens.
+
+**(1) and (2b) — one hypothesis covering both, acted on but NOT confirmed.** The composer markup
+itself is correct (`flex-1` textarea, `shrink-0` send button), so a mispositioned button doesn't
+explain it. The likelier cause is that the whole panel is wider than the viewport: `ChatPanel`'s
+root is a flex child with no `min-w-0`, and a flex item defaults to `min-width: auto` — it refuses
+to shrink below its content, so one long unbroken link, a wide code block, or an attachment can
+push the entire column past the screen edge, taking the composer with it. That also explains the
+second half of (2): if the page is sideways-scrollable, a horizontal drag near the edge on iOS is
+interpreted as the browser's own back gesture, which pops history and closes the conversation —
+"når jeg scroller havner jeg ut."
+
+Two conservative changes: `min-w-0` on the panel root, and `overflow-x-hidden` alongside the
+existing `overflow-y-auto` on the message list. The latter is safe *specifically there* because
+that element already establishes a scroll container (CSS forces the other axis to auto once either
+is non-visible), so it can't introduce a surprise second scrollbar the way it would on the root.
+Genuinely wide content keeps its escape hatch — code blocks carry their own `overflow-x-auto` in
+`lib/chatFormat.tsx` and scroll within themselves.
+
+**This is a hypothesis, not an observed cause.** No iOS device is available in-session, and this
+file's own hardest-won lesson is not to attribute a bug to the most plausible-sounding culprit
+without seeing the real broken state (see the `layoutId` misdiagnosis and the WebSocket red
+herring). The changes are cheap and correct regardless of whether they turn out to be *the* fix.
+If the symptom survives, the next step is a screenshot of the conversation scrolled sideways, to
+identify which element is actually overflowing, rather than another round of guessing.
+
+**(3) The fade animation — not addressed, deliberately.** There are several fades in play (the
+mobile menu backdrop, view transitions, message entrance), and nothing in the report identifies
+which one or in what way it looks wrong. Asked the user which screen and what it does rather than
+picking the most likely candidate and changing it blind.
+
+Verified with `npx tsc --noEmit` and a clean `npm run build`. None of it seen on a device.

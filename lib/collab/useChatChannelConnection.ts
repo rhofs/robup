@@ -37,6 +37,34 @@ export function useChatChannelConnection(
   const [typingUsers, setTypingUsers] = useState<TypingUser[]>([]);
   const typingTimersRef = useRef<Map<string, number>>(new Map());
 
+  // Polling fallback for whenever the WebSocket signal isn't available — which today is *always*
+  // in production, since NEXT_PUBLIC_COLLAB_WS_ENABLED is still unset there (see collabWsUrl.ts):
+  // the effect below returns immediately, nothing ever calls onMessageSignal, and a conversation
+  // simply never updates until the page is reloaded. Reported live: "må refreshe for å se
+  // meldinger poppe opp." Without this, chat is only real-time on localhost, which is the one
+  // place it matters least.
+  //
+  // 6s, not the 30s the unread-badge/invite polls elsewhere in the app use: those keep a number in
+  // a corner roughly fresh, while this is someone waiting for a reply in an open conversation, and
+  // 30s reads as broken. Skipped entirely while the tab is hidden — a backgrounded conversation
+  // has nobody watching it, and it catches up on the visibilitychange below the moment it returns.
+  //
+  // Deliberately kept even once the WebSocket is enabled would be wrong, so it isn't: this only
+  // runs when realtime is genuinely off. When the socket is live it stays the sole mechanism, and
+  // its own comment above about missed signals during a brief disconnect still applies.
+  useEffect(() => {
+    if (!channelId || isCollabRealtimeEnabled()) return;
+    const tick = () => {
+      if (!document.hidden) onMessageSignal();
+    };
+    const interval = window.setInterval(tick, 6000);
+    document.addEventListener('visibilitychange', tick);
+    return () => {
+      window.clearInterval(interval);
+      document.removeEventListener('visibilitychange', tick);
+    };
+  }, [channelId, onMessageSignal]);
+
   useEffect(() => {
     if (!channelId || !isCollabRealtimeEnabled()) {
       setProvider(null);
