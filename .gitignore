@@ -32,6 +32,16 @@ yarn-error.log*
 
 # env files (can opt-in for committing if needed)
 .env*
+# ...except .env.production, which is committed on purpose. It holds only NEXT_PUBLIC_* build-time
+# flags — values that Next inlines into the client bundle at `next build`, so they are shipped to
+# every browser regardless and are not secrets by construction. It is committed rather than set as
+# a Pterodactyl egg variable because the build happens inside the *install* container, which does
+# not reliably receive the server's configured env vars (this is what caused the DATABASE_URL
+# trouble documented in PLANNING.md) — a variable set in the panel can therefore silently fail to
+# reach the build, with no error and no working feature. A file in git always reaches it.
+# Real secrets (AUTH_SECRET, RESEND_API_KEY, GOOGLE_*, CHAT_BROADCAST_SECRET) stay out of git and
+# stay in the panel: they are read at runtime, where the panel's variables do arrive correctly.
+!.env.production
 
 # vercel
 .vercel

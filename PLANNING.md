@@ -3006,3 +3006,45 @@ which one or in what way it looks wrong. Asked the user which screen and what it
 picking the most likely candidate and changing it blind.
 
 Verified with `npx tsc --noEmit` and a clean `npm run build`. None of it seen on a device.
+
+## Today's session (2026-09-01, continued a second time) — Real-time chat turned on via a committed `.env.production`, and why the panel was the wrong place for it
+
+Following the polling fallback added in the entry above, the user asked to enable the real socket.
+`NEXT_PUBLIC_COLLAB_WS_ENABLED=true` now lives in a committed `.env.production`, with a matching
+`!.env.production` negation in `.gitignore`.
+
+**Why a committed file rather than a Pterodactyl egg variable**, which is where every other config
+value in this project lives: `NEXT_PUBLIC_*` values are inlined by `next build`, not read at
+runtime — and the build happens inside the Pterodactyl **install** container, which is exactly the
+environment already documented (see the DATABASE_URL saga) as not reliably receiving the server's
+configured variables. Setting it in the panel could therefore have silently failed to reach the
+build: no error, no working feature, and nothing to distinguish that from the flag being wrong. A
+file in git always reaches the build. Committing it is safe by construction rather than by
+judgement — a `NEXT_PUBLIC_*` value is inlined into the client bundle and shipped to every browser
+regardless, so it can never be a secret. Real secrets (`AUTH_SECRET`, `RESEND_API_KEY`, `GOOGLE_*`,
+`CHAT_BROADCAST_SECRET`) stay out of git and stay in the panel, where they are read at runtime and
+the panel's variables do arrive correctly. Both halves of that split are written into the
+`.gitignore` comment itself, since the exception looks like a mistake otherwise.
+
+**Verified by contrast rather than assumed** — the whole point was that this mechanism can fail
+silently, so "the file exists" would not have been evidence. Built twice and compared the compiled
+client bundle: without the file, `lib/collab/collabWsUrl.ts` compiles to
+`location.protocol||"true"===...env.NEXT_PUBLIC_COLLAB_WS_ENABLED` — the comparison survives into
+the bundle and resolves against nothing at runtime, i.e. off. With the file, the same code folds to
+`location.protocol,!0` — a literal `true`, i.e. on. The absence of the variable *name* in the
+bundle was itself expected once inlined, which is why grepping for the name alone was not treated
+as an answer either way.
+
+**Takes effect only on a Reinstall, not a Restart** — `deploy:prod` runs migrations and starts the
+server; it never builds. This is the single most likely way for this change to look broken: restart,
+see no change, conclude the flag does not work.
+
+**What changes once it is live:** chat messages arrive instantly instead of on the 6s poll, typing
+indicators start working (polling cannot provide them at all), and Office presence comes back. The
+poll switches itself off automatically — it is gated on the same flag. If the socket misbehaves,
+setting the value to `false` and reinstalling reverts to polling with no other change needed.
+
+**Still worth confirming first** (asked of the user, not yet answered): open a Doc on siqt.no and
+check the editor's own connection-status warning. That is the cheapest existing probe of whether
+the `/collab` proxy in `server/customServer.ts` is genuinely working end to end, and it predates
+this flag entirely.
