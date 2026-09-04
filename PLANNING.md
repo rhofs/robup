@@ -3160,3 +3160,51 @@ skipped by this — that flag gates effect 1 entirely, and leaving it false woul
 Verified with `npx tsc --noEmit` and a clean `npm run build`. Not yet confirmed on a device: the
 symptom needs two deliberately fast taps to reproduce, which is exactly the timing this session
 cannot exercise.
+
+## Infrastructure — Resend email/DNS, set up and verified 2026-09-04
+
+Recorded here for the same reason the backup cron is: it lives entirely outside this repo (a
+Resend account, DNS records at Cloudflare, and a Pterodactyl egg variable), so `git log` shows
+nothing and there is nowhere else it is written down.
+
+**DNS records on siqt.no (Cloudflare), all three verified live from Cloudflare's own authoritative
+nameservers rather than trusted from the dashboard UI:**
+
+| Type | Name | Value |
+|---|---|---|
+| TXT | `resend._domainkey` | `p=MIGfMA0GCSqGSIb3DQEBAQUAA4GNADCBiQKBgQCn2Cq8bCcL/…pptIAywIDAQAB` (DKIM) |
+| MX | `send` | `feedback-smtp.eu-west-1.amazonses.com`, priority 10 |
+| TXT | `send` | `v=spf1 include:amazonses.com ~all` |
+
+A `_dmarc` TXT (`v=DMARC1; p=none;`) also exists. Resend does not require it; it is harmless and
+generally good practice, so it was left alone. The Resend account region is **eu-west-1 (Ireland)**,
+which is why the MX target carries that region — a different account region would need a different
+value.
+
+**Two things worth knowing before anyone debugs this again:**
+
+1. **Cloudflare publishes changes in seconds, not hours** — a newly added record was visible from
+   an authoritative query about five seconds after saving. Resend's own "may take a few hours
+   depending on Cloudflare's propagation time" message is generic and misleading in this setup.
+2. **The real delay is negative caching, and it is 30 minutes.** `siqt.no`'s SOA minimum is `1800`,
+   which is how long a "this record does not exist" answer is remembered. Resend checked before the
+   SPF record was added, cached the miss, and kept reporting Pending for half an hour afterwards
+   even though the record was live. Clicking `restart verification` repeatedly does not help — it
+   cannot flush someone else's resolver cache. The records' own TTL is 300s; absence is remembered
+   six times longer than presence. Worth remembering for any future DNS-verified integration: add
+   the records *before* triggering the first check, never after.
+
+Diagnosing this from the dashboard screenshots alone was not sufficient — the decisive step each
+time was querying DNS directly (`dig +short @<authoritative-ns> <name> <type>`), which distinguishes
+"not published" from "published but cached as missing", something no dashboard shows.
+
+**Still owed at the time of writing:** the `RESEND_API_KEY` egg variable in Pterodactyl (Admin →
+Nests → the siqt egg → Variables, then the value on the server's own Startup page). Its Rules field
+must be widened from the default `max:20` — a Resend key is far longer, the same validation trap
+that silently blocked the Google OAuth variables. This one is read at runtime, so a plain Restart is
+enough; no Reinstall needed, unlike `NEXT_PUBLIC_COLLAB_WS_ENABLED`.
+
+**What email is actually used for today:** password reset only (`app/api/auth/forgot-password`).
+Workspace invite-by-email deliberately sends nothing — it looks the address up in-app and points at
+the invite link when there is no account. Now that mail infrastructure exists, wiring that up is a
+natural and small next step, but it is not built.
