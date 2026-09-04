@@ -1193,6 +1193,14 @@ function PageContent() {
   // Guards effect 1 from pushing any URL before effect 2 has had a chance to read a possibly
   // deep-linked one — otherwise the app's own default state would stomp it before it's ever seen.
   const hasHydratedFromUrlRef = useRef(false);
+  // Every query string effect 1 has pushed but not yet seen come back through `searchParams`.
+  // `router.push` is asynchronous: the new value only reaches this component a render or more
+  // later, and two quick taps can therefore have two pushes in flight at once. Without this,
+  // effect 2 treats the *first* push landing as an external navigation and dutifully rewrites
+  // state back to it — reported live as "trykker for fort på en ny knapp i menyen, så går den til
+  // den nye, men så umiddelbart tilbake til den første". It reads like the animation re-firing a
+  // tap; it is actually the URL sync undoing the second tap with the first tap's own URL.
+  const pendingPushesRef = useRef<string[]>([]);
   const urlModalStackKey = modalTaskStack.join(',');
   const urlListIdsKey = [...activeListIds].sort().join(',');
   const urlFocusDateKey = dateKey(calendarFocusDate);
@@ -1225,6 +1233,7 @@ function PageContent() {
       officeRoomId: activeOfficeRoomId,
     });
     if (qs === searchParams.toString()) return;
+    pendingPushesRef.current.push(qs);
     router.push(qs ? `${pathname}?${qs}` : pathname, { scroll: false });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [
@@ -1247,6 +1256,25 @@ function PageContent() {
   // any setter so it never fights effect 1 above.
   useEffect(() => {
     if (workspaces.length === 0) return;
+
+    // Is this our own push echoing back, rather than a real back/forward navigation? Matching by
+    // value, not by counting, because pushes can land out of order or be coalesced. Anything at or
+    // before the match is now accounted for and dropped. Either way we return without touching
+    // state: the URL we ourselves produced was, by construction, encoded *from* state, so state is
+    // already at that value or has since moved past it — and moving it "back" to an older push is
+    // exactly the bug this guards against.
+    const incoming = searchParams.toString();
+    const pendingIdx = pendingPushesRef.current.indexOf(incoming);
+    if (pendingIdx !== -1) {
+      pendingPushesRef.current.splice(0, pendingIdx + 1);
+      hasHydratedFromUrlRef.current = true;
+      return;
+    }
+    // A URL we never pushed means a genuine external navigation (back/forward, a deep link, a
+    // pasted URL). Any pushes still queued are irrelevant now and must not linger to swallow a
+    // later, unrelated navigation that happens to encode the same query string.
+    pendingPushesRef.current = [];
+
     const parsed = parseNavUrl(searchParams);
 
     if (parsed.view !== activeView) setActiveView(parsed.view);

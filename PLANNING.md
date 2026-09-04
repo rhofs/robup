@@ -3120,3 +3120,43 @@ scrolled sideways was requested; a video was attempted but this session cannot a
 
 Verified with `npx tsc --noEmit` and a clean `npm run build`. None of the four fixes has been seen
 on a device.
+
+## Today's session (2026-09-04) — "Tap two menu items quickly and it snaps back to the first": a real race between the two URL-sync effects
+
+Reported: "Om jeg går fra ett vindu i menyen, til en annen, og trykker for fort på en ny knapp i
+menyen, så går den til den nye, men så umiddelbart tilbake til den første jeg trykka på. virker som
+animasjonen retrigger et trykk på menyen eller noe?"
+
+Not the animation, and worth recording that the instinct to blame it was reasonable but wrong — the
+same shape of misattribution this file already documents twice (the `layoutId` misdiagnosis, the
+WebSocket red herring). The cause is the state↔URL sync pair in `app/page.tsx`.
+
+`router.push` is asynchronous: the pushed value only reaches the component through `searchParams` a
+render or more later. Tap A, and effect 1 pushes `?view=A`. Tap B before that lands, and effect 1
+pushes `?view=B` too — its own guard (`qs === searchParams.toString()`) can't help, because
+`searchParams` is still showing the pre-A URL. Now A's push arrives. Effect 2 has no way to tell
+that from a genuine back/forward navigation, so it does exactly what it is built to do: rewrites
+state to match, calling `setActiveView(A)`. State snaps back to the first tap, and effect 1 then
+sees state and URL agreeing, so nothing corrects it. The second tap is silently undone by the first
+tap's own URL.
+
+The existing "mutual already-equal check, not a reentrancy flag" design (documented in Known bugs
+above) is right for the steady state and is untouched. It simply cannot express "this URL is one of
+mine, and it is stale" — a value-equality check has no notion of *when* a value was produced.
+
+Fixed by tracking every query string effect 1 pushes but has not yet seen come back
+(`pendingPushesRef`). Effect 2 looks the incoming URL up in that list first: a match means it is
+our own echo, so everything up to and including it is dropped and state is left alone — by
+construction that URL was encoded *from* state, so state is already there or has moved past it, and
+moving it back to an older push is precisely the bug. A URL that is *not* in the list is a real
+external navigation (back/forward, deep link, pasted URL), and the queue is cleared so a stale
+entry can never swallow a later unrelated navigation that happens to encode the same string.
+Matched by value rather than by counting deliberately, since pushes can land out of order or be
+coalesced.
+
+`hasHydratedFromUrlRef` is still set on the early-return path, so the first hydration pass cannot be
+skipped by this — that flag gates effect 1 entirely, and leaving it false would freeze the URL.
+
+Verified with `npx tsc --noEmit` and a clean `npm run build`. Not yet confirmed on a device: the
+symptom needs two deliberately fast taps to reproduce, which is exactly the timing this session
+cannot exercise.
