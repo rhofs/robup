@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import { signOut } from 'next-auth/react';
-import { Image as ImageIcon, Pencil, Link2, Globe, AtSign, X, AlertTriangle, ChevronRight, LogOut, ShieldOff } from 'lucide-react';
+import { Image as ImageIcon, Pencil, Link2, Globe, AtSign, X, AlertTriangle, ChevronRight, LogOut, ShieldOff, KeyRound } from 'lucide-react';
 import { AppUser } from '../store/useTaskStore';
 import { EditableField } from './OfficePage';
 
@@ -58,9 +58,118 @@ export default function ProfilePage({ currentUser, onUpdate, onSetUsername }: Pr
         </div>
       </div>
 
+      <PasswordSection hasPassword={!!currentUser.hasPassword} />
+
       <SessionControls />
 
       <DangerZone user={currentUser} />
+    </div>
+  );
+}
+
+// Set or change your own password. Two distinct states, deliberately worded differently: an
+// account created through Google has no password at all (so "forgot password" correctly sends
+// nothing — there is nothing to reset — which is exactly how this gap was found), while an account
+// that has one must re-prove it before changing it.
+function PasswordSection({ hasPassword }: { hasPassword: boolean }) {
+  const [open, setOpen] = useState(false);
+  const [current, setCurrent] = useState('');
+  const [next, setNext] = useState('');
+  const [error, setError] = useState<string | null>(null);
+  const [done, setDone] = useState(false);
+  const [busy, setBusy] = useState(false);
+
+  const close = () => {
+    setOpen(false);
+    setCurrent('');
+    setNext('');
+    setError(null);
+  };
+
+  const submit = async () => {
+    setError(null);
+    setBusy(true);
+    const res = await fetch('/api/auth/set-password', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ currentPassword: current, newPassword: next }),
+    });
+    setBusy(false);
+    if (!res.ok) {
+      const data = await res.json().catch(() => null);
+      setError(data?.error || 'Could not save password');
+      return;
+    }
+    // No reload: hasPassword only changes what this panel offers next time the page is opened, and
+    // forcing a refetch here would be more disruptive than the stale label is worth.
+    setDone(true);
+    close();
+  };
+
+  return (
+    <div className="max-w-xl mx-auto border border-neutral-800/80 rounded">
+      {!open ? (
+        <button
+          onClick={() => {
+            setDone(false);
+            setOpen(true);
+          }}
+          className="w-full flex items-center gap-2.5 px-4 py-3 text-left hover:bg-neutral-800/40 cursor-pointer"
+        >
+          <KeyRound className="w-4 h-4 text-neutral-400 shrink-0" />
+          <span className="min-w-0 flex-1">
+            <span className="block text-xs text-neutral-200">{hasPassword ? 'Change password' : 'Set a password'}</span>
+            <span className="block text-[10px] text-neutral-500">
+              {done
+                ? 'Password saved.'
+                : hasPassword
+                  ? 'You sign in with email and password.'
+                  : 'You sign in with Google. Add a password to also sign in with email.'}
+            </span>
+          </span>
+        </button>
+      ) : (
+        <div className="px-4 py-3 space-y-2">
+          {hasPassword && (
+            <input
+              type="password"
+              autoComplete="current-password"
+              value={current}
+              onChange={(e) => setCurrent(e.target.value)}
+              placeholder="Current password"
+              className="w-full bg-neutral-950 border border-neutral-800 rounded px-2 py-1.5 text-xs text-app-strong placeholder:text-neutral-600 focus:outline-none focus:border-blue-500"
+            />
+          )}
+          <input
+            type="password"
+            autoComplete="new-password"
+            value={next}
+            onChange={(e) => setNext(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter') submit();
+            }}
+            placeholder="New password (at least 8 characters)"
+            className="w-full bg-neutral-950 border border-neutral-800 rounded px-2 py-1.5 text-xs text-app-strong placeholder:text-neutral-600 focus:outline-none focus:border-blue-500"
+          />
+          {error && <p className="text-[10px] text-red-400">{error}</p>}
+          <div className="flex gap-2">
+            <button
+              onClick={submit}
+              disabled={busy || next.length < 8}
+              className="text-[11px] bg-blue-600 hover:bg-blue-500 disabled:opacity-50 text-white rounded px-3 py-1.5 cursor-pointer"
+            >
+              {busy ? 'Saving…' : 'Save password'}
+            </button>
+            <button
+              onClick={close}
+              disabled={busy}
+              className="text-[11px] text-neutral-400 hover:text-neutral-200 disabled:opacity-50 px-3 py-1.5 cursor-pointer"
+            >
+              Cancel
+            </button>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

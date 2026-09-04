@@ -3256,3 +3256,50 @@ the second real use of the migrations workflow.
 before revocation and refused after it, a fresh sign-in afterwards is accepted, a session with no
 `issuedAt` passes, and another user's sessions are unaffected. All five passed. `npx tsc --noEmit`
 and `npm run build` clean. The UI itself has not been seen on a device.
+
+## Today's session (2026-09-04, continued a second time) — Set/change your own password; why no reset email arrived
+
+"jeg har forresten ikke fått noe mail. for forgot password." Root cause is in the route, not the
+mail setup: `POST /api/auth/forgot-password` returns its generic OK without sending anything when
+the account has no password at all, because a Google-created account has nothing to reset. The
+response is identical either way on purpose — anything else turns the endpoint into a public "does
+this person have an account here" oracle — so the user sees "check your inbox" and silence. Working
+as designed, and undiscoverable from the outside, which is exactly what made it worth writing down.
+
+The real gap behind it: **there was no way to set or change a password anywhere in the app.** A
+Google-only account could never sign in with email and password, and someone who *had* a password
+could only change it by going through the forgot-password email round trip — a strange thing to
+require of a person who already knows their password. `POST /api/auth/set-password` plus a
+Password section on the Profile page (next to the sign-out controls added earlier today) closes
+both.
+
+**On emailed "temporary passwords", which the user asked about** (a pattern they had seen
+elsewhere): deliberately not used. It puts a working credential into an inbox, where it persists,
+is searchable, gets forwarded and backed up, and hands the account to anyone who reaches the
+mailbox. The reset-link flow already here is the modern replacement precisely because it never
+transmits a usable credential — it is single-use, short-lived, and only permits *setting* a new
+password. Letting the owner choose one inside a session they already hold is the same principle.
+
+Decisions worth keeping:
+
+- **An existing password must be re-proved before it can be changed.** Holding a live session is
+  not the same as knowing the credential, and an unattended unlocked device should not be enough to
+  lock the real owner out.
+- **With no password set, the session alone is enough** — there is nothing to prove, and it is the
+  same bar every other account change on that page already uses. The tradeoff is named rather than
+  hidden: someone with an unlocked, signed-in device can give a Google-only account a password.
+  They could already act as that person entirely, so it grants no new reach, but it does make the
+  access outlive the session, which is why "Sign out of all devices" sits directly above it.
+- **Changing a password does not sign other devices out.** Defensible either way; doing it silently
+  would be a surprising side effect, and the explicit control is right there.
+
+**Verified against a real database:** a passwordless account can set one and the new password
+actually authenticates; too-short is rejected; a wrong or missing current password is rejected; the
+correct one is accepted; and afterwards the old password no longer works while the new one does.
+All eight passed. `tsc` and `npm run build` clean. Not seen on a device.
+
+**Follow-up worth considering, not built:** the login page still gives no hint when someone tries
+email + password on a Google-only account — they just get "invalid email or password". Telling them
+"this account signs in with Google" is a genuine usability win but leaks account existence, which
+is the exact tradeoff `forgot-password` deliberately refuses. Worth a decision rather than a
+default.
