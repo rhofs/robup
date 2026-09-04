@@ -3303,3 +3303,52 @@ email + password on a Google-only account — they just get "invalid email or pa
 "this account signs in with Google" is a genuine usability win but leaks account existence, which
 is the exact tradeoff `forgot-password` deliberately refuses. Worth a decision rather than a
 default.
+
+## Today's session (2026-09-04, continued a third time) — Signing up with a Google account's email created a SECOND account; almost certainly the 2026-08-28 duplicate-person report
+
+Asked as a what-if: "hva skjer om noen ikke husker om de logger inn med google eller ikke, og
+forsøker å opprette konto med samme epost som google kontoen?" The answer turned out to be a real
+bug, not a hypothetical.
+
+**No takeover risk** — signup does check for an existing account and refuses, so nobody can attach
+a password to someone else's Google account by re-registering their address. That was the first
+thing checked.
+
+**But the check was case-sensitive, and that is exactly the trap this codebase has already fixed
+three times elsewhere.** `POST /api/auth/signup` lowercases the submitted address, then looks it up
+with a plain `findUnique({ where: { email } })`. SQLite's unique index on `email` is
+case-SENSITIVE, and an account created through Google keeps whatever casing the provider sent —
+nothing in `auth.ts`'s `createUser` normalises it. So for a Google account stored as
+`Robin.Hofseth@Gmail.com`, someone signing up with `robin.hofseth@gmail.com` sails past the
+duplicate check, and `create` succeeds, because the two spellings are genuinely distinct to the
+index. **Two accounts, one person, one address.**
+
+This is almost certainly the real explanation for the duplicate-person report of 2026-08-28, which
+was left open with the hypothesis "most likely two different email addresses, so the
+`allowDangerousEmailAccountLinking` safety net never applied". One address in two spellings fits
+the evidence better and needs no second address to exist. The member-invites, connections-lookup and
+forgot-password routes all already carry the raw-SQL `LOWER(email)` fix and its explanatory comment;
+signup was simply missed each time.
+
+Fixed with the same `LOWER(email)` raw-SQL lookup. **Verified against a real database by
+contrast**, since the whole point is that the old code looked correct: a Google-style account stored
+as `Robin.Hofseth@Gmail.com` is missed by the old check (i.e. a duplicate would have been created)
+and found by the new one, with no false positive on an unrelated address.
+
+**Also fixed the dead end this created for the person.** Someone who signed up with Google and
+forgot previously hit three unhelpful answers in a row: "an account with this email already exists"
+at signup, "invalid email or password" at sign-in, and a reset email that correctly never arrives.
+The signup 409 now says the account is registered through Google when it has no password. Naming
+the method there leaks nothing further — the 409 has *already* disclosed that the account exists,
+so withholding how to get in only strands the person. This is deliberately the opposite of the
+forgot-password route's reasoning, where refusing to reveal existence is the entire point; the two
+look contradictory and are not.
+
+**`scripts/findDuplicateAccounts.ts`** (read-only, disposable) lists any address that already has
+more than one account, with each one's workspace/task/message counts and whether it has a password,
+so a merge decision can be made with the facts in view. It deliberately changes nothing — merging
+accounts is destructive and which row to keep depends on what is in them. **Not yet run against
+production**; worth running, since this bug was live for however long Google sign-in has been
+working.
+
+`tsc` and `npm run build` clean.

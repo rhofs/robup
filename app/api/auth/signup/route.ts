@@ -24,8 +24,35 @@ export async function POST(req: Request) {
   if (!EMAIL_RE.test(email)) return NextResponse.json({ error: 'Invalid email address' }, { status: 400 });
   if (password.length < 8) return NextResponse.json({ error: 'Password must be at least 8 characters' }, { status: 400 });
 
-  if (await prisma.user.findUnique({ where: { email } })) {
-    return NextResponse.json({ error: 'An account with this email already exists' }, { status: 409 });
+  // Case-insensitive via raw SQL, for the fourth time in this codebase (see the member-invites,
+  // connections-lookup and forgot-password routes): SQLite's unique index on email is
+  // case-SENSITIVE and Prisma's `mode: 'insensitive'` isn't supported on this provider. This route
+  // lowercases before comparing, but an account created through Google keeps whatever casing the
+  // provider sent — so a plain findUnique here MISSES an existing Google account whenever the
+  // casing differs, the duplicate check passes, and `create` below succeeds because the two
+  // spellings are distinct as far as the index is concerned. The result is two accounts for one
+  // person, which is almost certainly what produced the duplicate-person report of 2026-08-28
+  // (recorded there as "most likely two different email addresses" — this is a better explanation:
+  // one address, two spellings).
+  const existingRows = await prisma.$queryRaw<{ id: string; password: string | null }[]>`
+    SELECT id, password FROM "User" WHERE LOWER(email) = ${email} LIMIT 1`;
+  const existing = existingRows[0] ?? null;
+  if (existing) {
+    // Naming the sign-in method here leaks nothing further: the 409 has already disclosed that an
+    // account exists, so withholding *how* to get into it only strands the person. This is the
+    // opposite of the forgot-password route's reasoning, where the whole point is that the response
+    // must not reveal existence at all — there the silence is the feature; here it would just be
+    // unhelpful. Without this, someone who signed up with Google and forgot hits three separate
+    // dead ends in a row: "account already exists" here, "invalid email or password" at sign-in,
+    // and a reset email that correctly never arrives.
+    return NextResponse.json(
+      {
+        error: existing.password
+          ? 'An account with this email already exists'
+          : 'This email is already registered through Google — use "Continue with Google" to sign in.',
+      },
+      { status: 409 }
+    );
   }
 
   // Same initials-from-name derivation as auth.ts's events.createUser (Google sign-in path) —
