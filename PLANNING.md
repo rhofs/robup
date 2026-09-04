@@ -3352,3 +3352,53 @@ production**; worth running, since this bug was live for however long Google sig
 working.
 
 `tsc` and `npm run build` clean.
+
+## Today's session (2026-09-04, continued a fourth time) — The missing-Spaces report solved: two workspaces with the same name, and "All Tasks" was never workspace-scoped
+
+`scripts/diagnoseSpaces.ts` answered it outright, and the answer was not what any of the earlier
+theories predicted:
+
+```
+=== CRRM Media (1e1828c8…) ===   4 spaces
+   Robin  owner  -> 4 of 4
+   Yang   member -> 4 of 4
+=== CRRM Media (a5f0c53a…) ===   0 spaces
+   Yang   owner  -> 0 of 0
+```
+
+**There are two workspaces called "CRRM Media".** Yang owns a second, empty one and the client
+lands her in it. Access control was never involved — the server would serve her all four spaces of
+the real workspace; she simply was not looking at it. Worth noting the earlier reasoning was sound
+but the conclusion wrong: "she is a member of CRRM Media" was true and was taken to rule out the
+wrong-workspace theory, when in fact she is a member of one *and* the owner of another with the
+same name.
+
+**This is the concrete cost of the duplicate-name question asked on 2026-09-01.** That answer —
+nothing collides, ids are what matter, the cost is only cosmetic ambiguity — was technically
+correct and materially understated. Two identical names turned a wrong-workspace situation into
+something that read as one workspace behaving inconsistently.
+
+**A second, independent bug came out of it: `activeSpaceId === 'everything'` returned `true`
+unconditionally.** `tasks` in the store holds everything visible to a person across *every*
+workspace they belong to — `GET /api/tasks` is membership-wide by design, so Planner and My Tasks
+can read across workspaces — so the "All Tasks" board showed one workspace's tasks while sitting in
+another, under a heading that literally reads "All Tasks – <workspace name>". That is what made the
+report self-contradictory ("no spaces, but all the tasks are there"): the spaces came from her
+empty workspace, the tasks from the real one. Now scoped to the list ids reachable in the active
+workspace. Not a data leak — every task shown was one she is entitled to see — but a real
+correctness and labelling bug that predates this whole thread.
+
+**Also added an empty state** to the mobile Spaces sheet. A workspace with no spaces previously
+rendered nothing below "All Tasks", which is indistinguishable from a loading failure or a
+permissions problem, and was read as exactly that. It now says so, and names the workspace —
+which matters most in precisely this case, since two identically-named workspaces are otherwise
+impossible to tell apart from that screen.
+
+**What Yang should do:** switch to the workspace Robin owns via the workspace switcher. Her own
+empty one can be deleted, but only by her — she owns it. Nothing needs fixing in her data.
+
+`tsc` and `npm run build` clean. Neither change seen on a device.
+
+**Worth considering, not built:** the workspace switcher still shows two identical labels with
+nothing to tell them apart. A disambiguator (member count, owner name, or "created by you") would
+have made this self-diagnosing from the start.

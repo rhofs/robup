@@ -1808,13 +1808,32 @@ function PageContent() {
 
   const statusColor = (name: string) => statuses.find((s) => s.name === name)?.color || '#94a3b8';
 
+  // Every List id reachable in the active workspace, used to scope the "All Tasks" view below.
+  const currentWorkspaceListIds = useMemo(() => {
+    const ids = new Set<string>();
+    for (const space of currentWorkspace?.spaces ?? []) {
+      for (const id of collectListIdsUnder(space, null)) ids.add(id);
+    }
+    return ids;
+  }, [currentWorkspace]);
+
   const filteredTasks = useMemo(() => {
     let result = tasks.filter((task) => {
       if (modalTaskStack.length > 0) return false;
       if (task.parentId !== null) return false;
       if (!!task.archived !== showArchived) return false;
 
-      if (activeSpaceId === 'everything') return true;
+      // Scoped to the current workspace, not literally every task in the store. `tasks` holds
+      // everything visible to this person across EVERY workspace they belong to (GET /api/tasks is
+      // membership-wide by design, so the Planner and My Tasks can read across workspaces), so an
+      // unscoped `return true` here showed one workspace's tasks while sitting in another — under a
+      // heading that explicitly reads "All Tasks – <workspace name>".
+      //
+      // Found via a colleague who saw an empty Spaces tree but a full task list: she owns a second,
+      // empty workspace that happens to share the first one's name, landed in it, and "All Tasks"
+      // cheerfully showed the other workspace's contents. The identical names made it look like one
+      // workspace behaving inconsistently rather than two workspaces being confused for each other.
+      if (activeSpaceId === 'everything') return currentWorkspaceListIds.has(task.listId);
       if (activeListIds.size > 0) return activeListIds.has(task.listId);
       // Space selected but no List active: normally SpaceHome renders instead of a flat table,
       // so this table is never seen — except in Archive mode, which has no SpaceHome equivalent
@@ -1837,7 +1856,7 @@ function PageContent() {
     }
 
     return result;
-  }, [tasks, activeSpaceId, activeListIds, modalTaskStack, sortBy, sortOrder, showArchived]);
+  }, [tasks, activeSpaceId, activeListIds, modalTaskStack, sortBy, sortOrder, showArchived, currentWorkspaceListIds, currentSpace]);
 
   // Scoped to whatever's currently visible/filtered in the board (filteredTasks), not the whole
   // workspace — the "Clear overdue" toolbar button below only ever touches what's on screen, so

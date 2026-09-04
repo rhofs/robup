@@ -286,6 +286,21 @@ export default function MobileSpacesSheet({
               </span>
             </button>
 
+            {/* A workspace with no Spaces at all previously rendered nothing below "All Tasks" —
+                indistinguishable from a loading failure or a permissions problem. That is exactly
+                how it was read: a colleague who happened to own a second, empty workspace sharing
+                the real one's name landed in it and reported seeing "no spaces, only All Tasks".
+                Naming the workspace here matters as much as the message, since two workspaces with
+                identical names are otherwise impossible to tell apart from this screen. */}
+            {spaces.length === 0 && (
+              <div className="px-2 py-6 text-center">
+                <p className="text-xs text-neutral-400">No Spaces in &ldquo;{workspaceName}&rdquo; yet.</p>
+                <p className="text-[11px] text-neutral-500 mt-1">
+                  Create one with + above — or switch workspace from the menu if you expected to see something here.
+                </p>
+              </div>
+            )}
+
             {spaces.map((space) => {
               const Icon = space.icon ? FOLDER_ICON_MAP[space.icon] : null;
               const isExpanded = expandedSpaceIds.has(space.id);
