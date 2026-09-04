@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import { signOut } from 'next-auth/react';
-import { Image as ImageIcon, Pencil, Link2, Globe, AtSign, X, AlertTriangle, ChevronRight } from 'lucide-react';
+import { Image as ImageIcon, Pencil, Link2, Globe, AtSign, X, AlertTriangle, ChevronRight, LogOut, ShieldOff } from 'lucide-react';
 import { AppUser } from '../store/useTaskStore';
 import { EditableField } from './OfficePage';
 
@@ -58,7 +58,88 @@ export default function ProfilePage({ currentUser, onUpdate, onSetUsername }: Pr
         </div>
       </div>
 
+      <SessionControls />
+
       <DangerZone user={currentUser} />
+    </div>
+  );
+}
+
+// Sign out lived only in the desktop sidebar's user menu, inside an `<aside className="hidden
+// md:flex">` — so on a phone there was no way to sign out at all. That is why getting out of a
+// stale session in August required typing /api/auth/signout by hand. Placed on the profile page
+// because that is the one account-shaped screen reachable from both layouts.
+function SessionControls() {
+  const [confirming, setConfirming] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const signOutEverywhere = async () => {
+    setError(null);
+    setBusy(true);
+    const res = await fetch('/api/auth/sign-out-everywhere', { method: 'POST' });
+    if (!res.ok) {
+      const data = await res.json().catch(() => null);
+      setError(data?.error || 'Could not sign out other devices');
+      setBusy(false);
+      return;
+    }
+    // The server has already invalidated this session along with the rest; signing out locally
+    // just makes that visible immediately instead of on the next request that happens to fail.
+    await signOut({ redirectTo: '/login' });
+  };
+
+  return (
+    <div className="max-w-xl mx-auto border border-neutral-800/80 rounded divide-y divide-neutral-800/80">
+      <button
+        onClick={() => signOut({ redirectTo: '/login' })}
+        className="w-full flex items-center gap-2.5 px-4 py-3 text-left hover:bg-neutral-800/40 cursor-pointer"
+      >
+        <LogOut className="w-4 h-4 text-neutral-400 shrink-0" />
+        <span className="text-xs text-neutral-200">Sign out</span>
+      </button>
+
+      {!confirming ? (
+        <button
+          onClick={() => setConfirming(true)}
+          className="w-full flex items-center gap-2.5 px-4 py-3 text-left hover:bg-neutral-800/40 cursor-pointer"
+        >
+          <ShieldOff className="w-4 h-4 text-neutral-400 shrink-0" />
+          <span className="min-w-0">
+            <span className="block text-xs text-neutral-200">Sign out of all devices</span>
+            <span className="block text-[10px] text-neutral-500">
+              Use this if you&rsquo;ve lost a device, or signed in somewhere you don&rsquo;t control.
+            </span>
+          </span>
+        </button>
+      ) : (
+        <div className="px-4 py-3 space-y-2">
+          <p className="text-[11px] text-neutral-300">
+            Every device signed in to this account will be signed out, including this one. You&rsquo;ll need to
+            sign in again.
+          </p>
+          {error && <p className="text-[10px] text-red-400">{error}</p>}
+          <div className="flex gap-2">
+            <button
+              onClick={signOutEverywhere}
+              disabled={busy}
+              className="text-[11px] bg-red-600 hover:bg-red-500 disabled:opacity-50 text-white rounded px-3 py-1.5 cursor-pointer"
+            >
+              {busy ? 'Signing out…' : 'Sign out everywhere'}
+            </button>
+            <button
+              onClick={() => {
+                setConfirming(false);
+                setError(null);
+              }}
+              disabled={busy}
+              className="text-[11px] text-neutral-400 hover:text-neutral-200 disabled:opacity-50 px-3 py-1.5 cursor-pointer"
+            >
+              Cancel
+            </button>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

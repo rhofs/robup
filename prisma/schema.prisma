@@ -439,6 +439,13 @@ model User {
   // in localStorage so it follows the person across devices — someone who onboarded on their
   // laptop shouldn't be walked through it again the first time they open the app on their phone.
   onboardedAt   DateTime? @map("onboarded_at")
+  // "Sign out everywhere." Sessions here are JWT-only (auth.ts: Credentials + the adapter cannot
+  // use database sessions), which means nothing server-side records who is signed in — and what is
+  // never recorded cannot be revoked. This column is the missing server-side fact: every session
+  // issued before this moment is rejected by getCurrentUserId(), so setting it to `now` invalidates
+  // every existing sign-in at once, on every device, including the one that pressed the button.
+  // Null means "nothing has ever been revoked", which is the normal state.
+  sessionsValidFrom DateTime? @map("sessions_valid_from")
   createdAt     DateTime  @default(now()) @map("created_at")
 }
 

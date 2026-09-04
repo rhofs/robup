@@ -3208,3 +3208,51 @@ enough; no Reinstall needed, unlike `NEXT_PUBLIC_COLLAB_WS_ENABLED`.
 Workspace invite-by-email deliberately sends nothing — it looks the address up in-app and points at
 the invite link when there is no account. Now that mail infrastructure exists, wiring that up is a
 natural and small next step, but it is not built.
+
+## Today's session (2026-09-04, continued) — Sign out on mobile, and real "sign out of all devices"
+
+Asked while looking for the login page to test password reset: "har vi forresten en måte å logge ut
+på? burde ha for den enheten man er på, og logg ut av alle enheter typ."
+
+**Signing out was desktop-only, and nobody had noticed.** The control existed — in the sidebar's
+user-menu popover — but that whole sidebar is `hidden md:flex`, so on a phone there was no way to
+sign out at all. This is the same gap that forced typing `/api/auth/signout` by hand during the
+August orphaned-session incident; it was worked around then and never actually closed. Now on the
+Profile page, which is the one account-shaped screen reachable from both layouts.
+
+**"Sign out of all devices" could not exist before this, and the reason is structural.** Sessions
+are JWT-only (`auth.ts`: Credentials plus the adapter cannot use database sessions), so nothing
+server-side records who is signed in — and what is never recorded cannot be revoked. Added the one
+missing server-side fact: `User.sessionsValidFrom`, a timestamp meaning "every session issued
+before this is void". `POST /api/auth/sign-out-everywhere` stamps it with `now`, and
+`getCurrentUserId()` compares each request's JWT `iat` against it.
+
+Three decisions worth keeping:
+
+- **Enforced in `getCurrentUserId()`, not in `auth.ts`'s `jwt` callback.** That route already makes
+  exactly one user lookup per request, so the check rides along on a query that was happening
+  anyway. The `jwt` callback also runs on page renders, and putting it there would add a database
+  round trip to every one of them.
+- **A session with no `issuedAt` is allowed through.** Sessions minted before this shipped cannot
+  carry the claim, and rejecting them would sign the entire userbase out on deploy — a worse
+  outcome than briefly honouring sessions nobody has revoked.
+- **Self-only, deliberately not an admin capability.** This is a personal safety control (a lost
+  phone, a shared computer). Forcing someone else out of their account is a different feature with
+  different consequences, and inventing it as a side effect of this one would be wrong.
+
+The caller's own session is invalidated along with the rest — the timestamp is coarse and applies
+to every token equally, and exempting the current device would defeat the purpose on the device most
+likely to be the problem. The client signs itself out immediately rather than discovering it on the
+next failed request. Note that `SessionSync` (added earlier this week) already handles the general
+case: a revoked session shows up as "we hold a session but the server doesn't list us", and it signs
+out on its own — so other devices recover gracefully rather than sitting in a broken state.
+
+**Migration:** `20260904000000_add_sessions_valid_from`, one additive `ALTER TABLE ... ADD COLUMN`,
+nothing dropped or narrowed. Generated with `migrate diff --from-migrations`, verified with a
+follow-up diff reporting "No difference detected", and applied cleanly to a real database. This is
+the second real use of the migrations workflow.
+
+**Verified against a real database** rather than reasoned about: an hour-old session is accepted
+before revocation and refused after it, a fresh sign-in afterwards is accepted, a session with no
+`issuedAt` passes, and another user's sessions are unaffected. All five passed. `npx tsc --noEmit`
+and `npm run build` clean. The UI itself has not been seen on a device.

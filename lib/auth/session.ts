@@ -17,6 +17,23 @@ export async function getCurrentUserId(): Promise<string | null> {
   const session = await auth();
   const userId = session?.user?.id;
   if (!userId) return null;
-  const exists = await prisma.user.findUnique({ where: { id: userId }, select: { id: true } });
-  return exists ? userId : null;
+  const existing = await prisma.user.findUnique({
+    where: { id: userId },
+    select: { id: true, sessionsValidFrom: true },
+  });
+  if (!existing) return null;
+
+  // "Sign out everywhere": a session minted before this timestamp is refused. Enforced here rather
+  // than in auth.ts's jwt callback deliberately — this route already makes exactly one lookup per
+  // request, so the check rides along on a query that was happening anyway, whereas the jwt
+  // callback runs on page renders too and would add a database round trip to all of them.
+  //
+  // A session with no `issuedAt` predates this feature and is allowed through: rejecting those
+  // would sign every existing user out the moment this deploys, which is a worse outcome than
+  // briefly honouring sessions that were never revoked in the first place. `iat` is in seconds.
+  if (existing.sessionsValidFrom && typeof session?.user?.issuedAt === 'number') {
+    if (session.user.issuedAt * 1000 < existing.sessionsValidFrom.getTime()) return null;
+  }
+
+  return userId;
 }

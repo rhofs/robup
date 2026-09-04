@@ -72,6 +72,11 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
     },
     async session({ session, token }) {
       if (session.user && token.sub) session.user.id = token.sub;
+      // `iat` ("issued at", seconds since epoch) is standard JWT and set by Auth.js itself. Passed
+      // through so getCurrentUserId() can compare it against User.sessionsValidFrom and reject a
+      // session minted before a "sign out everywhere" — the one piece of revocation a stateless
+      // JWT session can support without giving up stateless sessions entirely.
+      if (session.user && typeof token.iat === 'number') session.user.issuedAt = token.iat;
       return session;
     },
     // Backs proxy.ts (re-exported as `auth as proxy`) — true/false decides allow vs. redirect to
