@@ -67,6 +67,10 @@ const ISLAND_HEIGHT_GUESS_PX = 300;
 // is centered again, and the rounded corners float clearly above the screen edge with visible air
 // beneath them.
 const ISLAND_EXTRA_BOTTOM_GAP_PX = 10;
+
+// Slightly softer than the old 500/34 so the pill visibly decelerates into place — the squash above
+// only reads as weight if there is a moment of braking for it to happen during.
+const PILL_MOVE = { type: 'spring' as const, stiffness: 480, damping: 32 };
 const ISLAND_BOTTOM_OFFSET = `calc(env(safe-area-inset-bottom) + ${ISLAND_EXTRA_BOTTOM_GAP_PX}px)`;
 
 // iOS Safari specifically: `backdrop-filter` is supported but repaints badly whenever anything
@@ -125,6 +129,30 @@ function isIosLike(): boolean {
 // is `position: absolute; bottom: 0` inside this wrapper — its content is always fully mounted
 // (never conditionally unmounted), so there's no remount-driven measurement jump the first time it
 // opens.
+// The moving pill's "squish". Two nested motion elements on purpose: the OUTER one owns
+// `layoutId` and therefore the position animation, the INNER one owns the scale. Put both on one
+// element and framer-motion's layout animation and an explicit scale animation fight over the same
+// transform, and the result is neither.
+//
+// The squash is along the axis of travel — wider and flatter as it arrives, settling to round —
+// which is what reads as a bubble carrying velocity rather than a box being resized. Requested
+// against ClickUp's own nav: "den skvises litt inn i det den bremser, akkurat som en boble med
+// velocity."
+function NavPill({ pillKey }: { pillKey: string }) {
+  return (
+    <motion.div layoutId="mobileNavPill" className="absolute inset-0 -z-10" transition={PILL_MOVE}>
+      <motion.div
+        // Keyed on the destination so the keyframes re-run on every move rather than only on mount.
+        key={pillKey}
+        className="w-full h-full bg-blue-500/15 rounded-full"
+        initial={{ scaleX: 1.22, scaleY: 0.82 }}
+        animate={{ scaleX: 1, scaleY: 1 }}
+        transition={{ type: 'spring', stiffness: 700, damping: 18, mass: 0.5 }}
+      />
+    </motion.div>
+  );
+}
+
 export default function MobileBottomNav({
   navTabs,
   menuOpen,
@@ -419,13 +447,7 @@ export default function MobileBottomNav({
                       this pill painted behind the *entire nav bar's own opaque background*, rendering
                       correctly in the DOM but completely invisible. z-0 scopes the negative z-index to
                       just this button, putting the pill behind its own icon/label as intended. */}
-                  {active && (
-                    <motion.div
-                      layoutId="mobileNavPill"
-                      className="absolute inset-0 bg-blue-500/15 rounded-full -z-10"
-                      transition={{ type: 'spring', stiffness: 500, damping: 34 }}
-                    />
-                  )}
+                  {active && <NavPill pillKey={tab.id} />}
                   <Icon className="w-5 h-5" />
                   {/* h-3, fixed: matches the pinned button's own label row below exactly (which
                       needs it explicitly since it wraps an icon alongside the text) so both rows
@@ -451,13 +473,7 @@ export default function MobileBottomNav({
               }`}
             >
               <AnimatePresence>
-                {!menuOpen && pinnedActive && (
-                  <motion.div
-                    layoutId="mobileNavPill"
-                    className="absolute inset-0 bg-blue-500/15 rounded-full -z-10"
-                    transition={{ type: 'spring', stiffness: 500, damping: 34 }}
-                  />
-                )}
+                {!menuOpen && pinnedActive && <NavPill pillKey={pinnedTile?.id ?? 'pinned'} />}
               </AnimatePresence>
               <PinnedIcon className="w-5 h-5" />
               {/* h-3, fixed: see the matching comment on the plain tab label above — this row

@@ -439,6 +439,15 @@ const NAV_TOTAL_HEIGHT_PB_CLASS = 'pb-[calc(4.75rem+env(safe-area-inset-bottom)+
 // CommandPalette.tsx's own scopeKind, which this mirrors exactly). Used by both the desktop pill
 // and the mobile per-view header pill below, so the two can never drift out of sync with each
 // other or with what actually happens once tapped.
+// Shared by both panes of the chat push transition so they cannot drift out of step — two
+// different curves would make the incoming pane arrive before or after the outgoing one settles,
+// which is exactly what breaks the illusion that one is sliding over the other.
+//
+// easeOut, not a spring: this is a screen moving under a finger's intent, not an object with
+// weight. A spring's overshoot on a full-screen pane reads as a wobble rather than as energy.
+// 0.32s is long enough to be legible as motion and short enough not to be in the way.
+const CHAT_PUSH_TRANSITION = { duration: 0.32, ease: [0.32, 0.72, 0, 1] as const };
+
 const searchPillLabel = (view: string) =>
   view === 'docs' ? 'Search docs...' : view === 'chat' ? 'Search chats and channels...' : 'Search...';
 
@@ -4877,18 +4886,45 @@ function PageContent() {
                       label alone per direct feedback) entirely for this state. The Back button in
                       the header row re-opens this same view once a channel *is* picked (see its own
                       condition below), matching how Spaces/Docs already get back to their own tree. */}
-                  {isMobile && !activeChatEntity ? (
-                    // pb-28: this list coexists with the floating bottom nav (MobileBottomNav.tsx
-                    // is `fixed`, floating over content rather than reserving space for itself —
-                    // see its own top comment), so the list needs enough of its own bottom padding
-                    // to let the very last channel/DM row scroll fully clear of the island.
-                    // rounded-t-2xl + bg-neutral-900: a step lighter than the page's own
-                    // bg-neutral-950 header above it, matching MobileSpacesSheet.tsx's own list —
-                    // same "content sits on a rounded sheet below the header" reference the user
-                    // pointed at (ClickUp's own Chats list), applied consistently everywhere a
-                    // mobile screen is fundamentally a plain list like this one.
-                    <div className="h-full overflow-y-auto px-3 py-3 pb-28 bg-neutral-900 rounded-t-2xl">
-                      <ChatSidebar workspaceId={activeWorkspaceId} />
+                  {isMobile ? (
+                    // Push transition, iOS/Discord/ClickUp-style: the list slides only PART of the
+                    // way left while the conversation comes all the way in from the right, on top
+                    // of it. The asymmetry is the whole effect — the user described it exactly:
+                    // "bakgrunnsvinduet skyves litt til venstre, kanskje 1/3 av veien, mens det
+                    // nye vinduet skyves raskere over hele veien... foran den siden vi var på". If
+                    // both moved the same distance it would read as a carousel, not as depth.
+                    //
+                    // Both panes are absolutely positioned so they genuinely overlap mid-flight
+                    // (AnimatePresence's default sync mode keeps both mounted); the wrapper is
+                    // `relative overflow-hidden` so whatever is off-screen is clipped rather than
+                    // widening the page. No `position: fixed` lives inside either pane — checked,
+                    // because a transform on an ancestor would relocate it.
+                    <div className="relative h-full overflow-hidden">
+                      <AnimatePresence initial={false}>
+                        {!activeChatEntity ? (
+                          <motion.div
+                            key="chat-list"
+                            className="absolute inset-0 overflow-y-auto px-3 py-3 pb-28 bg-neutral-900 rounded-t-2xl"
+                            initial={{ x: '-33%' }}
+                            animate={{ x: 0 }}
+                            exit={{ x: '-33%' }}
+                            transition={CHAT_PUSH_TRANSITION}
+                          >
+                            <ChatSidebar workspaceId={activeWorkspaceId} />
+                          </motion.div>
+                        ) : (
+                          <motion.div
+                            key="chat-panel"
+                            className="absolute inset-0 bg-neutral-950"
+                            initial={{ x: '100%' }}
+                            animate={{ x: 0 }}
+                            exit={{ x: '100%' }}
+                            transition={CHAT_PUSH_TRANSITION}
+                          >
+                            <ChatPanel />
+                          </motion.div>
+                        )}
+                      </AnimatePresence>
                     </div>
                   ) : (
                     <ChatPanel />

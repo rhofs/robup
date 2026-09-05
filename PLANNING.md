@@ -3834,3 +3834,39 @@ on the chance one gets opened is a real cost in a real workspace, and this is a 
   four other changes. It touches the same mobile view-switching machinery that has cost this
   project many rounds (the popup-menu saga, the Chat-vs-Planner bounce, the nav remount), so it
   deserves its own pass rather than being bundled in behind unverified work.
+
+### Same session — the push transition, and the nav pill's squash
+
+Reordering and Undo confirmed working on-device first. Then two animation requests, both described
+precisely enough to build from.
+
+**Push transition into a conversation.** The user's own description is the specification: the
+outgoing view slides only *part* of the way left ("kanskje 1/3 av veien") while the incoming one
+travels the full width from the right, over the top of it. The asymmetry is the entire effect — if
+both moved the same distance it would read as a carousel rather than as one screen sliding over
+another. Built for Chat (list → conversation) only, which is the case that was named and the
+cleanest one to get right first.
+
+Both panes are absolutely positioned inside a `relative overflow-hidden` wrapper so they genuinely
+overlap mid-flight, with `AnimatePresence` in its default sync mode keeping both mounted. Verified
+first that neither pane contains a `position: fixed` element — a transform on an ancestor would
+relocate it, the hazard already recorded twice this week.
+
+`easeOut` rather than a spring, deliberately: this is a screen following a finger's intent, not an
+object with weight, and a spring's overshoot across a full-screen pane reads as a wobble. Both panes
+share one transition constant so they cannot drift out of step; two different curves would let the
+incoming pane arrive before the outgoing one settles, which is precisely what breaks the illusion.
+
+**Nav pill squash.** Requested against ClickUp's: "den skvises litt inn i det den bremser, akkurat
+som en boble med velocity." Built as **two nested motion elements** — the outer owns `layoutId` and
+therefore the position animation, the inner owns the scale. On a single element, framer-motion's
+layout animation and an explicit scale animation fight over the same transform and neither wins;
+that is the whole reason for the nesting. The inner element is keyed on the destination tab so the
+keyframes re-run on every move rather than only on mount, and squashes along the axis of travel
+(wider and flatter arriving, settling round). The pill's own movement spring was softened slightly
+(500/34 → 480/32) because the squash only reads as weight if there is a moment of braking for it to
+happen during.
+
+Builds clean. Neither seen on a device — and animation work on this project has a long history of
+looking different in practice than in reasoning, so both are worth a specific look, especially
+whether the 1/3 offset feels right or wants to be nearer 20%.
