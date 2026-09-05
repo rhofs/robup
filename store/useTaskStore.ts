@@ -504,6 +504,10 @@ interface TaskStore {
   // the implementation for why that needs a slower refetch-based path instead of a local patch.
   moveList: (spaceId: string, listId: string, folderId: string | null, targetSpaceId?: string) => Promise<void>;
   reorderList: (spaceId: string, listId: string, order: number) => Promise<void>;
+  // Manual task position within a List. Mirrors reorderList exactly, including the undo entry —
+  // one task, one order value; the caller renumbers a whole run of siblings inside a
+  // useHistoryStore transaction so a single Ctrl+Z (or the mobile Undo toast) puts them all back.
+  reorderTask: (taskId: string, order: number) => Promise<void>;
   deleteList: (spaceId: string, listId: string) => Promise<void>;
   // Non-destructive, independent of deleteList/Trash — cascades to every Task inside (see
   // lib/archiveCascade.ts). `archived: false` restores.
@@ -2189,6 +2193,23 @@ export const useTaskStore = create<TaskStore>((set, get) => {
         undo: () => get().moveList(targetSpaceId ?? spaceId, listId, oldFolderId, spaceId),
         redo: () => get().moveList(spaceId, listId, folderId, targetSpaceId),
       });
+    },
+
+    reorderTask: async (taskId, order) => {
+      const oldOrder = get().tasks.find((t) => t.id === taskId)?.order;
+      set((state) => ({ tasks: state.tasks.map((t) => (t.id === taskId ? { ...t, order } : t)) }));
+      await fetch(`/api/tasks/${taskId}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ order }),
+      });
+      if (oldOrder !== undefined && oldOrder !== order) {
+        useHistoryStore.getState().push({
+          label: 'Reorder task',
+          undo: () => get().reorderTask(taskId, oldOrder),
+          redo: () => get().reorderTask(taskId, order),
+        });
+      }
     },
 
     reorderList: async (spaceId, listId, order) => {

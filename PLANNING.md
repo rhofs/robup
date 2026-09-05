@@ -3761,3 +3761,44 @@ nesting (the same ambiguity Spaces/Folders/Lists already solve with `reorder*Rel
 indicator, so there is a pattern to follow), and — the part that is a real product decision rather
 than a mechanical one — an answer for what manual order means while a sort is active. Those two
 cannot both win. Raised with the user rather than picked unilaterally.
+
+### Same session — manual task ordering, and the sorting question that came with it
+
+Requested: "det må også være mulig å flytte tasks rundt om i selve listen og. ikke bare inn i andre
+tasks." Not a tweak — `Task` had no order column at all, so tasks came back `orderBy: createdAt
+desc` and there was nowhere for a manual position to live. This is a large part of *why* accidental
+nesting kept happening: dropping onto another task was the only thing a drag could do.
+
+**The design question was put to the user rather than decided unilaterally**, because manual order
+and the list's existing sort (due date / start date / name) cannot both win. Three options were
+offered; the user picked the ClickUp/Notion behaviour: **manual order is the default, and choosing
+a sort overrides it until set back to "none".** Recorded here because it is exactly the kind of
+choice a later session would otherwise re-litigate.
+
+Built, following the `reorder*RelativeTo` pattern Spaces/Folders/Lists already use:
+
+- `Task.order Int @default(0)` plus a migration. SQLite implements this as a table rebuild, which
+  is the shape AGENTS.md warns about, so it was **proved non-destructive rather than assumed**:
+  built a database on the previous migrations, inserted tasks with descriptions and assignees,
+  applied the new migration, and confirmed all three survived intact with `order = 0`.
+- `reorderTask` in the store, mirroring `reorderList` including its undo entry, and
+  `reorderTaskRelativeTo` in `page.tsx` renumbering the whole sibling run inside one
+  `transaction()` so a single undo restores all of it. The updates are awaited together inside the
+  transaction — un-awaited they would land outside the group and undo one task at a time, which is
+  the `transaction()` trap already documented in Known bugs.
+- Siblings means same List **and** same parent. Anything else is a move, and is left to the
+  existing move/nest paths rather than silently doing something the drop did not look like.
+
+**The interaction design is the interesting part.** Dropping one task on another now means two
+different things depending on where in the row the finger is: the outer 30% at each edge reorders
+(with a blue insertion line showing exactly where), the middle 40% still nests as a subtask. Both
+actions are useful and both are reachable from one gesture, so the row is split rather than one
+being dropped — and the visible line is what tells you which you are about to get. Without the
+dead zone, nesting would become nearly unhittable on a phone; without the edges, there would be no
+way to reorder at all. Position within the row is computed from a real `pointermove` listener, not
+from `onDragOver`, which only fires when the closest droppable *changes* — the same gotcha this
+file already documents for the Space and List indicators.
+
+**Verified against a real database**: default order matches creation order, moving a task to the
+top persists, moving it back restores the original sequence, a neighbour swap lands correctly, and
+dropping a task on itself is a no-op. All seven passed.

@@ -32,6 +32,10 @@ type TaskRowProps = {
   onRenameHandled?: () => void;
   animateEntrance?: boolean;
   navScope: string;
+  // 'above' | 'below' while a task is being dragged near this row's top or bottom edge — the line
+  // is what distinguishes "this will reorder" from "this will nest as a subtask", which is
+  // otherwise the same gesture on the same target.
+  dropIndicator?: 'above' | 'below' | null;
 };
 
 function TaskRowImpl({
@@ -48,6 +52,7 @@ function TaskRowImpl({
   onRenameHandled,
   animateEntrance = true,
   navScope,
+  dropIndicator,
 }: TaskRowProps) {
   const {
     users,
@@ -328,6 +333,7 @@ function TaskRowImpl({
       exit={{ opacity: 0, scale: 0.85, filter: 'blur(6px)', y: -6 }}
       transition={{ duration: 0.28, ease: 'easeOut' }}
     >
+      {dropIndicator === 'above' && <div className="h-0.5 -mb-0.5 rounded-full bg-blue-500" />}
       {isMobile ? (
         // ================= MOBILE ROW — a "card," not a table row: checkbox + title on top
         // (title wraps instead of truncating), status/assignee/dates/custom fields always visible
@@ -530,6 +536,7 @@ function TaskRowImpl({
           </div>
         </div>
       )}
+      {dropIndicator === 'below' && <div className="h-0.5 -mt-0.5 rounded-full bg-blue-500" />}
     </motion.div>
   );
 }

@@ -526,6 +526,14 @@ model Task {
   archivedAt DateTime? @map("archived_at")
   deletedAt  DateTime? @map("deleted_at")
 
+  // Manual position within its List, set by dragging a task between two others. Until this
+  // existed, tasks came back ordered by createdAt with no way to arrange them at all — the only
+  // thing a drag could do was drop a task ONTO another and nest it as a subtask, which is a large
+  // part of why that kept happening by accident. Same `order` convention Space/Folder/List already
+  // use, including the "everything starts at 0 and stays tied until something is actually dragged"
+  // behaviour, where createdAt remains the tie-breaker.
+  order Int @default(0)
+
   listId String @map("list_id")
   list   List   @relation(fields: [listId], references: [id], onDelete: Cascade)
 

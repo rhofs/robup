@@ -623,6 +623,7 @@ function PageContent() {
     deleteSpace,
     moveList,
     reorderList,
+    reorderTask,
     updateList,
     deleteList,
     archiveList,
@@ -1897,6 +1898,15 @@ function PageContent() {
       return false;
     });
 
+    // Manual order is the default view; picking a sort overrides it until it is set back to
+    // "none" — the behaviour the user chose when this was raised, and the one ClickUp/Notion use.
+    // createdAt stays the tie-breaker, so a List nobody has ever dragged in looks exactly as it
+    // did before this feature existed (every task's order is 0 until something is actually moved).
+    if (sortBy === 'none') {
+      result = [...result].sort(
+        (a, b) => a.order - b.order || new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
+      );
+    }
     if (sortBy !== 'none') {
       result.sort((a: any, b: any) => {
         const key = sortBy === 'dueDate' ? 'dueDate' : sortBy === 'startDate' ? 'startDate' : 'title';
@@ -2284,6 +2294,13 @@ function PageContent() {
   // itself a List, never for a plain task drag over the same target. Lets a List be dropped at an
   // exact position among a *different* Space's Lists, not just appended via that Space's header.
   const [listDropIndicator, setListDropIndicator] = useState<{ targetId: string; position: 'above' | 'below' } | null>(null);
+  // Dragging one task over another now means two different things depending on WHERE in the row
+  // the finger is: near an edge it reorders, in the middle it still nests as a subtask. Before
+  // this, a task drag could only ever nest — there was no manual order to move into, which is a
+  // large part of why nesting kept happening by accident ("de havner alltid inni en annen task").
+  // Null while hovering the middle, which is what makes "no line showing" mean "this will nest."
+  const [taskDropIndicator, setTaskDropIndicator] = useState<{ targetId: string; position: 'above' | 'below' } | null>(null);
+  const taskOverRef = useRef<{ targetId: string; top: number; height: number } | null>(null);
   const listOverRef = useRef<{ targetId: string; top: number; height: number } | null>(null);
 
   // dnd-kit ships a built-in autoScroll, but it never actually kicks in for this sidebar (verified
@@ -2327,6 +2344,32 @@ function PageContent() {
       cancelAnimationFrame(raf);
     };
   }, [activeDragEntity?.kind]);
+
+  // Where within the hovered row the finger actually is, recomputed on every real pointermove for
+  // the same reason the Space/List indicators do it: `onDragOver` only fires when the *closest*
+  // droppable changes, so it cannot tell "near the top edge" from "in the middle".
+  //
+  // The middle 40% is a deliberate dead zone that still nests. Reordering and nesting are both
+  // useful and both reachable from the same gesture, so the row is split rather than one of them
+  // being dropped: edges reorder, centre nests, and the visible line is what tells you which you
+  // are about to get. Without a dead zone, nesting would become almost unhittable on a phone.
+  useEffect(() => {
+    if (!activeDragTask) return;
+    const REORDER_EDGE_FRACTION = 0.3;
+    const onPointerMove = (e: PointerEvent) => {
+      const over = taskOverRef.current;
+      if (!over) {
+        setTaskDropIndicator(null);
+        return;
+      }
+      const offset = (e.clientY - over.top) / (over.height || 1);
+      if (offset < REORDER_EDGE_FRACTION) setTaskDropIndicator({ targetId: over.targetId, position: 'above' });
+      else if (offset > 1 - REORDER_EDGE_FRACTION) setTaskDropIndicator({ targetId: over.targetId, position: 'below' });
+      else setTaskDropIndicator(null);
+    };
+    window.addEventListener('pointermove', onPointerMove);
+    return () => window.removeEventListener('pointermove', onPointerMove);
+  }, [activeDragTask]);
 
   const [toast, setToast] = useState<{ message: string; undoable?: boolean } | null>(null);
   const toastTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -2634,6 +2677,36 @@ function PageContent() {
     });
   };
 
+  // Renumbers the dragged task's whole sibling run inside one transaction, so a single Ctrl+Z (or
+  // the mobile Undo toast) puts every affected task back — the same shape reorderSpaceRelativeTo
+  // uses. Only top-level tasks in the same List are considered siblings: a subtask reorders among
+  // its own parent's children, and dragging across Lists is still the "move" path, not this one.
+  const reorderTaskRelativeTo = (draggedId: string, targetId: string, position: 'above' | 'below') => {
+    const dragged = tasks.find((t) => t.id === draggedId);
+    const target = tasks.find((t) => t.id === targetId);
+    if (!dragged || !target) return;
+    // Reordering only means anything among true siblings. Anything else (a different List, a
+    // different parent) is a move, and is left to the existing move/nest paths rather than
+    // silently doing something the drop did not look like.
+    if (dragged.listId !== target.listId || (dragged.parentId ?? null) !== (target.parentId ?? null)) return;
+
+    const siblings = tasks
+      .filter((t) => t.listId === dragged.listId && (t.parentId ?? null) === (dragged.parentId ?? null) && !t.archived)
+      .sort((a, b) => a.order - b.order || new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime());
+    const withoutDragged = siblings.filter((t) => t.id !== draggedId);
+    const targetIndex = withoutDragged.findIndex((t) => t.id === targetId);
+    if (targetIndex === -1) return;
+    const insertAt = position === 'below' ? targetIndex + 1 : targetIndex;
+    const next = [...withoutDragged.slice(0, insertAt), dragged, ...withoutDragged.slice(insertAt)];
+    useHistoryStore.getState().transaction('Reorder tasks', async () => {
+      // Awaited together inside the transaction, never fire-and-forget: transaction() closes the
+      // moment its callback returns, and each reorderTask only pushes its history entry after its
+      // own fetch resolves — un-awaited, they would land outside the group and Ctrl+Z would undo
+      // one task at a time. This exact trap is documented in Known bugs.
+      await Promise.all(next.map((t, index) => (t.order !== index ? reorderTask(t.id, index) : null)));
+    });
+  };
+
   const handleTaskDragStart = (event: DragStartEvent) => {
     const draggedId = event.active.id as string;
 
@@ -2723,6 +2796,22 @@ function PageContent() {
     }
     const draggedId = active.id as string;
     const overId = over.id as string;
+
+    // A bare id (no `kind:` prefix) is a task being dragged. Record the row it is over so the
+    // pointermove loop below can work out *where* in that row the finger is — `onDragOver` alone
+    // only reports which row is closest, never the position within it (a documented gotcha in this
+    // file's own Known bugs).
+    if (!draggedId.includes(':')) {
+      if (overId.startsWith('task:') && over.rect) {
+        const targetId = overId.slice('task:'.length);
+        taskOverRef.current = targetId === draggedId ? null : { targetId, top: over.rect.top, height: over.rect.height };
+      } else {
+        taskOverRef.current = null;
+        setTaskDropIndicator(null);
+      }
+      return;
+    }
+    taskOverRef.current = null;
 
     if (draggedId.startsWith('list-drag:')) {
       spaceOverRef.current = null;
@@ -2884,6 +2973,7 @@ function PageContent() {
     const droppedSpaceIndicator = spaceDropIndicator;
     const droppedDocIndicator = docDropIndicator;
     const droppedListIndicator = listDropIndicator;
+    const droppedTaskIndicator = taskDropIndicator;
     setActiveDragTask(null);
     setActiveDragEntity(null);
     setSpaceDropIndicator(null);
@@ -2892,6 +2982,8 @@ function PageContent() {
     docOverRef.current = null;
     setListDropIndicator(null);
     listOverRef.current = null;
+    setTaskDropIndicator(null);
+    taskOverRef.current = null;
     const { active, over } = event;
     if (!over) return;
     const draggedId = active.id as string;
@@ -3088,6 +3180,13 @@ function PageContent() {
 
     if (overId.startsWith('task:')) {
       const targetId = overId.slice('task:'.length);
+      // A visible insertion line means the finger was near an edge: reorder. No line means the
+      // middle of the row: nest, exactly as before.
+      if (droppedTaskIndicator && droppedTaskIndicator.targetId !== draggedId) {
+        reorderTaskRelativeTo(draggedId, droppedTaskIndicator.targetId, droppedTaskIndicator.position);
+        showUndoableToast('Task moved');
+        return;
+      }
       if (targetId !== draggedId) {
         const target = tasks.find((t) => t.id === targetId);
         optimisticSetParent(draggedId, targetId);
@@ -4913,6 +5012,7 @@ function PageContent() {
                       key={task._localId || task.id}
                       task={task}
                       navScope={navScope}
+                      dropIndicator={taskDropIndicator?.targetId === task.id ? taskDropIndicator.position : null}
                       onOpen={() => setModalTaskStack([task.id])}
                       columns={activeColumns}
                       gridTemplate={rowGridTemplate}
