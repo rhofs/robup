@@ -5,6 +5,7 @@ import { Hash, MessageCircle, Pencil, Plus, Check, Bell, BellOff } from 'lucide-
 import { useChatStore, type ChatChannel, type Connection } from '../store/useChatStore';
 import { useSessionStore } from '../store/useSessionStore';
 import { useIsMobile } from '../hooks/useIsMobile';
+import { hapticTap } from '../lib/haptics';
 import FloatingPopover from './FloatingPopover';
 
 type ChatSidebarProps = {
@@ -159,7 +160,12 @@ export default function ChatSidebar({ workspaceId }: ChatSidebarProps) {
             ) : (
               <div key={c.id} className={`group relative ${c.muted ? 'opacity-60' : ''}`}>
                 <button
-                  onClick={() => setActiveChannelId(c.id)}
+                  onClick={() => {
+                    // Same tick the bottom nav gives a destination change — opening a
+                    // conversation is a navigation, and it now animates like one too.
+                    hapticTap();
+                    setActiveChannelId(c.id);
+                  }}
                   className={`w-full text-left py-1.5 pr-11 rounded text-xs font-medium transition flex items-center gap-1.5 cursor-pointer border-l-2 ${
                     activeChannelId === c.id
                       ? 'bg-neutral-800 text-app-strong border-blue-500 pl-2'

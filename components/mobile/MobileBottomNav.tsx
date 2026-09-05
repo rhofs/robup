@@ -145,9 +145,21 @@ function NavPill({ pillKey }: { pillKey: string }) {
         // Keyed on the destination so the keyframes re-run on every move rather than only on mount.
         key={pillKey}
         className="w-full h-full bg-blue-500/15 rounded-full"
-        initial={{ scaleX: 1.22, scaleY: 0.82 }}
-        animate={{ scaleX: 1, scaleY: 1 }}
-        transition={{ type: 'spring', stiffness: 700, damping: 18, mass: 0.5 }}
+        // Three keyframes, not two — this is real squash-and-stretch rather than a single settle.
+        // In flight it stretches along the direction of travel and thins; on arrival it overshoots
+        // the other way, compressing horizontally and bulging taller, before settling round. The
+        // second phase is what was missing: without a compression on arrival there is no "impact"
+        // for the eye to read, which is why the first version barely registered.
+        //
+        // Volume is roughly conserved at each step (wider ⇒ flatter, narrower ⇒ taller), which is
+        // what makes it read as a bubble rather than as a box being resized.
+        // transformOrigin bottom: the vertical growth then goes UPWARD, out of the nav bar, instead
+        // of splitting either side of the centre — "at den eser ut oppover for å gjøre opp for
+        // presset innover".
+        style={{ transformOrigin: 'bottom center' }}
+        initial={{ scaleX: 1.3, scaleY: 0.78 }}
+        animate={{ scaleX: [1.3, 0.88, 1], scaleY: [0.78, 1.18, 1] }}
+        transition={{ duration: 0.42, times: [0, 0.55, 1], ease: [0.22, 1, 0.36, 1] }}
       />
     </motion.div>
   );

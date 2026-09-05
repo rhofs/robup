@@ -67,6 +67,7 @@ import {
 } from 'lucide-react';
 import { useTaskStore, HierarchySpace, HierarchyFolder, HierarchyList, HierarchyDocFolder, HierarchyRoom, HierarchyWorkspace, StatusDef, CustomFieldDef, Task, TaskDoc, AppUser } from '../store/useTaskStore';
 import { useHistoryStore } from '../store/useHistoryStore';
+import { hapticTap } from '../lib/haptics';
 import { useSessionStore } from '../store/useSessionStore';
 import { useChatStore } from '../store/useChatStore';
 import { usePresenceConnection } from '../lib/collab/usePresenceConnection';
@@ -4206,7 +4207,10 @@ function PageContent() {
                   itself is already what's showing otherwise, so there's nothing to go "back" to. */}
               {activeView === 'chat' && !!activeChatEntity && (
                 <button
-                  onClick={() => setActiveChatChannelId(null)}
+                  onClick={() => {
+                    hapticTap();
+                    setActiveChatChannelId(null);
+                  }}
                   title="Back"
                   className="p-1.5 rounded text-neutral-400 hover:text-app-strong hover:bg-neutral-800/60 cursor-pointer"
                 >
@@ -4237,8 +4241,26 @@ function PageContent() {
                 that should be about reading and writing messages. It stays on the channel/DM list,
                 where it belongs. Same condition the floating nav uses to get out of the way of a
                 full-screen conversation, so the two stay consistent. */}
+            {/* Slides out with the list rather than vanishing. Removing it outright made the search
+                bar "cutte vekk" the instant a conversation opened, while everything below it was
+                still travelling — one element disappearing mid-slide is exactly what breaks the
+                impression that the whole page is moving as one. Same curve and the same 1/3
+                distance as the outgoing pane, so it moves in step with it. */}
+            <AnimatePresence initial={false}>
             {!(activeView === 'chat' && isMobile && activeChatEntity) && (
-            <div className="md:hidden absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 w-[min(calc(100%-88px),420px)]">
+            <motion.div
+              key="search-pill"
+              // x is a percentage of the pill's OWN width, and -50% is what centres it against
+              // `left-1/2` (replacing the -translate-x-1/2 class, which would otherwise fight
+              // framer-motion for the same transform). -83% is that centre shifted a further 33%
+              // left — the same fraction the outgoing pane travels. Enter and exit share it, so
+              // going back the pill returns from the left alongside the list rather than arriving
+              // from the opposite side.
+              initial={{ x: '-83%', opacity: 0 }}
+              animate={{ x: '-50%', opacity: 1 }}
+              exit={{ x: '-83%', opacity: 0 }}
+              transition={CHAT_PUSH_TRANSITION}
+              className="md:hidden absolute left-1/2 top-1/2 -translate-y-1/2 w-[min(calc(100%-88px),420px)]">
               <button
                 onClick={() => setCommandPaletteOpen(true)}
                 className="w-full flex items-center gap-1.5 bg-neutral-900/60 border border-neutral-800/80 rounded-full px-3 py-3 text-neutral-500 hover:border-neutral-700 hover:text-neutral-300 cursor-pointer"
@@ -4246,8 +4268,9 @@ function PageContent() {
                 <Search className="w-3.5 h-3.5 shrink-0" />
                 <span className="text-[11px] truncate">{searchPillLabel(activeView)}</span>
               </button>
-            </div>
+            </motion.div>
             )}
+            </AnimatePresence>
             {/* Hidden on mobile entirely — a breadcrumb reads as unpolished clutter at phone
                 width, and the "Lists"/"Channels"/"Archive" buttons below already tell you where
                 you are well enough without it. Desktop keeps it unchanged. */}

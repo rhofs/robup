@@ -3891,3 +3891,36 @@ as braking. Now an expo-style out — `[0.16, 1, 0.3, 1]` — which covers most 
 and then glides visibly into place, over 0.46s rather than 0.32s. Deceleration needs time to be
 perceived at all; a fast ease-out simply reads as a fast move, which is what "går litt fort"
 was describing.
+
+### Same session — four polish items on the push transition
+
+**The search bar "cut away" instead of sliding.** It was being unmounted outright the instant a
+conversation opened, while everything below it was still travelling — one element disappearing
+mid-slide is exactly what breaks the impression of a page moving as one. It now slides out on the
+same curve and the same 1/3 distance as the outgoing pane. `x` here is a percentage of the pill's
+*own* width and `-50%` is what centres it against `left-1/2`, replacing the `-translate-x-1/2`
+class, which would otherwise fight framer-motion for the same transform. Enter and exit share
+`-83%`, so returning to the list brings the pill back from the left alongside it rather than from
+the opposite side — that was wrong in the first draft and caught before shipping.
+
+Worth noting the honest limit: this makes the *changing* part of the header travel with the page.
+Genuinely sliding the entire chrome would mean restructuring the shared header that every view
+renders through, which is a much larger change than this and not obviously better.
+
+**Haptics on entering and leaving a conversation** — the same tick the bottom nav gives a
+destination change. Opening a conversation is a navigation, and now that it animates like one it
+should feel like one.
+
+**Real squash-and-stretch on the nav pill.** The first version had only two keyframes (stretched →
+settled), which is why it barely registered: there was no compression on arrival for the eye to read
+as impact. Now three — stretched and thin in flight, compressed and taller on arrival, then round —
+with volume roughly conserved at each step, which is what separates a bubble from a box being
+resized. `transformOrigin: bottom center` sends the vertical growth *upward*, out of the nav bar,
+rather than splitting either side of the centre: "at den eser ut oppover for å gjøre opp for presset
+innover".
+
+**Day separators in chat** are now a left-aligned label over a full-width hairline, matching the
+reference. The previous centred pill floated in the middle of the column and read as a chip rather
+than as a break in the conversation.
+
+All build clean; none seen on a device.

@@ -396,10 +396,13 @@ export default function ChatPanel() {
         )}
         {days.map((day, dayIdx) => (
           <div key={dayIdx} className="space-y-3">
-            <div className="flex items-center justify-center">
-              <span className="text-[10px] font-medium text-neutral-500 bg-neutral-900 border border-neutral-800 rounded-full px-3 py-1">
-                {day.label}
-              </span>
+            {/* A left-aligned label over a full-width hairline, matching the reference the user
+                pointed at. The previous centred pill floated in the middle of the column and read
+                as a chip rather than as a break in the conversation — a rule that spans the whole
+                width is what actually divides one day from the next. */}
+            <div className="pt-1">
+              <div className="text-[10px] font-medium text-neutral-500 mb-1.5">{day.label}</div>
+              <div className="h-px bg-neutral-800" />
             </div>
             {day.runs.map((run, runIdx) => {
               const first = run.messages[0];
