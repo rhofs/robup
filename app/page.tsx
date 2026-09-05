@@ -6764,6 +6764,24 @@ function PageContent() {
           setNavigation(spaceId, [listId]);
           setActiveView('board');
         }}
+        // Long-press menus, reusing the desktop sidebar's own openers verbatim rather than a
+        // mobile-only copy — the menus themselves are already rendered globally at z-[61] with
+        // fixed positioning, so they land above the sheet with no further work. Renaming,
+        // recolouring and deleting a Space/Folder/List had no mobile entry point at all before
+        // this: the only one lived inside the `hidden md:flex` sidebar.
+        onSpaceMenu={(spaceId, x, y) => {
+          const space = workspaces.flatMap((w) => w.spaces).find((sp) => sp.id === spaceId);
+          if (space) setSpaceMenu({ x, y, space });
+        }}
+        onFolderMenu={(folderId, x, y) => {
+          const folder = workspaces.flatMap((w) => w.spaces).flatMap((sp) => sp.folders).find((f) => f.id === folderId);
+          if (folder) setFolderMenu({ x, y, folder });
+        }}
+        onListMenu={(spaceId, listId, x, y) => {
+          const space = workspaces.flatMap((w) => w.spaces).find((sp) => sp.id === spaceId);
+          const list = space?.lists.find((l) => l.id === listId);
+          if (list) setListMenu({ x, y, list, spaceId });
+        }}
         onSelectDoc={(spaceId, docId) => {
           setModalTaskStack([]);
           setNavigation(spaceId, []);
@@ -6795,6 +6813,24 @@ function PageContent() {
           setModalTaskStack([]);
           setNavigation(spaceId, [listId]);
           setActiveView('board');
+        }}
+        // Long-press menus, reusing the desktop sidebar's own openers verbatim rather than a
+        // mobile-only copy — the menus themselves are already rendered globally at z-[61] with
+        // fixed positioning, so they land above the sheet with no further work. Renaming,
+        // recolouring and deleting a Space/Folder/List had no mobile entry point at all before
+        // this: the only one lived inside the `hidden md:flex` sidebar.
+        onSpaceMenu={(spaceId, x, y) => {
+          const space = workspaces.flatMap((w) => w.spaces).find((sp) => sp.id === spaceId);
+          if (space) setSpaceMenu({ x, y, space });
+        }}
+        onFolderMenu={(folderId, x, y) => {
+          const folder = workspaces.flatMap((w) => w.spaces).flatMap((sp) => sp.folders).find((f) => f.id === folderId);
+          if (folder) setFolderMenu({ x, y, folder });
+        }}
+        onListMenu={(spaceId, listId, x, y) => {
+          const space = workspaces.flatMap((w) => w.spaces).find((sp) => sp.id === spaceId);
+          const list = space?.lists.find((l) => l.id === listId);
+          if (list) setListMenu({ x, y, list, spaceId });
         }}
         onSelectDoc={(spaceId, docId) => {
           setModalTaskStack([]);

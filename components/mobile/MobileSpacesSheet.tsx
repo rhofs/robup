@@ -5,6 +5,7 @@ import { ChevronRight, ChevronDown, Globe, Search, X, Plus, Folder as FolderIcon
 import { useTaskStore, type HierarchySpace } from '../../store/useTaskStore';
 import { FOLDER_ICON_MAP } from '../FolderTree';
 import FloatingPopover from '../FloatingPopover';
+import { hapticTap } from '../../lib/haptics';
 import { getChildFolders, getListsIn, getBoardDocsIn } from '../../lib/folderTree';
 
 type Props = {
@@ -33,6 +34,12 @@ type Props = {
   // correctly pointed at exactly where you were, reported live as "husker ikke hvor Spaces var."
   activeListIds: Set<string>;
   onSelectSpace: (spaceId: string) => void;
+  // Long-press menus, mirroring the desktop sidebar's right-click menus exactly — page.tsx passes
+  // its own existing openSpaceMenu/openFolderMenu/openListMenu through, so there is one menu
+  // implementation, not a second mobile copy that could drift.
+  onSpaceMenu?: (spaceId: string, x: number, y: number) => void;
+  onFolderMenu?: (folderId: string, x: number, y: number) => void;
+  onListMenu?: (spaceId: string, listId: string, x: number, y: number) => void;
   onSelectList: (spaceId: string, listId: string) => void;
   onSelectDoc: (spaceId: string, docId: string) => void;
 };
@@ -56,6 +63,90 @@ type Props = {
 // navigate. Docs alongside Lists at each level mirrors FolderTree.tsx's own desktop behavior
 // exactly (a Folder in the Tasks-tab tree can hold both — lib/folderTree.ts's getBoardDocsIn is a
 // second, independent axis from the standalone Docs tab's own folder tree).
+// Long-press to open the same context menu the desktop sidebar opens on right-click. None of this
+// existed on mobile at all: renaming, recolouring or deleting a Space/Folder/List was simply
+// unreachable from a phone, because the only entry point was FolderTree.tsx's `onContextMenu`
+// inside an `<aside className="hidden md:flex">`. Reported live: "Det er ikke mulig å holde inne,
+// for å 'høyreklikke' for å rename etc."
+//
+// Both paths are wired, because neither alone is enough: Android Chrome fires a real `contextmenu`
+// event on long-press, iOS Safari does not do so dependably for a plain element. The timer covers
+// both; `handledRef` stops a platform that fires both from opening the menu twice.
+//
+// 500ms matches ChatThreadPanel's own long-press. The gesture is abandoned as soon as the finger
+// moves more than a few pixels — a phone list is something you scroll far more often than you
+// long-press, and a scroll that opened a rename menu would be worse than no menu at all.
+const LONG_PRESS_MS = 500;
+const LONG_PRESS_MOVE_TOLERANCE_PX = 8;
+
+function useLongPressMenu(onOpen: ((x: number, y: number) => void) | undefined) {
+  const timerRef = useRef<number | null>(null);
+  const startRef = useRef({ x: 0, y: 0 });
+  const handledRef = useRef(false);
+
+  const cancel = () => {
+    if (timerRef.current !== null) {
+      window.clearTimeout(timerRef.current);
+      timerRef.current = null;
+    }
+  };
+
+  if (!onOpen) return {};
+
+  return {
+    onPointerDown: (e: React.PointerEvent) => {
+      handledRef.current = false;
+      startRef.current = { x: e.clientX, y: e.clientY };
+      cancel();
+      const { clientX, clientY } = e;
+      timerRef.current = window.setTimeout(() => {
+        handledRef.current = true;
+        hapticTap();
+        onOpen(clientX, clientY);
+      }, LONG_PRESS_MS);
+    },
+    onPointerMove: (e: React.PointerEvent) => {
+      const dx = Math.abs(e.clientX - startRef.current.x);
+      const dy = Math.abs(e.clientY - startRef.current.y);
+      if (dx > LONG_PRESS_MOVE_TOLERANCE_PX || dy > LONG_PRESS_MOVE_TOLERANCE_PX) cancel();
+    },
+    onPointerUp: cancel,
+    onPointerCancel: cancel,
+    // The row's own onClick must not also fire after a long press opened a menu.
+    onClickCapture: (e: React.MouseEvent) => {
+      if (handledRef.current) {
+        e.preventDefault();
+        e.stopPropagation();
+        handledRef.current = false;
+      }
+    },
+    onContextMenu: (e: React.MouseEvent) => {
+      e.preventDefault();
+      cancel();
+      if (handledRef.current) return;
+      handledRef.current = true;
+      onOpen(e.clientX, e.clientY);
+    },
+  };
+}
+
+// A row that behaves like a plain button but also opens a context menu on long-press. Extracted so
+// Space, Folder and List rows share one implementation rather than three copies of the same
+// pointer bookkeeping — see useLongPressMenu above for why both the timer and `contextmenu` are
+// wired.
+function SpaceRowButton({
+  onOpenMenu,
+  children,
+  ...buttonProps
+}: React.ComponentProps<'button'> & { onOpenMenu?: (x: number, y: number) => void }) {
+  const longPress = useLongPressMenu(onOpenMenu);
+  return (
+    <button {...buttonProps} {...longPress}>
+      {children}
+    </button>
+  );
+}
+
 export default function MobileSpacesSheet({
   open,
   onClose,
@@ -69,6 +160,9 @@ export default function MobileSpacesSheet({
   onSelectSpace,
   onSelectList,
   onSelectDoc,
+  onSpaceMenu,
+  onFolderMenu,
+  onListMenu,
 }: Props) {
   // Called directly via the store, same as FolderTree.tsx's own create-Folder/List/Space
   // buttons already do — no need to thread these through app/page.tsx as props.
@@ -306,7 +400,8 @@ export default function MobileSpacesSheet({
               const isExpanded = expandedSpaceIds.has(space.id);
               return (
                 <div key={space.id}>
-                  <button
+                  <SpaceRowButton
+                    onOpenMenu={onSpaceMenu ? (x, y) => onSpaceMenu(space.id, x, y) : undefined}
                     onClick={() => toggleSpace(space.id)}
                     className={`w-full flex items-center gap-3 px-2 py-2.5 rounded-lg text-left transition cursor-pointer ${
                       activeSpaceId === space.id ? 'bg-neutral-800' : 'hover:bg-neutral-800/60'
@@ -325,7 +420,7 @@ export default function MobileSpacesSheet({
                     ) : (
                       <ChevronRight className="w-4 h-4 text-neutral-600 shrink-0" />
                     )}
-                  </button>
+                  </SpaceRowButton>
                   {isExpanded && (
                     <>
                       <SpaceContents
@@ -345,6 +440,8 @@ export default function MobileSpacesSheet({
                         onCreateFolder={(name, parentId) => createFolder(space.id, name, parentId)}
                         onCreateList={(name, folderId) => createList(space.id, name, folderId)}
                         onCreateDoc={(name, folderId) => createSpaceDoc(space.id, null, { title: name, boardFolderId: folderId })}
+                        onFolderMenu={onFolderMenu}
+                        onListMenu={onListMenu ? (listId, x, y) => onListMenu(space.id, listId, x, y) : undefined}
                       />
                     </>
                   )}
@@ -372,6 +469,8 @@ function SpaceContents({
   onCreateFolder,
   onCreateList,
   onCreateDoc,
+  onFolderMenu,
+  onListMenu,
 }: {
   space: HierarchySpace;
   folderId: string | null;
@@ -380,6 +479,8 @@ function SpaceContents({
   onToggleFolder: (folderId: string) => void;
   onSelectList: (listId: string) => void;
   onSelectDoc: (docId: string) => void;
+  onFolderMenu?: (folderId: string, x: number, y: number) => void;
+  onListMenu?: (listId: string, x: number, y: number) => void;
   onCreateFolder: (name: string, parentId: string | null) => void;
   onCreateList: (name: string, folderId: string | null) => void;
   onCreateDoc: (name: string, folderId: string | null) => void;
@@ -405,7 +506,8 @@ function SpaceContents({
         const isExpanded = expandedFolderIds.has(folder.id);
         return (
           <div key={folder.id}>
-            <button
+            <SpaceRowButton
+              onOpenMenu={onFolderMenu ? (x, y) => onFolderMenu(folder.id, x, y) : undefined}
               onClick={() => onToggleFolder(folder.id)}
               className="w-full flex items-center gap-2 py-2 rounded-lg text-left transition cursor-pointer hover:bg-neutral-800/60"
               style={{ paddingLeft: 8 + depth * 20, paddingRight: 8 }}
@@ -417,7 +519,7 @@ function SpaceContents({
               ) : (
                 <ChevronRight className="w-3.5 h-3.5 text-neutral-600 shrink-0" />
               )}
-            </button>
+            </SpaceRowButton>
             {isExpanded && (
               <SpaceContents
                 space={space}
@@ -430,6 +532,8 @@ function SpaceContents({
                 onCreateFolder={onCreateFolder}
                 onCreateList={onCreateList}
                 onCreateDoc={onCreateDoc}
+                onFolderMenu={onFolderMenu}
+                onListMenu={onListMenu}
               />
             )}
           </div>
@@ -439,15 +543,16 @@ function SpaceContents({
         const CustomIcon = leaf.icon ? FOLDER_ICON_MAP[leaf.icon] : null;
         const LIcon = CustomIcon || (leaf.kind === 'doc' ? FileText : ListIconLucide);
         return (
-          <button
+          <SpaceRowButton
             key={leaf.id}
+            onOpenMenu={onListMenu && leaf.kind === 'list' ? (x, y) => onListMenu(leaf.id, x, y) : undefined}
             onClick={() => (leaf.kind === 'list' ? onSelectList(leaf.id) : onSelectDoc(leaf.id))}
             className="w-full flex items-center gap-2 py-2 rounded-lg text-left transition cursor-pointer hover:bg-neutral-800/60"
             style={{ paddingLeft: 8 + depth * 20, paddingRight: 8 }}
           >
             <LIcon className="w-3.5 h-3.5 shrink-0" style={{ color: leaf.color || undefined }} />
             <span className="min-w-0 flex-1 text-[13px] text-neutral-400 truncate">{leaf.name}</span>
-          </button>
+          </SpaceRowButton>
         );
       })}
       <NewFolderOrListRow

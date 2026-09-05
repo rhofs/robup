@@ -3659,3 +3659,29 @@ one the same way and it was right to. If it comes back, the useful next step is 
 stills of the transition (the technique that finally cracked the Chat-vs-Planner bounce), not
 another round of reasoning — two attempted fixes have already changed nothing, which says the
 mechanism has not been identified at all.
+
+### Same session — long-press menus in the mobile Spaces/My Tasks tree
+
+Reported: "Det er ikke mulig å holde inne, for å 'høyreklikke' for å rename etc. spaces folders
+list osv." Not a regression — **it was never built for mobile.** `MobileSpacesSheet.tsx` had no
+context-menu handling of any kind, and the only entry point for renaming, recolouring or deleting a
+Space/Folder/List lived in `FolderTree.tsx`'s `onContextMenu`, inside an
+`<aside className="hidden md:flex">`. Same shape as the sign-out gap found a few days ago: a
+feature that exists, works, and is simply unreachable from a phone.
+
+Wired to the *desktop's own* `openSpaceMenu`/`openFolderMenu`/`openListMenu` state setters rather
+than a mobile copy, so there is one menu implementation and no second one to drift. The menus were
+already rendered globally (`fixed`, `z-[61]`), so they land above the sheet with no extra work.
+
+Both the long-press timer **and** `contextmenu` are wired, because neither covers both platforms:
+Android Chrome fires a real `contextmenu` on long-press, iOS Safari does not do so dependably for a
+plain element. A `handledRef` stops a platform that fires both from opening the menu twice, and an
+`onClickCapture` guard stops the row's own click from also firing after a long press selected it —
+without that, long-pressing a List would open the menu *and* navigate into the List behind it.
+
+The gesture is abandoned once the finger moves more than 8px: a phone list is scrolled far more
+often than it is long-pressed, and a scroll that opened a rename menu would be worse than no menu.
+500ms matches `ChatThreadPanel`'s existing long-press so the app feels consistent.
+
+Builds clean; not seen on a device. Worth checking specifically that scrolling the tree never
+triggers a menu, since that is the failure mode that would make the feature actively annoying.
