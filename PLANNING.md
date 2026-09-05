@@ -3601,3 +3601,45 @@ than a transform (same containing-block hazard as above) and not `display:none` 
 the very measurements the component reads back).
 
 Both build clean. Neither seen on a device.
+
+### Same session — reverted the viewport fix, and two mobile bugs I have now failed to fix twice each
+
+**The visual-viewport sizing made iOS worse and has been reverted.** With the root sized to
+`visualViewport.height`, the composer and the rest of the conversation had to be swiped up to reach
+at all. That is the predictable failure of shrinking the app *without* compensating for the visual
+viewport's own scroll offset: the app becomes shorter than the layout viewport, the document can
+scroll, and Safari's scroll position leaves part of the app off-screen. Compensating requires a
+transform on the root, which would relocate every `position: fixed` element in the app — so that
+door is shut, and the remedy needs a different shape entirely. The *diagnosis* still stands (it is
+a keyboard/visual-viewport problem, not horizontal overflow); the remedy does not.
+
+Back to `h-dvh`, which is imperfect rather than harmful.
+
+**A commit-hygiene mistake worth recording:** `git revert` on that commit removed only the hook
+file, because the `app/page.tsx` half had been swept into the *previous* commit by a
+`git add app/page.tsx` issued while two unrelated edits sat in the working tree. That commit
+therefore contained a change its own message never mentioned, and the revert left the tree in a
+non-compiling state. Staging a whole file while more than one change is in flight is how that
+happens.
+
+**Where these two stand, stated plainly:**
+
+- *iOS keyboard cropping* — two attempts, two failures. First `min-w-0`/`overflow-x-hidden` (wrong
+  axis entirely), then visual-viewport sizing (right axis, worse outcome).
+- *Phantom "menu opened and closed" on leaving a DM* — two attempts, two failures. First
+  suppressing the height transition until first measurement, then keeping the nav mounted instead
+  of unmounting it. Neither changed the symptom, which means the animation is something I have not
+  identified at all, not a variation of what I assumed.
+
+Both are visual/animation bugs on a device this session cannot see, and both have now absorbed
+several rounds of plausible-sounding reasoning that produced nothing. **The project's own history
+already answers this**: the Chat-vs-Planner "bounce" resisted two full sessions of correct-but-
+misaimed investigation and was solved in minutes once screenshots of the actual transition arrived,
+showing a sparse desktop-shaped row painting before the mobile card. The same evidence is what is
+missing here. Asked for frame-by-frame stills rather than another guess.
+
+**Also this round, a small direct request:** the chat search pill is now hidden inside an open
+conversation. It searches channels and DMs — something you do while choosing *which* conversation
+to open — so once inside one it was a control for going elsewhere occupying the most prominent spot
+on a screen meant for reading and writing. Uses the same condition the floating nav already uses to
+get out of a full-screen conversation's way, so the two cannot drift apart.

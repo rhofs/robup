@@ -4099,6 +4099,13 @@ function PageContent() {
                 (still pinned to the row's own left/right via justify-between) and simply sit behind
                 the centered pill in stacking order — the back-slot's own icon has room to spare on
                 the sides, so nothing ends up covered. */}
+            {/* Hidden inside an open conversation. The pill searches channels and DMs, which is a
+                thing you do while choosing *which* conversation to open — once you are in one, it
+                is a control for going somewhere else taking up the most prominent spot on a screen
+                that should be about reading and writing messages. It stays on the channel/DM list,
+                where it belongs. Same condition the floating nav uses to get out of the way of a
+                full-screen conversation, so the two stay consistent. */}
+            {!(activeView === 'chat' && isMobile && activeChatEntity) && (
             <div className="md:hidden absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 w-[min(calc(100%-88px),420px)]">
               <button
                 onClick={() => setCommandPaletteOpen(true)}
@@ -4108,6 +4115,7 @@ function PageContent() {
                 <span className="text-[11px] truncate">{searchPillLabel(activeView)}</span>
               </button>
             </div>
+            )}
             {/* Hidden on mobile entirely — a breadcrumb reads as unpolished clutter at phone
                 width, and the "Lists"/"Channels"/"Archive" buttons below already tell you where
                 you are well enough without it. Desktop keeps it unchanged. */}
