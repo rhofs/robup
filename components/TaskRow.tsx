@@ -335,9 +335,18 @@ function TaskRowImpl({
         // an expert design pass flagged the earlier accordion-behind-a-chevron approach as still
         // clumsy, and a permanently-visible metadata row is both simpler and matches how mobile
         // task apps (and the reference screenshots this was redesigned against) actually look.
-        // Elevated surface (bg-neutral-900 against the page's darker background) with no border
-        // and a soft rounded-xl corner, rather than the hairline-bordered/square-cornered "table
-        // row" look — the flat gap-based card spacing (app/page.tsx's list container) replaces
+        // Elevated surface with no border and a soft rounded-xl corner, rather than the
+        // hairline-bordered/square-cornered "table row" look.
+        //
+        // bg-neutral-800/50, not bg-neutral-900: this card was originally bg-neutral-900 to sit
+        // above the page's own darker background, and then the rounded-sheet pass gave the list
+        // container it sits inside that exact same bg-neutral-900. The card stopped being a card —
+        // identical fill, no border — leaving only whitespace between one task and the next.
+        // Reported live: "de flyter over i hverandre nesten (på mobil altså)". One step of
+        // contrast against the sheet restores the boundary without adding any chrome back.
+        // Deliberately a translucent step rather than a hard colour, so it holds up in light mode
+        // too, where the neutral scale is inverted (see globals.css) and this reads as one step
+        // darker than the sheet instead of one step lighter — the same separation either way — the flat gap-based card spacing (app/page.tsx's list container) replaces
         // the old divide-y row separators. Grip (drag) and More (menu) live in the top-right
         // corner, always reachable without scrolling. Whole-row drag-and-drop is still scoped to
         // the dedicated grip handle (dnd-kit's own "drag handle" pattern), not the card itself, so
@@ -347,7 +356,7 @@ function TaskRowImpl({
         // app/page.tsx) already handles touch via the Pointer Events API. =================
         <div
           ref={setNodeRef}
-          className={`relative rounded-xl bg-neutral-900 ${isSelected ? 'ring-1 ring-inset ring-blue-500/60' : ''} ${
+          className={`relative rounded-xl bg-neutral-800/50 ${isSelected ? 'ring-1 ring-inset ring-blue-500/60' : ''} ${
             isOver ? 'ring-1 ring-inset ring-neutral-500' : ''
           } ${isDragging ? 'opacity-40' : ''}`}
         >

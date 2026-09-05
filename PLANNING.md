@@ -3685,3 +3685,28 @@ often than it is long-pressed, and a scroll that opened a rename menu would be w
 
 Builds clean; not seen on a device. Worth checking specifically that scrolling the tree never
 triggers a menu, since that is the failure mode that would make the feature actively annoying.
+
+### Same session — mobile task cards had become invisible
+
+Reported: "jeg aller helst skulle hatt litt mer som skiller de ulike tasksa i list... de flyter over
+i hverandre nesten (på mobil altså)." Asked as a design question; it turned out to be a regression
+with a precise cause.
+
+The mobile task row is already a card — `rounded-xl bg-neutral-900`, borderless, deliberately
+elevated. Its own comment still said "against the page's darker background". That background stopped
+being darker: the rounded-sheet pass (2026-08-27/28) gave the list container it sits inside the
+exact same `bg-neutral-900`. Identical fill, no border — so nothing marked where one task ended and
+the next began, and only whitespace was left doing that job. Nobody noticed because the change that
+broke it was several rounds away from the thing it broke.
+
+Card is now `bg-neutral-800/50`: one step of contrast against the sheet, no chrome added back.
+Translucent rather than a flat colour deliberately, so it survives light mode — where the neutral
+scale is inverted and this reads as one step *darker* than the sheet rather than lighter. Either
+way it is one step of separation, which is what the eye needs.
+
+Two further suggestions were made and deliberately **not** built yet, pending a look at this one
+alone: tightening the gap between a card's title and its metadata row while widening the gap
+*between* cards (proximity does as much work as colour, and right now both gaps are about equal),
+and dimming the metadata row so titles win when scanning. A hairline divider between rows was
+raised and rejected — it would turn the list back into the table the mobile redesign deliberately
+moved away from.
