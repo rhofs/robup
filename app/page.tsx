@@ -1,6 +1,6 @@
 'use client';
 
-import { Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { Suspense, startTransition, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useRouter, usePathname, useSearchParams } from 'next/navigation';
 import dynamic from 'next/dynamic';
 import { AnimatePresence, motion } from 'framer-motion';
@@ -447,12 +447,15 @@ const NAV_TOTAL_HEIGHT_PB_CLASS = 'pb-[calc(4.75rem+env(safe-area-inset-bottom)+
 // easeOut, not a spring: this is a screen moving under a finger's intent, not an object with
 // weight. A spring's overshoot on a full-screen pane reads as a wobble rather than as energy.
 //
-// Not linear — it never was — but the first curve's braking was too brief to read as braking. This
-// one is an expo-style out: most of the distance is covered early, then a long visible glide into
-// place, which is the "fin bremseeffekt" asked for. 0.46s rather than 0.32s, because deceleration
-// needs time to be perceived at all; a fast ease-out just reads as a fast move.
-const CHAT_PUSH_MS = 460;
-const CHAT_PUSH_TRANSITION = { duration: CHAT_PUSH_MS / 1000, ease: [0.16, 1, 0.3, 1] as const };
+// It was never linear, but it has been a pure ease-out until now, which starts at maximum speed —
+// and a movement that begins abruptly cannot feel smooth however carefully it lands. Both ends are
+// eased now, with the acceleration kept short so the response to the tap is still immediate.
+const CHAT_PUSH_MS = 520;
+// Now an ease-in-OUT, not a pure ease-out. The previous curve started at full speed, which is what
+// kept it from feeling smooth however long it ran: motion that begins abruptly reads as a jump no
+// matter how gracefully it ends. A short acceleration at the start gives the eye something to
+// follow into the movement, and the long tail still does the braking.
+const CHAT_PUSH_TRANSITION = { duration: CHAT_PUSH_MS / 1000, ease: [0.42, 0, 0.18, 1] as const };
 
 const searchPillLabel = (view: string) =>
   view === 'docs' ? 'Search docs...' : view === 'chat' ? 'Search chats and channels...' : 'Search...';
@@ -1281,7 +1284,16 @@ function PageContent() {
     });
     if (qs === searchParams.toString()) return;
     pendingPushesRef.current.push(qs);
-    router.push(qs ? `${pathname}?${qs}` : pathname, { scroll: false });
+    // startTransition: a router.push in the App Router is real navigation work (an RSC round trip
+    // among other things), and React runs it at default priority — so it competes directly with
+    // the tap that triggered it. Spaces and My Tasks began stuttering the moment the `sheet` param
+    // was added, because opening those sheets previously changed no URL at all and so paid none of
+    // this; Chat and Planner already pushed a `view` and had always paid it. Marking the push as a
+    // transition lets React finish painting the interaction first and do the navigation after,
+    // which is exactly the priority order a URL that merely *records* where you are deserves.
+    startTransition(() => {
+      router.push(qs ? `${pathname}?${qs}` : pathname, { scroll: false });
+    });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [
     activeView,

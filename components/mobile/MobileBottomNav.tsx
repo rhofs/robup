@@ -138,7 +138,7 @@ function isIosLike(): boolean {
 // which is what reads as a bubble carrying velocity rather than a box being resized. Requested
 // against ClickUp's own nav: "den skvises litt inn i det den bremser, akkurat som en boble med
 // velocity."
-function NavPill({ pillKey }: { pillKey: string }) {
+function NavPill({ pillKey, direction }: { pillKey: string; direction: 'left' | 'right' }) {
   return (
     <motion.div layoutId="mobileNavPill" className="absolute inset-0 -z-10" transition={PILL_MOVE}>
       <motion.div
@@ -153,18 +153,23 @@ function NavPill({ pillKey }: { pillKey: string }) {
         //
         // Volume is roughly conserved at each step (wider ⇒ flatter, narrower ⇒ taller), which is
         // what makes it read as a bubble rather than as a box being resized.
-        // Centre origin, not bottom. Anchoring it to the bottom made the pill grow only upward,
-        // which reads as it being *pulled* rather than squeezed — "klemmes bare oppover, ser dorky
-        // ut". A bubble compressed from the sides bulges evenly in both directions, so the default
-        // centre origin is the correct one and the earlier change was simply wrong.
-        //
-        // The vertical range is also much narrower now. The horizontal amount was confirmed good,
-        // so it is untouched; strict volume conservation would pair 1.3 with roughly 0.77, but
-        // that overshoot is exactly what read as too much. Physical accuracy is not the goal here —
-        // the suggestion of weight is, and it stops being a suggestion when you can measure it.
+        // Origin at the LEADING edge, which is the detail that makes ClickUp's version feel right:
+        // the front of the pill holds its position while the back end catches up and compresses
+        // into it, rather than both ends moving symmetrically about the centre. Travelling right,
+        // that means anchoring the right edge; travelling left, the left one. Vertically it stays
+        // centred, so the bulge still goes evenly both ways (anchoring it to the bottom made it
+        // grow only upward, which read as being pulled — corrected in the previous round).
+        style={{ transformOrigin: direction === 'right' ? 'right center' : 'left center' }}
+        // The horizontal amount was confirmed good and is untouched. The vertical range stays
+        // narrow — strict volume conservation would demand far more, and that overshoot is exactly
+        // what read as too much.
         initial={{ scaleX: 1.3, scaleY: 0.94 }}
         animate={{ scaleX: [1.3, 0.88, 1], scaleY: [0.94, 1.05, 1] }}
-        transition={{ duration: 0.42, times: [0, 0.55, 1], ease: [0.22, 1, 0.36, 1] }}
+        // The settle occupies most of the duration now (times 0 → 0.38 → 1 over 0.58s, against
+        // 0 → 0.55 → 1 over 0.42s): the brake arrives sooner and the recovery out of it is long and
+        // unhurried, which is the "roligere skvis tilbake etter bremsen" asked for. A snappy
+        // recovery reads as a twitch; a slow one reads as something settling.
+        transition={{ duration: 0.58, times: [0, 0.38, 1], ease: [0.22, 1, 0.36, 1] }}
       />
     </motion.div>
   );
@@ -242,6 +247,17 @@ export default function MobileBottomNav({
   // lazy initializer keeps this correct on the very first paint (this file's own useIsMobile
   // lesson: a useState(false)-then-useEffect correction can visibly paint the wrong frame first).
   const [blurDisabled] = useState(isIosLike);
+
+  // Which way the pill is about to travel, so the squash can anchor its leading edge (see NavPill).
+  // Derived from the active slot's index against the previous one — a ref rather than state,
+  // because reading it must not itself cause a render.
+  const activeSlotIndex = primaryTabs.findIndex((t) =>
+    t.id === 'board' ? t.active || spacesOpen : t.active && !spacesOpen
+  );
+  const resolvedSlotIndex = activeSlotIndex === -1 ? primaryTabs.length : activeSlotIndex;
+  const prevSlotIndexRef = useRef(resolvedSlotIndex);
+  const pillDirection: 'left' | 'right' = resolvedSlotIndex >= prevSlotIndexRef.current ? 'right' : 'left';
+  prevSlotIndexRef.current = resolvedSlotIndex;
 
   // True once the real measured heights have replaced the guesses above. Until then the island's
   // height animation is suppressed (see `transition` on the motion.div below), because the very
@@ -464,7 +480,7 @@ export default function MobileBottomNav({
                       this pill painted behind the *entire nav bar's own opaque background*, rendering
                       correctly in the DOM but completely invisible. z-0 scopes the negative z-index to
                       just this button, putting the pill behind its own icon/label as intended. */}
-                  {active && <NavPill pillKey={tab.id} />}
+                  {active && <NavPill pillKey={tab.id} direction={pillDirection} />}
                   <Icon className="w-5 h-5" />
                   {/* h-3, fixed: matches the pinned button's own label row below exactly (which
                       needs it explicitly since it wraps an icon alongside the text) so both rows
@@ -490,7 +506,7 @@ export default function MobileBottomNav({
               }`}
             >
               <AnimatePresence>
-                {!menuOpen && pinnedActive && <NavPill pillKey={pinnedTile?.id ?? 'pinned'} />}
+                {!menuOpen && pinnedActive && <NavPill pillKey={pinnedTile?.id ?? 'pinned'} direction={pillDirection} />}
               </AnimatePresence>
               <PinnedIcon className="w-5 h-5" />
               {/* h-3, fixed: see the matching comment on the plain tab label above — this row

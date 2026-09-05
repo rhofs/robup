@@ -3955,3 +3955,33 @@ one. The first frames of a transform on a tall scrollable subtree are exactly wh
 appear, which is what "færre frames i vår" was describing. Whether this closes the gap to ClickUp
 is genuinely unknown from here — it is the standard first move, not a guaranteed fix, and if it
 still stutters the next step is measuring on-device rather than guessing again.
+
+### Same session — a self-inflicted stutter, and the detail that makes ClickUp's pill work
+
+**Spaces and My Tasks began dropping frames, and nothing else did — a regression from the `sheet`
+URL param.** Encoding which sheet is open (added earlier the same day so a reload keeps your place)
+meant opening those two now triggers a `router.push`, which in the App Router is real navigation
+work. Nothing else regressed because Chat and Planner already pushed a `view` param and had always
+paid that cost; Spaces and My Tasks previously changed no URL at all, so they were free. The "only
+these two" shape of the report is what identified it — a general slowdown would have pointed
+somewhere else entirely.
+
+Fixed by wrapping the push in `startTransition`, so React paints the interaction first and does the
+navigation after. That is the correct priority order for a URL whose whole job is to *record* where
+you already are, rather than to take you somewhere.
+
+**The pill's leading edge.** The user identified precisely what makes ClickUp's version feel good:
+"fronten forblir relativt i samme posisjon, mens det er bakenden som skvises innover". That is a
+transform origin at the *leading* edge, not the centre — travelling right, anchor the right edge, so
+the front holds while the back catches up and compresses into it. Direction is derived by comparing
+the active slot's index against the previous one, held in a ref so reading it cannot itself cause a
+render. Vertically it stays centred, so the bulge still goes both ways.
+
+The settle was also stretched: brake earlier, recover longer (times 0 → 0.38 → 1 over 0.58s, against
+0 → 0.55 → 1 over 0.42s). A fast recovery reads as a twitch; a slow one reads as something settling.
+
+**Push easing.** It has been a pure ease-out throughout, which starts at maximum speed — and a
+movement that begins abruptly cannot feel smooth however carefully it lands. That, rather than the
+duration, is the likeliest reason it never matched ClickUp. Now eased at both ends
+(`[0.42, 0, 0.18, 1]`) over 0.52s, with the acceleration deliberately short so the response to the
+tap still feels immediate.
