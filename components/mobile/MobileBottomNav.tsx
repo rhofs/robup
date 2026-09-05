@@ -139,6 +139,13 @@ function isIosLike(): boolean {
 // against ClickUp's own nav: "den skvises litt inn i det den bremser, akkurat som en boble med
 // velocity."
 function NavPill({ pillKey, direction }: { pillKey: string; direction: 'left' | 'right' }) {
+  // Captured once, at mount. The parent recomputes `direction` on every render — and it re-renders
+  // for all sorts of unrelated reasons (a store update, an unread count) — at which point the
+  // previous and current slot indexes are equal again and it resolves back to 'right'. A leftward
+  // move therefore started with the correct origin and silently flipped to the right edge partway
+  // through, which is why it looked like the old centre-ish animation in that direction only.
+  // Freezing it here ties the value to the life of this pill instead of to render timing.
+  const [frozenDirection] = useState(direction);
   return (
     <motion.div layoutId="mobileNavPill" className="absolute inset-0 -z-10" transition={PILL_MOVE}>
       <motion.div
@@ -159,7 +166,7 @@ function NavPill({ pillKey, direction }: { pillKey: string; direction: 'left' | 
         // that means anchoring the right edge; travelling left, the left one. Vertically it stays
         // centred, so the bulge still goes evenly both ways (anchoring it to the bottom made it
         // grow only upward, which read as being pulled — corrected in the previous round).
-        style={{ transformOrigin: direction === 'right' ? 'right center' : 'left center' }}
+        style={{ transformOrigin: frozenDirection === 'right' ? 'right center' : 'left center' }}
         // The horizontal amount was confirmed good and is untouched. The vertical range stays
         // narrow — strict volume conservation would demand far more, and that overshoot is exactly
         // what read as too much.

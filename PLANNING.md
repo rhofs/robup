@@ -3985,3 +3985,35 @@ movement that begins abruptly cannot feel smooth however carefully it lands. Tha
 duration, is the likeliest reason it never matched ClickUp. Now eased at both ends
 (`[0.42, 0, 0.18, 1]`) over 0.52s, with the acceleration deliberately short so the response to the
 tap still feels immediate.
+
+### Same session — three corrections, two of them to my own previous rounds
+
+The push transition's timing is confirmed right ("der traff vi"). Three faults left, and two were
+introduced by the fixes before them.
+
+**"Starter 2/3 ferdig lukka" going back — a paint-order problem, not a timing one.** The incoming
+list enters at `x: -33%`, meaning it already covers the left two thirds of the screen on its very
+first frame. With no explicit stacking, it painted *above* the outgoing conversation, hiding it from
+frame one — so the conversation appeared to begin its exit already mostly gone. It was moving
+correctly the whole time; it just could not be seen. Fixed with explicit `z-10` on the conversation
+against `z-0` on the list: the conversation is the card being slid off, so it belongs on top for the
+whole journey.
+
+**The pill's squash worked rightward and not leftward.** `direction` is recomputed on every parent
+render — and the parent re-renders constantly for unrelated reasons (store updates, unread counts) —
+at which point the previous and current slot indexes are equal again and it resolves back to
+`'right'`. A leftward move therefore began with the correct origin and silently flipped to the right
+edge partway through, which is precisely why only that direction looked like the older animation.
+Now frozen at mount inside `NavPill`, tying the value to the life of that pill rather than to render
+timing. Worth remembering as a shape: a value derived by comparing against "last render" is only
+correct on the render where it changed, and anything reading it later gets a different answer.
+
+**The Spaces/My Tasks stutter was not fixed by `startTransition`, and could not have been.**
+Lowering a task's priority does not remove it — an App Router `router.push` is a real navigation
+with a server round trip, and deferring it only moves when that happens. Replaced with
+`window.history.pushState`, which Next explicitly supports and keeps `useSearchParams` in step with
+(confirmed in `node_modules/next/dist/docs/01-app/02-guides/single-page-applications.md` rather than
+from memory, per this repo's own instruction — and the documented example is literally storing a
+sort choice in the URL, which is exactly this). This page is a single client-rendered route: nothing
+on the server depends on these parameters, they exist only to record where the user already is, so
+there is no reason to make a request at all. Back/forward and deep links are unaffected.

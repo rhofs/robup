@@ -1,6 +1,6 @@
 'use client';
 
-import { Suspense, startTransition, useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useRouter, usePathname, useSearchParams } from 'next/navigation';
 import dynamic from 'next/dynamic';
 import { AnimatePresence, motion } from 'framer-motion';
@@ -1240,7 +1240,7 @@ function PageContent() {
   // deep-linked one — otherwise the app's own default state would stomp it before it's ever seen.
   const hasHydratedFromUrlRef = useRef(false);
   // Every query string effect 1 has pushed but not yet seen come back through `searchParams`.
-  // `router.push` is asynchronous: the new value only reaches this component a render or more
+  // The URL update is asynchronous: the new value only reaches this component a render or more
   // later, and two quick taps can therefore have two pushes in flight at once. Without this,
   // effect 2 treats the *first* push landing as an external navigation and dutifully rewrites
   // state back to it — reported live as "trykker for fort på en ny knapp i menyen, så går den til
@@ -1284,16 +1284,14 @@ function PageContent() {
     });
     if (qs === searchParams.toString()) return;
     pendingPushesRef.current.push(qs);
-    // startTransition: a router.push in the App Router is real navigation work (an RSC round trip
-    // among other things), and React runs it at default priority — so it competes directly with
-    // the tap that triggered it. Spaces and My Tasks began stuttering the moment the `sheet` param
-    // was added, because opening those sheets previously changed no URL at all and so paid none of
-    // this; Chat and Planner already pushed a `view` and had always paid it. Marking the push as a
-    // transition lets React finish painting the interaction first and do the navigation after,
-    // which is exactly the priority order a URL that merely *records* where you are deserves.
-    startTransition(() => {
-      router.push(qs ? `${pathname}?${qs}` : pathname, { scroll: false });
-    });
+    // window.history, not router.push. startTransition lowered the priority of the navigation but
+    // did not remove it — an App Router push is still a real navigation with a server round trip
+    // behind it, and deferring work does not make it stop happening. This page is a single
+    // client-rendered route: nothing on the server depends on these parameters, and they exist only
+    // to record where the user already is. Next supports history.pushState directly and keeps
+    // useSearchParams in step with it, so the URL still updates, back/forward still work, and no
+    // request is made at all. That is what the tap was waiting on.
+    window.history.pushState(null, '', qs ? `${pathname}?${qs}` : pathname);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [
     activeView,
@@ -4977,7 +4975,14 @@ function PageContent() {
                             // where dropped frames show up, which is what "færre frames i vår"
                             // was describing.
                             style={{ willChange: 'transform' }}
-                            className="absolute inset-0 overflow-y-auto px-3 py-3 pb-28 bg-neutral-900 rounded-t-2xl"
+                            // z-0 against the conversation's z-10. The incoming list starts at
+                            // x:-33%, i.e. already covering the left two thirds of the screen — so
+                            // if it paints above the outgoing conversation, the conversation is
+                            // hidden from the first frame and appears to begin the animation
+                            // already mostly gone. Reported exactly: "starter 2/3 ferdig lukka."
+                            // The conversation is the card being slid off, so it belongs on top for
+                            // the whole journey.
+                            className="absolute inset-0 z-0 overflow-y-auto px-3 py-3 pb-28 bg-neutral-900 rounded-t-2xl"
                             initial={{ x: '-33%' }}
                             animate={{ x: 0 }}
                             exit={{ x: '-33%' }}
@@ -4991,7 +4996,7 @@ function PageContent() {
                             // p-2 lives here, not on the shared wrapper — see that wrapper's own
                             // comment. Inside the animated pane it simply travels along.
                             style={{ willChange: 'transform' }}
-                            className="absolute inset-0 bg-neutral-950 p-2"
+                            className="absolute inset-0 z-10 bg-neutral-950 p-2"
                             initial={{ x: '100%' }}
                             animate={{ x: 0 }}
                             exit={{ x: '100%' }}
