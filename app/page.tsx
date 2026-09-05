@@ -2328,12 +2328,24 @@ function PageContent() {
     };
   }, [activeDragEntity?.kind]);
 
-  const [toast, setToast] = useState<string | null>(null);
+  const [toast, setToast] = useState<{ message: string; undoable?: boolean } | null>(null);
   const toastTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const showToast = (message: string) => {
     if (toastTimeoutRef.current) clearTimeout(toastTimeoutRef.current);
-    setToast(message);
+    setToast({ message });
     toastTimeoutRef.current = setTimeout(() => setToast(null), 3000);
+  };
+  // A toast carrying an Undo button. Undo has always existed, but only as Ctrl+Z — which a phone
+  // does not have, so on mobile every drag was final. Dragging a task is easy to do by accident
+  // and easy to get wrong (dropping onto another task nests it as a subtask), and the only way
+  // back was to find "Move to..." in the task's own menu and know that it also un-nests. Reported
+  // live: "de havner alltid inni en annen task, og det er ikke mulig å ctrl z angre det."
+  // Longer-lived than a plain toast: an undo you have to catch in three seconds is not one you can
+  // rely on, and this is the only route back on a phone.
+  const showUndoableToast = (message: string) => {
+    if (toastTimeoutRef.current) clearTimeout(toastTimeoutRef.current);
+    setToast({ message, undoable: true });
+    toastTimeoutRef.current = setTimeout(() => setToast(null), 8000);
   };
 
   // The token lives only on the /api/users/[id] response (never the team-wide GET /api/users
@@ -3076,9 +3088,17 @@ function PageContent() {
 
     if (overId.startsWith('task:')) {
       const targetId = overId.slice('task:'.length);
-      if (targetId !== draggedId) optimisticSetParent(draggedId, targetId);
+      if (targetId !== draggedId) {
+        const target = tasks.find((t) => t.id === targetId);
+        optimisticSetParent(draggedId, targetId);
+        // Named, not a generic "Moved": dropping a task onto another one turns it into a subtask,
+        // which is a bigger change than the gesture suggests and is the single most common thing
+        // to do by accident here.
+        showUndoableToast(target ? `Made a subtask of "${target.title}"` : 'Made a subtask');
+      }
     } else if (overId.startsWith('list:')) {
       moveTaskToList(draggedId, overId.slice('list:'.length));
+      showUndoableToast('Task moved');
     } else if (overId.startsWith('folder-drop:') || overId.startsWith('space:')) {
       // Dropping a task onto a Folder/Space (rather than a specific List) has no single obvious
       // destination when there's more than one List recursively inside — rather than silently
@@ -6719,9 +6739,26 @@ function PageContent() {
             initial={{ opacity: 0, y: 10 }}
             animate={{ opacity: 1, y: 0 }}
             exit={{ opacity: 0, y: 10 }}
-            className="fixed bottom-6 left-1/2 -translate-x-1/2 z-[70] bg-neutral-900 border border-neutral-700 rounded shadow-2xl px-4 py-2.5 text-xs text-neutral-200 max-w-sm text-center"
+            // bottom-24 on mobile, not bottom-6: the floating nav island lives at the bottom of
+            // the screen there, and a toast with a button the user is meant to reach must not land
+            // underneath it.
+            className="fixed bottom-24 md:bottom-6 left-1/2 -translate-x-1/2 z-[70] bg-neutral-900 border border-neutral-700 rounded shadow-2xl px-4 py-2.5 text-xs text-neutral-200 max-w-sm flex items-center gap-3"
           >
-            {toast}
+            <span className="min-w-0 flex-1 text-center">{toast.message}</span>
+            {toast.undoable && (
+              <button
+                onClick={() => {
+                  setToast(null);
+                  useHistoryStore
+                    .getState()
+                    .undo()
+                    .then((label) => label && showToast(`Undid: ${label}`));
+                }}
+                className="shrink-0 text-blue-400 hover:text-blue-300 font-medium cursor-pointer"
+              >
+                Undo
+              </button>
+            )}
           </motion.div>
         )}
       </AnimatePresence>

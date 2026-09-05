@@ -3710,3 +3710,31 @@ alone: tightening the gap between a card's title and its metadata row while wide
 and dimming the metadata row so titles win when scanning. A hairline divider between rows was
 raised and rejected — it would turn the list back into the table the mobile redesign deliberately
 moved away from.
+
+### Same session — Undo reaches mobile, via the toast
+
+Reported: "å flytte de på mobil er tungvindt. de havner alltid inni en annen task, og det er ikke
+mulig å ctrl z angre det."
+
+Two separate facts behind that. Dropping a task onto another task nests it as a subtask — a much
+bigger change than the gesture suggests, and the easiest thing here to do by accident on a touch
+screen. And **undo has always been keyboard-only.** `useHistoryStore` has covered essentially every
+mutation in this app since 2026-07-31, but the sole way to reach it is Ctrl+Z, which a phone does
+not have. So on mobile every drag was final, and the only route back was to find "Move to..." in
+the task's own menu and happen to know that it also un-nests (the code even carries a comment
+saying so, which is a fair sign the friction was known and left).
+
+The toast now optionally carries an **Undo** button, fired on both drag outcomes that move a task:
+nesting it under another (named — "Made a subtask of X" — since that is the surprising one) and
+moving it to a different List. It calls the same `useHistoryStore.undo()` the keyboard shortcut
+does, so there is one undo path, not a mobile approximation of one.
+
+Two details that matter more than they look. The undoable toast lives **8 seconds**, not the usual
+3: an undo you have to catch in three seconds is not one anybody can rely on, and on a phone it is
+the only route back. And it sits at `bottom-24` on mobile rather than `bottom-6`, because the
+floating nav island occupies the bottom of the screen there — a toast with a button the user is
+meant to press must not appear underneath it.
+
+**Still unresolved, and blocked on evidence:** a second report in the same message, that the
+dropdown shown while moving a task into another is cropped so you cannot tell where it will land.
+The screenshot referenced was not attached, so nothing was changed for it.
