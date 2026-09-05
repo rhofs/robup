@@ -100,7 +100,7 @@ function PageRow({
   onRenameDocHandled: () => void;
   docDropIndicator: { targetId: string; position: 'above' | 'below' } | null;
 }) {
-  const { updateSpaceDoc } = useTaskStore();
+  const updateSpaceDoc = useTaskStore((s) => s.updateSpaceDoc);
   const children = getChildDocs(space, doc.id);
 
   // Same `spacedoc-drag:`/`spacedoc:` id prefixes the main sidebar's DocRow (DocFolderTree.tsx)

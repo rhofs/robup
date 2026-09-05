@@ -28,7 +28,7 @@ type RoomDetailProps = {
 };
 
 export default function RoomDetail({ room, members, workspace, currentUserId, canManage, onBack, onSelectUser, onRequestRemoveMember, onStartDM }: RoomDetailProps) {
-  const { updateRoom } = useTaskStore();
+  const updateRoom = useTaskStore((s) => s.updateRoom);
   const [editingName, setEditingName] = useState(false);
   const [nameDraft, setNameDraft] = useState(room.name);
 

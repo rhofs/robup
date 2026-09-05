@@ -4017,3 +4017,34 @@ from memory, per this repo's own instruction — and the documented example is l
 sort choice in the URL, which is exactly this). This page is a single client-rendered route: nothing
 on the server depends on these parameters, they exist only to record where the user already is, so
 there is no reason to make a request at all. Back/forward and deep links are unaffected.
+
+### Same session — the Spaces/My Tasks stutter, found at last: a whole-store subscription
+
+Two previous attempts at this failed, and both failed for the same reason: they assumed the cost was
+the URL update. It was not. `MobileSpacesSheet` destructured `useTaskStore()` **without a selector**,
+which in Zustand subscribes the component to every change anywhere in the store — every task edit,
+every 30s poll, every chat message. That component renders the entire Space/Folder/List tree and is
+deliberately never unmounted, so it was re-rendering that whole tree constantly, including while
+closed.
+
+That also explains the shape of the report precisely, which neither earlier theory did: Chat and
+Planner never touch this component, so they stayed smooth throughout, and the stutter appeared only
+on the two entry points that actually mount its tree. It got worse when long-press handlers were
+added to every row, because that increased the cost of each of those needless re-renders.
+
+Fixed by selecting each action individually — Zustand action references are stable, so the component
+now re-renders only when something it actually reads changes. The same pattern was fixed in three
+other components found by the same grep: `MentionText` (rendered once per mention inside every
+comment and doc, so the cost multiplies across a page), `RoomDetail` and `DocSubpagesPanel`.
+
+**Worth adding to the standing lessons:** `useTaskStore()` with no selector is not a convenience, it
+is a subscription to everything. In a component that renders a large tree — or one rendered many
+times over — it is a performance bug waiting for the store to get busy enough to expose it. The two
+earlier fixes here (`startTransition`, then `window.history.pushState`) were both defensible
+improvements on their own terms and are worth keeping, but neither was the cause, and shipping them
+as fixes twice is exactly the "plausible-sounding culprit" pattern this file already warns about.
+
+**Also this round:** the pill's squash now uses one easing curve *per segment* rather than a single
+ease-out across both. A single ease-out meant the stretch began at full speed — the same thing that
+kept the page push from feeling smooth until it was eased at both ends. The compression now eases in
+and out, and only the final settle keeps a pure decelerating tail.

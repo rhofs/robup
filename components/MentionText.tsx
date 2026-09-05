@@ -27,7 +27,11 @@ type MentionTextProps = {
 // Read-only renderer for text containing @-mention tokens (`@[Label](kind:id)`) — used for posted
 // comment bodies and the Doc editor's view-mode. Renders a <div>, not <p>, so it works in both spots.
 export default function MentionText({ text, onJump, className }: MentionTextProps) {
-  const { tasks, users, workspaces } = useTaskStore();
+  // Selected individually — this renders once per mention inside every comment and doc, so a
+  // whole-store subscription here multiplies across the page (see MobileSpacesSheet's own note).
+  const tasks = useTaskStore((s) => s.tasks);
+  const users = useTaskStore((s) => s.users);
+  const workspaces = useTaskStore((s) => s.workspaces);
   const segments = parseMentions(text);
 
   return (

@@ -172,11 +172,22 @@ function NavPill({ pillKey, direction }: { pillKey: string; direction: 'left' | 
         // what read as too much.
         initial={{ scaleX: 1.3, scaleY: 0.94 }}
         animate={{ scaleX: [1.3, 0.88, 1], scaleY: [0.94, 1.05, 1] }}
-        // The settle occupies most of the duration now (times 0 → 0.38 → 1 over 0.58s, against
-        // 0 → 0.55 → 1 over 0.42s): the brake arrives sooner and the recovery out of it is long and
-        // unhurried, which is the "roligere skvis tilbake etter bremsen" asked for. A snappy
-        // recovery reads as a twitch; a slow one reads as something settling.
-        transition={{ duration: 0.58, times: [0, 0.38, 1], ease: [0.22, 1, 0.36, 1] }}
+        // The settle occupies most of the duration (times 0 → 0.38 → 1): the brake arrives early and
+        // the recovery out of it is long and unhurried. A snappy recovery reads as a twitch; a slow
+        // one reads as something settling.
+        //
+        // One easing curve PER SEGMENT, which is what softens it. A single ease-out applied across
+        // both meant the stretch began at full speed — the same thing that kept the page push from
+        // feeling smooth until it was eased at both ends. Now the squash eases in and out of the
+        // compression, and only the final settle keeps a pure decelerating tail.
+        transition={{
+          duration: 0.6,
+          times: [0, 0.38, 1],
+          ease: [
+            [0.4, 0, 0.2, 1],
+            [0.25, 0.9, 0.35, 1],
+          ],
+        }}
       />
     </motion.div>
   );

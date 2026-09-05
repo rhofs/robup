@@ -166,7 +166,17 @@ export default function MobileSpacesSheet({
 }: Props) {
   // Called directly via the store, same as FolderTree.tsx's own create-Folder/List/Space
   // buttons already do — no need to thread these through app/page.tsx as props.
-  const { createSpace, createFolder, createList, createSpaceDoc } = useTaskStore();
+  // Selected one at a time, NOT `useTaskStore()`. Destructuring the whole store subscribes this
+  // component to every change in it — every task edit, every 30s poll, every chat message — and
+  // this component renders the entire Space/Folder/List tree and is deliberately never unmounted,
+  // so it was re-rendering that whole tree constantly, including while closed. That is what made
+  // opening Spaces and My Tasks drop frames while Chat and Planner stayed smooth. Zustand action
+  // references are stable, so selecting each one individually means this component now re-renders
+  // only when something it actually reads has changed.
+  const createSpace = useTaskStore((s) => s.createSpace);
+  const createFolder = useTaskStore((s) => s.createFolder);
+  const createList = useTaskStore((s) => s.createList);
+  const createSpaceDoc = useTaskStore((s) => s.createSpaceDoc);
   const [creatingSpace, setCreatingSpace] = useState(false);
   const [newSpaceDraft, setNewSpaceDraft] = useState('');
   const commitNewSpace = () => {
