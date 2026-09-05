@@ -3526,3 +3526,44 @@ and `npm run build` clean.
 Not seen on a device. Worth testing together: reload inside a DM, reload with the Spaces tree open,
 reload with My Tasks open, and the browser back button out of each — back now has a history entry
 to return to in cases where it previously had none.
+
+## Today's session (2026-09-05, continued a third time) — Every chat attachment and Doc image uploaded since the last restart was returning 404
+
+Reported with two screenshots: a colleague's screenshot upload failed, and the resulting
+`siqt.no/uploads/chat/2…` URL showed Next's own "404 This page could not be found".
+
+**Root cause, reproduced locally rather than reasoned about — Next does not serve files that appear
+in `public/` after the server has started.** The upload route (`POST /api/uploads/image`) writes to
+`public/uploads/<context>/` at runtime and returns `/uploads/<context>/<uuid>.<ext>`, which had
+always been assumed to be served like any other static asset. The experiment: one file placed in
+`public/uploads/chat` before `next build`, one written after `next start`, both requested with a
+real session cookie. The first returned **200**, the second **404**.
+
+This has been broken for every upload in production since the feature shipped, and it hides itself
+almost perfectly: a restart re-scans `public/`, so yesterday's broken images silently start working
+while today's are broken — which reads as intermittent rather than systematic. It also explains why
+Phase 6 verified fine at the time; that was in dev, where the behaviour does not apply. Nothing was
+lost — the files are on disk, `/public/uploads` is gitignored so `git clean -fd` spares them — they
+simply could not be served.
+
+**Fixed with a route handler at `app/uploads/[...path]/route.ts`** that reads from disk per
+request, so there is no build-time notion of which files exist. Stored URLs need no migration:
+files that *did* exist at build time are still served by the static handler before this ever runs,
+and this catches exactly the ones that would otherwise 404.
+
+Two details worth keeping. It re-applies the session check, because `proxy.ts` gates page routes
+and a route handler is not covered by that matcher — losing that check silently while "only
+changing how the file is read" would have been a real regression. And the filename is validated
+against the exact `uuid.ext` shape the upload route generates, plus a two-segment path and a
+context allowlist: the name is machine-generated, so there is no legitimate alternative shape, and
+an allowlist of the known-good form leaves no traversal sequences to reason about.
+
+**Verified against a running production build**: a file written after startup returns 200 with the
+right content-type and body (404 before the fix), an unauthenticated request still redirects, and
+an unknown context and an invalid filename both 404.
+
+Two process notes from this round, both cost real time. `pkill -f "next start"` matches *its own
+shell's command line* and killed the session twice before it was noticed — kill by port
+(`ss -ltnp`) instead. And a route handler under a path that also exists as a `public/` directory is
+only reachable once it is actually in the build; an interrupted `npm run build` produced a
+convincing "the route does not work" result that was really "the route was never compiled".
