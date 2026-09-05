@@ -3643,3 +3643,19 @@ conversation. It searches channels and DMs — something you do while choosing *
 to open — so once inside one it was a control for going elsewhere occupying the most prominent spot
 on a screen meant for reading and writing. Uses the same condition the floating nav already uses to
 get out of a full-screen conversation's way, so the two cannot drift apart.
+
+### Same session — the phantom close animation now reported as fine, without a new deploy
+
+Follow-up: "menyen ser ut til å være ok nå. sier ifra om det endrer seg."
+
+Recorded as **unexplained rather than fixed**, because the timeline does not support calling it
+fixed. The keep-the-nav-mounted change (`a540128`) was already live when the bug was reported as
+still present — that reinstall is the same one that made file uploads work (`22b9a53`, shipped
+together). Nothing has been deployed since. So the symptom changed with no code change behind it,
+which means it is timing- or load-dependent rather than gone, and it can return.
+
+This is the second "seems fine now" on mobile nav behaviour; the 2026-08-29 entry flagged the first
+one the same way and it was right to. If it comes back, the useful next step is frame-by-frame
+stills of the transition (the technique that finally cracked the Chat-vs-Planner bounce), not
+another round of reasoning — two attempted fixes have already changed nothing, which says the
+mechanism has not been identified at all.
