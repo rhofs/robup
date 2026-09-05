@@ -3402,3 +3402,42 @@ empty one can be deleted, but only by her — she owns it. Nothing needs fixing 
 **Worth considering, not built:** the workspace switcher still shows two identical labels with
 nothing to tell them apart. A disambiguator (member count, owner name, or "created by you") would
 have made this self-diagnosing from the start.
+
+## Today's session (2026-09-05) — Refreshing dropped you into the first Space, highlighted as if chosen
+
+Reported with two screenshots: "når jeg refresher så havner jeg i nytt view, gjelder spaces, My
+tasks, og Chat (potensielt flere). i tillegg lyser øverste space, som om jeg har valgt den (selv om
+jeg ikke har det)." One cause, both symptoms — the Space really was selected, so the highlight was
+correct and the selection was not.
+
+The screenshots carried the decisive detail: the URL read `siqt.no/?workspace=1e…` — a workspace,
+no `space`. `buildNavQueryString` omits `space` for exactly one reason, that it was `'everything'`.
+The chain:
+
+1. Effect 2 restores the workspace from the URL by calling `setActiveWorkspaceId`.
+2. That action falls back to `workspace.spaces[0]` whenever it has no remembered position for the
+   workspace — and after a reload it never does, since `lastPositionByWorkspaceId` lives only in
+   memory. So the store now points at the first Space.
+3. Effect 2's own `explicitSpaceId` rule then declined to correct it: a URL with no `space` was
+   treated as "no opinion" on the first hydration pass, deliberately, so that a fresh visit to `/`
+   would keep `fetchInitialData`'s auto-select behaviour.
+
+Rule (3) was written when a bare URL genuinely meant "someone typed the domain". It has not been
+true for a while: any URL carrying nav parameters at all was produced by our own encoder, so a
+missing `space` on such a URL is a positive statement of the default, not silence. Now only a
+completely empty query string counts as "no opinion".
+
+**A second, subtler bug sat behind the first and would have swallowed the fix.** The block that
+applies the URL's Space compares `resolvedSpaceId !== activeSpaceId` — but `activeSpaceId` in that
+closure is the pre-switch render's value, while `setActiveWorkspaceId` has already moved the store
+in the same tick. With both at `'everything'` the comparison reads "nothing to do" and leaves the
+store holding a Space the URL never asked for. Fixed by forcing the write whenever this pass
+switched workspace. Comparing against a value the same tick has already invalidated is the general
+shape worth remembering — the app's whole state↔URL design leans on content comparison, and this is
+the case where it quietly cannot work.
+
+Both are the same family as the fast-double-tap race fixed 2026-09-04: the two sync effects are
+correct in the steady state and fragile in the moments where "current value" is ambiguous.
+
+`tsc` and `npm run build` clean. Not confirmed on a device — reproducing needs a real reload on a
+URL with no explicit Space.

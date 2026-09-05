@@ -1283,8 +1283,10 @@ function PageContent() {
     // no distinct "explicit default" value the way Space has 'everything' — a stale/deleted
     // workspace id (e.g. this identity is no longer a member) silently falls back to whichever
     // workspace fetchInitialData already picked, rather than erroring.
-    if (parsed.workspaceId && parsed.workspaceId !== activeWorkspaceId && workspaces.some((w) => w.id === parsed.workspaceId)) {
-      setActiveWorkspaceId(parsed.workspaceId);
+    const switchedWorkspace =
+      !!parsed.workspaceId && parsed.workspaceId !== activeWorkspaceId && workspaces.some((w) => w.id === parsed.workspaceId);
+    if (switchedWorkspace) {
+      setActiveWorkspaceId(parsed.workspaceId!);
     }
 
     // A bare URL (no `space=`) means two different things depending on when we see it: on the very
@@ -1293,7 +1295,21 @@ function PageContent() {
     // back/forward navigation landing on a URL from before the user ever picked a Space — it must
     // actually resolve to 'everything', or backing past that first click would silently do nothing
     // (the "no opinion" reading would just leave the current Space selected).
-    const explicitSpaceId = parsed.spaceId ?? (hasHydratedFromUrlRef.current ? 'everything' : null);
+    // A URL carrying any nav parameters at all was produced by buildNavQueryString, and that
+    // encoder omits `space` for exactly one reason: it was 'everything'. So on such a URL a missing
+    // space is not "no opinion", it is a positive statement of the default — even on the first
+    // hydration pass. Only a genuinely empty query string (a fresh visit to `/`) still means "no
+    // opinion", leaving fetchInitialData's own auto-select alone.
+    //
+    // Without this, reloading anywhere that had no explicit Space landed on the first Space in the
+    // workspace, highlighted as though it had been chosen: setActiveWorkspaceId (called just above,
+    // and by every other restore path) falls back to `spaces[0]` when it has no remembered position
+    // — which is always the case right after a reload, since that memory lives only in memory — and
+    // the old "no opinion" reading then declined to correct it. Reported with screenshots as
+    // landing in a different view after refresh, with the top Space lit up unselected.
+    const urlCarriesNavState = searchParams.toString().length > 0;
+    const explicitSpaceId =
+      parsed.spaceId ?? (hasHydratedFromUrlRef.current || urlCarriesNavState ? 'everything' : null);
     let docsSpace: HierarchySpace | undefined;
     if (explicitSpaceId !== null) {
       const allSpaces = workspaces.flatMap((w) => w.spaces);
@@ -1302,7 +1318,12 @@ function PageContent() {
       const space = allSpaces.find((s) => s.id === resolvedSpaceId);
       docsSpace = space;
       const validListIds = (parsed.listIds ?? []).filter((id) => space?.lists.some((l) => l.id === id));
-      if (resolvedSpaceId !== activeSpaceId || validListIds.sort().join(',') !== urlListIdsKey) {
+      // `switchedWorkspace` forces the write: setActiveWorkspaceId has already moved the store's
+      // activeSpaceId to that workspace's first Space, but `activeSpaceId` in this closure is still
+      // the pre-switch render's value, so the comparison below would see "nothing to do" and leave
+      // the store holding a Space the URL never asked for. Comparing against a value the same tick
+      // has already invalidated is the whole trap here.
+      if (switchedWorkspace || resolvedSpaceId !== activeSpaceId || validListIds.sort().join(',') !== urlListIdsKey) {
         setNavigation(resolvedSpaceId, validListIds);
       }
     }
