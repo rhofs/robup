@@ -1036,7 +1036,7 @@ function PageContent() {
   const [docContributorsPickerOpen, setDocContributorsPickerOpen] = useState(false);
 
   const [columnMenu, setColumnMenu] = useState<{ x: number; y: number; col: ColumnDef } | null>(null);
-  const [taskListPicker, setTaskListPicker] = useState<{ x: number; y: number; taskId: string; options: { id: string; label: string }[] } | null>(null);
+  const [taskListPicker, setTaskListPicker] = useState<{ x: number; y: number; taskId: string; options: { id: string; label: string; name?: string; path?: string }[] } | null>(null);
   const [fieldEditTarget, setFieldEditTarget] = useState<CustomFieldDef | null>(null);
   const [fieldToDelete, setFieldToDelete] = useState<{ id: string; name: string } | null>(null);
   const [fieldConflictPrompt, setFieldConflictPrompt] = useState<{
@@ -5131,9 +5131,25 @@ function PageContent() {
                 // move a task to any List, which also happens to be the easiest way to pull a
                 // subtask back out to the top level (moveTaskToListAndUnparent clears its
                 // parentId too) after an accidental drag-onto-another-task nest.
-                const options = workspaces
-                  .flatMap((w) => w.spaces)
-                  .flatMap((s) => s.lists.filter((l) => !l.archived).map((l) => ({ id: l.id, label: `${s.name} / ${listPathLabel(s, l.id)}` })));
+                // name and path kept apart, not pre-joined into one string. As a single
+                // "Space / Folder / List" label, truncation ate the END — which is the list name,
+                // the one part you actually need. Every entry read "Innholdsskapelse / Gaming / …"
+                // and told you everything except which list you were about to pick. Reported with
+                // a screenshot.
+                const options = workspaces.flatMap((w) => w.spaces).flatMap((s) =>
+                  s.lists
+                    .filter((l) => !l.archived)
+                    .map((l) => {
+                      const full = listPathLabel(s, l.id);
+                      const cut = full.lastIndexOf(' / ');
+                      return {
+                        id: l.id,
+                        label: full,
+                        name: cut === -1 ? full : full.slice(cut + 3),
+                        path: cut === -1 ? s.name : `${s.name} / ${full.slice(0, cut)}`,
+                      };
+                    })
+                );
                 const { x, y } = clampMenuPosition(taskMenu.x, taskMenu.y, 224, 288);
                 setTaskListPicker({ x, y, taskId: taskMenu.task.id, options });
                 setTaskMenu(null);
@@ -5425,9 +5441,13 @@ function PageContent() {
       {taskListPicker && (
         <>
           <div className="fixed inset-0 z-[60]" onClick={() => setTaskListPicker(null)} onContextMenu={(e) => { e.preventDefault(); setTaskListPicker(null); }} />
+          {/* Mobile: pinned to the screen rather than to the tap point, and nearly full width.
+              A 224px menu positioned at a finger's x/y ran off the right edge and left barely
+              enough room for a word, which is what made the truncation so damaging. Desktop keeps
+              the anchored-at-the-cursor behaviour, where there is room for it. */}
           <div
-            className="fixed z-[61] w-56 max-h-72 overflow-y-auto bg-neutral-900 border border-neutral-800 rounded shadow-2xl py-1"
-            style={{ top: taskListPicker.y, left: taskListPicker.x }}
+            className="fixed z-[61] max-h-72 overflow-y-auto bg-neutral-900 border border-neutral-800 rounded shadow-2xl py-1 inset-x-4 bottom-24 md:inset-x-auto md:bottom-auto md:w-72"
+            style={isMobile ? undefined : { top: taskListPicker.y, left: taskListPicker.x }}
           >
             <div className="px-3 py-1 text-[10px] uppercase tracking-wide text-neutral-500">Move to which list?</div>
             {taskListPicker.options.map((opt) => (
@@ -5437,10 +5457,13 @@ function PageContent() {
                   moveTaskToListAndUnparent(taskListPicker.taskId, opt.id);
                   setTaskListPicker(null);
                 }}
-                className="w-full text-left px-3 py-1.5 text-xs text-neutral-300 hover:bg-neutral-800/60 cursor-pointer truncate"
+                className="w-full text-left px-3 py-2 hover:bg-neutral-800/60 cursor-pointer"
                 title={opt.label}
               >
-                {opt.label}
+                {/* The list's own name leads and is allowed the full width; the path sits under it,
+                    dimmer and smaller, and is the thing that truncates if anything must. */}
+                <span className="block text-xs text-neutral-200 truncate">{opt.name ?? opt.label}</span>
+                {opt.path && <span className="block text-[10px] text-neutral-500 truncate">{opt.path}</span>}
               </button>
             ))}
           </div>

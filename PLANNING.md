@@ -3738,3 +3738,26 @@ meant to press must not appear underneath it.
 **Still unresolved, and blocked on evidence:** a second report in the same message, that the
 dropdown shown while moving a task into another is cropped so you cannot tell where it will land.
 The screenshot referenced was not attached, so nothing was changed for it.
+
+### Same session — the "Move to..." picker truncated the only part that mattered
+
+Screenshot showed every entry reading "Innholdsskapelse / 🎮Gaming / …" — the label was built as
+one `Space / Folder / List` string and truncated from the end, so it told you everything except
+*which list you were about to pick*. Compounded by geometry: a 224px menu positioned at the tap's
+x/y ran past the right edge of a phone screen, leaving room for barely a word.
+
+Fixed on both axes. The name and path are now separate fields rather than one pre-joined string,
+rendered as two lines — the list's own name leads at full width, the path sits under it dimmer and
+smaller, and the path is what truncates if anything must. On mobile the menu is pinned to the
+screen (nearly full width, above the nav island) instead of to the finger; desktop keeps its
+anchored-at-the-cursor placement, where there is room for it.
+
+**Also requested and NOT built: moving tasks around within a list.** Worth stating what that
+actually costs, because it is not a tweak — `Task` has no order column at all. Tasks come back
+`orderBy: createdAt desc` and the list offers optional client-side sorting by due date, start date
+or name. Manual reordering therefore needs: a `Task.order` field and a migration, a reorder action
+with undo, a drop-between-rows insertion indicator distinct from the existing drop-*onto*-a-row
+nesting (the same ambiguity Spaces/Folders/Lists already solve with `reorder*RelativeTo` plus an
+indicator, so there is a pattern to follow), and — the part that is a real product decision rather
+than a mechanical one — an answer for what manual order means while a sort is active. Those two
+cannot both win. Raised with the user rather than picked unilaterally.
