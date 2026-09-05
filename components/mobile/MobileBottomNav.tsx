@@ -153,12 +153,17 @@ function NavPill({ pillKey }: { pillKey: string }) {
         //
         // Volume is roughly conserved at each step (wider ⇒ flatter, narrower ⇒ taller), which is
         // what makes it read as a bubble rather than as a box being resized.
-        // transformOrigin bottom: the vertical growth then goes UPWARD, out of the nav bar, instead
-        // of splitting either side of the centre — "at den eser ut oppover for å gjøre opp for
-        // presset innover".
-        style={{ transformOrigin: 'bottom center' }}
-        initial={{ scaleX: 1.3, scaleY: 0.78 }}
-        animate={{ scaleX: [1.3, 0.88, 1], scaleY: [0.78, 1.18, 1] }}
+        // Centre origin, not bottom. Anchoring it to the bottom made the pill grow only upward,
+        // which reads as it being *pulled* rather than squeezed — "klemmes bare oppover, ser dorky
+        // ut". A bubble compressed from the sides bulges evenly in both directions, so the default
+        // centre origin is the correct one and the earlier change was simply wrong.
+        //
+        // The vertical range is also much narrower now. The horizontal amount was confirmed good,
+        // so it is untouched; strict volume conservation would pair 1.3 with roughly 0.77, but
+        // that overshoot is exactly what read as too much. Physical accuracy is not the goal here —
+        // the suggestion of weight is, and it stops being a suggestion when you can measure it.
+        initial={{ scaleX: 1.3, scaleY: 0.94 }}
+        animate={{ scaleX: [1.3, 0.88, 1], scaleY: [0.94, 1.05, 1] }}
         transition={{ duration: 0.42, times: [0, 0.55, 1], ease: [0.22, 1, 0.36, 1] }}
       />
     </motion.div>

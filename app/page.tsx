@@ -451,7 +451,8 @@ const NAV_TOTAL_HEIGHT_PB_CLASS = 'pb-[calc(4.75rem+env(safe-area-inset-bottom)+
 // one is an expo-style out: most of the distance is covered early, then a long visible glide into
 // place, which is the "fin bremseeffekt" asked for. 0.46s rather than 0.32s, because deceleration
 // needs time to be perceived at all; a fast ease-out just reads as a fast move.
-const CHAT_PUSH_TRANSITION = { duration: 0.46, ease: [0.16, 1, 0.3, 1] as const };
+const CHAT_PUSH_MS = 460;
+const CHAT_PUSH_TRANSITION = { duration: CHAT_PUSH_MS / 1000, ease: [0.16, 1, 0.3, 1] as const };
 
 const searchPillLabel = (view: string) =>
   view === 'docs' ? 'Search docs...' : view === 'chat' ? 'Search chats and channels...' : 'Search...';
@@ -775,12 +776,35 @@ function PageContent() {
   // re-renders, same safe shape the old channel-only version of this selector already had) — the
   // {kind, text} object is now built in a separate useMemo, which only ever runs when that
   // reference (or currentUserId) actually changes.
-  const activeChatEntity = useChatStore((s) => {
+  // Everything that changes when a conversation opens or closes reads this, not activeChatEntity
+  // directly — the search pill, the floating nav, the pane switch. If any one of them used the raw
+  // value it would flip at a different moment than the others and something would jump mid-slide,
+  // which is the same class of bug as the shared padding fixed a round earlier.
+  // True from the moment Back is pressed until the slide-out has finished. Without it, pressing
+  // Back cleared activeChannelId instantly, ChatPanel re-rendered as its "Pick a channel" empty
+  // state, and what actually slid off screen was a blank pane — the conversation never animated
+  // away at all. Reported as "går for fort vekk", which is what a disappearance looks like when
+  // you expect a movement. The store is cleared only once the animation is done.
+  const [chatClosing, setChatClosing] = useState(false);
+  const activeChatEntityRaw = useChatStore((s) => {
     const id = s.activeChannelId;
     if (!id) return null;
     const channel = activeWorkspaceId ? (s.channelsByWorkspace[activeWorkspaceId] || []).find((c) => c.id === id) : null;
     return channel ?? s.dms.find((d) => d.id === id) ?? null;
   });
+  // Null the instant Back is pressed, even though the store still holds the channel for another
+  // ~460ms so the conversation can finish sliding out with its content intact.
+  const activeChatEntity = chatClosing ? null : activeChatEntityRaw;
+
+  const closeChatConversation = () => {
+    hapticTap();
+    setChatClosing(true);
+    window.setTimeout(() => {
+      setActiveChatChannelId(null);
+      setChatClosing(false);
+    }, CHAT_PUSH_MS);
+  };
+
   const activeChatChannelLabel = useMemo(() => {
     if (!activeChatEntity) return null;
     if (activeChatEntity.type !== 'dm' && activeChatEntity.type !== 'group_dm') {
@@ -4207,10 +4231,7 @@ function PageContent() {
                   itself is already what's showing otherwise, so there's nothing to go "back" to. */}
               {activeView === 'chat' && !!activeChatEntity && (
                 <button
-                  onClick={() => {
-                    hapticTap();
-                    setActiveChatChannelId(null);
-                  }}
+                  onClick={closeChatConversation}
                   title="Back"
                   className="p-1.5 rounded text-neutral-400 hover:text-app-strong hover:bg-neutral-800/60 cursor-pointer"
                 >
@@ -4938,6 +4959,12 @@ function PageContent() {
                         {!activeChatEntity ? (
                           <motion.div
                             key="chat-list"
+                            // willChange: the browser promotes this to its own compositing layer
+                            // up front instead of discovering mid-animation that it needs one —
+                            // the first frames of a transform on a tall, scrollable subtree are
+                            // where dropped frames show up, which is what "færre frames i vår"
+                            // was describing.
+                            style={{ willChange: 'transform' }}
                             className="absolute inset-0 overflow-y-auto px-3 py-3 pb-28 bg-neutral-900 rounded-t-2xl"
                             initial={{ x: '-33%' }}
                             animate={{ x: 0 }}
@@ -4951,6 +4978,7 @@ function PageContent() {
                             key="chat-panel"
                             // p-2 lives here, not on the shared wrapper — see that wrapper's own
                             // comment. Inside the animated pane it simply travels along.
+                            style={{ willChange: 'transform' }}
                             className="absolute inset-0 bg-neutral-950 p-2"
                             initial={{ x: '100%' }}
                             animate={{ x: 0 }}

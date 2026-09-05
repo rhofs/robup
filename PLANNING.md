@@ -3924,3 +3924,34 @@ reference. The previous centred pill floated in the middle of the column and rea
 than as a break in the conversation.
 
 All build clean; none seen on a device.
+
+### Same session — "goes away too fast" was a blank pane, not a fast one
+
+**Pressing Back never animated the conversation at all.** It cleared `activeChannelId` instantly,
+ChatPanel re-rendered as its "Pick a channel or DM to get started" empty state, and what slid off
+screen was a blank pane. The conversation did not travel — it vanished, and then an empty rectangle
+moved. "Går for fort vekk" is exactly what a disappearance looks like when you are expecting a
+movement.
+
+Fixed by keeping the store's channel for the length of the animation: Back sets a local
+`chatClosing` flag, everything derives `activeChatEntity` from `raw && !chatClosing`, and
+`setActiveChannelId(null)` runs on a timer matched to the transition. One derived value feeds the
+search pill, the floating nav and the pane switch, so none of them can flip at a different moment
+than the others — the same failure mode as the shared padding fixed a round earlier, and the reason
+it is centralised rather than repeated at each site.
+
+**The pill's squash was anchored to the bottom, which was simply wrong.** Growing only upward reads
+as being *pulled*, not squeezed — "klemmes bare oppover, ser dorky ut". A bubble compressed from
+the sides bulges evenly both ways, so the default centre origin was right all along and the previous
+round's change made it worse. The vertical range is also much narrower now (0.94→1.05 rather than
+0.78→1.18); the horizontal amount was confirmed good and is untouched. Strict volume conservation
+would pair a 1.3 stretch with roughly 0.77, and that is precisely the overshoot that read as too
+much: physical accuracy is not the goal, the *suggestion* of weight is, and it stops being a
+suggestion once you can measure it.
+
+**Smoothness:** both sliding panes now declare `will-change: transform`, so the browser promotes
+them to their own compositing layer up front rather than discovering mid-animation that it needs
+one. The first frames of a transform on a tall scrollable subtree are exactly where dropped frames
+appear, which is what "færre frames i vår" was describing. Whether this closes the gap to ClickUp
+is genuinely unknown from here — it is the standard first move, not a guaranteed fix, and if it
+still stutters the next step is measuring on-device rather than guessing again.
