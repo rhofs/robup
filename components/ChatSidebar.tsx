@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { Hash, MessageCircle, Pencil, Plus, Check, Bell, BellOff } from 'lucide-react';
 import { useChatStore, type ChatChannel, type Connection } from '../store/useChatStore';
 import { useSessionStore } from '../store/useSessionStore';
@@ -35,6 +35,7 @@ export default function ChatSidebar({ workspaceId }: ChatSidebarProps) {
     renameChannel,
     fetchDMs,
     fetchConnections,
+    fetchMessages,
     createOrOpenDM,
     toggleChannelMute,
   } = useChatStore();
@@ -54,6 +55,22 @@ export default function ChatSidebar({ workspaceId }: ChatSidebarProps) {
     fetchDMs();
     fetchConnections();
   }, [fetchDMs, fetchConnections]);
+
+  // Warm the message cache for the few most recent conversations while the list is on screen.
+  // fetchMessages already caches per channel and ChatPanel reads that cache directly, so a
+  // conversation that has been prefetched opens with its history already there instead of a blank
+  // panel — which is the difference the user noticed against Discord/ClickUp ("den ikke loader i
+  // clickup/disc"). Capped at five and fired once per list mount: this is a nicety, and fetching
+  // every conversation's history on the chance one gets opened would be a real cost for a real
+  // workspace.
+  const prefetchedRef = useRef(false);
+  useEffect(() => {
+    if (prefetchedRef.current) return;
+    const recent = [...dms].slice(0, 5);
+    if (recent.length === 0) return;
+    prefetchedRef.current = true;
+    for (const c of recent) fetchMessages(c.id);
+  }, [dms, fetchMessages]);
 
   const handleCreateChannel = async (name: string) => {
     if (!workspaceId) return;

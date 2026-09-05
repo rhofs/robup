@@ -152,6 +152,13 @@ interface ChatStore {
   lookupUser: (query: string) => Promise<ConnectionSearchResult[]>;
   sendConnectionRequestTo: (userId: string) => Promise<{ status: string } | null>;
   fetchMessages: (channelId: string) => Promise<void>;
+  // Which channels have completed at least one message fetch. Without this, an unopened channel and
+  // an genuinely empty one are indistinguishable — both are `messagesByChannel[id] === undefined` —
+  // so ChatPanel confidently rendered "No messages yet, say hello" during the first load of every
+  // conversation, asserting something it could not yet know. Reported as chat taking a moment to
+  // appear; the wait is real, but claiming the conversation is empty while waiting is the part that
+  // actually looked broken.
+  loadedChannelIds: string[];
   postMessage: (
     channelId: string,
     opts: { id?: string; body: string; quotedMessageId?: string; attachment?: PendingChatAttachment }
@@ -205,6 +212,7 @@ export const useChatStore = create<ChatStore>((set, get) => ({
   connectionRequestsIncoming: [],
   connectionRequestsOutgoing: [],
   messagesByChannel: {},
+  loadedChannelIds: [],
   threadsByRootId: {},
   activeChannelId: null,
   activeThreadRootId: null,
@@ -374,6 +382,9 @@ export const useChatStore = create<ChatStore>((set, get) => ({
     const messages = await res.json();
     set((state) => ({
       messagesByChannel: { ...state.messagesByChannel, [channelId]: messages },
+      loadedChannelIds: state.loadedChannelIds.includes(channelId)
+        ? state.loadedChannelIds
+        : [...state.loadedChannelIds, channelId],
       dms: zeroUnread(state.dms, channelId),
       channelsByWorkspace: Object.fromEntries(
         Object.entries(state.channelsByWorkspace).map(([wsId, channels]) => [wsId, zeroUnread(channels, channelId)])

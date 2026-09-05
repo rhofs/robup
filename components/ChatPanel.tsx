@@ -110,7 +110,7 @@ function groupIntoDays(messages: ChatMessage[]): { label: string; runs: Run[] }[
 }
 
 export default function ChatPanel() {
-  const { channelsByWorkspace, dms, messagesByChannel, activeChannelId, fetchMessages, postMessage, deleteMessage, setActiveThreadRootId, toggleReaction } =
+  const { channelsByWorkspace, dms, messagesByChannel, loadedChannelIds, activeChannelId, fetchMessages, postMessage, deleteMessage, setActiveThreadRootId, toggleReaction } =
     useChatStore();
   const currentUserId = useSessionStore((s) => s.currentUserId);
   const isMobile = useIsMobile();
@@ -195,6 +195,10 @@ export default function ChatPanel() {
     : null;
   const activeChannelLabel = isDM ? dmLabel : activeChannel?.name;
   const messages = activeChannelId ? messagesByChannel[activeChannelId] || [] : [];
+  // Has this conversation ever finished loading? Cached messages render instantly on a second
+  // visit; the very first open genuinely has nothing to show yet, and the difference matters
+  // because "empty" and "not loaded" look identical from `messages.length` alone.
+  const hasLoaded = !!activeChannelId && loadedChannelIds.includes(activeChannelId);
   const days = groupIntoDays(messages);
   const myProfile = currentUserId ? membersById.get(currentUserId) ?? null : null;
 
@@ -381,7 +385,11 @@ export default function ChatPanel() {
           overflow-x-auto (lib/chatFormat.tsx), so they scroll within themselves rather than
           widening the page. */}
       <div className="flex-1 overflow-y-auto overflow-x-hidden px-1 py-3 space-y-4" onClick={() => setHeldMessageId(null)}>
-        {messages.length === 0 && (
+        {/* Only once we actually know. Previously this rendered during the first load of every
+            conversation, telling the user it was empty before the messages had arrived — which is
+            most of what "det tar litt tid før chatten vises" was describing: not the wait itself,
+            but the app asserting something false while waiting. */}
+        {messages.length === 0 && hasLoaded && (
           <p className="text-[11px] text-neutral-500 px-2">
             No messages yet {isDM ? `with ${activeChannelLabel}` : `in #${activeChannelLabel}`} — say hello.
           </p>

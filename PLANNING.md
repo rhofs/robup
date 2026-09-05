@@ -3802,3 +3802,35 @@ file already documents for the Space and List indicators.
 **Verified against a real database**: default order matches creation order, moving a task to the
 top persists, moving it back restores the original sequence, a neighbour swap lands correctly, and
 dropping a task on itself is a no-op. All seven passed.
+
+### Same session — chat's "loading" gap, plus three answers
+
+**Chat felt slow to open, and part of it was the app lying.** `messagesByChannel` is already a
+cache and `fetchMessages` replaces rather than clears it, so a *second* visit to a conversation
+renders instantly. The first has nothing yet — and with only `messages.length` to go on, an unopened
+conversation and a genuinely empty one are indistinguishable, so ChatPanel rendered "No messages yet
+— say hello" during the first load of every conversation. The wait was real; asserting the
+conversation was empty while waiting is what made it look broken. Added `loadedChannelIds`, and the
+empty state now waits until a fetch has actually completed.
+
+Also warms the cache for the five most recent DMs while the chat list is on screen, fired once per
+mount. That is what makes the first open feel instant, which is the difference against
+Discord/ClickUp the user was pointing at. Capped deliberately: fetching every conversation's history
+on the chance one gets opened is a real cost in a real workspace, and this is a nicety.
+
+**Three things answered rather than built:**
+
+- *The Undo toast not appearing* — most likely simply not deployed yet: it shipped in `19f16d3`,
+  after the card-contrast change the screenshot confirms is live. Asked the user to check the
+  running commit rather than guessing at a second cause, since the toast fires on both drag
+  outcomes and there is nothing conditional about it beyond that.
+- *No "sort by" on mobile* — correct, and it does not block reordering. The sort control lives in
+  the column header row, which is `hidden md:grid`, so `sortBy` can only ever be `'none'` on a
+  phone, which is exactly the state where manual order applies. The premise behind the worry
+  ("so I can't reorder either") is the opposite of the truth. A mobile sort control is a real gap
+  but a separate one.
+- *Slide-in navigation animation* (Discord/ClickUp-style push-left-reveal-right when opening a DM,
+  room, list or doc) — a genuine feature request, deliberately not started in the same round as
+  four other changes. It touches the same mobile view-switching machinery that has cost this
+  project many rounds (the popup-menu saga, the Chat-vs-Planner bounce, the nav remount), so it
+  deserves its own pass rather than being bundled in behind unverified work.
