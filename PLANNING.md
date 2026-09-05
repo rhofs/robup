@@ -3482,3 +3482,47 @@ flagged to the user as a separate decision rather than bundled in silently, sinc
 back/forward behaviour depends on that encoder and it deserves its own round of testing.
 
 `tsc` and `npm run build` clean. Not seen on a device.
+
+## Today's session (2026-09-05, continued a second time) — The open chat conversation and the open mobile sheet now survive a reload
+
+The second half of the refresh complaint, deliberately left out of the previous fix and now done on
+request. Both are the same shape: real destinations from the user's point of view that lived only
+in React state, so `parseNavUrl`/`buildNavQueryString` had nothing to restore.
+
+- **`chat=<channelId>`** — refreshing inside a DM or channel used to return you to the channel list.
+- **`sheet=spaces|mytasks`** — refreshing while browsing a mobile tree sheet dropped you onto
+  whatever board sat underneath it, which is most of what "havner i nytt view" actually described.
+
+Two things in the implementation are worth keeping, because both were near-misses:
+
+**The chat channel is deliberately NOT validated against the loaded channel list**, unlike the modal
+stack and event id, which are. Channels and DMs are fetched by their own store on their own
+schedule, so on a cold load that list is routinely still empty when this effect first runs —
+validating would throw away a perfectly good id for arriving early. `ChatPanel` already renders a
+"pick a channel" state for an id that resolves to nothing, so a genuinely stale one degrades into
+that instead of breaking.
+
+**Restoring a sheet collides with the "close every mobile overlay when activeView changes"
+backstop.** That effect is declared earlier in the file, so on the pass where the URL sync sets the
+view, it fires *first* and closes the sheet — and because it depends on `activeView` while the URL
+sync depends on `searchParams`, nothing re-runs afterwards to open it again. The sheet would have
+silently never appeared. Solved with the existing one-shot `suppressOverlayCloseRef`, the same
+mechanism nav taps already use for "this tap both changes view and opens a sheet", rather than
+inventing a second one. This is the third distinct bug in this family (after the 2026-08-26 batched
+`setActiveView` collision and yesterday's fast-double-tap race): whenever two effects disagree about
+who owns a piece of state within a single tick, this file's mutual-equality design has no way to
+express it.
+
+Also read `activeChannelId` as a plain id rather than the resolved channel object — selecting an
+object literal from a Zustand store is the documented infinite-render-loop trap in Known bugs, and
+this is exactly the shape that triggers it.
+
+**Verified as pure logic**, which this genuinely is: 12 round-trip checks covering the chat channel
+and both sheet values, rejection of an unknown `sheet` value, defaults still being omitted from the
+query string (an empty state must still produce an empty URL), and — the regression that mattered
+most — every pre-existing field surviving a round trip alongside the two new ones. All passed. `tsc`
+and `npm run build` clean.
+
+Not seen on a device. Worth testing together: reload inside a DM, reload with the Spaces tree open,
+reload with My Tasks open, and the browser back button out of each — back now has a history entry
+to return to in cases where it previously had none.

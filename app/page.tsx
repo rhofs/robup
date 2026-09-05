@@ -669,6 +669,10 @@ function PageContent() {
   const connectionRequestsIncoming = useChatStore((s) => s.connectionRequestsIncoming);
   const createOrOpenDM = useChatStore((s) => s.createOrOpenDM);
   const setActiveChatChannelId = useChatStore((s) => s.setActiveChannelId);
+  // Read as a plain id (not the resolved channel object) specifically so it can be encoded into
+  // the URL and compared by value — the resolved object is derived separately below, and selecting
+  // an object literal here is exactly the infinite-render-loop trap documented in Known bugs.
+  const activeChatChannelId = useChatStore((s) => s.activeChannelId);
   const setActiveChatSidebarTab = useChatStore((s) => s.setActiveChatSidebarTab);
 
   // "Send DM" from ManageableAvatar (Office, backlog #9) — jumps straight into the real
@@ -1231,6 +1235,10 @@ function PageContent() {
       docId: activeStandaloneDocId,
       officeUserId: activeOfficeUserId,
       officeRoomId: activeOfficeRoomId,
+      // Only meaningful inside the chat view — a channel id left in the URL after navigating
+      // elsewhere would restore a conversation nobody asked to reopen.
+      chatChannelId: activeView === 'chat' ? activeChatChannelId : null,
+      sheet: mobileSpacesOpen ? 'spaces' : mobilePersonalSpacesOpen ? 'mytasks' : null,
     });
     if (qs === searchParams.toString()) return;
     pendingPushesRef.current.push(qs);
@@ -1249,6 +1257,9 @@ function PageContent() {
     urlDocIdKey,
     urlOfficeUserIdKey,
     urlOfficeRoomIdKey,
+    activeChatChannelId,
+    mobileSpacesOpen,
+    mobilePersonalSpacesOpen,
   ]);
 
   // Effect 2: URL -> nav state. Runs once real data has loaded (so a deep-linked Space/List/task
@@ -1277,6 +1288,14 @@ function PageContent() {
 
     const parsed = parseNavUrl(searchParams);
 
+    // Restoring a sheet from the URL collides with the "close every mobile overlay when activeView
+    // changes" backstop above: that effect is declared earlier, so on the pass where this one sets
+    // the view it fires first and shuts the sheet, and — because it depends on activeView while
+    // this effect depends on searchParams — nothing re-runs to open it again. Same collision the
+    // nav taps already solve, so it uses the same one-shot flag rather than a second mechanism.
+    if (parsed.sheet && parsed.view !== activeView) {
+      suppressOverlayCloseRef.current = true;
+    }
     if (parsed.view !== activeView) setActiveView(parsed.view);
 
     // Same "URL says nothing -> leave it" rule as spaceId below, just simpler since workspace has
@@ -1353,6 +1372,21 @@ function PageContent() {
     const validOfficeRoomId =
       parsed.officeRoomId && workspaces.some((w) => w.rooms.some((r) => r.id === parsed.officeRoomId)) ? parsed.officeRoomId : null;
     if (validOfficeRoomId !== activeOfficeRoomId) setActiveOfficeRoomId(validOfficeRoomId);
+
+    // Chat channel/DM. Deliberately NOT validated against the loaded channel list the way the modal
+    // stack and event id are: channels and DMs are fetched by their own store, on their own
+    // schedule, so on a cold load they are routinely still empty here — validating would discard a
+    // perfectly good id for being early. ChatPanel already renders its own "pick a channel" state
+    // for an id that resolves to nothing, so a stale one degrades to that rather than breaking.
+    if (parsed.chatChannelId !== activeChatChannelId) setActiveChatChannelId(parsed.chatChannelId);
+
+    // Which mobile tree sheet is open. Restoring these is the whole point of encoding them — a
+    // reload while browsing the Spaces or My Tasks tree previously dropped the user onto whatever
+    // board was underneath, which is what "havner i nytt view" described.
+    const wantSpacesSheet = parsed.sheet === 'spaces';
+    const wantPersonalSheet = parsed.sheet === 'mytasks';
+    if (wantSpacesSheet !== mobileSpacesOpen) setMobileSpacesOpen(wantSpacesSheet);
+    if (wantPersonalSheet !== mobilePersonalSpacesOpen) setMobilePersonalSpacesOpen(wantPersonalSheet);
 
     hasHydratedFromUrlRef.current = true;
     // eslint-disable-next-line react-hooks/exhaustive-deps

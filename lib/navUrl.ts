@@ -1,6 +1,12 @@
 import { startOfDay } from './calendarDates';
 
 export type NavGranularity = 'month' | 'week' | 'day';
+// Which full-screen mobile tree sheet is open, if any. Encoded because it is a real destination
+// from the user's point of view — browsing the Spaces or My Tasks tree is *where they are* — but
+// it lived purely in React state, so a reload dropped them onto whatever board sat underneath.
+// Reported live as "når jeg refresher så havner jeg i nytt view". Meaningless on desktop, which
+// never opens these; a desktop load carrying one simply renders nothing extra.
+export type NavSheet = 'spaces' | 'mytasks';
 export type NavView = 'board' | 'calendar' | 'docs' | 'office' | 'mytasks' | 'profile' | 'chat' | 'directMessages';
 
 // `workspaceId`/`spaceId`/`listIds` are nullable — null means the URL simply didn't mention them
@@ -26,6 +32,11 @@ export type ParsedNavUrl = {
   docId: string | null;
   officeUserId: string | null;
   officeRoomId: string | null;
+  // The open chat channel or DM. Same reasoning as modalStack and eventId: without it, refreshing
+  // inside a conversation returned you to the channel list, and a back gesture out of a
+  // conversation navigated whatever came before it instead of just leaving the conversation.
+  chatChannelId: string | null;
+  sheet: NavSheet | null;
 };
 
 export type NavState = {
@@ -41,6 +52,8 @@ export type NavState = {
   docId: string | null;
   officeUserId: string | null;
   officeRoomId: string | null;
+  chatChannelId: string | null;
+  sheet: NavSheet | null;
 };
 
 // Local-date YYYY-MM-DD — not `toISOString()`, which is UTC and shifts the date near midnight in
@@ -86,7 +99,13 @@ export function parseNavUrl(params: URLSearchParams): ParsedNavUrl {
   const officeUserId = params.get('officeUser');
   const officeRoomId = params.get('officeRoom');
   const eventId = params.get('event') || null;
-  return { view, workspaceId, spaceId, listIds, modalStack, eventId, granularity, focusDate, docFolderId, docId, officeUserId, officeRoomId };
+  const chatChannelId = params.get('chat') || null;
+  const sheetRaw = params.get('sheet');
+  const sheet: NavSheet | null = sheetRaw === 'spaces' || sheetRaw === 'mytasks' ? sheetRaw : null;
+  return {
+    view, workspaceId, spaceId, listIds, modalStack, eventId, granularity, focusDate,
+    docFolderId, docId, officeUserId, officeRoomId, chatChannelId, sheet,
+  };
 }
 
 // Always-explicit canonical serialization of a fully-resolved nav state (as opposed to
@@ -105,5 +124,7 @@ export function buildNavQueryString(state: NavState): string {
   if (state.docId) params.set('doc', state.docId);
   if (state.officeUserId) params.set('officeUser', state.officeUserId);
   if (state.officeRoomId) params.set('officeRoom', state.officeRoomId);
+  if (state.chatChannelId) params.set('chat', state.chatChannelId);
+  if (state.sheet) params.set('sheet', state.sheet);
   return params.toString();
 }
