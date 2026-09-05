@@ -111,6 +111,7 @@ import MobileSpacesSheet from '../components/mobile/MobileSpacesSheet';
 import MobileDocPagesSheet from '../components/mobile/MobileDocPagesSheet';
 import MobileCalendarFilterSheet from '../components/mobile/MobileCalendarFilterSheet';
 import { useIsMobile } from '../hooks/useIsMobile';
+import { useViewportHeight } from '../hooks/useViewportHeight';
 import AccessControlPanel from '../components/AccessControlPanel';
 import MentionText from '../components/MentionText';
 import MentionTextarea from '../components/MentionTextarea';
@@ -653,6 +654,8 @@ function PageContent() {
   const { currentUserId } = useSessionStore();
   usePresenceConnection(activeWorkspaceId ?? null);
   const isMobile = useIsMobile();
+  // Keeps --app-height in step with the on-screen keyboard; see the root element's own comment.
+  useViewportHeight();
 
   // Unread badges (Phase 8) — fetched here, not just inside ChatSidebar (which only mounts once
   // the user has already navigated into Chat), so the nav-rail/Me-zone badges below can show
@@ -3271,7 +3274,21 @@ function PageContent() {
         below the actual visible fold, requiring a scroll to reach it. `dvh` tracks the real
         visible viewport and updates as the browser chrome shows/hides — the standard fix for
         exactly this class of "have to scroll to see the bottom bar" mobile-web bug. */}
-    <div className="flex flex-col h-dvh bg-neutral-950 text-neutral-100 font-sans overflow-hidden select-none">
+    <div
+      // h-[var(--app-height,100dvh)]: `dvh` follows the browser's collapsing chrome but knows
+      // nothing about the on-screen keyboard, so on iOS the app stayed full-height while the
+      // keyboard covered its bottom and Safari scrolled the header off the top to reveal the
+      // composer — the "cropped while writing" report. --app-height is the visual viewport's real
+      // height (hooks/useViewportHeight.ts); the literal 100dvh fallback keeps every browser
+      // without visualViewport behaving exactly as before.
+      // Height only — deliberately NO transform to compensate for the visual viewport's own scroll
+      // offset. A transform on this element (even translateY(0)) establishes a containing block,
+      // which would make every `position: fixed` descendant — the bottom nav, its backdrop, the
+      // task modal, every context menu — resolve against this div instead of the viewport. Sizing
+      // the app correctly is where nearly all the benefit is; buying the last few pixels at the
+      // cost of relocating every fixed element in the app is not a trade worth making.
+      className="flex flex-col h-[var(--app-height,100dvh)] bg-neutral-950 text-neutral-100 font-sans overflow-hidden select-none"
+    >
       {/* ================= TOP BAR — workspace + search, so the icon rail/sidebar below don't
           have to carry that weight themselves (previously both lived stacked at the very top
           of the sidebar, which read as cramped). ================= */}
@@ -4946,7 +4963,29 @@ function PageContent() {
           gets you out. The channel/DM *picker* (ChatSidebar, shown when nothing's picked yet) still
           gets the floating nav like every other screen — only an actually-open conversation hides
           it. */}
-      {!(activeView === 'chat' && isMobile && activeChatEntity) && (
+      {/* Hidden, not unmounted. Unmounting it meant every exit from a conversation REMOUNTED the
+          whole nav: its measured heights reset to their initial guesses, its AnimatePresence
+          children re-entered, and the result was a visible flourish that reads as the menu opening
+          and shutting again — reported as "en rar 'lukke' animasjon... som om menyen var åpen og
+          lukket veldig fort" on pressing Back out of a DM. A previous round suppressed the height
+          transition until the first measurement, which removed one symptom without removing the
+          cause; there is no reason for this component to be torn down and rebuilt just to be
+          invisible for a while. Kept mounted, it also stays measurable (offsetHeight is unaffected
+          by a transform, unlike `display:none`), so the ResizeObserver values stay correct.
+          Hidden with opacity + pointer-events rather than a transform: this wrapper has no height of
+          its own (every child inside is `fixed`), so a translate would move nothing — and worse, a
+          transform on an ancestor makes `position: fixed` resolve against that ancestor instead of
+          the viewport, which would break the nav's placement the moment the wrapper ever gained
+          height. `display:none` is out for the opposite reason: it would zero the measurements this
+          component reads back. */}
+      <div
+        className={
+          activeView === 'chat' && isMobile && activeChatEntity
+            ? 'pointer-events-none opacity-0'
+            : undefined
+        }
+        aria-hidden={activeView === 'chat' && isMobile && !!activeChatEntity}
+      >
       <MobileBottomNav
         navTabs={visibleNavTabs}
         menuOpen={mobileMenuOpen}
@@ -4968,7 +5007,7 @@ function PageContent() {
         onSelectWorkspace={setActiveWorkspaceId}
         onCreateWorkspace={() => setCreatingWorkspace(true)}
       />
-      )}
+      </div>
 
       {/* Standalone "zero real workspace" fallback — a fixed floating pill, always visible and
           always tappable regardless of which mobile-only overlay (Spaces sheet, popup menu,
