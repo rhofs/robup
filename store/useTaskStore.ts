@@ -681,7 +681,11 @@ export const useTaskStore = create<TaskStore>((set, get) => {
               workspaces.find((w: HierarchyWorkspace) => w.isPersonal)?.id ??
               null);
         const activeWorkspace = workspaces.find((w: HierarchyWorkspace) => w.id === activeWorkspaceId);
-        const firstSpaceId = activeWorkspace?.spaces[0]?.id || 'everything';
+        // Same reasoning as setActiveWorkspaceId's own fallback below: never auto-select a Space on
+        // the user's behalf. Only used when the previous selection no longer exists (a deleted
+        // Space, or a workspace switch), where falling back to All Tasks is both correct and
+        // visibly neutral.
+        const firstSpaceId = 'everything';
         const lastRealWorkspaceId = activeWorkspace && !activeWorkspace.isPersonal ? activeWorkspace.id : previousLastRealWorkspaceId;
 
         // Same "keep it if it's still valid" rule as activeWorkspaceId just above, extended to
@@ -790,7 +794,15 @@ export const useTaskStore = create<TaskStore>((set, get) => {
       const workspace = get().workspaces.find((w) => w.id === id);
       const remembered = get().lastPositionByWorkspaceId[id];
       const rememberedSpace = remembered && workspace?.spaces.find((s) => s.id === remembered.spaceId);
-      const activeSpaceId = rememberedSpace ? remembered.spaceId : workspace?.spaces[0]?.id || 'everything';
+      // 'everything', not spaces[0]: picking the first Space on the user's behalf looks exactly
+      // like a choice they made — the Spaces sheet highlights it, the board opens its SpaceHome —
+      // and because activeSpaceId is written into the URL, that unasked-for choice then survives
+      // every reload from then on. Reported live: "det lyser øverste space, som om jeg har valgt
+      // den (selv om jeg ikke har det)", together with refreshes landing in that Space. Restoring a
+      // *remembered* position above is different and still correct: that one the user really did
+      // choose. With nothing remembered, All Tasks is the honest answer — nothing is selected,
+      // because nothing has been.
+      const activeSpaceId = rememberedSpace ? remembered.spaceId : 'everything';
       const activeListIds = rememberedSpace
         ? new Set(remembered!.listIds.filter((lid) => rememberedSpace.lists.some((l) => l.id === lid)))
         : new Set<string>();

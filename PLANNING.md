@@ -3441,3 +3441,44 @@ correct in the steady state and fragile in the moments where "current value" is 
 
 `tsc` and `npm run build` clean. Not confirmed on a device — reproducing needs a real reload on a
 URL with no explicit Space.
+
+## Today's session (2026-09-05, continued) — The refresh bug, actually root-caused: the app was picking a Space nobody chose
+
+**The previous entry's diagnosis was wrong, and the reason is worth recording.** It rested on
+reading `siqt.no/?workspace=1e…` off a screenshot as "this URL has no `space` parameter". That `…`
+was the browser's address bar truncating a long URL, not the end of it. Asking for the full string
+showed `?workspace=1e1828c8…&space=62d384f4…` — and, decisively, **identical before and after the
+refresh**. The URL round-trip was working perfectly the whole time.
+
+The fix shipped for that (`68dce30`) is harmless and arguably still an improvement, but it solved a
+problem that did not exist. **Lesson: a truncated address bar is not a URL.** Screenshots are
+excellent evidence for what is rendered and unreliable for anything the UI abbreviates — the same
+class of mistake as trusting a dashboard over an authoritative DNS query.
+
+**The real cause: `setActiveWorkspaceId` auto-selected `workspace.spaces[0]`** whenever it had no
+remembered position for that workspace — which is every first visit to a workspace, and every
+reload, since `lastPositionByWorkspaceId` lives only in memory. `fetchInitialData` had the same
+fallback. So switching to a workspace silently selected its first Space, the Spaces sheet
+highlighted it, the board opened its SpaceHome — and because `activeSpaceId` is written into the
+URL, that unasked-for choice then persisted through every subsequent reload. The user never picked
+Innholdsskapelse; the app did, once, and the URL kept it alive.
+
+Both fallbacks now resolve to `'everything'`. Restoring a genuinely *remembered* position is
+untouched and still correct — that one the user really did choose. With nothing remembered, All
+Tasks is the honest state: nothing is selected because nothing has been. This also makes the
+highlight trustworthy again, which was half the complaint.
+
+**A second, separate gap is NOT fixed and explains the rest of "I end up in a new view":** some
+mobile state is not encoded in the URL at all, so a reload cannot restore it —
+
+- which sheet is open (`mobileSpacesOpen` / `mobilePersonalSpacesOpen`), so refreshing while
+  browsing the Spaces or My Tasks tree drops you onto whatever board sits underneath it
+- which chat channel or DM is open — `lib/navUrl.ts` encodes view, workspace, space, lists, modal
+  stack, event, calendar granularity/date, doc folder/doc, office user/room, and no chat channel at
+  all, so refreshing inside a conversation returns you to the channel list
+
+Both are real and both are additive work on `navUrl.ts` plus its two sync effects. Not started —
+flagged to the user as a separate decision rather than bundled in silently, since the app's
+back/forward behaviour depends on that encoder and it deserves its own round of testing.
+
+`tsc` and `npm run build` clean. Not seen on a device.
