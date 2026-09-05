@@ -3567,3 +3567,37 @@ shell's command line* and killed the session twice before it was noticed — kil
 (`ss -ltnp`) instead. And a route handler under a path that also exists as a `public/` directory is
 only reachable once it is actually in the build; an interrupted `npm run build` produced a
 convincing "the route does not work" result that was really "the route was never compiled".
+
+### Same session — the other two reports: iOS keyboard cropping (finally explained) and the phantom close animation
+
+**The chat "cropping" on iOS was never horizontal overflow.** The decisive detail was in the
+report, not the code: it happens *while writing* and is fine otherwise. The app root is `h-dvh`,
+which follows the browser's collapsing address bar but knows nothing about the on-screen keyboard —
+on iOS the layout viewport keeps its full height when the keyboard opens and only the VISUAL
+viewport shrinks. Safari then scrolls the page to reveal the focused input, pushing the header off
+the top while the bottom of the app sits behind the keyboard. That is exactly what the screenshot
+shows, and it is why the earlier `min-w-0` / `overflow-x-hidden` round changed nothing: it was a
+coherent theory about the wrong axis.
+
+Fixed with `hooks/useViewportHeight.ts`, publishing `window.visualViewport.height` as
+`--app-height`, with the root sized `h-[var(--app-height,100dvh)]`. The literal `100dvh` fallback
+keeps browsers without `visualViewport` behaving exactly as before; confirmed the arbitrary class
+actually reached the compiled CSS (`height:var(--app-height,100dvh)`) rather than assuming Tailwind
+generated it.
+
+**Height only, deliberately.** Compensating for the visual viewport's own scroll offset needs a
+transform on the app root — and a transform there, *even `translateY(0)`*, establishes a containing
+block, which would make every `position: fixed` descendant (the bottom nav, its backdrop, the task
+modal, every context menu) resolve against that div instead of the viewport. This was written,
+noticed, and removed before shipping. Worth remembering as a standing hazard: this app has a lot of
+`fixed` chrome, so **no ancestor of it may ever gain a transform**.
+
+**The phantom "menu opened and closed" animation on leaving a DM** was the nav being conditionally
+*unmounted* while a conversation is open, so exiting one remounted the whole component — measured
+heights back to their initial guesses, `AnimatePresence` children re-entering. The 2026-09-04 round
+suppressed the height transition until the first measurement, which removed one symptom without
+removing the cause. Now kept mounted and hidden instead. Hidden with opacity/pointer-events rather
+than a transform (same containing-block hazard as above) and not `display:none` (which would zero
+the very measurements the component reads back).
+
+Both build clean. Neither seen on a device.
