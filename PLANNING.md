@@ -3870,3 +3870,24 @@ happen during.
 Builds clean. Neither seen on a device — and animation work on this project has a long history of
 looking different in practice than in reasoning, so both are worth a specific look, especially
 whether the 1/3 offset feels right or wants to be nearer 20%.
+
+### Same session — the push transition's vertical hitch, and a longer brake
+
+First on-device look: the 1/3 offset reads correctly. Two corrections.
+
+**The background "pressed down" a notch before sliding — a real bug, not a tuning issue.** The
+shared content wrapper in `page.tsx` picked its classes off `activeChatEntity`: no padding for the
+list, `p-2` for a conversation. So opening one added 8px of padding to the container *both* panes
+live in, at the exact instant the slide began, shoving them down mid-flight. Reported exactly as it
+behaves: "bakgrunnen presses ned, hakker et hakk ned vertikalt før den blir skyvd."
+
+Fixed by moving that breathing room onto the sliding pane itself, where it travels with the pane
+instead of resizing the stage underneath it. General lesson worth keeping: **nothing that both
+panes share may change with the state that drives the transition** — any layout property keyed off
+the same flag will fire mid-animation, and it will look like the animation's fault.
+
+**Easing.** It was never linear (it was already an ease-out), but the braking was too short to read
+as braking. Now an expo-style out — `[0.16, 1, 0.3, 1]` — which covers most of the distance early
+and then glides visibly into place, over 0.46s rather than 0.32s. Deceleration needs time to be
+perceived at all; a fast ease-out simply reads as a fast move, which is what "går litt fort"
+was describing.

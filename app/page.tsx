@@ -445,8 +445,12 @@ const NAV_TOTAL_HEIGHT_PB_CLASS = 'pb-[calc(4.75rem+env(safe-area-inset-bottom)+
 //
 // easeOut, not a spring: this is a screen moving under a finger's intent, not an object with
 // weight. A spring's overshoot on a full-screen pane reads as a wobble rather than as energy.
-// 0.32s is long enough to be legible as motion and short enough not to be in the way.
-const CHAT_PUSH_TRANSITION = { duration: 0.32, ease: [0.32, 0.72, 0, 1] as const };
+//
+// Not linear — it never was — but the first curve's braking was too brief to read as braking. This
+// one is an expo-style out: most of the distance is covered early, then a long visible glide into
+// place, which is the "fin bremseeffekt" asked for. 0.46s rather than 0.32s, because deceleration
+// needs time to be perceived at all; a fast ease-out just reads as a fast move.
+const CHAT_PUSH_TRANSITION = { duration: 0.46, ease: [0.16, 1, 0.3, 1] as const };
 
 const searchPillLabel = (view: string) =>
   view === 'docs' ? 'Search docs...' : view === 'chat' ? 'Search chats and channels...' : 'Search...';
@@ -4398,7 +4402,14 @@ function PageContent() {
                 // one. Dropped entirely for the list case; kept for an *open* conversation
                 // (ChatPanel), which still wants real breathing room around its message bubbles
                 // and has no rounded sheet of its own to go edge-to-edge with.
-                isMobile && !activeChatEntity
+                // Padding must NOT depend on activeChatEntity here. It used to: the list case had
+                // none and the conversation case had `p-2`, so opening a conversation added 8px of
+                // padding to the shared container at the exact instant the slide began, shoving
+                // both panes down a notch mid-flight. Reported precisely: "bakgrunnen presses ned,
+                // hakker et hakk ned vertikalt før den blir skyvd." The conversation's own breathing
+                // room now lives on the sliding pane itself, where it travels with the pane instead
+                // of resizing the stage underneath it.
+                isMobile
                 ? 'flex-1 min-h-0 overflow-hidden flex flex-col'
                 : 'flex-1 min-h-0 overflow-hidden p-2 md:p-6 flex flex-col'
               : activeView === 'board'
@@ -4915,7 +4926,9 @@ function PageContent() {
                         ) : (
                           <motion.div
                             key="chat-panel"
-                            className="absolute inset-0 bg-neutral-950"
+                            // p-2 lives here, not on the shared wrapper — see that wrapper's own
+                            // comment. Inside the animated pane it simply travels along.
+                            className="absolute inset-0 bg-neutral-950 p-2"
                             initial={{ x: '100%' }}
                             animate={{ x: 0 }}
                             exit={{ x: '100%' }}
