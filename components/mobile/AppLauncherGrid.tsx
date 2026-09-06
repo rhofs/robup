@@ -54,10 +54,38 @@ type TileProps = {
   label: string;
   selected?: boolean;
   badge?: number;
+  // Resolved by the caller from TILE_ACCENT so this component stays presentational.
+  accent?: string;
   onClick: () => void;
 };
 
-function Tile({ icon: Icon, label, selected, badge, onClick }: TileProps) {
+// Per-destination accent colours. The reference (ClickUp's own launcher) keeps the tiles neutral
+// and colours the ICONS — each destination gets an identity you recognise before you have read the
+// label, which is what makes a grid of nine scannable rather than a wall of identical grey squares.
+//
+// -500 shades throughout, deliberately: this app has a light mode built by inverting the neutral
+// scale (see globals.css), and chromatic colours are untouched by that inversion. A -400 would be
+// washed out against a light tile and a -600 muddy against a dark one; -500 carries enough contrast
+// on both without needing a per-theme variant for every entry here.
+//
+// Keyed by tile id with a neutral fallback, so a destination added later simply looks as it does
+// today until someone deliberately gives it a colour — no visual surprise from forgetting this map.
+const TILE_ACCENT: Record<string, string> = {
+  board: 'text-violet-500',
+  calendar: 'text-rose-500',
+  docs: 'text-blue-500',
+  office: 'text-amber-500',
+  chat: 'text-teal-500',
+  'my-tasks': 'text-indigo-500',
+  mytasks: 'text-emerald-500',
+  directMessages: 'text-cyan-500',
+  profile: 'text-fuchsia-500',
+  settings: 'text-slate-500',
+  trash: 'text-red-500',
+  archive: 'text-orange-500',
+};
+
+function Tile({ icon: Icon, label, selected, badge, accent, onClick }: TileProps) {
   return (
     <button
       onClick={() => {
@@ -71,7 +99,10 @@ function Tile({ icon: Icon, label, selected, badge, onClick }: TileProps) {
           selected ? 'bg-neutral-800 ring-2 ring-blue-500' : 'bg-neutral-800/60'
         }`}
       >
-        <Icon className={`w-5 h-5 ${selected ? 'text-blue-400' : 'text-neutral-300'}`} />
+        {/* The accent stays on whether or not the tile is selected — a destination's colour is its
+            identity, not a state. Selection is carried by the ring and the tile's own background
+            instead, which is also how the reference distinguishes the current one. */}
+        <Icon className={`w-5 h-5 ${accent ?? 'text-neutral-300'}`} />
         {!!badge && badge > 0 && (
           <span className="absolute -top-1 -right-1 min-w-[16px] h-4 px-1 rounded-full bg-red-500 text-white text-[9px] font-bold flex items-center justify-center leading-none">
             {badge > 99 ? '99+' : badge}
@@ -229,6 +260,7 @@ export default function AppLauncherGridContent({
           <Tile
             key={tile.id}
             icon={tile.icon}
+            accent={TILE_ACCENT[tile.id]}
             label={tile.label}
             badge={tile.badge}
             onClick={() => {
@@ -246,6 +278,7 @@ export default function AppLauncherGridContent({
       <div className="grid grid-cols-3 gap-4 pb-2">
         <Tile
           icon={Settings}
+          accent={TILE_ACCENT.settings}
           label="Settings"
           onClick={() => {
             onOpenSettings();
@@ -254,6 +287,7 @@ export default function AppLauncherGridContent({
         />
         <Tile
           icon={Trash2}
+          accent={TILE_ACCENT.trash}
           label="Trash"
           onClick={() => {
             onOpenTrash();
@@ -262,6 +296,7 @@ export default function AppLauncherGridContent({
         />
         <Tile
           icon={Archive}
+          accent={TILE_ACCENT.archive}
           label={showArchived ? 'Viewing archive' : 'Archive'}
           selected={showArchived}
           onClick={() => {
@@ -272,6 +307,7 @@ export default function AppLauncherGridContent({
         {canInstall && (
           <Tile
             icon={Download}
+            accent="text-sky-500"
             label="Install"
             onClick={() => {
               promptInstall();

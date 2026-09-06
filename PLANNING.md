@@ -4075,3 +4075,29 @@ the Chat-vs-Planner bounce resisted two sessions of careful reasoning and fell i
 evidence of the transition arrived. Asked the user for a Chrome remote-debugging performance
 profile, which is obtainable here (they are already comfortable with docker and ssh) and would name
 the cost outright instead of narrowing toward it one failed fix at a time.
+
+### Same session — colour in the app launcher
+
+Request, with ClickUp's own launcher as the reference: more colour. The reference is specific about
+*where* — the tiles stay neutral and the **icons** carry the colour, so each destination has an
+identity you recognise before reading the label. That is what makes a grid of nine scannable instead
+of a wall of identical grey squares, and it is a different thing from colouring the tiles
+themselves, which would fight the app's neutral chrome.
+
+`TILE_ACCENT` in `AppLauncherGrid.tsx` maps tile id → colour, with a neutral fallback so a
+destination added later simply looks as it does today rather than inheriting a wrong colour by
+accident.
+
+`-500` shades throughout, deliberately. Light mode here is built by inverting the neutral scale
+(globals.css) and chromatic colours are untouched by that inversion — so a `-400` would wash out
+against a light tile and a `-600` go muddy against a dark one, while `-500` carries on both without
+needing a per-theme variant for all twelve entries. Verified the classes actually reached the
+compiled CSS rather than assuming Tailwind's scanner found them inside a `Record` literal.
+
+The accent stays on whether or not a tile is selected: a destination's colour is its identity, not a
+state. Selection remains carried by the ring and the tile background, which is how the reference
+distinguishes the current one too.
+
+Only the launcher so far. The same treatment would suit the bottom nav's four icons and the desktop
+rail, but those are smaller, always-visible surfaces where the same amount of colour reads very
+differently — worth seeing this one on a device first.
