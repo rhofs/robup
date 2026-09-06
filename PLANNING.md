@@ -4048,3 +4048,30 @@ as fixes twice is exactly the "plausible-sounding culprit" pattern this file alr
 ease-out across both. A single ease-out meant the stretch began at full speed — the same thing that
 kept the page push from feeling smooth until it was eased at both ends. The compression now eases in
 and out, and only the final settle keeps a pure decelerating tail.
+
+### Same session — the pill's trailing kick, and stopping the guesswork on the stutter
+
+**Pill:** the outbound stretch is down from 1.3 to 1.12. With the transform origin pinned to the
+leading edge, *all* of the stretch is spent dragging the trailing end backwards — so 1.3 meant the
+back of the pill kicked out nearly a third of its own width on the way over. The compression on
+arrival (0.88) is untouched: that half was already right, and it is the half actually suggesting
+weight.
+
+**The Spaces/My Tasks stutter is unresolved after three attempts, and I am stopping rather than
+attempting a fourth.** Ruled out so far, each with a reason rather than a shrug:
+
+- The URL push is not the cost — `startTransition` deferred it and changed nothing, and
+  `window.history.pushState` removes the navigation entirely and still changed nothing. (Both are
+  genuine improvements and stay.)
+- The whole-store subscription in `MobileSpacesSheet` was real and is fixed, but was not this — the
+  stutter survived it.
+- The sheet does not render its tree while closed (`{open && …}`), so this is not constant
+  background cost; it is something in the tap itself.
+
+What remains unexamined is the shape of the work during that one frame, and that cannot be
+established from here: there is no device, and the three theories above were each plausible enough
+to act on and each wrong. The project's own history is unambiguous about what breaks this pattern —
+the Chat-vs-Planner bounce resisted two sessions of careful reasoning and fell in minutes once real
+evidence of the transition arrived. Asked the user for a Chrome remote-debugging performance
+profile, which is obtainable here (they are already comfortable with docker and ssh) and would name
+the cost outright instead of narrowing toward it one failed fix at a time.

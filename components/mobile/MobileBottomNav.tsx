@@ -170,8 +170,14 @@ function NavPill({ pillKey, direction }: { pillKey: string; direction: 'left' | 
         // The horizontal amount was confirmed good and is untouched. The vertical range stays
         // narrow — strict volume conservation would demand far more, and that overshoot is exactly
         // what read as too much.
-        initial={{ scaleX: 1.3, scaleY: 0.94 }}
-        animate={{ scaleX: [1.3, 0.88, 1], scaleY: [0.94, 1.05, 1] }}
+        // 1.12, down from 1.3. With the origin pinned to the leading edge, all of the stretch is
+        // spent dragging the TRAILING end backwards — so 1.3 meant the back of the pill kicked out
+        // nearly a third of its own width on the way over, which is what read as "sparker ut bak
+        // litt for mye... bobler for mye ut i det den kjører mot destinasjonen". The compression on
+        // arrival is untouched at 0.88: that half was already right, and it is the half doing the
+        // work of suggesting weight.
+        initial={{ scaleX: 1.12, scaleY: 0.96 }}
+        animate={{ scaleX: [1.12, 0.88, 1], scaleY: [0.96, 1.05, 1] }}
         // The settle occupies most of the duration (times 0 → 0.38 → 1): the brake arrives early and
         // the recovery out of it is long and unhurried. A snappy recovery reads as a twitch; a slow
         // one reads as something settling.
