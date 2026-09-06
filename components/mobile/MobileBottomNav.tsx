@@ -327,21 +327,23 @@ export default function MobileBottomNav({
     return () => observer.disconnect();
   }, []);
 
-  // Total reserved space, including the external gap below the island (see ISLAND_BOTTOM_OFFSET) —
-  // used for the outer wrapper's document-flow height and the backdrop's own cutoff, so both agree
-  // with where the island's visible top edge actually sits.
-  const reservedHeight = `calc(${closedHeightPx}px + ${ISLAND_BOTTOM_OFFSET})`;
-
   return (
     <>
-      {/* Backdrop dims everything *except* the island itself — stops exactly at `reservedHeight`
-          instead of covering the full screen, so it never paints over (and visibly darkens) the
-          tab row sitting at the bottom of the very same box it's supposed to be excluding. z-40,
-          one below the island's own z-50, and z-30 above MobileSpacesSheet.tsx's tree sheet (so
-          the menu can open on top of it without needing to close it first, per handlePinnedTap's
-          own comment above). No pointer-events wrapper juggling needed here any more — unlike the
-          old separate-panel version, this backdrop isn't nested inside a full-screen ancestor div
-          that could silently swallow clicks meant for something else underneath it. */}
+      {/* Covers the WHOLE screen. It used to stop short of the island, so as not to darken the tab
+          row through the island's own translucency — but the island is only 300px wide, so
+          everything either side of its lower portion was left undimmed. In dark mode that was
+          nearly invisible; in light mode the undimmed page and the island are both near-white and
+          merged into one bright band across the bottom. Reported with both themes side by side,
+          which is what made the cause obvious: a gap you can only see in one theme is a gap that
+          matches the *other* theme's chrome.
+          Two earlier attempts patched this by adding another strip to fill part of the gap. The
+          arithmetic linking the backdrop's cutoff to the island's measured height was the real
+          problem — every fix had to keep several numbers agreeing, and one of them always did not.
+          Covering everything removes the coupling entirely. The island compensates with a slightly
+          more opaque background below, so what shows through it is the dimmed page rather than a
+          visibly darkened pill.
+          z-40: one below the island's own z-50, and above MobileSpacesSheet's tree sheet (z-30), so
+          the menu can open on top of that without closing it first. */}
       <AnimatePresence>
         {menuOpen && (
           <motion.div
@@ -349,35 +351,12 @@ export default function MobileBottomNav({
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
             transition={{ duration: 0.12 }}
-            style={{ bottom: reservedHeight }}
-            className="fixed inset-x-0 top-0 z-40 md:hidden bg-black/60"
+            className="fixed inset-0 z-40 md:hidden bg-black/60"
             onClick={onCloseMenu}
           />
         )}
       </AnimatePresence>
 
-      {/* The island floats ISLAND_BOTTOM_OFFSET above the true screen edge, and the backdrop above
-          deliberately stops short of the island so it never darkens the tab row through the
-          island's own translucency. That leaves the gap *below* the island covered by neither —
-          showing the page itself, undimmed. Invisible while the app was dark-only (dark on dark),
-          and a hard white band the moment light mode shipped: reported with a screenshot as "en
-          hvit bar nederst som ikke ser så bra ut, når menyen popper."
-          Dimmed by its own strip rather than by extending the main backdrop down: the island sits
-          above the backdrop in z-order but is translucent, so anything painted behind it bleeds
-          through and darkens it. This strip stops exactly where the island's bottom edge begins,
-          so it can't. */}
-      <AnimatePresence>
-        {menuOpen && (
-          <motion.div
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
-            transition={{ duration: 0.12 }}
-            style={{ height: ISLAND_BOTTOM_OFFSET }}
-            className="fixed inset-x-0 bottom-0 z-40 md:hidden bg-black/60 pointer-events-none"
-          />
-        )}
-      </AnimatePresence>
 
       <div className="fixed inset-x-0 bottom-0 z-50 md:hidden">
         <motion.div
@@ -428,7 +407,7 @@ export default function MobileBottomNav({
               blended into whatever was scrolled under it instead of reading as its own chrome. */}
           <div
             aria-hidden
-            className={`absolute inset-x-0 bottom-0 pointer-events-none ${blurDisabled ? 'bg-neutral-950' : 'bg-neutral-950/90'}`}
+            className={`absolute inset-x-0 bottom-0 pointer-events-none ${blurDisabled ? 'bg-neutral-950' : 'bg-neutral-950/95'}`}
             style={{
               height: islandHeightPx,
               // Opaque instead of translucent where the blur is dropped: a see-through panel with

@@ -4101,3 +4101,28 @@ distinguishes the current one too.
 Only the launcher so far. The same treatment would suit the bottom nav's four icons and the desktop
 rail, but those are smaller, always-visible surfaces where the same amount of colour reads very
 differently — worth seeing this one on a device first.
+
+### Same session — the bright band under the open menu, fixed by deleting the arithmetic
+
+Colours confirmed good on-device. Then: a bar across the very bottom whenever the menu opens —
+"veldig synlig på lyst tema, man ser den så vidt på mørk."
+
+That asymmetry is what identified it. The backdrop stopped short of the island (`bottom:
+reservedHeight`) so it would not darken the tab row through the island's own translucency — but the
+island is only 300px wide, so everything either side of its lower portion was never dimmed at all.
+In dark mode the undimmed page and the island are both near-black and the seam is almost invisible;
+in light mode both are near-white and they merge into one bright band. **A gap you can only see in
+one theme is a gap that happens to match the other theme's chrome** — worth remembering as a way to
+read this kind of report.
+
+This is the third attempt at this same region. The first added the bottom strip; the second dimmed
+it. Both were patches on an arithmetic relationship — the backdrop's cutoff derived from the
+island's measured height plus its safe-area offset — where several numbers had to agree and one
+never did. The fix is to delete the relationship: the backdrop now covers the whole screen
+(`inset-0`), and the island's background goes from `/90` to `/95` so what shows through it is the
+dimmed page rather than a visibly darkened pill. `reservedHeight` is gone entirely, and with it the
+whole class of gap bugs it kept producing.
+
+Worth stating plainly since it took three rounds: the original decision to stop the backdrop short
+was defensible on its own terms, and every patch after it was reasoning correctly *inside* a
+structure that should not have existed. Removing the constraint was available from the start.
