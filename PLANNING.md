@@ -4159,3 +4159,26 @@ without a fixed height, which is why it read as the panel jumping rather than on
 those are the two most switched between. All five now share `h-96`. The panel also gained
 `max-w-[calc(100vw-24px)]`: its 440px was wider than a phone and was being clipped at the screen
 edge.
+
+### Same session — instrumenting the stutter, since USB debugging could not be made to work
+
+Remote debugging was attempted and abandoned: the phone (Xiaomi, HyperOS) reached Chrome's
+"Offline — pending authentication" state, meaning cable, driver and USB mode were all working, but
+the `Allow USB debugging?` dialog never appeared even after revoking authorisations and reconnecting
+unlocked. Rather than keep grinding on that, the measurement moved into the app.
+
+`lib/perfProbe.ts` + `components/PerfOverlay.tsx`, **gated behind `?perf=1`** so it cannot appear
+for anyone who has not asked for it. It uses the browser's own `longtask` observer — every block of
+the main thread over 50ms, which is the browser's measurement rather than an approximation — and
+reports each one *relative to the tap*, because an 80ms block half a second later is a completely
+different problem from one 5ms after. Both entry points (`openMobileSpaces` and the My Tasks
+handler) mark the interaction, and `MobileSpacesSheet` marks when its tree has actually been laid
+out, so the readout distinguishes "the time goes into building the sheet" from "something else
+reacts to the same state change afterwards".
+
+Honest about what it is: far less than a real profile — it cannot name the function spending the
+time. But it answers the questions that separate the remaining hypotheses (one long block or many
+short ones, how long, before or after paint), which is more than three rounds of reasoning have
+managed.
+
+**This is temporary and is to be deleted once the cause is known.** Both files say so at the top.

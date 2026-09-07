@@ -1,11 +1,13 @@
 'use client';
 
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { ChevronRight, ChevronDown, Globe, Search, X, Plus, Folder as FolderIconLucide, List as ListIconLucide, FileText } from 'lucide-react';
 import { useTaskStore, type HierarchySpace } from '../../store/useTaskStore';
 import { FOLDER_ICON_MAP } from '../FolderTree';
 import FloatingPopover from '../FloatingPopover';
 import { hapticTap } from '../../lib/haptics';
+// Temporary — see lib/perfProbe.ts.
+import { markPainted } from '../../lib/perfProbe';
 import { getChildFolders, getListsIn, getBoardDocsIn } from '../../lib/folderTree';
 
 type Props = {
@@ -231,6 +233,13 @@ export default function MobileSpacesSheet({
     setExpandedFolderIds(ancestorIds);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeSpaceId, activeListIds, spaces]);
+
+  // Fires once the sheet's tree has actually been laid out, so the readout can show whether the
+  // blocking happens before it appears (building it) or after (something else reacting to the
+  // same state change).
+  useLayoutEffect(() => {
+    if (open) markPainted('sheet');
+  }, [open]);
 
   const toggleSpace = (spaceId: string) =>
     setExpandedSpaceIds((prev) => {
