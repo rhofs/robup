@@ -4253,3 +4253,26 @@ destination has been chosen and the render is not competing with the tap being a
 plausible, each defensible, and each aimed at something that could not have produced the observed
 asymmetry between the two entry points. The measurement took one round to build and one round to
 correct, which is less than any single wrong fix cost.
+
+### Same session — confirmed fixed, and the remaining 92ms
+
+Measured after the fix: **370ms → 0 blocks** on Spaces, sheet painted at +16ms against +144ms
+before. My Tasks: 0 blocks, painted at +4ms. Planner/Chat unchanged, as expected.
+
+One case left, and the user identified it precisely: leaving a *large* list open (102 tasks) and
+tapping Spaces still blocked 92ms. That turned out to be a side effect of the fix itself — the
+`null` check sat **inside** `<AnimatePresence mode="popLayout">`, so flipping to null asked it to
+play an exit animation for every row at once, and each `TaskRow` exits with opacity, scale, a
+y-offset *and* a blur filter. 102 simultaneous animated exits, all of them behind a sheet that
+already covers the screen. Hoisted the check outside `AnimatePresence` so the subtree simply
+unmounts.
+
+**On the scaling worry — "skummelt om vi ender på veldig store lister":** the honest answer is that
+this is mitigation, not a solution. The list renders every task it has, so cost grows linearly:
+102 tasks is fine now, 1000 will not be, and no amount of skipping work *behind* a sheet changes
+what happens when the list is genuinely on screen. The real answer is virtualising the list —
+rendering only the rows in view — which is a real piece of work here rather than a library drop-in:
+rows have variable heights on mobile (titles wrap), and dnd-kit drag-and-drop plus shared-layout
+animations both interact badly with windowing. Flagged as a known future limit rather than pretended
+away; worth doing when a real list gets big enough to hurt, and worth designing deliberately when it
+happens.
