@@ -68,9 +68,6 @@ import {
 import { useTaskStore, HierarchySpace, HierarchyFolder, HierarchyList, HierarchyDocFolder, HierarchyRoom, HierarchyWorkspace, StatusDef, CustomFieldDef, Task, TaskDoc, AppUser } from '../store/useTaskStore';
 import { useHistoryStore } from '../store/useHistoryStore';
 import { hapticTap } from '../lib/haptics';
-// Temporary — see lib/perfProbe.ts. Remove once the Spaces/My Tasks stutter has a cause.
-import { markInteraction } from '../lib/perfProbe';
-import PerfOverlay from '../components/PerfOverlay';
 import TaskListSentinel from '../components/TaskListSentinel';
 import { useSessionStore } from '../store/useSessionStore';
 import { useChatStore } from '../store/useChatStore';
@@ -1636,7 +1633,6 @@ function PageContent() {
   // shows Personal, and the nav pill lights up too" resurfaced from a second, forgotten call site
   // rather than a real regression in the already-fixed one.
   const openMobileSpaces = () => {
-    markInteraction('Spaces');
     // setActiveWorkspaceId now restores this workspace's own last position automatically — see
     // its own comment in store/useTaskStore.ts.
     if (currentWorkspace?.isPersonal && realSheetWorkspace) {
@@ -1774,7 +1770,6 @@ function PageContent() {
             // route is an idempotent upsert) but a real, noticeable delay on every tap once the
             // workspace already exists. Skip it once `workspaces` already has one; only fall back
             // to the async ensure-and-create path the very first time (or a stale local list).
-            markInteraction('My Tasks');
             const known = workspaces.find((w) => w.isPersonal)?.id;
             const workspaceId = known ?? (await ensurePersonalWorkspace(currentUserId)).workspaceId;
             // setActiveWorkspaceId itself now restores this workspace's own last-visited Space/List
@@ -3487,8 +3482,6 @@ function PageContent() {
   const navScope = `${activeSpaceId}|${activeListIdsKey}`;
 
   return (
-    <>
-    <PerfOverlay />
     <DndContext sensors={taskSensors} collisionDetection={closestCenter} onDragStart={handleTaskDragStart} onDragOver={handleTaskDragOver} onDragEnd={handleTaskDragEnd}>
     {/* select-none here is app-wide (mostly buttons/rows/drag targets, not prose) — CSS
         user-select is inherited, so any real copyable text content (chat messages, task
@@ -7409,6 +7402,5 @@ function PageContent() {
       <SessionSync />
     </div>
     </DndContext>
-    </>
   );
 }

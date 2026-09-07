@@ -4327,3 +4327,32 @@ that already resets selection mode on a list change — same trigger, same reaso
 **Worth keeping as a rule for this file specifically:** `app/page.tsx` has an early return part-way
 down a very long component, so "declare state next to where it is used" — normally good practice —
 is actively unsafe here. Every hook belongs above `if (isLoading)`, without exception.
+
+### Same session — confirmed, and the probe removed
+
+Final measurements on device, tapping Spaces with a large list open:
+
+| | Before | After |
+|---|---|---|
+| 120-task list | — | **0 blocks, 0ms** |
+| 102-task list | 370ms at the tap | **73ms** |
+
+The probe (`lib/perfProbe.ts`, `components/PerfOverlay.tsx`) and every call into it have been
+deleted, as promised when it was added. It existed to answer one question and it answered it.
+
+**The whole arc, worth keeping as a lesson rather than four separate entries:** this took four
+attempts. The first three — deferring the URL push, replacing it with `history.pushState`, fixing a
+whole-store subscription — were each defensible, each shipped as a fix, and each wrong about *this*
+problem. Every one of them was ruled out by a fact that had been available from the start: Planner
+and Chat never stuttered, and none of those three theories could explain why. The fourth attempt
+differed only in that it measured first.
+
+Building the probe cost one round, and correcting it (it read the URL flag on every call, which the
+app's own URL rewriting then stripped) cost a second. Two rounds to get evidence, against three
+rounds of confident wrong fixes — and the evidence named the cause immediately: a 370ms block
+starting *at* the tap with the sheet's first render landing 127ms inside it, plus the My Tasks
+comparison showing the cost tracking the workspace's content rather than the sheet.
+
+Then two follow-ons the same measurements exposed: 102 simultaneous exit animations behind a sheet
+nobody can see, and the list rendering every task it owns. Neither would have been found by
+reasoning about the symptom.
