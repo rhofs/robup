@@ -33,9 +33,23 @@ export async function POST(req: Request) {
   if (!userId) return NextResponse.json({ error: 'Not authenticated' }, { status: 401 });
   if (!(await ensureListAccess(body.listId, userId))) return NextResponse.json({ error: 'Not authorized for this list' }, { status: 403 });
 
+  // Land at the bottom of whatever it is being added to. Everything created before Task.order
+  // existed sits at 0, so a new task only needs to beat the current maximum — it does not need the
+  // rest renumbered, and leaving them tied at 0 keeps their existing createdAt order intact.
+  // Scoped to the same parent as well as the same list, so a new subtask goes last among its
+  // siblings rather than last in the whole list.
+  const parentId = body.parentId ?? null;
+  const lastSibling = await prisma.task.findFirst({
+    where: { listId: body.listId, parentId, deletedAt: null },
+    orderBy: { order: 'desc' },
+    select: { order: true },
+  });
+  const nextOrder = (lastSibling?.order ?? -1) + 1;
+
   const task = await prisma.task.create({
     data: {
       ...(body.id ? { id: body.id } : {}),
+      order: nextOrder,
       title: body.title,
       listId: body.listId,
       parentId: body.parentId ?? null,

@@ -788,6 +788,12 @@ function PageContent() {
   // state, and what actually slid off screen was a blank pane — the conversation never animated
   // away at all. Reported as "går for fort vekk", which is what a disappearance looks like when
   // you expect a movement. The store is cleared only once the animation is done.
+  // Mobile only. Selection checkboxes used to sit permanently on every row, immediately outside the
+  // status circle — two controls of near-identical size where only "square vs round" told them
+  // apart, on a surface where a mistap is easy. They now appear only after Select is pressed.
+  // Desktop is untouched: there the checkbox is already hidden until the row is hovered, which is
+  // an affordance a touch screen simply does not have.
+  const [selectionMode, setSelectionMode] = useState(false);
   const [chatClosing, setChatClosing] = useState(false);
   const activeChatEntityRaw = useChatStore((s) => {
     const id = s.activeChannelId;
@@ -987,6 +993,12 @@ function PageContent() {
   useEffect(() => {
     closeMobileOverlays();
   }, [activeView, closeMobileOverlays]);
+  // Selection mode is about the list you are looking at, so navigating anywhere else ends it.
+  // Otherwise you return to a board days later still in selection mode, with checkboxes on every
+  // row and no memory of why.
+  useEffect(() => {
+    setSelectionMode(false);
+  }, [activeView, activeSpaceId, activeListIds]);
   const [hideWeekNumbers, setHideWeekNumbers] = useState(false);
   useEffect(() => {
     setHiddenNavTabs(readHiddenNavTabs());
@@ -1951,8 +1963,13 @@ function PageContent() {
     // createdAt stays the tie-breaker, so a List nobody has ever dragged in looks exactly as it
     // did before this feature existed (every task's order is 0 until something is actually moved).
     if (sortBy === 'none') {
+      // createdAt ASCENDING as the tie-break, so the oldest sits at the top and anything new lands
+      // at the bottom — which is where you were looking when you typed it. It used to be
+      // descending (newest first), which is why a task typed into the row at the bottom appeared
+      // at the top instead. Tasks created from now on also carry a real `order` putting them last;
+      // this makes the same true for everything created before that existed, which is all tied at 0.
       result = [...result].sort(
-        (a, b) => a.order - b.order || new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
+        (a, b) => a.order - b.order || new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime()
       );
     }
     if (sortBy !== 'none') {
@@ -2313,7 +2330,24 @@ function PageContent() {
   };
 
   // ---- Drag & drop for tasks (row → another row / list / space) ----
-  const taskSensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 5 } }));
+  // A short hold before anything lifts, rather than 5px of movement. On a phone a scroll starts as
+  // a small drag, so a distance-only constraint meant flicking through a list regularly picked a
+  // task up by accident — reported after several such mishaps. 180ms is long enough that a scroll
+  // never reaches it (the finger is already moving well before then) and short enough that a
+  // deliberate press-and-drag still feels immediate. `tolerance: 8` cancels the hold if the finger
+  // travels during it, so an unusually slow scroll still scrolls rather than lifting.
+  //
+  // Desktop keeps the distance constraint: a mouse has no scroll-by-dragging to confuse it, and
+  // making every drag wait 180ms there would just feel sluggish.
+  const isMobileForDrag = useIsMobile();
+  const taskSensors = useSensors(
+    useSensor(
+      PointerSensor,
+      isMobileForDrag
+        ? { activationConstraint: { delay: 180, tolerance: 8 } }
+        : { activationConstraint: { distance: 5 } }
+    )
+  );
   const [activeDragTask, setActiveDragTask] = useState<Task | null>(null);
   const [activeDragEntity, setActiveDragEntity] = useState<{
     kind: 'folder' | 'list' | 'space' | 'person' | 'room' | 'docfolder' | 'spacedoc';
@@ -4491,6 +4525,44 @@ function PageContent() {
             <div className="flex items-center justify-between">
               <div className="text-neutral-500 font-mono text-[10px]">{filteredTasks.length} tasks</div>
               <div className="flex items-center gap-1.5">
+                {/* Mobile-only selection controls. In selection mode the pair reads as one unit —
+                    a way out, and a bulk action — rather than a checkbox permanently competing
+                    with each row's own status circle for the same corner of the screen. */}
+                {isMobile && (
+                  selectionMode ? (
+                    <>
+                      <button
+                        onClick={() => {
+                          const allSelected = filteredTasks.length > 0 && filteredTasks.every((t) => selectedIds.has(t.id));
+                          if (allSelected) clearSelection();
+                          else setSelectedIds(new Set(filteredTasks.map((t) => t.id)));
+                        }}
+                        className="text-[11px] rounded px-3 py-2 border border-neutral-700 text-neutral-300 bg-neutral-900 cursor-pointer"
+                      >
+                        {filteredTasks.length > 0 && filteredTasks.every((t) => selectedIds.has(t.id)) ? 'Unselect all' : 'Select all'}
+                      </button>
+                      <button
+                        onClick={() => {
+                          // Leaving selection mode drops the selection with it — keeping a hidden
+                          // set of selected tasks around after the checkboxes are gone is exactly
+                          // the sort of invisible state that produces a surprising bulk action later.
+                          clearSelection();
+                          setSelectionMode(false);
+                        }}
+                        className="text-[11px] rounded px-3 py-2 border border-neutral-700 text-neutral-300 bg-neutral-900 cursor-pointer"
+                      >
+                        Cancel
+                      </button>
+                    </>
+                  ) : (
+                    <button
+                      onClick={() => setSelectionMode(true)}
+                      className="text-[11px] rounded px-3 py-2 border border-neutral-700 text-neutral-300 bg-neutral-900 cursor-pointer"
+                    >
+                      Select
+                    </button>
+                  )
+                )}
                 {overdueTasksInView.length > 0 && (
                   <button
                     onClick={(e) => {
@@ -5134,7 +5206,7 @@ function PageContent() {
                       columns={activeColumns}
                       gridTemplate={rowGridTemplate}
                       statuses={statuses}
-                      selectable
+                      selectable={!isMobile || selectionMode}
                       isSelected={selectedIds.has(task.id)}
                       onToggleSelect={() => toggleSelect(task.id)}
                       onContextMenu={openTaskMenu}

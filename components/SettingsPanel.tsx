@@ -355,7 +355,12 @@ export default function SettingsPanel({
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-scrim/70 backdrop-blur-xs" onClick={onClose}>
-      <div onClick={(e) => e.stopPropagation()} className="w-[440px] bg-neutral-900 border border-neutral-800 rounded shadow-2xl overflow-hidden">
+      {/* max-w-[calc(100vw-24px)]: 440px is wider than a phone, so the panel used to be clipped by
+          the screen edge on mobile. */}
+      <div
+        onClick={(e) => e.stopPropagation()}
+        className="w-[440px] max-w-[calc(100vw-24px)] bg-neutral-900 border border-neutral-800 rounded shadow-2xl overflow-hidden flex flex-col"
+      >
         <div className="px-5 py-4 border-b border-neutral-800 flex items-center justify-between">
           <h3 className="font-bold text-sm text-app-strong flex items-center gap-1.5">
             <Settings className="w-4 h-4" /> Settings
@@ -415,7 +420,11 @@ export default function SettingsPanel({
         </div>
 
         {tab === 'general' ? (
-          <div className="p-4 space-y-1">
+          // h-96, same as every other tab. General and Account were the only two without a fixed
+          // height, so the whole panel resized when switching between them — the two tabs the user
+          // moves between most, which is why it read as the panel jumping rather than as one tab
+          // simply being longer.
+          <div className="p-4 space-y-1 h-96 overflow-y-auto">
             {!workspace.isPersonal && (
               <>
                 <div className="text-[10px] uppercase tracking-wide text-neutral-500 px-1 pb-1">Workspace</div>
@@ -600,7 +609,7 @@ export default function SettingsPanel({
             </div>
           </div>
         ) : tab === 'roles' ? (
-          <div className="p-5 space-y-2 max-h-96 overflow-y-auto">
+          <div className="p-5 space-y-2 h-96 overflow-y-auto">
             {workspace.roles.length === 0 && !creatingRole && <p className="text-xs text-neutral-500">No roles yet — roles let you grant specific people access to private Spaces, Folders, Lists, and Tasks.</p>}
             {workspace.roles.map((r) => {
               const expanded = expandedRoleId === r.id;
@@ -693,7 +702,7 @@ export default function SettingsPanel({
             )}
           </div>
         ) : tab === 'invite' ? (
-          <div className="p-5 space-y-2 max-h-96 overflow-y-auto">
+          <div className="p-5 space-y-2 h-96 overflow-y-auto">
             {/* Invite by email — for someone whose address you know but who isn't in your
                 Network, which the picker below can't reach. No email is sent (this app has no
                 mail infrastructure): an existing account gets the invite in-app, and if no
@@ -853,7 +862,7 @@ export default function SettingsPanel({
             </div>
           </div>
         ) : tab === 'import' ? (
-          <div className="p-5 space-y-3 max-h-96 overflow-y-auto">
+          <div className="p-5 space-y-3 h-96 overflow-y-auto">
             <p className="text-[11px] text-neutral-500">
               Import a ClickUp CSV export (Everything view → Export). Spaces, Folders, Lists, and Statuses referenced in the file are matched by name or created; existing ones are reused, never duplicated.
             </p>
@@ -907,7 +916,7 @@ export default function SettingsPanel({
           // the desktop-only sidebar user-menu dropdown, so mobile had no way to reach Connect
           // Google at all. This tab is reachable from the exact same "Settings" entry point every
           // other tab already is, on both desktop and mobile.
-          <div className="p-3 space-y-1">
+          <div className="p-3 space-y-1 h-96 overflow-y-auto">
             {user ? (
               <>
                 <button

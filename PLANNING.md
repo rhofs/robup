@@ -4126,3 +4126,36 @@ whole class of gap bugs it kept producing.
 Worth stating plainly since it took three rounds: the original decision to stop the backdrop short
 was defensible on its own terms, and every patch after it was reasoning correctly *inside* a
 structure that should not have existed. Removing the constraint was available from the start.
+
+### Same session — four mobile fixes ahead of the profiling session
+
+**1. New tasks now land at the bottom.** They were appearing at the top: `POST /api/tasks` set no
+`order`, and the list's tie-break sorted `createdAt` *descending*. So you typed into the row at the
+bottom and the task jumped to the top. The route now computes `(max order among siblings) + 1`,
+scoped to the same list **and** the same parent so a new subtask goes last among its siblings rather
+than last in the whole list; the tie-break flipped to ascending, which also puts everything created
+before `Task.order` existed (all tied at 0) into creation order top-to-bottom. Verified against a
+real database across six cases, including that subtasks are numbered independently of the top level.
+
+**2. Selection is now a mode, not a permanent control.** A checkbox sat on every row immediately
+outside the status circle — two controls of near-identical size distinguished only by square versus
+round, on a surface where a mistap costs you. Mobile now has a **Select** button in the list header
+which reveals the checkboxes and swaps itself for **Cancel** plus **Select all / Unselect all**.
+Leaving the mode clears the selection with it: keeping a hidden set of selected tasks after the
+checkboxes disappear is exactly the invisible state that produces a surprising bulk action later.
+Navigating anywhere else also exits the mode. Desktop is untouched — its checkbox is already
+hidden until hover, an affordance a touch screen does not have.
+
+**3. Dragging now needs a short hold.** The sensor used a 5px distance constraint, and on a phone a
+scroll *starts* as a small drag, so flicking through a list regularly picked a task up by accident.
+Mobile now uses `delay: 180, tolerance: 8`: long enough that a scroll never reaches it (the finger
+is already moving well before), short enough that a deliberate press-and-drag still feels immediate,
+and cancelled if the finger travels during the hold so even a slow scroll still scrolls. Desktop
+keeps the distance constraint — a mouse has no scroll-by-dragging to confuse it, and making every
+drag wait would just feel sluggish.
+
+**4. Settings tabs no longer resize the panel.** General and Account were the only two bodies
+without a fixed height, which is why it read as the panel jumping rather than one tab being longer —
+those are the two most switched between. All five now share `h-96`. The panel also gained
+`max-w-[calc(100vw-24px)]`: its 440px was wider than a phone and was being clipped at the screen
+edge.
