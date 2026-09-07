@@ -71,6 +71,7 @@ import { hapticTap } from '../lib/haptics';
 // Temporary — see lib/perfProbe.ts. Remove once the Spaces/My Tasks stutter has a cause.
 import { markInteraction } from '../lib/perfProbe';
 import PerfOverlay from '../components/PerfOverlay';
+import TaskListSentinel from '../components/TaskListSentinel';
 import { useSessionStore } from '../store/useSessionStore';
 import { useChatStore } from '../store/useChatStore';
 import { usePresenceConnection } from '../lib/collab/usePresenceConnection';
@@ -3456,6 +3457,26 @@ function PageContent() {
   // when we're just switching which list of tasks is shown.
   const taskListNavKey = `${activeSpaceId}|${activeListIdsKey}|${showArchived}|${modalTaskStack.length > 0}`;
 
+  // How many rows of the task list are actually rendered. The list used to render every task it
+  // had, so the cost grew linearly with the list: 102 tasks was already measurable, and a real
+  // workspace will eventually hold far more.
+  //
+  // Incremental rendering rather than true virtualisation, and the choice is deliberate. Windowing
+  // (rendering only rows in view and recycling them) keeps the DOM constant no matter how large the
+  // list gets, but every row here participates in three things that assume it exists: dnd-kit
+  // drag-and-drop, framer-motion's shared `layoutId` transition into the task modal, and
+  // AnimatePresence enter/exit. Windowing breaks all three for anything scrolled out of view, which
+  // would trade a performance problem for three behavioural regressions in features that are
+  // actually used. Growing the window instead keeps every rendered row behaving exactly as it does
+  // today, and removes the thing that actually hurts: one enormous synchronous render.
+  const TASK_PAGE_SIZE = 30;
+  const [visibleTaskCount, setVisibleTaskCount] = useState(TASK_PAGE_SIZE);
+  // Reset whenever the list being shown changes — taskListNavKey already encodes Space, Lists,
+  // archive mode and modal state, which is exactly "am I looking at a different list now".
+  useEffect(() => {
+    setVisibleTaskCount(TASK_PAGE_SIZE);
+  }, [taskListNavKey]);
+
   // Scopes TaskRow's shared layoutId to the current Space/List — Framer Motion matches
   // layoutId globally, so without this a task visible in two different nav contexts
   // (e.g. "Everything" and its own List) would FLIP-animate between their screen
@@ -5226,7 +5247,7 @@ function PageContent() {
                       This defers that work rather than deleting it: closing the sheet still has to
                       render the board. But by then a destination has been chosen and the render is
                       not competing with the tap that is being animated. */}
-                  {filteredTasks.map((task) => (
+                  {filteredTasks.slice(0, visibleTaskCount).map((task) => (
                     <TaskRow
                       key={task._localId || task.id}
                       task={task}
@@ -5246,6 +5267,19 @@ function PageContent() {
                   ))}
                 </AnimatePresence>
                 )}
+                {/* Loads the next page when scrolled into view. A sentinel plus IntersectionObserver
+                    rather than a scroll handler: the observer fires only when this element actually
+                    becomes visible, where a scroll listener runs on every frame of every scroll and
+                    would be its own performance problem. The button is the fallback for browsers
+                    without IntersectionObserver, and doubles as an honest signal that the list is
+                    longer than what is on screen. */}
+                {!(isMobile && (mobileSpacesOpen || mobilePersonalSpacesOpen)) &&
+                  filteredTasks.length > visibleTaskCount && (
+                    <TaskListSentinel
+                      remaining={filteredTasks.length - visibleTaskCount}
+                      onLoadMore={() => setVisibleTaskCount((n) => n + TASK_PAGE_SIZE)}
+                    />
+                  )}
 
                 {activeAdd ? (
                   <div className="p-2.5 bg-neutral-950/40 flex gap-2 items-center">

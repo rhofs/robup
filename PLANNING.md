@@ -4276,3 +4276,33 @@ rows have variable heights on mobile (titles wrap), and dnd-kit drag-and-drop pl
 animations both interact badly with windowing. Flagged as a known future limit rather than pretended
 away; worth doing when a real list gets big enough to hurt, and worth designing deliberately when it
 happens.
+
+### Same session — the task list now renders in pages
+
+Taken on now rather than deferred, since the user wants this settled before building on top of it:
+"det er siste del, før jeg ønsker å lage en mobilapp."
+
+The list rendered every task it had, so cost grew linearly — 102 tasks was already measurable and a
+real workspace will hold far more. It now renders 30 rows and grows by 30 as the end scrolls into
+view, via an `IntersectionObserver` sentinel (`components/TaskListSentinel.tsx`) with 600px of lead
+margin so the next page exists before the user reaches it. A visible "N more" button doubles as the
+fallback where `IntersectionObserver` is unavailable and as an honest signal that the list continues.
+The window resets on `taskListNavKey`, which already encodes "am I looking at a different list now".
+
+**Incremental rendering, not true virtualisation — and the choice is deliberate rather than lazy.**
+Windowing keeps the DOM constant at any list size, which is strictly better on paper. But every row
+here participates in three things that assume it exists: dnd-kit drag-and-drop, framer-motion's
+shared `layoutId` transition into the task modal, and AnimatePresence enter/exit. Windowing breaks
+all three for anything scrolled out of view — dragging past the rendered range, the row-to-modal
+animation for a recycled row, and exit animations for rows that were never mounted. That trades one
+performance problem for three behavioural regressions in features that are actually used daily.
+
+What this does and does not buy: it removes the large synchronous render, which is the thing that
+actually blocks a tap, and it caps what any single frame has to do. It does not cap total DOM size —
+scrolling to the end of a 1000-task list still ends with 1000 rows mounted. If a real list ever gets
+large enough for *that* to hurt, windowing becomes worth its costs and should be designed
+deliberately, with the drag and animation behaviour reworked rather than quietly lost.
+
+Bulk selection and the task count deliberately still read `filteredTasks` (the full set), not the
+rendered slice — "Select all" must mean all of them, not all of the ones that happen to be on
+screen.
