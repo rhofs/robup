@@ -4214,3 +4214,42 @@ shown up on Planner and Chat too, and neither adds anything at all.
 
 Added a render counter to the sheet for the next round, since "several blocks" and "several
 renders" is the specific pairing to confirm before optimising anything.
+
+### Same session — the stutter, finally measured and explained
+
+With timestamps working, the readout is unambiguous. Tapping **Spaces** (reading chronologically):
+
+```
+TAP Spaces
+render sheet #1  +127ms
+PAINTED sheet    +144ms
+BLOCK 370ms @ -3ms        ← begins AT the tap, runs 370ms
+BLOCK 74ms @ +368ms
+render sheet #4  +813ms
+```
+
+**The 370ms block starts at the tap and the sheet's own first render lands 127ms inside it.** So
+the time was never going into building the sheet — the sheet is a passenger in a block that was
+already running.
+
+The decisive comparison is **My Tasks**, which does the identical work against the near-empty
+personal workspace: 51ms of blocking, sheet painted at +22ms against Spaces' +144ms. Same component,
+three spaces in each workspace — a sixfold difference that tracks *the content behind the sheet*,
+not the sheet itself.
+
+**Cause:** opening either sheet also switches workspace, and the board underneath then re-renders
+every `TaskRow` of the newly selected workspace — each a framer-motion component with layout
+animations — behind a sheet that completely covers it. CRRM Media has real content; the personal
+workspace has almost none. That is the whole difference, and it explains every earlier observation:
+Planner, Chat and Docs never switch workspace and never render the board, which is why they add no
+blocks at all, and why the URL push and the store subscription (both real improvements, both kept)
+changed nothing.
+
+Fixed by not rendering the board's task list while a full-screen tree sheet covers it. This defers
+the work rather than deleting it — closing the sheet still has to render the board — but by then a
+destination has been chosen and the render is not competing with the tap being animated.
+
+**Four attempts, and the difference in the fourth was evidence.** The first three were each
+plausible, each defensible, and each aimed at something that could not have produced the observed
+asymmetry between the two entry points. The measurement took one round to build and one round to
+correct, which is less than any single wrong fix cost.

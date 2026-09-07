@@ -5203,7 +5203,24 @@ function PageContent() {
 
               <div className={isMobile ? 'flex flex-col gap-2' : 'divide-y divide-neutral-800/50'}>
                 <AnimatePresence mode="popLayout" initial={false} key={taskListNavKey}>
-                  {filteredTasks.map((task) => (
+                  {/* Nothing is rendered while a full-screen tree sheet covers the board. This is
+                      the Spaces/My Tasks stutter, measured rather than guessed at: tapping Spaces
+                      blocked the main thread for 370ms starting AT the tap, with the sheet's own
+                      first render landing 127ms inside that block — so the time was never going
+                      into building the sheet. Opening the sheet also switches workspace, and the
+                      board underneath dutifully re-rendered every TaskRow of the newly selected
+                      workspace (each a framer-motion component with layout animations) behind a
+                      sheet that completely covers it.
+                      The evidence is in the asymmetry: My Tasks does the identical work against
+                      the near-empty personal workspace and blocked for 51ms, painting its sheet in
+                      22ms against Spaces' 144ms — same sheet, three spaces each, and a sixfold
+                      difference that tracks the *content behind it*, not the sheet.
+                      This defers that work rather than deleting it: closing the sheet still has to
+                      render the board. But by then a destination has been chosen and the render is
+                      not competing with the tap that is being animated. */}
+                  {isMobile && (mobileSpacesOpen || mobilePersonalSpacesOpen)
+                    ? null
+                    : filteredTasks.map((task) => (
                     <TaskRow
                       key={task._localId || task.id}
                       task={task}
