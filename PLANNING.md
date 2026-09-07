@@ -4182,3 +4182,35 @@ short ones, how long, before or after paint), which is more than three rounds of
 managed.
 
 **This is temporary and is to be deleted once the cause is known.** Both files say so at the top.
+
+### Same session — first real measurements of the stutter
+
+The probe's first readings arrived, and they immediately exposed a flaw in the probe itself: every
+line read `@ +-1ms` and no `TAP`/`PAINTED` marks appeared at all. Cause: `isPerfEnabled()` re-read
+`location.search` on every call, and the app rewrites its own URL on every navigation via
+`buildNavQueryString`, which does not carry `perf`. So the flag vanished the moment the user
+navigated anywhere. The longtask observer kept running (already started), but every
+`markInteraction` after the first navigation returned early. Now resolved once and cached.
+
+**The block data is real and decisive even without the timestamps:**
+
+| Tapped | New blocks added |
+|---|---|
+| Planner | none |
+| Chat | none |
+| Docs | none |
+| My Tasks | 3 (~280ms) |
+| Spaces | 4 (~420ms) |
+
+Planner, Chat and Docs add not one block. Spaces and My Tasks add several *every time*, always
+including one around 220ms plus a few of 50–80ms. Repeated across two rounds of taps with
+consistent numbers.
+
+That rules out a whole class of explanation: **this is not one expensive operation, it is several
+separate ones in sequence** — which fits repeated re-renders rather than a single heavy build, and
+is firmly tied to the sheet rather than to navigation in general. It also confirms the earlier
+theories were aimed at the wrong thing entirely: a URL push or a store subscription would have
+shown up on Planner and Chat too, and neither adds anything at all.
+
+Added a render counter to the sheet for the next round, since "several blocks" and "several
+renders" is the specific pairing to confirm before optimising anything.

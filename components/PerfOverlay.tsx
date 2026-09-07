@@ -31,6 +31,7 @@ export default function PerfOverlay() {
         <div key={i}>
           {e.kind === 'interaction' && <span className="text-emerald-400">TAP {e.label}</span>}
           {e.kind === 'paint' && <span className="text-sky-400">PAINTED {e.label} +{e.sinceInteraction}ms</span>}
+          {e.kind === 'render' && <span className="text-neutral-400">render {e.label} +{e.sinceInteraction}ms</span>}
           {e.kind === 'longtask' && (
             <span className={e.duration > 150 ? 'text-red-400' : 'text-amber-400'}>
               BLOCK {e.duration}ms @ +{e.sinceInteraction}ms ({e.label})
