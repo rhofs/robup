@@ -4306,3 +4306,24 @@ deliberately, with the drag and animation behaviour reworked rather than quietly
 Bulk selection and the task count deliberately still read `filteredTasks` (the full set), not the
 rendered slice — "Select all" must mean all of them, not all of the ones that happen to be on
 screen.
+
+### Same session — I broke the app, and how
+
+The paged-list change took the whole page down: nothing loaded at all. Cause was mine and it is a
+classic — `useState` and `useEffect` for the render window were declared next to `taskListNavKey`,
+where they are *used*, which sits **below** `if (isLoading) return …`. So on every render while data
+was still loading those two hooks did not run, and on the render after loading finished they did.
+React saw a different number of hooks between renders and tore the tree down.
+
+**Neither `tsc` nor `npm run build` catches this**, which is exactly why it reached the device: it is
+a runtime rule about hook ordering, not a type or syntax error. The server render even returns 200,
+because the failure happens during client hydration — so "the page responds" is not evidence here.
+The evidence that actually settles it is structural: no hook of any kind now appears after that
+early return, checked across the whole component rather than around the edit.
+
+Both hooks moved up beside the other state declarations, and the window reset folded into the effect
+that already resets selection mode on a list change — same trigger, same reason, one fewer effect.
+
+**Worth keeping as a rule for this file specifically:** `app/page.tsx` has an early return part-way
+down a very long component, so "declare state next to where it is used" — normally good practice —
+is actively unsafe here. Every hook belongs above `if (isLoading)`, without exception.

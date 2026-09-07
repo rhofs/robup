@@ -797,6 +797,24 @@ function PageContent() {
   // apart, on a surface where a mistap is easy. They now appear only after Select is pressed.
   // Desktop is untouched: there the checkbox is already hidden until the row is hovered, which is
   // an affordance a touch screen simply does not have.
+  // How many rows of the task list are actually rendered. The list used to render every task it
+  // had, so cost grew linearly: 102 tasks was already measurable and a real workspace will hold far
+  // more.
+  //
+  // Incremental rendering rather than true virtualisation, deliberately. Windowing keeps the DOM
+  // constant at any list size, but every row here participates in three things that assume it
+  // exists — dnd-kit drag-and-drop, framer-motion's shared `layoutId` transition into the task
+  // modal, and AnimatePresence enter/exit — and windowing breaks all three for anything scrolled
+  // out of view. Growing the window keeps every rendered row behaving exactly as it does today and
+  // still removes the thing that actually hurts: one enormous synchronous render.
+  //
+  // Declared HERE, with the other hooks, and not beside taskListNavKey where it is used. That spot
+  // is below `if (isLoading) return …`, so these two hooks ran only after loading finished — React
+  // saw a different number of hooks between renders and tore the whole page down. Build and
+  // typecheck both pass on that; it only fails at runtime, which is exactly why it reached the
+  // device. Every hook in this component belongs above that early return.
+  const TASK_PAGE_SIZE = 30;
+  const [visibleTaskCount, setVisibleTaskCount] = useState(TASK_PAGE_SIZE);
   const [selectionMode, setSelectionMode] = useState(false);
   const [chatClosing, setChatClosing] = useState(false);
   const activeChatEntityRaw = useChatStore((s) => {
@@ -1002,7 +1020,9 @@ function PageContent() {
   // row and no memory of why.
   useEffect(() => {
     setSelectionMode(false);
-  }, [activeView, activeSpaceId, activeListIds]);
+    // Same trigger, same reason: a different list is showing, so start its window from the top.
+    setVisibleTaskCount(TASK_PAGE_SIZE);
+  }, [activeView, activeSpaceId, activeListIds, showArchived]);
   const [hideWeekNumbers, setHideWeekNumbers] = useState(false);
   useEffect(() => {
     setHiddenNavTabs(readHiddenNavTabs());
@@ -3457,25 +3477,6 @@ function PageContent() {
   // when we're just switching which list of tasks is shown.
   const taskListNavKey = `${activeSpaceId}|${activeListIdsKey}|${showArchived}|${modalTaskStack.length > 0}`;
 
-  // How many rows of the task list are actually rendered. The list used to render every task it
-  // had, so the cost grew linearly with the list: 102 tasks was already measurable, and a real
-  // workspace will eventually hold far more.
-  //
-  // Incremental rendering rather than true virtualisation, and the choice is deliberate. Windowing
-  // (rendering only rows in view and recycling them) keeps the DOM constant no matter how large the
-  // list gets, but every row here participates in three things that assume it exists: dnd-kit
-  // drag-and-drop, framer-motion's shared `layoutId` transition into the task modal, and
-  // AnimatePresence enter/exit. Windowing breaks all three for anything scrolled out of view, which
-  // would trade a performance problem for three behavioural regressions in features that are
-  // actually used. Growing the window instead keeps every rendered row behaving exactly as it does
-  // today, and removes the thing that actually hurts: one enormous synchronous render.
-  const TASK_PAGE_SIZE = 30;
-  const [visibleTaskCount, setVisibleTaskCount] = useState(TASK_PAGE_SIZE);
-  // Reset whenever the list being shown changes — taskListNavKey already encodes Space, Lists,
-  // archive mode and modal state, which is exactly "am I looking at a different list now".
-  useEffect(() => {
-    setVisibleTaskCount(TASK_PAGE_SIZE);
-  }, [taskListNavKey]);
 
   // Scopes TaskRow's shared layoutId to the current Space/List — Framer Motion matches
   // layoutId globally, so without this a task visible in two different nav contexts
