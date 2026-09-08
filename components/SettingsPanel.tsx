@@ -10,6 +10,7 @@ import { useChatStore } from '../store/useChatStore';
 import { getPushStatus, enablePush, disablePush } from '../lib/pushClient';
 import { useInstallPrompt } from '../hooks/useInstallPrompt';
 import { useIsMobile } from '../hooks/useIsMobile';
+import { Capacitor } from '@capacitor/core';
 import ColorSwatchPicker from './ColorSwatchPicker';
 import { copyToClipboard } from '../lib/copyToClipboard';
 
@@ -519,7 +520,12 @@ export default function SettingsPanel({
                 Picking an option fires a pulse at that strength immediately (see
                 setHapticStrength), so the difference is felt while choosing rather than only on
                 some later unrelated tap. */}
-            {isMobile && typeof navigator !== 'undefined' && 'vibrate' in navigator && (
+            {/* Inside the native app the platform's own haptics are used instead of
+                navigator.vibrate (see lib/haptics.ts), and iOS has never implemented that API at
+                all — so gating purely on it would have hidden this setting on exactly the device
+                where the app finally makes haptics possible. */}
+            {(Capacitor.isNativePlatform() ||
+              (isMobile && typeof navigator !== 'undefined' && 'vibrate' in navigator)) && (
               <>
                 <div className="text-[10px] uppercase tracking-wide text-neutral-500 px-1 pb-1">Haptics</div>
                 <div className="flex items-center gap-1 bg-neutral-950 border border-neutral-800 rounded p-0.5 mb-3">

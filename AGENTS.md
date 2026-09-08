@@ -1,3 +1,23 @@
+# The Android app is a shell around the live site, not a copy of it
+
+`capacitor.config.ts` points at `https://siqt.no` rather than bundling the web build. That is forced
+by the architecture, not chosen for convenience: this app has server routes, an auth layer and a
+database behind it, so it cannot be exported as static files. Two consequences worth knowing before
+touching anything here:
+
+- **Web changes reach the app the moment production redeploys.** No app-store review is involved.
+  A new store build is only needed when something *native* changes — a plugin, a permission, the
+  icon, the app id.
+- **`npx cap sync` does not ship your web code.** In remote-URL mode it only updates native plugins
+  and config. Running it after a web change and expecting the app to update is a trap.
+
+Capacitor is pinned to **v7**, not the latest. v8's CLI requires Node >= 22, and both this machine
+and the production container run Node 20. Upgrading Capacitor means upgrading Node in the
+Pterodactyl egg first — do not do one without the other.
+
+Building an APK/AAB needs Java and Android Studio, which this server does not have. The native
+project (`android/`) is committed and is meant to be opened on a machine that does.
+
 # Keep PLANNING.md current — it is this project's memory
 
 `PLANNING.md` is the running record of the project: what is built, what each session actually did,

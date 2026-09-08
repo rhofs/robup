@@ -4356,3 +4356,45 @@ comparison showing the cost tracking the workspace's content rather than the she
 Then two follow-ons the same measurements exposed: 102 simultaneous exit animations behind a sheet
 nobody can see, and the list rendering every task it owns. Neither would have been found by
 reasoning about the symptom.
+
+## Today's session (2026-09-08) — Capacitor, and why push turned out not to be the reason for it
+
+The user asked what building a mobile app would take, wanting **proper push notifications**. The
+first finding made that reason mostly moot, and the second replaced it with a better one.
+
+**Push has been fully built since 2026-08-21 and has never been switched on.** Checked live rather
+than assumed: `GET https://siqt.no/api/push/vapid-public-key` returns **503**, which that route
+returns when `VAPID_PUBLIC_KEY` is unset. The service worker, subscription handling, sending and the
+Settings toggle all exist; the three env vars were listed as owed back in August and never added. On
+Android, web push in an installed PWA routes through FCM and behaves like any other notification —
+so an app was never needed for this, and a TWA would have used the identical mechanism.
+
+**What an app genuinely does change, and it is haptics.** `navigator.vibrate` takes a duration and
+nothing else — no amplitude — which is why tuning it took several rounds and still only approximated
+a click (see the LRA reasoning in `lib/haptics.ts`). Android and iOS both ship tuned impact effects;
+Capacitor's `Haptics.impact` maps onto whichever is underneath. iOS has never implemented
+`navigator.vibrate` at all, so in the app it goes from *approximate* to *possible*. Two other real
+gains: control over WebView keyboard behaviour (the iOS cropping bug that resisted two attempts),
+and native push on iOS.
+
+**What it does not change, stated plainly to the user:** smoothness. A Capacitor WebView is the same
+Chrome engine — same JS, same layout, same paint. The stutter fixed earlier this week would have
+been identical inside an app. Only a real native rewrite changes that, and it costs months.
+
+Set up so far:
+
+- Capacitor **v7**, deliberately not v8: v8's CLI requires Node ≥22 and both this machine and the
+  production container run Node 20. Recorded in AGENTS.md, since upgrading one now requires
+  upgrading the other.
+- `capacitor.config.ts` loads `https://siqt.no` (the architecture allows nothing else), with
+  `allowNavigation` limited to that host so Google sign-in opens in the real browser — Google
+  refuses to authenticate inside an embedded WebView, so trapping it would break login outright.
+- `android/` generated and committed.
+- `lib/haptics.ts` now routes through native impacts when `Capacitor.isNativePlatform()`, and the
+  existing duration-based web path is untouched for everyone else.
+- The Settings haptics row no longer gates on `navigator.vibrate` alone — that would have hidden it
+  on iOS in the app, which is precisely where it starts working.
+
+**Still to do:** Firebase project for native push, the `@capacitor/keyboard` and status-bar plugins,
+app icons/splash, and a Play Store listing. Costs, told to the user: Capacitor and Android tooling
+are free, Play is $25 once, and iOS needs $99/year plus a Mac.

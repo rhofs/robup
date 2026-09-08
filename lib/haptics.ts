@@ -9,6 +9,9 @@
 // Do Not Disturb / bedtime mode suppresses vibration system-wide, and it silently affects
 // navigator.vibrate too — worth ruling out before looking at this file.
 
+import { Capacitor } from '@capacitor/core';
+import { Haptics, ImpactStyle } from '@capacitor/haptics';
+
 export type HapticStrength = 'off' | 'light' | 'strong';
 
 export const HAPTIC_STORAGE_KEY = 'siqt.hapticStrength';
@@ -54,7 +57,32 @@ export function setHapticStrength(value: HapticStrength): void {
   } catch {}
   // Fire one pulse at the newly-picked strength so the choice is felt at the moment it's made,
   // rather than only on some later unrelated tap.
-  if (value !== 'off') vibrate(DURATIONS[value].strong);
+  if (value === 'off') return;
+  if (Capacitor.isNativePlatform()) nativeImpact('strong', value);
+  else vibrate(DURATIONS[value].strong);
+}
+
+// Inside the native app, use the platform's own predefined effects instead of a raw duration.
+// This is the whole reason the app exists: `navigator.vibrate` can only say "buzz for N
+// milliseconds", so every value in DURATIONS above is an approximation of a click. Android and iOS
+// both ship real, tuned impact effects — Android's VibrationEffect, iOS's Taptic Engine — and
+// Capacitor maps `Haptics.impact` onto whichever one is underneath. A tap in the app therefore
+// feels like a button rather than like a motor being switched on and off.
+//
+// `Capacitor.isNativePlatform()` is false in a browser and in an installed PWA, so the web path
+// below stays exactly as it is today for everyone not using the app. Nothing here degrades.
+function nativeImpact(kind: 'tap' | 'strong', strength: Exclude<HapticStrength, 'off'>): void {
+  // 'light' keeps the app's own gentler setting meaningfully gentler; without this every tap would
+  // land on the same medium impact and the Off/Light/Strong choice would be two options, not three.
+  const style =
+    strength === 'light'
+      ? ImpactStyle.Light
+      : kind === 'strong'
+        ? ImpactStyle.Medium
+        : ImpactStyle.Light;
+  // Fire-and-forget: the promise only reports whether the platform accepted the request, and a
+  // failed buzz must never surface as an error in the middle of a tap handler.
+  void Haptics.impact({ style }).catch(() => {});
 }
 
 function vibrate(ms: number): void {
@@ -68,6 +96,10 @@ function vibrate(ms: number): void {
 function pulse(kind: 'tap' | 'strong'): void {
   const strength = readHapticStrength();
   if (strength === 'off') return;
+  if (Capacitor.isNativePlatform()) {
+    nativeImpact(kind, strength);
+    return;
+  }
   vibrate(DURATIONS[strength][kind]);
 }
 
