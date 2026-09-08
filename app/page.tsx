@@ -1020,6 +1020,15 @@ function PageContent() {
     // Same trigger, same reason: a different list is showing, so start its window from the top.
     setVisibleTaskCount(TASK_PAGE_SIZE);
   }, [activeView, activeSpaceId, activeListIds, showArchived]);
+
+  // Archive mode ends when you leave the board. It is the only screen that renders archived tasks
+  // or the banner announcing them, so anywhere else it is a mode that is switched on, invisible,
+  // and waiting to confuse you when you come back — which is exactly what happened. Deliberately
+  // NOT tied to changing Space or List: browsing several lists' archives in a row is a real thing
+  // to want, and the banner is on screen throughout.
+  useEffect(() => {
+    if (activeView !== 'board') setShowArchived(false);
+  }, [activeView, setShowArchived]);
   const [hideWeekNumbers, setHideWeekNumbers] = useState(false);
   useEffect(() => {
     setHiddenNavTabs(readHiddenNavTabs());
@@ -5169,6 +5178,30 @@ function PageContent() {
                TaskRow's own mobile layout stopped needing it, since it's an inline style keyed
                off the desktop grid's column widths regardless of which layout actually renders
                inside) — each TaskRow.tsx card below carries its own elevated background instead. */
+            <>
+            {/* Archive is a MODE, not a place — it swaps the list's contents and then stays on until
+                it is switched off. On desktop a small header button lit up to say so; on mobile the
+                only indicator was inside the popup menu, which closes the moment you use it, so you
+                landed on a board full of unfamiliar tasks with nothing anywhere saying why.
+                Reported exactly that way: "vanskelig å vite at jeg er inne i arkiv i det hele tatt."
+                An unmissable banner with its own way out, on both layouts. Amber rather than the
+                app's usual neutral chrome, for the same reason the message-of-the-day banner is:
+                this is a temporary state the user should notice they are in, not part of the
+                furniture. */}
+            {showArchived && (
+              <div className="mb-2 flex items-center justify-between gap-3 rounded-lg border border-amber-500/40 bg-amber-500/10 px-3 py-2">
+                <span className="min-w-0 text-[11px] text-amber-300">
+                  <span className="font-semibold">Viewing archive</span>
+                  <span className="text-amber-300/70"> — archived tasks only</span>
+                </span>
+                <button
+                  onClick={() => setShowArchived(false)}
+                  className="shrink-0 rounded border border-amber-500/40 px-2.5 py-1 text-[11px] font-medium text-amber-200 hover:bg-amber-500/20 cursor-pointer"
+                >
+                  Exit archive
+                </button>
+              </div>
+            )}
             <div className={isMobile ? 'rounded' : 'bg-neutral-900/60 border border-neutral-800/80 rounded overflow-x-auto shadow-sm'}>
               <div style={{ minWidth: isMobile ? undefined : tableMinWidth }}>
               <div
@@ -5309,6 +5342,7 @@ function PageContent() {
               </div>
               </div>
             </div>
+            </>
             )}
           </div>
         </div>

@@ -4398,3 +4398,28 @@ Set up so far:
 **Still to do:** Firebase project for native push, the `@capacitor/keyboard` and status-bar plugins,
 app icons/splash, and a Play Store listing. Costs, told to the user: Capacitor and Android tooling
 are free, Play is $25 once, and iOS needs $99/year plus a Mac.
+
+### Same session — making it obvious when you are in the archive
+
+Reported: "vanskelig å vite at jeg er inne i arkiv i det hele tatt."
+
+Archive is a **mode**, not a place: it swaps the task list's contents for archived tasks and stays
+on until switched off. On desktop a small header button lit up to say so. On mobile the toggle lives
+in the popup menu — which closes the moment you use it — so you landed on a board full of unfamiliar
+tasks with nothing anywhere on screen explaining why. The only indicator was in the thing you just
+dismissed.
+
+Two changes:
+
+- **A banner above the list whenever archive mode is on**, on both layouts, with its own "Exit
+  archive" button. Amber rather than the app's neutral chrome, for the same reason the
+  message-of-the-day banner is: this is a temporary state you should notice being in, not part of
+  the furniture.
+- **The mode ends when you leave the board.** The board is the only screen that renders archived
+  tasks or the banner, so anywhere else it is a switched-on, invisible mode waiting to confuse you
+  on return. Deliberately *not* tied to changing Space or List — browsing several lists' archives in
+  a row is a real thing to want, and the banner is on screen throughout that.
+
+Worth noting the shape, since it is the third instance this week: a mode whose only indicator lives
+in the control that turns it on. Selection mode had the same problem (checkboxes appearing with no
+way to tell why), and archive had it worse because the control was inside a menu that closes.
