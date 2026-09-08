@@ -4502,3 +4502,54 @@ Three implementation details worth keeping:
 **Verified against a real database with two users in one workspace**: a plain member sees the
 ordinary deleted list and none of the private space, the private list, or the non-private list
 inside a private folder; the owner still sees all four.
+
+## Today's session (2026-09-08, continued) — The APK is built, and this server builds it
+
+The plan said the native project was "meant to be opened on a machine that has Android Studio."
+The user asked the obvious question — "kan vi ikke ordne så du kan lage det?" — and the answer
+turned out to be yes. **`npm run android:build` now produces an installable APK on this server, with
+no Android Studio and no second machine involved.** The first debug APK is 4.3 MB and was handed to
+the user directly.
+
+What Android Studio actually provides for a headless build is a JDK, the SDK, and Gradle, all three
+of which install on their own. The toolchain lives in `~/toolchain` — **outside the repo on
+purpose**, because it is ~2GB and because the Pterodactyl install script runs `git clean -fd` on
+every re-install; anything untracked inside the working tree is deleted by that. `scripts/build-
+android.sh` is consequently the only written record of where it is, and it fails with an
+instructive message rather than a stack trace when the paths stop matching.
+
+**The one non-obvious version constraint, which cost the whole detour:** Capacitor 7's Android
+library compiles with `sourceCompatibility 21`, so building under the JDK 17 that was installed
+first dies with
+
+```
+error: invalid source release: 21
+```
+
+That message names the *target* release, not the missing JDK, and reads like a Gradle
+misconfiguration. It is not — it means the JDK is older than the code being compiled. Temurin JDK 21
+fixed it with no project changes at all. Worth remembering because the same wording will reappear
+the day Capacitor bumps its target again.
+
+Also settled: `android/app/build/` and `android/local.properties` are already covered by the
+`android/.gitignore` that Capacitor generated, so the ~200MB of build output and the machine-specific
+SDK path stay out of git without any new rules. This was verified with `git check-ignore`, not
+assumed — an earlier `check-ignore` on the *directory* answered differently from the same check on a
+*file inside it*, which briefly looked like the build output was about to be committed.
+
+**Unverified, and only the user can verify it:** whether the app actually runs. The build succeeding
+says the native project compiles, nothing more. Two things to watch on first launch, both being the
+reason the app exists rather than the PWA:
+
+- Do the haptics feel like a button press rather than a buzz? That is the whole point of the native
+  path in `lib/haptics.ts`, and it is untestable without a device.
+- Does Google sign-in open the real browser rather than trying to render inside the WebView? Google
+  blocks OAuth in embedded WebViews, so if it opens in-app it will fail, and the fix is a plugin,
+  not a config tweak.
+
+**Still to do** (unchanged, none of it blocking use of the debug APK): Firebase for native push, the
+`@capacitor/keyboard` plugin — which may also be the answer to the unresolved iOS keyboard cropping —
+a release build with a signing key, and the Play listing. A debug APK installs fine by hand but
+cannot go to the store, and its signing key is a throwaway: **the release key, once created, must be
+backed up, because losing it means never being able to update the app on Play under the same
+listing.**

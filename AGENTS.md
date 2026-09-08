@@ -15,8 +15,19 @@ Capacitor is pinned to **v7**, not the latest. v8's CLI requires Node >= 22, and
 and the production container run Node 20. Upgrading Capacitor means upgrading Node in the
 Pterodactyl egg first — do not do one without the other.
 
-Building an APK/AAB needs Java and Android Studio, which this server does not have. The native
-project (`android/`) is committed and is meant to be opened on a machine that does.
+**This server can build the APK itself — Android Studio is not needed.** Run `npm run
+android:build`; the output lands at `android/app/build/outputs/apk/debug/app-debug.apk`. The
+toolchain it uses (Temurin JDK 21 + Android SDK 35) lives in `~/toolchain`, deliberately outside
+the repo so that the install script's `git clean -fd` cannot delete it. `scripts/build-android.sh`
+is the only place those paths are written down.
+
+The JDK version is not a free choice: Capacitor 7's android library compiles with
+`sourceCompatibility 21`, so a JDK 17 build dies with `error: invalid source release: 21`. That
+error names the *target*, not the missing JDK, which makes it easy to misread as a Gradle config
+problem.
+
+`android/local.properties` points Gradle at that SDK. It is machine-specific and gitignored, so a
+fresh clone must recreate it (the build script's error messages say how).
 
 # Keep PLANNING.md current — it is this project's memory
 
