@@ -30,5 +30,16 @@
     ".next/dev/types/**/*.ts",
     "**/*.mts"
   ],
-  "exclude": ["node_modules"]
+  "exclude": [
+    "node_modules",
+    // Capacitor's own config, read by the `cap` CLI and never by the app. It imports types from
+    // @capacitor/cli, which is a devDependency — so type-checking it during `next build` makes the
+    // production build depend on a dev-only package being present. Excluded so the app's build can
+    // never fail over a file the app does not use. `npx cap` loads it with its own loader and is
+    // unaffected.
+    "capacitor.config.ts",
+    // Generated native project: Java and Gradle, nothing for TypeScript to check, and no reason to
+    // walk hundreds of files on every build.
+    "android"
+  ]
 }
