@@ -4456,3 +4456,18 @@ member of returns empty rather than its contents.
 since August): a trashed item that was *private within a shared workspace* is still visible in that
 workspace's Trash to any member, without the `canSee` check the live views apply. Narrower than what
 was fixed here, and worth its own pass.
+
+### Same session — chat text a step larger on mobile
+
+Requested: "gjøre chatten litt større. ikke veldig mye, men litt, så det ikke er supersmått."
+
+Message bodies and both composers go 13px → **15px on mobile only** (`md:` keeps desktop exactly as
+it was, where 13px against a wide column reads fine and a bump would just look coarse). Author name,
+timestamp, day divider, the quoted-message preview and the "N replies" link each go up one step
+alongside it — raising the message text alone would have left everything around it looking
+conspicuously smaller than before, which is a worse result than not changing anything.
+
+The thread panel got the same treatment, from 12px, so a reply does not read smaller than the
+message it is replying to.
+
+Deliberately modest, as asked: one step, not a redesign.

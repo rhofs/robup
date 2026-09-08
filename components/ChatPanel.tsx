@@ -401,7 +401,7 @@ export default function ChatPanel() {
                 as a chip rather than as a break in the conversation — a rule that spans the whole
                 width is what actually divides one day from the next. */}
             <div className="pt-1">
-              <div className="text-[10px] font-medium text-neutral-500 mb-1.5">{day.label}</div>
+              <div className="text-[11px] md:text-[10px] font-medium text-neutral-500 mb-1.5">{day.label}</div>
               <div className="h-px bg-neutral-800" />
             </div>
             {day.runs.map((run, runIdx) => {
@@ -427,20 +427,20 @@ export default function ChatPanel() {
                     )}
                     <div className="min-w-0 flex-1">
                       <div className="flex items-baseline gap-1.5">
-                        <span className="text-[12px] font-semibold text-neutral-200">
+                        <span className="text-[13px] md:text-[12px] font-semibold text-neutral-200">
                           {first.author?.name ?? 'Unknown'}
                           {first.authorId === currentUserId ? ' (you)' : ''}
                         </span>
-                        <span className="text-[10px] text-neutral-500">{timeLabel(first.createdAt)}</span>
+                        <span className="text-[11px] md:text-[10px] text-neutral-500">{timeLabel(first.createdAt)}</span>
                       </div>
                       {first.quotedBodySnapshot && <QuotedPreview authorName={resolveAuthorName(first.quotedAuthorId)} body={first.quotedBodySnapshot} />}
-                      {first.body && <div className="text-[13px] text-neutral-200 break-words leading-snug select-text">{renderChatMessageBody(first.body)}</div>}
+                      {first.body && <div className="text-[15px] md:text-[13px] text-neutral-200 break-words leading-snug select-text">{renderChatMessageBody(first.body)}</div>}
                       <AttachmentGrid attachments={first.attachments} />
                       <ReactionBar reactions={first.reactions} currentUserId={currentUserId} onToggle={(emoji) => handleToggleReaction(first.id, emoji)} />
                       {first.threadReplyCount > 0 && (
                         <button
                           onClick={() => setActiveThreadRootId(first.id)}
-                          className="mt-0.5 flex items-center gap-1 text-[11px] text-blue-400 hover:text-blue-300 cursor-pointer"
+                          className="mt-0.5 flex items-center gap-1 text-[12px] md:text-[11px] text-blue-400 hover:text-blue-300 cursor-pointer"
                         >
                           <MessagesSquare className="w-3 h-3" />
                           {first.threadReplyCount} {first.threadReplyCount === 1 ? 'reply' : 'replies'}
@@ -470,13 +470,13 @@ export default function ChatPanel() {
                       </span>
                       <div className="min-w-0 flex-1">
                         {m.quotedBodySnapshot && <QuotedPreview authorName={resolveAuthorName(m.quotedAuthorId)} body={m.quotedBodySnapshot} />}
-                        {m.body && <div className="text-[13px] text-neutral-200 break-words leading-snug select-text">{renderChatMessageBody(m.body)}</div>}
+                        {m.body && <div className="text-[15px] md:text-[13px] text-neutral-200 break-words leading-snug select-text">{renderChatMessageBody(m.body)}</div>}
                         <AttachmentGrid attachments={m.attachments} />
                         <ReactionBar reactions={m.reactions} currentUserId={currentUserId} onToggle={(emoji) => handleToggleReaction(m.id, emoji)} />
                         {m.threadReplyCount > 0 && (
                           <button
                             onClick={() => setActiveThreadRootId(m.id)}
-                            className="mt-0.5 flex items-center gap-1 text-[11px] text-blue-400 hover:text-blue-300 cursor-pointer"
+                            className="mt-0.5 flex items-center gap-1 text-[12px] md:text-[11px] text-blue-400 hover:text-blue-300 cursor-pointer"
                           >
                             <MessagesSquare className="w-3 h-3" />
                             {m.threadReplyCount} {m.threadReplyCount === 1 ? 'reply' : 'replies'}
@@ -569,7 +569,7 @@ export default function ChatPanel() {
           placeholder={activeChannel ? `Message ${isDM ? activeChannelLabel : `#${activeChannel.name}`}` : 'Message...'}
           rows={1}
           style={{ maxHeight: COMPOSER_MAX_HEIGHT_PX }}
-          className="flex-1 bg-transparent text-[13px] text-app-strong placeholder:text-neutral-500 resize-none focus:outline-none py-1 overflow-y-auto"
+          className="flex-1 bg-transparent text-[15px] md:text-[13px] text-app-strong placeholder:text-neutral-500 resize-none focus:outline-none py-1 overflow-y-auto"
         />
         <button
           onClick={handleSend}
@@ -671,7 +671,7 @@ export function ReactionBar({
 // (quotedMessageId itself goes null then, via onDelete: SetNull; the snapshot columns don't).
 export function QuotedPreview({ authorName, body }: { authorName: string; body: string }) {
   return (
-    <div className="mb-0.5 pl-2 border-l-2 border-neutral-700 text-[11px] text-neutral-500 truncate">
+    <div className="mb-0.5 pl-2 border-l-2 border-neutral-700 text-[12px] md:text-[11px] text-neutral-500 truncate">
       <span className="font-medium text-neutral-400">{authorName}</span> {body}
     </div>
   );
