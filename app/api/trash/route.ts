@@ -7,7 +7,7 @@ import { getCurrentUserId } from '@/lib/auth/session';
 // turn deleting one Space into dozens or hundreds of rows. Instead: only show an item if its
 // own immediate parent is NOT also trashed. If the parent is trashed too, this item is already
 // covered by the parent's own Trash entry (and will come back together when that's restored).
-export async function GET() {
+export async function GET(req: Request) {
   const userId = await getCurrentUserId();
   if (!userId) return NextResponse.json([]);
 
@@ -18,7 +18,23 @@ export async function GET() {
   // hide a trashed *private* item from a workspace member who wouldn't normally have canSee access
   // to it — a narrower, further refinement, named here rather than silently assumed handled.
   const memberships = await prisma.workspaceMembership.findMany({ where: { userId }, select: { workspaceId: true } });
-  const workspaceIds = memberships.map((m) => m.workspaceId);
+  const memberWorkspaceIds = memberships.map((m) => m.workspaceId);
+  if (memberWorkspaceIds.length === 0) return NextResponse.json([]);
+
+  // Narrowed further to ONE workspace when the caller names it. Membership alone meant the Trash
+  // view mixed every workspace the person belongs to into a single list — including their own
+  // personal "My Tasks" workspace. Nobody else's data was ever exposed, but opening Trash while
+  // sitting in a shared workspace listed private deleted items alongside the team's, which is the
+  // wrong thing to have on screen in an office. Raised by the user directly: "pass på at det ikke
+  // lenker info fra private (my tasks) til offisielle workspaces når man sletter/arkiverer."
+  //
+  // The requested id is intersected with real memberships rather than trusted, so passing someone
+  // else's workspace id returns nothing rather than their trash. Omitting the parameter keeps the
+  // old membership-wide behaviour, so an older client mid-deploy still works.
+  const requested = new URL(req.url).searchParams.get('workspaceId');
+  const workspaceIds = requested
+    ? memberWorkspaceIds.filter((id) => id === requested)
+    : memberWorkspaceIds;
   if (workspaceIds.length === 0) return NextResponse.json([]);
 
   const [spaces, folders, lists, tasks, docFolders, docs, events] = await Promise.all([

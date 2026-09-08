@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { X, Layers, Folder as FolderIcon, List as ListIcon, CheckSquare, FolderOpen, FileText, CalendarDays, Undo2, Trash2 } from 'lucide-react';
 import { useTaskStore } from '../store/useTaskStore';
 import ConfirmDialog from './ConfirmDialog';
@@ -49,21 +49,32 @@ const formatDay = (dateStr: string) =>
   new Date(dateStr).toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric' });
 
 export default function TrashPanel({ onClose }: { onClose: () => void }) {
-  const { restoreFromTrash, permanentlyDeleteFromTrash } = useTaskStore();
+  // Selected individually rather than destructuring the whole store — see MobileSpacesSheet's note
+  // on why `useTaskStore()` with no selector subscribes to every change in the app.
+  const restoreFromTrash = useTaskStore((s) => s.restoreFromTrash);
+  const permanentlyDeleteFromTrash = useTaskStore((s) => s.permanentlyDeleteFromTrash);
+  // Trash is scoped to the workspace you are actually in. Without this it listed every workspace
+  // the person belongs to at once, personal "My Tasks" included — so opening it inside a shared
+  // workspace put private deleted items on screen next to the team's.
+  const activeWorkspaceId = useTaskStore((s) => s.activeWorkspaceId);
   const [items, setItems] = useState<TrashItem[] | null>(null);
   const [purgeTarget, setPurgeTarget] = useState<TrashItem | null>(null);
   const [busyId, setBusyId] = useState<string | null>(null);
 
-  const load = () => {
-    fetch('/api/trash')
+  const load = useCallback(() => {
+    setItems(null);
+    const qs = activeWorkspaceId ? `?workspaceId=${encodeURIComponent(activeWorkspaceId)}` : '';
+    fetch(`/api/trash${qs}`)
       .then((r) => r.json())
       .then(setItems)
       .catch(() => setItems([]));
-  };
+  }, [activeWorkspaceId]);
 
+  // Reloads when the workspace changes, not only on mount — the panel would otherwise keep showing
+  // the previous workspace's trash after a switch, which is the same mistake one level along.
   useEffect(() => {
     load();
-  }, []);
+  }, [load]);
 
   const handleRestore = async (item: TrashItem) => {
     setBusyId(item.id);

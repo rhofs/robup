@@ -4423,3 +4423,36 @@ Two changes:
 Worth noting the shape, since it is the third instance this week: a mode whose only indicator lives
 in the control that turns it on. Selection mode had the same problem (checkboxes appearing with no
 way to tell why), and archive had it worse because the control was inside a menu that closes.
+
+### Same session — Trash mixed personal and team workspaces together
+
+Raised by the user while reviewing the archive work: "pass på at det ikke lenker info fra private
+(my tasks) til offisielle workspaces når man sletter/arkiverer." Checked rather than reassured, and
+one of the two was a real problem.
+
+**Archive was already correct.** `filteredTasks` scopes "All Tasks" to `currentWorkspaceListIds`,
+and archive-with-a-Space-selected walks only that Space. So My Tasks shows personal tasks and a team
+workspace shows team ones, with no crossing.
+
+**Trash was not.** `GET /api/trash` scoped to *every workspace the caller is a member of* — which
+includes their own personal workspace — and returned them as one flat list with no workspace on any
+row. So opening Trash inside a shared workspace listed private deleted items next to the team's.
+Not a cross-*user* leak: everything shown belonged to the person asking. But it is exactly the wrong
+thing to have on screen in an office, and the client could not even have separated them, since the
+response carried no workspace id at all.
+
+Now scoped to the active workspace, with the requested id **intersected with real memberships**
+rather than trusted — asking for someone else's workspace returns nothing rather than their trash.
+Omitting the parameter keeps the old membership-wide behaviour so a client mid-deploy still works.
+The panel also reloads when the workspace changes rather than only on mount, which would otherwise
+have left the previous workspace's trash on screen after a switch — the same mistake one level
+along.
+
+**Verified against a real database** across six cases, including the two that matter most: standing
+in the team workspace never shows the personal one's items, and requesting a workspace you are not a
+member of returns empty rather than its contents.
+
+**Still open, and named rather than quietly assumed handled** (the route's own comment has said so
+since August): a trashed item that was *private within a shared workspace* is still visible in that
+workspace's Trash to any member, without the `canSee` check the live views apply. Narrower than what
+was fixed here, and worth its own pass.
