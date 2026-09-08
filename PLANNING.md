@@ -4471,3 +4471,34 @@ The thread panel got the same treatment, from 12px, so a reply does not read sma
 message it is replying to.
 
 Deliberately modest, as asked: one step, not a redesign.
+
+### Same session — private items no longer surface in a shared workspace's Trash
+
+The narrower gap named in the previous entry, and flagged in the route's own comment since August,
+is now closed. Trash applied **no access filtering at all**: a private Space, Folder, List or Task
+appeared in that workspace's Trash to every member, even though the same item is hidden from them
+everywhere else in the app. Deleting something made it *more* visible than it was while it existed —
+the wrong way round, and the kind of thing that only shows up when someone actually starts using
+private lists.
+
+`GET /api/trash` now applies the same rules the live views do: `canSee` per row, plus
+`buildFolderChainVisibility` so a List that is not itself private but sits inside a private Folder
+stays hidden. Tasks must clear Space, List **and** their own flag — a task is only as visible as the
+least visible thing above it, matching `getTaskVisibilityContext`. Docs and DocFolders have no
+privacy flag of their own, so they inherit: a Doc attached to both a Task and a Space must satisfy
+both, since the schema is explicit that those two are independent.
+
+Three implementation details worth keeping:
+
+- **One access context per workspace, not per row.** `getAccessContext` runs real queries, and the
+  row count here is unbounded while the workspace count is small.
+- **Folders are loaded unfiltered and in full.** Chain visibility has to walk parents that may
+  themselves be invisible, so filtering folder-by-folder first would break the very check it feeds —
+  the same reason `GET /api/workspaces` builds it this way.
+- **Missing context fails closed.** A row whose workspace has no context is treated as invisible
+  rather than visible. It should not happen, since the workspace ids come from real memberships, but
+  a visibility check is the wrong place to default to "show it".
+
+**Verified against a real database with two users in one workspace**: a plain member sees the
+ordinary deleted list and none of the private space, the private list, or the non-private list
+inside a private folder; the owner still sees all four.
