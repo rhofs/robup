@@ -23,7 +23,14 @@ export const config = {
   // installability check and the tab favicon both need to load on an unauthenticated /login visit
   // too, and a redirected (HTML) response in place of the real sw.js script fails service worker
   // registration outright rather than just looking wrong.
+  //
+  // siqt.apk is excluded for a practical reason rather than a philosophical one. Chrome on Android
+  // hands large downloads to the system DownloadManager, which does not reliably carry the session
+  // cookie — so a gated APK URL does not fail cleanly, it silently saves the *login page HTML*
+  // under the .apk name and the install fails later with a confusing "invalid package" error. There
+  // is also nothing to protect: the app is a shell around a site that still requires signing in, so
+  // the download is useless to anyone without an account.
   matcher: [
-    '/((?!api|login|reset-password|invite|connect|_next/static|_next/image|favicon.ico|manifest.webmanifest|icon|apple-icon|pwa-icon-192|pwa-icon-512|pwa-icon-512-maskable|sw.js).*)',
+    '/((?!api|login|reset-password|invite|connect|_next/static|_next/image|favicon.ico|manifest.webmanifest|icon|apple-icon|pwa-icon-192|pwa-icon-512|pwa-icon-512-maskable|sw.js|siqt.apk).*)',
   ],
 };

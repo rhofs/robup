@@ -4950,3 +4950,32 @@ drop to a single `{ id: 'click' }` to go back. `thud` is the heaviest and longes
 still is not enough. The plugin only needs rebuilding to gain a new *kind* of effect.
 
 APK 1.3 (versionCode 4), 4.5MB, verified with `aapt dump badging`.
+
+### Same session — the APK download was gated behind login
+
+Reported after installing what should have been 1.3: no splash animation and no change in haptics.
+Checking what production actually serves found something worth fixing regardless of whether it was
+the cause:
+
+    $ curl -sI https://siqt.no/siqt.apk
+    HTTP/2 307
+    location: https://siqt.no/login?callbackUrl=...
+
+`proxy.ts` (Next 16's rename of middleware.ts) excludes icons, the manifest and `sw.js` from the auth
+gate, but nothing excluded `siqt.apk`. **This does not fail cleanly.** Chrome on Android hands large
+downloads to the system DownloadManager, which does not reliably carry the session cookie, so the
+gated URL saves the *login page HTML* under the `.apk` name — and the failure only surfaces much
+later as a confusing install error, or as an install that appears to succeed from a stale file still
+sitting in Downloads. There is also nothing being protected: the app is a shell around a site that
+still requires signing in, so the file is useless without an account. Now excluded.
+
+The file in git was verified correct before changing anything — `git cat-file -s HEAD:public/siqt.apk`
+is 4,660,708 bytes, matching the 1.3 build exactly. So this was never a case of the wrong file being
+committed.
+
+**Still unresolved at the time of writing:** whether the gate was actually what he hit, or whether he
+installed a stale `siqt.apk` already in his Downloads folder (Chrome saves a second copy as
+`siqt (1).apk` rather than overwriting, which is an easy trap). Asked him to read the version from
+Android's app-info screen — that is exactly what `versionName` was added for, and it answers the
+question outright: 1.3 means the APK is fine and the problem is elsewhere; 1.2 or lower means the
+install never took.
