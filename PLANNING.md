@@ -4634,3 +4634,56 @@ safe to change — worth re-reading before touching this route again.
 Immediate workaround, which still works and needed no deploy: sign in with Google in a real browser,
 then Profile → "Set a password" (`ProfilePage.tsx` already omits the current-password field when
 `hasPassword` is false).
+
+### Same session — the native haptics were wrong, and so was the comment explaining them
+
+First real-device verdict on the app's haptics: "appen sin meny vibrasjon kjennes kraftigere ut,
+men i clickup er den mye kortere, typ 1/3, kan vi endre." Reading the plugin's own source rather
+than trusting its API names explained it completely.
+
+**`Haptics.impact` on Android is not a tuned system effect.** The previous comment in
+`lib/haptics.ts` asserted the app reached Android's `VibrationEffect` presets (EFFECT_CLICK and
+friends) and that this was "the whole reason the app exists". That is simply not what the plugin
+does — `HapticsImpactType.java` builds an ordinary `createWaveform` from a duration and an
+amplitude, the same shape as the web path with amplitude added:
+
+    LIGHT  50ms @ 110/255      MEDIUM  43ms @ 180/255      HEAVY  60ms @ 255
+
+Two consequences, both matching what was felt on the phone:
+
+- Every one of those is **longer than the web's own 32ms**, so the app read as *stronger* purely by
+  buzzing longer — the exact failure mode this file's existing comments warn about ("long, not
+  strong") and which the web durations had already been tuned to avoid.
+- **LIGHT (50ms) is longer than MEDIUM (43ms)**, and this file used LIGHT for ordinary taps and
+  MEDIUM for deliberate ones. The two were inverted relative to their names, so every routine tap
+  was the longest pulse in the app.
+
+**Fix:** use `Haptics.vibrate({ duration })`, which is `createOneShot(duration, DEFAULT_AMPLITUDE)` —
+the device's own full strength instead of a fraction of it. Native durations are now 15ms (menu) and
+10ms (tap), against 43 and 50. That combination, short *and* at full amplitude, is the one thing the
+browser genuinely cannot do: `navigator.vibrate` has no amplitude parameter, so on the web the only
+way to feel firmer is to last longer.
+
+**This needed no new APK**, which is worth remembering: `vibrate` already exists in the installed
+plugin, so only the JS calling it changed, and that ships with a normal web deploy. Native code is
+the thing that forces a rebuild — calling a *different method of an already-installed plugin* is not.
+
+**Unverified:** whether 15/10ms actually reads as a firm click on the user's phone or as too faint.
+The LRA spin-up reasoning higher in that file argues under ~15ms never reaches peak, but that was
+derived for the web path where amplitude is out of reach; at DEFAULT_AMPLITUDE the motor is driven
+hard immediately, so the usable band should sit lower. If it feels weak, raise `NATIVE_DURATIONS`
+rather than reverting to `impact`.
+
+### Same session — the user is right that signup already leaks what forgot-password protects
+
+Raised by the user, and correct: "den avslører jo at vi må logge inn med google, når vi prøver lage
+ny bruker." `app/api/auth/signup/route.ts` returns a 409 that names Google when the existing account
+has no password, so anyone can already learn from *that* route whether an address has an account
+here and how it signs in. The careful generic response in `forgot-password` therefore protects
+something the app discloses a few pixels away.
+
+**Decision: leave both as they are.** Signup cannot avoid it — it has to say the address is taken or
+the form cannot be completed, and naming Google is what turns a dead end into an instruction. Making
+`forgot-password` chatty as well would add a second, easier-to-script disclosure and buy nothing.
+The inconsistency is real but the asymmetry is the right way round; recorded here so the next session
+does not "fix" the generic response on the grounds that it is pointless.

@@ -10,7 +10,7 @@
 // navigator.vibrate too — worth ruling out before looking at this file.
 
 import { Capacitor } from '@capacitor/core';
-import { Haptics, ImpactStyle } from '@capacitor/haptics';
+import { Haptics } from '@capacitor/haptics';
 
 export type HapticStrength = 'off' | 'light' | 'strong';
 
@@ -62,27 +62,42 @@ export function setHapticStrength(value: HapticStrength): void {
   else vibrate(DURATIONS[value].strong);
 }
 
-// Inside the native app, use the platform's own predefined effects instead of a raw duration.
-// This is the whole reason the app exists: `navigator.vibrate` can only say "buzz for N
-// milliseconds", so every value in DURATIONS above is an approximation of a click. Android and iOS
-// both ship real, tuned impact effects — Android's VibrationEffect, iOS's Taptic Engine — and
-// Capacitor maps `Haptics.impact` onto whichever one is underneath. A tap in the app therefore
-// feels like a button rather than like a motor being switched on and off.
+// Native durations, deliberately much shorter than the web ones above.
 //
+// CORRECTION, measured rather than assumed — an earlier version of this file claimed the app got
+// Android's "real, tuned impact effects" (EFFECT_CLICK and friends) through `Haptics.impact`. It
+// does not. Read
+// `node_modules/@capacitor/haptics/android/.../arguments/HapticsImpactType.java`: the plugin builds
+// its own `VibrationEffect.createWaveform` from a duration and an amplitude, exactly like the web
+// path, just with amplitude available too. The actual values are
+//
+//     LIGHT  50ms @ 110/255      MEDIUM  43ms @ 180/255      HEAVY  60ms @ 255
+//
+// which produced two problems on a real device. Every one of those is longer than the web's own
+// 32ms, so the app read as *stronger* only because it buzzed for longer — reported directly against
+// ClickUp: "i clickup er den mye kortere, typ 1/3." And LIGHT, which this file used for ordinary
+// taps, is 50ms — **longer than the MEDIUM used for the deliberate ones**, so the two were
+// inverted relative to their names.
+//
+// So the app now uses `Haptics.vibrate({ duration })` instead, which is
+// `createOneShot(duration, DEFAULT_AMPLITUDE)` — the device's own full-strength default rather than
+// a fraction of it. That is what makes a genuinely short pulse still feel firm, and it is the one
+// thing the browser could not do: short *and* strong, instead of trading one for the other.
+//
+// These stay well under the ~15-20ms LRA spin-up discussed above on purpose. That reasoning was
+// derived for the web path, where amplitude is out of reach; at the default amplitude the motor is
+// driven hard from the first millisecond, so the band that reads as a click sits lower.
+const NATIVE_DURATIONS: Record<Exclude<HapticStrength, 'off'>, { tap: number; strong: number }> = {
+  light: { tap: 6, strong: 10 },
+  strong: { tap: 10, strong: 15 },
+};
+
 // `Capacitor.isNativePlatform()` is false in a browser and in an installed PWA, so the web path
-// below stays exactly as it is today for everyone not using the app. Nothing here degrades.
+// stays exactly as it is today for everyone not using the app. Nothing here degrades.
 function nativeImpact(kind: 'tap' | 'strong', strength: Exclude<HapticStrength, 'off'>): void {
-  // 'light' keeps the app's own gentler setting meaningfully gentler; without this every tap would
-  // land on the same medium impact and the Off/Light/Strong choice would be two options, not three.
-  const style =
-    strength === 'light'
-      ? ImpactStyle.Light
-      : kind === 'strong'
-        ? ImpactStyle.Medium
-        : ImpactStyle.Light;
   // Fire-and-forget: the promise only reports whether the platform accepted the request, and a
   // failed buzz must never surface as an error in the middle of a tap handler.
-  void Haptics.impact({ style }).catch(() => {});
+  void Haptics.vibrate({ duration: NATIVE_DURATIONS[strength][kind] }).catch(() => {});
 }
 
 function vibrate(ms: number): void {
