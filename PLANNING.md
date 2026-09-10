@@ -5064,3 +5064,57 @@ Hence `/api/version` (commit hash + process start time, read from git at request
 the running checkout rather than what was compiled). The only signal available before it was the byte
 size of `public/siqt.apk`, which says nothing about changes that do not touch that file. **Check it
 before diagnosing anything that "did not work" — this is now the cheapest possible first question.**
+
+### Same session — CORRECTION: the waveform was probably never the problem
+
+The entry above ("1.4 killed haptics entirely; the custom waveform is silent on Xiaomi") states a
+cause that does not hold up, and it is left in place rather than edited so the mistake stays legible.
+
+The user found it: "jeg tror kanskje det var fordi jeg har klart å skru av på mobilen... men funker
+nå." **The app's own haptics setting had been switched to Off on that phone.** That alone explains
+"null haptic" in 1.4 and again after the supposed fix — and it means the custom waveform was never
+given a fair trial. The MIUI-ignores-custom-patterns theory is a real trait of some builds, but
+nothing in this session ever demonstrated it here.
+
+`USE_WAVEFORM_FALLBACK` stays **off**, now as a cautious default rather than a verdict. The comment
+in `lib/haptics.ts` has been corrected to say so, and to give the way to settle it: confirm the
+setting is on Strong, flip the flag, redeploy, compare the same tap with it off.
+
+**The real failure was in the diagnostic, not the diagnosis.** `HapticDiagnostics` was added
+precisely to end this class of guessing, and it reported the device's capabilities *regardless of
+whether haptics were enabled* — so with the setting on Off it displayed "composed pulse", implying
+everything was fine, while nothing could possibly play. The off state now comes first in that
+component. A diagnostic that ignores the most common cause is worse than no diagnostic, because it
+actively argues against the right answer.
+
+Two things worth carrying forward from a day that lost several rounds to this:
+
+- **Check the switch before the wiring.** Both the app's Off/Light/Strong setting and Android's own
+  system haptic intensity can silence everything, and neither is visible from the code.
+- **The app and the browser do not share settings.** The WebView has its own localStorage, entirely
+  separate from Chrome's on the same phone, so haptics (theme, hidden nav tabs, everything else in
+  `siqt.*` keys) can be configured differently in the app than on the website — and testing one
+  says nothing about the other.
+
+### Same session — adding body behind the kick, and turning the open question into a test
+
+"mulig å få vibrasjon på toppen av den 'kick' følelsen? kjennes litt kort ut." Both paths were
+changed, because which one this phone takes is still unknown:
+
+- **Composition path** (devices with primitives): `click@1.0` followed by `thud@0.6` at delay 0.
+  `thud` rather than a second click on purpose — it is the low, heavy, longer primitive, so it reads
+  as weight trailing the hit instead of as a second hit.
+- **Waveform path** (devices without): 12ms at full amplitude, then 28ms at ~37%. Sharp attack, then
+  a sustain trailing off.
+
+40ms crosses the "~45ms reads as a buzz" line this file has warned about since the web-only days, and
+that is deliberate rather than forgotten: **that rule describes a pulse held at constant amplitude,**
+where duration is the only thing the motor communicates. A buzz placed *under* a sharp attack is the
+difference between "a hit with weight behind it" and "the motor is on".
+
+`USE_WAVEFORM_FALLBACK` is back **on**, and this is the point: it was disabled on a diagnosis that
+did not hold, and it is also the only way to add body on a device without primitives, since the
+predefined effects are fixed and the one longer option (`doubleClick`) reads as two taps. **If
+haptics go silent again with the setting confirmed on, that is no longer ambiguous** — it means the
+MIUI theory was right. Either outcome is information, which is why it is worth shipping rather than
+leaving as an unanswered maybe. Both this and the correction above are web-only; no new APK.

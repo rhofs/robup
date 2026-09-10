@@ -183,25 +183,45 @@ const NATIVE_EFFECTS: Record<Exclude<HapticStrength, 'off'>, { tap: NativeEffect
 //
 // This was added as a middle fallback for devices without composition primitives: a hand-built
 // waveform (18ms at full amplitude, then 12ms at ~47%) so such a phone would get *something* new
-// rather than silently replaying the predefined effect it already had. On the one real device this
-// has been tested on — a Chinese-region Xiaomi on HyperOS — enabling it produced **no vibration at
-// all**. Reported plainly: "nå er det null haptic."
+// rather than silently replaying the predefined effect it already had.
 //
-// That is a known trait rather than a mystery: several Xiaomi/MIUI builds honour the system's own
-// predefined haptics and quietly ignore custom `createWaveform` patterns from ordinary apps. The
-// call succeeds, nothing moves, and no error is raised anywhere — so it fails exactly like a
-// feature that was never deployed.
+// It was switched off after a device reported total silence — but that diagnosis DID NOT HOLD UP.
+// The haptics setting on that phone turned out to have been on Off the whole time, so the waveform
+// was never actually given a fair trial. The theory at the time (that Xiaomi/MIUI honours the
+// system's predefined haptics and ignores custom `createWaveform` patterns from ordinary apps) is a
+// real and documented trait of some builds, but nothing here ever demonstrated it.
+//
+// So this stays off as the *cautious* default, not as a proven verdict. To settle it properly:
+// confirm haptics are set to Strong, flip the flag, redeploy, and compare against the same tap with
+// it off. Do that before writing anything down about what this device can and cannot play.
 //
 // The plugin still supports it, so turning this back on is a one-line change here and needs no new
 // APK. Do not enable it globally on the strength of one device feeling better; the failure mode is
 // total silence, which is worse than the slightly-too-soft click it was meant to improve.
-const USE_WAVEFORM_FALLBACK = false;
+// Back ON, deliberately, as a controlled test rather than a guess.
+//
+// It was turned off on a diagnosis that did not hold (see the note below), and it is also the ONLY
+// way to add body to the pulse on a device without composition primitives — predefined effects are
+// fixed, and the only longer one, doubleClick, reads as two taps rather than one fuller hit.
+//
+// If haptics go silent again *with the setting confirmed on*, that is no longer ambiguous: it means
+// the MIUI theory was right after all. Either outcome is information, which is why this is worth
+// shipping rather than leaving as an unanswered maybe.
+const USE_WAVEFORM_FALLBACK = true;
 
 const NATIVE_WAVEFORMS: Partial<
   Record<Exclude<HapticStrength, 'off'>, Partial<Record<'tap' | 'strong', { timings: number[]; amplitudes: number[] }>>>
 > = {
   strong: {
-    strong: { timings: [0, 18, 12], amplitudes: [0, 255, 120] },
+    // Kick, then body: 12ms at full amplitude is the hit, and 28ms at ~37% is the sustain trailing
+    // off behind it. Asked for directly — "mulig å få vibrasjon på toppen av den kick følelsen?
+    // kjennes litt kort ut."
+    //
+    // 40ms total does cross the ~45ms "reads as a buzz" line noted at the top of this file, but not
+    // by accident: that line describes a pulse held at CONSTANT amplitude, where length is all the
+    // motor communicates. Here the buzz is deliberate and sits under a sharp attack, which is what
+    // separates "a hit with weight behind it" from "the motor is on".
+    strong: { timings: [0, 12, 28], amplitudes: [0, 255, 95] },
   },
 };
 
@@ -211,7 +231,12 @@ const NATIVE_COMPOSITIONS: Partial<
   strong: {
     strong: [
       { id: 'click', scale: 1 },
-      { id: 'click', scale: 0.7, delay: 0 },
+      // thud, not a second click: it is the low, heavy, longer primitive, so it reads as weight
+      // trailing the hit rather than as a second hit. That is the "vibrasjon på toppen av kicket"
+      // being asked for. Alternatives if this is wrong in either direction: `lowTick` for something
+      // subtler, a second `click` for more of a double-tap character, or raising the scale for more
+      // of it.
+      { id: 'thud', scale: 0.6, delay: 0 },
     ],
   },
 };

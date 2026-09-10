@@ -98,7 +98,7 @@ function AndroidAppRow() {
 // change never having shipped. Tuning the haptics has taken several rounds of "does this feel
 // different?" over chat, and twice the honest answer could not be distinguished from a bug. One
 // readable line ends that — it says which of the three paths the device is actually taking.
-function HapticDiagnostics() {
+function HapticDiagnostics({ strength }: { strength: HapticStrength }) {
   const [caps, setCaps] = useState<NativeHapticCapabilities | null>(null);
 
   useEffect(() => {
@@ -115,9 +115,23 @@ function HapticDiagnostics() {
   // nothing useful to say, so the line simply is not there.
   if (!caps) return null;
 
-  // Mirrors the order in nativeImpact/SiqtHapticsPlugin. The custom-waveform branch is deliberately
-  // absent: USE_WAVEFORM_FALLBACK in lib/haptics.ts is off after it produced total silence on a
-  // Xiaomi, so claiming it here would describe a path nothing takes.
+  // The switched-off case comes FIRST, and that ordering is the whole lesson of this component.
+  // Its earlier version reported the device's capabilities regardless of whether haptics were
+  // enabled, so with the setting on Off it cheerfully said "composed pulse" — describing a path
+  // nothing was taking. A whole debugging round went into a phone that had simply been switched
+  // off, while the diagnostics line sat there implying everything was fine. A diagnostic that
+  // ignores the most common cause is worse than none.
+  if (strength === 'off') {
+    return (
+      <div className="text-[10px] text-neutral-500 px-1 pb-3 leading-relaxed">
+        Native haptics: <span className="text-amber-500/80">off</span> — nothing will play until this
+        is set to Light or Strong.
+      </div>
+    );
+  }
+
+  // Mirrors the order in nativeImpact/SiqtHapticsPlugin. The custom-waveform branch is absent
+  // because USE_WAVEFORM_FALLBACK in lib/haptics.ts is off, so nothing takes that path today.
   const path = caps.supportsPrimitives ? 'composed pulse' : 'built-in effect';
 
   return (
@@ -636,7 +650,7 @@ export default function SettingsPanel({
                     </button>
                   ))}
                 </div>
-                <HapticDiagnostics />
+                <HapticDiagnostics strength={haptics} />
               </>
             )}
 
