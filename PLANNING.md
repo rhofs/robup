@@ -4687,3 +4687,20 @@ the form cannot be completed, and naming Google is what turns a dead end into an
 `forgot-password` chatty as well would add a second, easier-to-script disclosure and buy nothing.
 The inconsistency is real but the asymmetry is the right way round; recorded here so the next session
 does not "fix" the generic response on the grounds that it is pointless.
+
+### Same session — the app does feel smoother, which partly contradicts what was promised
+
+The user, unprompted: "ellers føles det smoothere i appen, enn i browser, f.eks. når chatten sklir
+inn, er det smoothere. kanskje pgs chrome? idk"
+
+Earlier this session the Capacitor entry above states plainly, under "What it does not change":
+smoothness, on the grounds that a WebView is the same Chromium engine. **That reasoning is still
+right and the conclusion was still too strong.** The engine is identical, so nothing renders faster —
+but Chrome on Android hides and reveals its URL bar during scrolling, and each of those resizes the
+viewport and forces a relayout mid-gesture. A panel sliding in is exactly the case that shows it.
+The WebView has no URL bar, no tab strip and no pull-to-refresh gesture competing for the same
+frames, so the same code gets a cleaner run at them.
+
+So the honest version, for anyone repeating the claim to a user: the app is not faster, it has less
+fighting it. The gain is real, bounded, and concentrated in animations that run during scroll or
+gesture — not a general speed-up, and not a reason to expect heavy screens to improve.
