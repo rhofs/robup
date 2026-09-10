@@ -21,6 +21,31 @@ const config: CapacitorConfig = {
     // Cleartext stays off: everything goes to https://siqt.no, and allowing plain http would only
     // widen what the WebView will load.
     allowMixedContent: false,
+    // The WebView's own background, seen for as long as it has nothing to paint. It defaults to
+    // white, which on a dark app is not a neutral gap but a full-screen flash — and it lasts much
+    // longer here than in a normal app, because there is no bundled HTML to fall back on: the
+    // WebView is idle until https://siqt.no comes back over the network. Reported on device from
+    // China over a VPN, where that wait is at its worst: "når jeg åpner appen så er skjermen bare
+    // helt hvit." Same value as themeColor in app/layout.tsx and the manifest.
+    backgroundColor: '#0A0A0A',
+  },
+  plugins: {
+    // The launch theme (AppTheme.NoActionBarLaunch) already points at the generated @drawable/
+    // splash, but on its own that only covers the moment before the window is drawn. This keeps it
+    // up until the web app is actually on screen, which is the gap that was showing as white.
+    SplashScreen: {
+      backgroundColor: '#0A0A0A',
+      androidSplashResourceName: 'splash',
+      androidScaleType: 'CENTER_CROP',
+      showSpinner: false,
+      // Hidden from JS as soon as the app has rendered (components/NativeSplashGate.tsx), so this
+      // duration is only ever a ceiling. It stays an *auto*-hide on purpose: with
+      // launchAutoHide:false, anything that stops that JS from running — no network, siqt.no down,
+      // a redeploy mid-launch — would strand the user on a splash screen with no way forward.
+      // Failing into the app's own error handling beats failing into a picture.
+      launchAutoHide: true,
+      launchShowDuration: 3000,
+    },
   },
   server: {
     url: 'https://siqt.no',

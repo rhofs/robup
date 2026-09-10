@@ -9,8 +9,15 @@
 // Do Not Disturb / bedtime mode suppresses vibration system-wide, and it silently affects
 // navigator.vibrate too — worth ruling out before looking at this file.
 
-import { Capacitor } from '@capacitor/core';
+import { Capacitor, registerPlugin } from '@capacitor/core';
 import { Haptics } from '@capacitor/haptics';
+
+// Our own tiny native plugin (android/app/src/main/java/no/siqt/app/SiqtHapticsPlugin.java). It
+// exists for one reason @capacitor/haptics cannot cover — see NATIVE_DURATIONS below.
+interface SiqtHapticsPlugin {
+  click(options: { style: 'light' | 'strong'; fallbackMs: number }): Promise<void>;
+}
+const SiqtHaptics = registerPlugin<SiqtHapticsPlugin>('SiqtHaptics');
 
 export type HapticStrength = 'off' | 'light' | 'strong';
 
@@ -94,10 +101,29 @@ const NATIVE_DURATIONS: Record<Exclude<HapticStrength, 'off'>, { tap: number; st
 
 // `Capacitor.isNativePlatform()` is false in a browser and in an installed PWA, so the web path
 // stays exactly as it is today for everyone not using the app. Nothing here degrades.
+// Shortening the pulse to 15ms got the length right but not the character. Reported next: ClickUp's
+// "varer ca like lenge, men sparker med ifra" — same duration, but it hits and stops dead, while
+// ours starts softly and rings out. That is not a number this file can pick. Driving an LRA for a
+// flat duration means it ramps up over ~15ms and then oscillates freely once the current stops;
+// Android's own EFFECT_CLICK is a vendor-tuned waveform that reaches full amplitude immediately and
+// then *brakes* the motor by driving it in reverse. Neither the Web Vibration API nor
+// @capacitor/haptics exposes it, hence SiqtHapticsPlugin.
+//
+// The duration below is still passed along: the plugin uses it for its own fallback on a device
+// with no tuned effect, so the two stay in step instead of drifting apart in two files.
 function nativeImpact(kind: 'tap' | 'strong', strength: Exclude<HapticStrength, 'off'>): void {
+  const fallbackMs = NATIVE_DURATIONS[strength][kind];
   // Fire-and-forget: the promise only reports whether the platform accepted the request, and a
   // failed buzz must never surface as an error in the middle of a tap handler.
-  void Haptics.vibrate({ duration: NATIVE_DURATIONS[strength][kind] }).catch(() => {});
+  //
+  // The .catch is load-bearing rather than defensive: an app installed from an APK built before
+  // this plugin existed has no 'SiqtHaptics' registered, and the call rejects with "not
+  // implemented". Since the JS ships from the web and updates the moment production redeploys,
+  // while the APK only changes when someone installs a new one, those two versions are routinely
+  // out of step. Falling back keeps haptics working on the older build instead of silently dying.
+  void SiqtHaptics.click({ style: strength === 'light' ? 'light' : 'strong', fallbackMs }).catch(
+    () => Haptics.vibrate({ duration: fallbackMs }).catch(() => {}),
+  );
 }
 
 function vibrate(ms: number): void {

@@ -11,6 +11,14 @@ touching anything here:
 - **`npx cap sync` does not ship your web code.** In remote-URL mode it only updates native plugins
   and config. Running it after a web change and expecting the app to update is a trap.
 
+**`android/` now contains hand-written code, not only generated code.**
+`no/siqt/app/SiqtHapticsPlugin.java` is ours, and `MainActivity.java` has been edited to register it
+(before `super.onCreate`, which is where the plugin list is read — registering after leaves it
+invisible to JS with no error). Regenerating the platform — `npx cap add android`, or deleting the
+folder and letting the CLI recreate it — silently reverts `MainActivity` to its empty template and
+takes the plugin with it. The failure then shows up only as haptics quietly falling back on a real
+device. `npx cap sync` is safe; recreating the platform is not.
+
 Capacitor is pinned to **v7**, not the latest. v8's CLI requires Node >= 22, and both this machine
 and the production container run Node 20. Upgrading Capacitor means upgrading Node in the
 Pterodactyl egg first — do not do one without the other.

@@ -4744,3 +4744,52 @@ given edge-to-edge plus `viewport-fit=cover`, and there is no fallback if it rep
 would simply stay where it is. If that happens the answer is the `@capacitor/status-bar` plugin with
 `setOverlaysWebView({ overlay: false })`, which insets the WebView natively instead — and that
 *would* need a new APK.
+
+### Same session — why ClickUp's haptic "kicks", and the white screen on launch
+
+Two device reports, both needing native code, so both went into one rebuild rather than making the
+user reinstall twice (which on his phone means going through Xiaomi's 增强防护 block each time).
+
+**"clickup sin haptic varer ca like lenge, men sparker med ifra, hvorfor det?"** Because duration was
+never the missing variable. Every path available to us so far — `navigator.vibrate`,
+`Haptics.vibrate`, `Haptics.impact` — drives the motor at a level for a length of time. An LRA fed
+that way ramps up over ~15ms and then **rings out** freely when the current stops: soft attack, and
+a tail. Android's `VibrationEffect.createPredefined(EFFECT_CLICK)` plays a waveform the *vendor*
+tuned for that specific motor, which reaches full amplitude immediately and then **brakes** — the
+motor is driven in reverse to kill the oscillation. Same length, sharp at both ends. That is the
+"kick", and no amount of further tuning the numbers in `lib/haptics.ts` could have produced it.
+
+Neither the Web Vibration API nor @capacitor/haptics exposes predefined effects, so
+`android/app/src/main/java/no/siqt/app/SiqtHapticsPlugin.java` was written — ~50 lines, EFFECT_CLICK
+for the deliberate pulse and EFFECT_TICK for the light one. **`MainActivity.java` now registers it,
+and that registration must sit before `super.onCreate()`** — the Bridge reads the plugin list there,
+so registering afterwards leaves the plugin invisible with no error at all. Noted in AGENTS.md,
+along with the bigger trap: `android/` is no longer purely generated, so `npx cap add android` or
+recreating the folder would silently restore the empty MainActivity template and take the plugin
+with it.
+
+The JS keeps `Haptics.vibrate` as a fallback, and that is **load-bearing rather than defensive**: the
+web JS updates on every redeploy while the APK only changes when someone installs one, so a phone
+running the older APK has no `SiqtHaptics` registered and the call rejects as "not implemented".
+Without the fallback, haptics would simply stop working on every not-yet-updated install.
+
+**"når jeg åpner appen så er skjermen bare helt hvit"** — the WebView's default background, showing
+because in `server.url` mode there is no bundled HTML to paint: the WebView has nothing at all until
+siqt.no answers over the network, which over a VPN from China is long enough to look like a failed
+launch. Two fixes, both needed: `android.backgroundColor: '#0A0A0A'` so the gap is the app's own dark
+surface rather than a white flash, and `@capacitor/splash-screen` so the already-generated
+`@drawable/splash` stays up until the app has rendered. The launch *theme* alone was never enough —
+it only covers the moment before the window is drawn.
+
+`launchAutoHide` was left **true** with a 3s ceiling, with `components/NativeSplashGate.tsx` hiding
+it earlier once React mounts. The tempting alternative (`launchAutoHide: false`, hide only from JS)
+would strand a user on a splash screen forever whenever that JS cannot run — no network, siqt.no
+down, a redeploy mid-launch. Failing into the app's own error handling beats failing into a picture.
+
+APK is now 8.2 MB, up from 4.3 MB, entirely from the splash images. `public/siqt.apk` was replaced
+with the new build. **That is a second multi-megabyte blob in git history** — the reason to delete
+that file once it has served its purpose, rather than treating it as the distribution channel.
+
+**Unverified, all of it:** the plugin has never run on a device. Registration order, EFFECT_CLICK
+support on that particular Xiaomi, and whether the splash actually covers the load are all things
+only an install can show.
