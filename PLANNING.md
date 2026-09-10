@@ -4821,3 +4821,24 @@ git history forever.** Two better homes when it becomes annoying — GitHub Rele
 in the repo) or Play Store (which also removes the unknown-sources warning entirely, though it is
 not usefully reachable from China). Until then, replacing the file in place at least keeps the
 working tree at one copy.
+
+### Same session — version numbers, and why installing over the old APK is fine
+
+Asked: "må jeg slette den gamle apk? eller bare innstallere ny?" **Just install over it** — Android
+accepts an APK over an existing install as long as the signature matches, and both builds are signed
+with the same debug keystore because both were produced on this server. App data (the login session)
+survives.
+
+The question exposed a real gap, though: both builds were `versionCode 1 / versionName "1.0"`, so
+nothing on the phone distinguished them and "did the update take?" had no answer. Bumped to
+**versionCode 2 / versionName "1.1"**, with a comment in `android/app/build.gradle` saying to bump
+both on every build handed to anyone. `versionCode` is the one Android itself compares — it refuses
+an APK whose code is *lower* than what is installed — and `versionName` is the half a user can
+actually read back to you from Android's app-info screen.
+
+`public/siqt.apk` is now 1.1 and contains everything from this session's native work: the
+EFFECT_CLICK haptics plugin, the splash screen, and the dark WebView background. The safe-area
+header fix and the shortened haptic durations ride along with the web deploy rather than the APK.
+
+**Both a server re-install and an app re-install are needed to see all of it** — the web half ships
+with the redeploy, the native half only with the new APK.

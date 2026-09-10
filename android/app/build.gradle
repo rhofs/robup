@@ -7,8 +7,14 @@ android {
         applicationId "no.siqt.app"
         minSdkVersion rootProject.ext.minSdkVersion
         targetSdkVersion rootProject.ext.targetSdkVersion
-        versionCode 1
-        versionName "1.0"
+        // Bump BOTH on every build that gets handed to someone. versionCode is what Android
+        // itself compares — it refuses to install an APK whose code is lower than the installed
+        // one, and leaving it equal makes "did the update actually take?" unanswerable, since
+        // nothing on the phone distinguishes the two builds. versionName is the human half, shown
+        // in Android's own app info screen, and is the only way a user can report which build they
+        // are on.
+        versionCode 2
+        versionName "1.1"
         testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
         aaptOptions {
              // Files and dirs to omit from the packaged assets dir, modified to accommodate modern web apps.
