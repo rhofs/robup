@@ -115,11 +115,10 @@ function HapticDiagnostics() {
   // nothing useful to say, so the line simply is not there.
   if (!caps) return null;
 
-  const path = caps.supportsPrimitives
-    ? 'composed pulse'
-    : caps.hasAmplitudeControl
-      ? 'custom waveform'
-      : 'built-in effect';
+  // Mirrors the order in nativeImpact/SiqtHapticsPlugin. The custom-waveform branch is deliberately
+  // absent: USE_WAVEFORM_FALLBACK in lib/haptics.ts is off after it produced total silence on a
+  // Xiaomi, so claiming it here would describe a path nothing takes.
+  const path = caps.supportsPrimitives ? 'composed pulse' : 'built-in effect';
 
   return (
     <div className="text-[10px] text-neutral-500 px-1 pb-3 leading-relaxed">

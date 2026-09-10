@@ -179,12 +179,24 @@ const NATIVE_EFFECTS: Record<Exclude<HapticStrength, 'off'>, { tap: NativeEffect
 // bare click. `quickRise` before a click reads as a swell into the hit; `thud` is the heaviest and
 // longest primitive if this is still not enough. Everything below falls back to NATIVE_EFFECTS
 // above on a device without primitives, so nothing here can leave someone with no feedback at all.
-// The fallback for a device with no composition primitives, which is a per-device property — a
-// phone can be on Android 15 and have none. Without this such a phone drops straight to a predefined
-// effect, i.e. exactly what it already played, and a change that shipped correctly is indistinguishable
-// from one that never arrived. Paired arrays: 18ms at full strength, then 12ms at roughly half, so
-// the pulse hits hard and decays rather than stopping dead — the same shape the composition above
-// produces, built by hand. Total 30ms, still inside the "reads as a click, not a buzz" band.
+// OFF BY DEFAULT, and the reason is the whole point of this constant existing.
+//
+// This was added as a middle fallback for devices without composition primitives: a hand-built
+// waveform (18ms at full amplitude, then 12ms at ~47%) so such a phone would get *something* new
+// rather than silently replaying the predefined effect it already had. On the one real device this
+// has been tested on — a Chinese-region Xiaomi on HyperOS — enabling it produced **no vibration at
+// all**. Reported plainly: "nå er det null haptic."
+//
+// That is a known trait rather than a mystery: several Xiaomi/MIUI builds honour the system's own
+// predefined haptics and quietly ignore custom `createWaveform` patterns from ordinary apps. The
+// call succeeds, nothing moves, and no error is raised anywhere — so it fails exactly like a
+// feature that was never deployed.
+//
+// The plugin still supports it, so turning this back on is a one-line change here and needs no new
+// APK. Do not enable it globally on the strength of one device feeling better; the failure mode is
+// total silence, which is worse than the slightly-too-soft click it was meant to improve.
+const USE_WAVEFORM_FALLBACK = false;
+
 const NATIVE_WAVEFORMS: Partial<
   Record<Exclude<HapticStrength, 'off'>, Partial<Record<'tap' | 'strong', { timings: number[]; amplitudes: number[] }>>>
 > = {
@@ -218,8 +230,8 @@ function nativeImpact(kind: 'tap' | 'strong', strength: Exclude<HapticStrength, 
     effect: NATIVE_EFFECTS[strength][kind],
     fallbackMs,
     primitives: NATIVE_COMPOSITIONS[strength]?.[kind],
-    waveformTimings: NATIVE_WAVEFORMS[strength]?.[kind]?.timings,
-    waveformAmplitudes: NATIVE_WAVEFORMS[strength]?.[kind]?.amplitudes,
+    waveformTimings: USE_WAVEFORM_FALLBACK ? NATIVE_WAVEFORMS[strength]?.[kind]?.timings : undefined,
+    waveformAmplitudes: USE_WAVEFORM_FALLBACK ? NATIVE_WAVEFORMS[strength]?.[kind]?.amplitudes : undefined,
   }).catch(() => Haptics.vibrate({ duration: fallbackMs }).catch(() => {}));
 }
 

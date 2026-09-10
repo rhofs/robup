@@ -5017,3 +5017,29 @@ Xiaomi takes, are both answerable only on the device — but the second one is n
 reading a line in Settings* instead of by guessing.
 
 APK 1.4 (versionCode 5), 4.5MB, clean build, `layoutName` confirmed present in the packaged config.
+
+### Same session — 1.4 killed haptics entirely; the custom waveform is silent on Xiaomi
+
+"nå er det null haptic." A regression, and worse than the problem it was meant to solve.
+
+The cause is the middle fallback added in 1.4: a hand-built `createWaveform` tried above the
+predefined effects whenever the device reports amplitude control. On this phone that call **succeeds
+and nothing moves.** Several Xiaomi/MIUI builds honour the system's own predefined haptics and
+quietly ignore custom waveform patterns from ordinary apps — no exception, no log, no feedback. It
+fails exactly like a feature that was never deployed, which is also why it took a device to find.
+
+It also explains the previous report cleanly: in 1.3 this phone was falling through to the predefined
+effect (hence "no change" — that is what 1.2 already played), which means **`supportsPrimitives` is
+almost certainly false here.** 1.4 then inserted the waveform in front of that fallback and turned
+"unchanged" into "nothing".
+
+`USE_WAVEFORM_FALLBACK` in `lib/haptics.ts` is now **false**. The plugin still implements the path,
+so re-enabling is one line and needs no APK — but it must not be turned on globally on the strength
+of one device feeling better, because its failure mode is total silence, which is worse than the
+slightly-soft click it was meant to improve.
+
+**Fixed with a web deploy only.** The Java was never wrong; it was the JS asking for a path this
+device cannot play. Worth remembering as the general shape here: when native code is written to be
+*driven* by the web side, most feel-level mistakes stay fixable without redistributing an app.
+
+The Settings diagnostics line no longer offers a "custom waveform" branch, since nothing takes it.
