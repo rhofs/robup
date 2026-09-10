@@ -8,6 +8,7 @@ import {
   readHapticStrength,
   setHapticStrength,
   readNativeHapticCapabilities,
+  describeNativeHapticPath,
   type HapticStrength,
   type NativeHapticCapabilities,
 } from '../lib/haptics';
@@ -130,9 +131,9 @@ function HapticDiagnostics({ strength }: { strength: HapticStrength }) {
     );
   }
 
-  // Mirrors the order in nativeImpact/SiqtHapticsPlugin. The custom-waveform branch is absent
-  // because USE_WAVEFORM_FALLBACK in lib/haptics.ts is off, so nothing takes that path today.
-  const path = caps.supportsPrimitives ? 'composed pulse' : 'built-in effect';
+  // Derived in lib/haptics.ts, deliberately — see describeNativeHapticPath. Duplicating the
+  // decision here is what made this line report the wrong path twice.
+  const path = describeNativeHapticPath(caps);
 
   return (
     <div className="text-[10px] text-neutral-500 px-1 pb-3 leading-relaxed">

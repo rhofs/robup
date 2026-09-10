@@ -49,6 +49,20 @@ interface SiqtHapticsPlugin {
 
 const SiqtHaptics = registerPlugin<SiqtHapticsPlugin>('SiqtHaptics');
 
+// Which path a device actually takes, derived HERE rather than in the Settings component.
+//
+// That placement is the whole point. The label lived next to the UI twice and drifted out of step
+// with this file both times — first claiming a waveform branch after it was disabled, then claiming
+// "built-in effect" after it was re-enabled, on a phone that was in fact playing the waveform. A
+// diagnostic that disagrees with the code it describes is worse than none, because it is trusted.
+// Keep this function immediately beside nativeImpact and change them together.
+export function describeNativeHapticPath(caps: NativeHapticCapabilities): string {
+  if (!caps.hasVibrator) return 'no vibration motor';
+  if (caps.supportsPrimitives) return 'composed pulse';
+  if (USE_WAVEFORM_FALLBACK && caps.hasAmplitudeControl) return 'custom waveform';
+  return 'built-in effect';
+}
+
 // What the device can actually do, for the diagnostics line in Settings. Resolves to null outside
 // the app, and on an APK built before this method existed (the call rejects as "not implemented").
 export async function readNativeHapticCapabilities(): Promise<NativeHapticCapabilities | null> {

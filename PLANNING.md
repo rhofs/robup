@@ -5154,3 +5154,38 @@ another reason; not worth a reinstall on its own.
 been asked for twice without an answer yet — worth one more ask, because it decides whether future
 tuning belongs in NATIVE_COMPOSITIONS or NATIVE_WAVEFORMS, and half of the guessing this session
 came from not knowing.
+
+### Same session — the diagnostics line finally answered it, and what it means for other phones
+
+Read off the device: **`built-in effect · primitives no · amplitude yes · Android API 36`**.
+
+So on this phone (Chinese-region Xiaomi, HyperOS, Android 16):
+
+- **Composition primitives are NOT supported.** Every round spent tuning `NATIVE_COMPOSITIONS` —
+  heavyClick, the thud, the three chained clicks — has had **no effect on this device at all**. That
+  is the single most useful fact of the day and it was available from the moment the line shipped.
+- **Amplitude control IS supported**, so the path it actually takes is the custom waveform: the one
+  that was nearly disabled permanently on a diagnosis (see the correction above) that was wrong
+  twice over.
+
+**And the label was wrong again.** It read "built-in effect" while the waveform was in fact playing,
+because the decision was duplicated in `SettingsPanel.tsx` and never updated when
+`USE_WAVEFORM_FALLBACK` was turned back on. That is the **second** time this line reported a path
+nothing was taking. It now comes from `describeNativeHapticPath()` in `lib/haptics.ts`, sitting
+directly beside the code it describes — a diagnostic that can disagree with the implementation is
+worse than none, because it is believed.
+
+**On not over-fitting to this one phone**, which the user raised directly ("det burde også funke for
+andre telefoner, som ikke er xiaomi da") — the design deliberately keeps all three paths tuned rather
+than optimising the one device in the room:
+
+| Device | Path | What plays |
+|---|---|---|
+| Most Samsung / Pixel / OnePlus | primitives | three `PRIMITIVE_CLICK`s at delay 0, fused |
+| This Xiaomi, and phones like it | amplitude only | 12ms attack + 30ms body + 22ms fade |
+| Older / low-end | neither | `EFFECT_HEAVY_CLICK` |
+
+The two upper paths are aimed at roughly the same 50-65ms decaying pulse so the app feels the same
+across phones. **None of this has been tested on a non-Xiaomi device** — worth borrowing a colleague's
+Samsung or Pixel once, since that is the path most future users will actually take and it is
+currently unverified.
