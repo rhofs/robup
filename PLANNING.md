@@ -4608,3 +4608,29 @@ sign-in outside the WebView and hands the app an ID token that a new server endp
 an Auth.js session. That needs a Google Cloud OAuth client tied to **the app's signing certificate
 fingerprint** — which is why it should be done alongside the signed release build rather than
 against this throwaway-signed debug APK. Doing it now would mean configuring it twice.
+
+### Same session — Google-only accounts had no way into the app at all
+
+Found while unblocking the user, and it would have hit every colleague: **"forgot password" sent
+nothing to an account created with Google.** `app/api/auth/forgot-password/route.ts` returned early
+on `if (!user?.password)` — correct on its own terms (there is no password to reset) but it left the
+user waiting for mail that was never sent, with a success message on screen and no explanation
+anywhere. The user hit this and reported "jeg prøvde glemt passord, ingenting kom". Resend was never
+at fault and was never asked to send anything.
+
+This mattered far more than it looks, because of the WebView finding above: **the app cannot use
+Google sign-in, so every Google user who installs it needs a password — and the one self-service
+route to getting one silently did nothing.** Signup does not help either; it correctly refuses with
+"this email already has an account, made with Google". The combination was a closed loop.
+
+The fix sends a link in that case too, with different wording: it names the Google account, says the
+password is *additional* rather than a replacement, and explains that the mobile app is why it is
+needed. Same token machinery — `reset-password` already handled a null password correctly, so
+nothing there changed. **The anti-oracle property is intact:** the HTTP response is byte-identical
+in all three cases (no account, Google-only account, password account); only the email body differs,
+and only whoever controls the mailbox can read it. That distinction is the whole reason this was
+safe to change — worth re-reading before touching this route again.
+
+Immediate workaround, which still works and needed no deploy: sign in with Google in a real browser,
+then Profile → "Set a password" (`ProfilePage.tsx` already omits the current-password field when
+`hasPassword` is false).
