@@ -3507,7 +3507,18 @@ function PageContent() {
       {/* ================= TOP BAR — workspace + search, so the icon rail/sidebar below don't
           have to carry that weight themselves (previously both lived stacked at the very top
           of the sidebar, which read as cramped). ================= */}
-      <header className="h-14 shrink-0 border-b-0 md:border-b border-neutral-800/80 bg-neutral-950 flex items-center px-3 gap-4">
+      {/* The height is 3.5rem *plus* the top safe area, not a flat h-14. In the Android app the
+          WebView draws edge-to-edge — targetSdkVersion 35 (Android 15) makes that mandatory, not
+          optional — so without this the title sits underneath the status bar and collides with the
+          clock. Reported on device: "sidenavnet er så høyt oppe at det går bak klokka."
+          This never showed up on the web because the browser's own URL bar supplied the clearance
+          for free, which is also why `safe-area-inset-bottom` was already handled all over this
+          codebase while the *top* inset appeared literally nowhere.
+          Padding rather than margin, so the header's background still extends behind the status
+          bar instead of leaving a bare strip above it. Both values are needed together: h-14 alone
+          would keep the box the same height and merely squash its contents, since Tailwind sets
+          border-box. Resolves to plain 3.5rem everywhere `env()` is 0 — desktop, and any browser. */}
+      <header className="h-[calc(3.5rem+env(safe-area-inset-top))] pt-[env(safe-area-inset-top)] shrink-0 border-b-0 md:border-b border-neutral-800/80 bg-neutral-950 flex items-center px-3 gap-4">
         {/* Workspace name/switcher is desktop-only now — mobile switches workspace from the
             popup menu's own "Workspace" section (AppLauncherGrid.tsx) instead, per explicit
             feedback that having it in both places (top bar AND the popup) was one too many. The

@@ -258,7 +258,12 @@ export default function MobileSpacesSheet({
     <>
       {open && (
         <div
-          className="fixed inset-x-0 top-0 z-30 md:hidden bg-neutral-950 flex flex-col"
+          // pt-[env(safe-area-inset-top)]: this sheet is `top-0` and covers the global mobile
+          // header, so it has to repeat that header's own status-bar clearance — otherwise its
+          // title lands under the clock in the Android app, where the WebView is edge-to-edge.
+          // Kept on the container rather than on the h-14 title row below, so the whole sheet
+          // (search row included) shifts down together and lines up with the header it replaces.
+          className="fixed inset-x-0 top-0 z-30 md:hidden bg-neutral-950 flex flex-col pt-[env(safe-area-inset-top)]"
           // Full height now, not stopped short above the nav — MobileBottomNav.tsx floats over
           // content (`fixed`, translucent) rather than reserving its own lane, matching the same
           // treatment as every other mobile scroll surface (see that file's own top comment). The

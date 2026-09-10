@@ -4704,3 +4704,43 @@ frames, so the same code gets a cleaner run at them.
 So the honest version, for anyone repeating the claim to a user: the app is not faster, it has less
 fighting it. The gain is real, bounded, and concentrated in animations that run during scroll or
 gesture — not a general speed-up, and not a reason to expect heavy screens to improve.
+
+### Same session — the page title sat behind the status bar in the app
+
+Reported with a screenshot: "sidenavnet er så høyt oppe at det går bak klokka." The "Spaces" title
+was drawn over the clock and the VPN/battery icons.
+
+**Cause: the app is edge-to-edge and nothing in this codebase ever handled the *top* safe area.**
+`android/variables.gradle` sets `targetSdkVersion = 35`, and on Android 15 edge-to-edge is mandatory
+rather than opt-in, so the WebView owns the full screen including the strip under the status bar.
+On the web this could never show, because the browser's own URL bar always supplied that clearance
+for free.
+
+That is also why it was easy to miss: `env(safe-area-inset-bottom)` appears in eight places across
+`app/page.tsx`, `MobileBottomNav.tsx`, `ChatPanel.tsx` and the sheets — the floating nav island
+forced that work early — while `safe-area-inset-top` appeared **nowhere at all**. The bottom looked
+like proof the whole problem was handled.
+
+Two surfaces needed it, and only two: the global mobile header (`app/page.tsx`) and
+`MobileSpacesSheet`, which is `top-0` and covers that header. Everything else on mobile sits below
+one of them.
+
+Details worth keeping:
+
+- The header is now `h-[calc(3.5rem+env(safe-area-inset-top))]` **plus** `pt-[env(...)]`. Both are
+  required: Tailwind sets `border-box`, so padding alone would keep the box at 56px and just squash
+  its contents. Verified nothing else in the codebase hard-codes 56px/3.5rem/`top-14` as an offset
+  against this header before changing its height.
+- Padding, not margin, so the header's background continues behind the status bar rather than
+  leaving a bare strip above it.
+- Resolves to plain 3.5rem wherever `env()` is 0, so desktop and every browser are untouched.
+
+**No new APK was needed** — this is CSS served from the web, and `viewportFit: "cover"` was already
+set in `app/layout.tsx`. Second time this session that an app-looking bug turned out to be fixable
+without a rebuild; the rule that keeps holding is that only *native* code forces one.
+
+**Unverified:** whether Android's WebView reports a non-zero `safe-area-inset-top` here. It should,
+given edge-to-edge plus `viewport-fit=cover`, and there is no fallback if it reports 0 — the title
+would simply stay where it is. If that happens the answer is the `@capacitor/status-bar` plugin with
+`setOverlaysWebView({ overlay: false })`, which insets the WebView natively instead — and that
+*would* need a new APK.
