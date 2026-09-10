@@ -4553,3 +4553,30 @@ a release build with a signing key, and the Play listing. A debug APK installs f
 cannot go to the store, and its signing key is a throwaway: **the release key, once created, must be
 backed up, because losing it means never being able to update the app on Play under the same
 listing.**
+
+### Same session — getting the APK to a phone in China
+
+The user could not download the APK from the chat file card: he is in China, behind a VPN, and
+that transfer kept failing. **siqt.no itself works fine for him**, so the build was copied to
+`public/siqt.apk` and reaches the phone from the app's own domain instead — no PC in the middle,
+and over the one network path already proven to work.
+
+Worth knowing for next time this comes up: **production runs in a Pterodactyl container that a
+shell on the host cannot reach** — no docker socket access, `/var/lib/pterodactyl/volumes` is
+permission-denied, and there is no nginx config for siqt.no (Cloudflare proxies straight to
+`213.170.135.134:3000`). So `/home/robin/pliqt` is a *separate* checkout, and **git is the only
+channel into the running site.** Anything production must serve has to be committed and deployed;
+copying it somewhere on the host does nothing.
+
+`server/customServer.ts` wraps Next's own request handler, so `public/` is served normally and no
+route handler was needed. Note this is not in tension with the earlier uploads-404 lesson: that one
+is about files appearing in `public/` *after* the server starts, which Next does not pick up. A file
+committed before the build is fine.
+
+**Two costs, accepted deliberately:** a 4.3 MB binary now sits in git history permanently, and the
+URL is unauthenticated — anyone who guesses it gets the APK. It is a debug build that only points at
+siqt.no and still requires a login, so the exposure is small. Serving it behind auth was considered
+and rejected: the phone's *browser* would need a valid session cookie, and the user signs in through
+the PWA, so the download would most likely just 401. **Delete `public/siqt.apk` once it has been
+installed**, and do not let it become the normal distribution channel — that is what a release build
+and the Play Store are for.
