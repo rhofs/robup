@@ -1,0 +1,13 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>Siqt</title>
+<!--
+  Never shown. capacitor.config.ts sets server.url, so the app loads https://siqt.no and this file
+  is only here because the Capacitor CLI requires webDir to exist and to contain an index.html.
+
+  It exists as its own directory rather than pointing webDir at public/ for a concrete reason: cap
+  sync COPIES webDir into the APK. With webDir: 'public' the app shipped an 8MB copy of the entire
+  public folder it never reads — including, once public/siqt.apk existed, a full copy of the
+  previous build of the app inside the app.
+-->
+<body style="margin:0;background:#0A0A0A"></body>

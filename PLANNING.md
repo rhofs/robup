@@ -4890,3 +4890,63 @@ would be surprising if it were finished. The plugin now only needs rebuilding to
 of effect.
 
 APK is 1.2 (versionCode 3), verified with `aapt dump badging` rather than assumed.
+
+### Same session — a spinning S, and two size bugs found while doing it
+
+"du har ikke en måte å animere den S'en inn kult? at den spinner eller noe?" Yes, and the plugin
+already supports it: `@capacitor/splash-screen`'s Android code calls `start()` on the splash drawable
+if it is an `Animatable` (SplashScreen.java, "if (splash instanceof Animatable)"). A PNG fails that
+check and just sits there; give it something animatable and it moves.
+
+**Two approaches were tried and rejected before the one that shipped:**
+
+- `animated-rotate`, a built-in drawable that spins whatever it wraps with **no new images at all**.
+  It compiles, but its two useful attributes are private: AAPT rejects the build outright with
+  "attribute android:framesCount is private". At its defaults it steps 30° at a time, which reads as
+  a stutter. Dead end for anything meant to look good.
+- `AnimatedVectorDrawable`, the modern answer, can only animate vector paths — and the logo is a
+  raster PNG. Tracing it to vectors to win a rotation is a lot of risk for no gain.
+
+What shipped: an `<animation-list>` of 36 frames, 10° apart, generated from the icon foreground with
+**sharp** (already present as a dependency of @capacitor/assets, so no new tooling). Each frame is
+padded to 612px before rotating and centre-cropped back afterwards, so the S stays a constant size
+instead of pulsing as its diagonal swings through the frame. In `drawable-nodpi`, since these are
+pre-sized artwork and density-scaling would size the logo differently per phone. 181KB in the APK.
+It loops, because the screen is up for however long siqt.no takes to answer — the movement is what
+distinguishes "still working" from "stuck", which is also why `showSpinner` stays off.
+
+**Two size bugs surfaced while checking the result, neither of which affects behaviour — size is
+their only symptom, so nothing but looking would ever have caught them:**
+
+1. **The APK contained a copy of itself.** `webDir` was `'public'`, and `cap sync` copies webDir into
+   the APK *regardless of remote-URL mode* — the comment in capacitor.config.ts claiming "nothing is
+   copied from it in that mode" was simply wrong. That shipped 8MB of unused files, and once
+   `public/siqt.apk` existed as the download link, each build embedded the previous build. `webDir`
+   now points at `capacitor-webdir/`, holding one placeholder index.html.
+2. **Incremental Gradle packaging keeps stale entries.** After fixing the above, the APK was still
+   11.7MB — larger than the sum of its own uncompressed contents, which is the tell. `clean
+   assembleDebug` on identical code produced **4.7MB**. Both traps are now in AGENTS.md, with the
+   rule to build clean before publishing to `public/siqt.apk`.
+
+### Same session — past the strongest predefined haptic
+
+"sparket kjennes ganske likt ut som clickup, men den kjennes bittelitt svakere/kortere ut."
+`EFFECT_HEAVY_CLICK` is the strongest *single* predefined effect, so there was nowhere left to go
+among them. Past that point the pulse has to be built: `SiqtHapticsPlugin` now also accepts a list of
+haptic **primitives**, each with a scale (amplitude) and a delay.
+
+The delay is measured from the moment the previous primitive *finishes*, so **delay 0 chains them
+back to back and they fuse into one longer pulse** rather than reading as two taps. The deliberate
+pulse is now `click@1.0` + `click@0.7` at delay 0 — same character, more body, with a decay instead
+of an abrupt cut.
+
+Primitive support is a **per-device** property, not a per-Android-version one, so the plugin checks
+`areAllPrimitivesSupported` and falls back to the predefined effect when they are missing. Nothing
+here can leave anyone with no feedback.
+
+The recipe lives in `NATIVE_COMPOSITIONS` in `lib/haptics.ts`, deliberately: **further tuning is now
+a web deploy, not a new APK.** Raise the second scale for weight, add a third entry for length, or
+drop to a single `{ id: 'click' }` to go back. `thud` is the heaviest and longest primitive if this
+still is not enough. The plugin only needs rebuilding to gain a new *kind* of effect.
+
+APK 1.3 (versionCode 4), 4.5MB, verified with `aapt dump badging`.

@@ -8,8 +8,13 @@ touching anything here:
 - **Web changes reach the app the moment production redeploys.** No app-store review is involved.
   A new store build is only needed when something *native* changes — a plugin, a permission, the
   icon, the app id.
-- **`npx cap sync` does not ship your web code.** In remote-URL mode it only updates native plugins
-  and config. Running it after a web change and expecting the app to update is a trap.
+- **`npx cap sync` does not ship your web code.** In remote-URL mode it updates native plugins and
+  config. Running it after a web change and expecting the app to update is a trap.
+- **It does, however, copy `webDir` into the APK** — whether or not the app will ever read it. That
+  is why `webDir` points at the near-empty `capacitor-webdir/` rather than at `public/`: with
+  `webDir: 'public'` every build shipped 8MB of unused files, and once `public/siqt.apk` existed as
+  the in-app download link, each APK contained a complete copy of the previous APK. Nothing warns
+  about this; it was found by listing the built package's contents.
 
 **`android/` now contains hand-written code, not only generated code.**
 `no/siqt/app/SiqtHapticsPlugin.java` is ours, and `MainActivity.java` has been edited to register it
@@ -24,7 +29,11 @@ and the production container run Node 20. Upgrading Capacitor means upgrading No
 Pterodactyl egg first — do not do one without the other.
 
 **This server can build the APK itself — Android Studio is not needed.** Run `npm run
-android:build`; the output lands at `android/app/build/outputs/apk/debug/app-debug.apk`. The
+android:build`; the output lands at `android/app/build/outputs/apk/debug/app-debug.apk`. Before
+publishing one to `public/siqt.apk`, build it with `./gradlew clean assembleDebug` instead:
+incremental packaging keeps stale entries in the archive, which once produced an 11.7MB APK where a
+clean build of the identical code produced 4.7MB. Size is the only symptom — the app still works —
+so nothing catches it except looking. The
 toolchain it uses (Temurin JDK 21 + Android SDK 35) lives in `~/toolchain`, deliberately outside
 the repo so that the install script's `git clean -fd` cannot delete it. `scripts/build-android.sh`
 is the only place those paths are written down.

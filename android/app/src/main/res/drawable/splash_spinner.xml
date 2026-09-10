@@ -1,0 +1,67 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  The launch logo, spinning — a frame animation rather than anything cleverer, and both of the
+  obvious alternatives were tried first:
+
+  - `animated-rotate` wraps any drawable and spins it with no new images at all, which is what this
+    started as. Its smoothness is controlled by android:frameDuration and android:framesCount, and
+    **both attributes are private** — AAPT refuses them outright ("attribute android:framesCount is
+    private"). Left at its defaults it steps 30 degrees at a time, which reads as a stutter rather
+    than a spin. It is a dead end for anything that needs to look good.
+  - AnimatedVectorDrawable is the modern answer, but it can only animate vector paths, and the logo
+    is a raster PNG. Tracing it to vectors to win a rotation would be a lot of risk for no gain.
+
+  So: 36 frames, 10 degrees apart, generated from mipmap-xxxhdpi/ic_launcher_foreground.png with
+  sharp (already present as a dependency of @capacitor/assets). Each frame is padded to 612px before
+  rotating and then centre-cropped back, so the S keeps a constant size instead of pulsing as its
+  diagonal swings through the frame. 276KB for the set at 216px.
+
+  In drawable-nodpi on purpose: these are pre-sized artwork, and letting Android density-scale them
+  would resize the logo differently on every phone.
+
+  33ms per frame is ~30fps, a full turn in 1.19s. It loops (oneshot=false) because the screen stays
+  up for however long siqt.no takes to answer — the movement is what says "still working".
+
+  AnimationDrawable implements Animatable, which is the interface @capacitor/splash-screen checks
+  before calling start(). That is the whole reason this animates and a plain PNG does not.
+-->
+<animation-list
+    xmlns:android="http://schemas.android.com/apk/res/android"
+    android:oneshot="false">
+    <item android:drawable="@drawable/splash_spin_00" android:duration="33" />
+    <item android:drawable="@drawable/splash_spin_01" android:duration="33" />
+    <item android:drawable="@drawable/splash_spin_02" android:duration="33" />
+    <item android:drawable="@drawable/splash_spin_03" android:duration="33" />
+    <item android:drawable="@drawable/splash_spin_04" android:duration="33" />
+    <item android:drawable="@drawable/splash_spin_05" android:duration="33" />
+    <item android:drawable="@drawable/splash_spin_06" android:duration="33" />
+    <item android:drawable="@drawable/splash_spin_07" android:duration="33" />
+    <item android:drawable="@drawable/splash_spin_08" android:duration="33" />
+    <item android:drawable="@drawable/splash_spin_09" android:duration="33" />
+    <item android:drawable="@drawable/splash_spin_10" android:duration="33" />
+    <item android:drawable="@drawable/splash_spin_11" android:duration="33" />
+    <item android:drawable="@drawable/splash_spin_12" android:duration="33" />
+    <item android:drawable="@drawable/splash_spin_13" android:duration="33" />
+    <item android:drawable="@drawable/splash_spin_14" android:duration="33" />
+    <item android:drawable="@drawable/splash_spin_15" android:duration="33" />
+    <item android:drawable="@drawable/splash_spin_16" android:duration="33" />
+    <item android:drawable="@drawable/splash_spin_17" android:duration="33" />
+    <item android:drawable="@drawable/splash_spin_18" android:duration="33" />
+    <item android:drawable="@drawable/splash_spin_19" android:duration="33" />
+    <item android:drawable="@drawable/splash_spin_20" android:duration="33" />
+    <item android:drawable="@drawable/splash_spin_21" android:duration="33" />
+    <item android:drawable="@drawable/splash_spin_22" android:duration="33" />
+    <item android:drawable="@drawable/splash_spin_23" android:duration="33" />
+    <item android:drawable="@drawable/splash_spin_24" android:duration="33" />
+    <item android:drawable="@drawable/splash_spin_25" android:duration="33" />
+    <item android:drawable="@drawable/splash_spin_26" android:duration="33" />
+    <item android:drawable="@drawable/splash_spin_27" android:duration="33" />
+    <item android:drawable="@drawable/splash_spin_28" android:duration="33" />
+    <item android:drawable="@drawable/splash_spin_29" android:duration="33" />
+    <item android:drawable="@drawable/splash_spin_30" android:duration="33" />
+    <item android:drawable="@drawable/splash_spin_31" android:duration="33" />
+    <item android:drawable="@drawable/splash_spin_32" android:duration="33" />
+    <item android:drawable="@drawable/splash_spin_33" android:duration="33" />
+    <item android:drawable="@drawable/splash_spin_34" android:duration="33" />
+    <item android:drawable="@drawable/splash_spin_35" android:duration="33" />
+</animation-list>

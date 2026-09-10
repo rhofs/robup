@@ -16,8 +16,23 @@ import { Haptics } from '@capacitor/haptics';
 // exists for one reason @capacitor/haptics cannot cover — see NATIVE_DURATIONS below.
 type NativeEffect = 'tick' | 'click' | 'heavyClick' | 'doubleClick';
 
+// A composed pulse, built from Android's haptic primitives. `scale` is amplitude (0..1) and `delay`
+// counts from the moment the previous primitive *finishes*, so a delay of 0 chains them back to
+// back into one longer pulse rather than two separate taps.
+type NativePrimitive = {
+  id: 'click' | 'tick' | 'lowTick' | 'thud' | 'spin' | 'quickRise' | 'slowRise' | 'quickFall';
+  scale?: number;
+  delay?: number;
+};
+
 interface SiqtHapticsPlugin {
-  click(options: { effect: NativeEffect; fallbackMs: number }): Promise<void>;
+  click(options: {
+    effect: NativeEffect;
+    fallbackMs: number;
+    // Tried first; `effect` is what plays if this device has no primitives, which is a per-device
+    // property rather than a per-Android-version one.
+    primitives?: NativePrimitive[];
+  }): Promise<void>;
 }
 const SiqtHaptics = registerPlugin<SiqtHapticsPlugin>('SiqtHaptics');
 
@@ -128,6 +143,29 @@ const NATIVE_EFFECTS: Record<Exclude<HapticStrength, 'off'>, { tap: NativeEffect
   strong: { tap: 'click', strong: 'heavyClick' },
 };
 
+// The deliberate pulse at full strength is composed rather than predefined, because
+// EFFECT_HEAVY_CLICK is the strongest single predefined effect and it still landed "bittelitt
+// svakere/kortere" than ClickUp's. Past that point the only way up is to build the pulse.
+//
+// Two clicks at delay 0 run back to back, so they fuse into a single kick with slightly more body
+// instead of reading as a double tap — the second at 0.7 gives it a decay rather than an abrupt cut.
+//
+// TO TUNE FURTHER (all of it a web deploy, no new APK): raise the second scale toward 1.0 for more
+// weight, add a third entry for more length, or drop to a single { id: 'click' } to go back to a
+// bare click. `quickRise` before a click reads as a swell into the hit; `thud` is the heaviest and
+// longest primitive if this is still not enough. Everything below falls back to NATIVE_EFFECTS
+// above on a device without primitives, so nothing here can leave someone with no feedback at all.
+const NATIVE_COMPOSITIONS: Partial<
+  Record<Exclude<HapticStrength, 'off'>, Partial<Record<'tap' | 'strong', NativePrimitive[]>>>
+> = {
+  strong: {
+    strong: [
+      { id: 'click', scale: 1 },
+      { id: 'click', scale: 0.7, delay: 0 },
+    ],
+  },
+};
+
 function nativeImpact(kind: 'tap' | 'strong', strength: Exclude<HapticStrength, 'off'>): void {
   const fallbackMs = NATIVE_DURATIONS[strength][kind];
   // Fire-and-forget: the promise only reports whether the platform accepted the request, and a
@@ -138,9 +176,11 @@ function nativeImpact(kind: 'tap' | 'strong', strength: Exclude<HapticStrength, 
   // implemented". Since the JS ships from the web and updates the moment production redeploys,
   // while the APK only changes when someone installs a new one, those two versions are routinely
   // out of step. Falling back keeps haptics working on the older build instead of silently dying.
-  void SiqtHaptics.click({ effect: NATIVE_EFFECTS[strength][kind], fallbackMs }).catch(() =>
-    Haptics.vibrate({ duration: fallbackMs }).catch(() => {}),
-  );
+  void SiqtHaptics.click({
+    effect: NATIVE_EFFECTS[strength][kind],
+    fallbackMs,
+    primitives: NATIVE_COMPOSITIONS[strength]?.[kind],
+  }).catch(() => Haptics.vibrate({ duration: fallbackMs }).catch(() => {}));
 }
 
 function vibrate(ms: number): void {

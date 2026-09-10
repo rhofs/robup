@@ -14,9 +14,15 @@ import type { CapacitorConfig } from '@capacitor/cli';
 const config: CapacitorConfig = {
   appId: 'no.siqt.app',
   appName: 'Siqt',
-  // Required by the CLI even when the app loads a remote URL — nothing is copied from it in that
-  // mode, so it only needs to exist.
-  webDir: 'public',
+  // A deliberately empty directory, NOT 'public'.
+  //
+  // The CLI requires webDir to exist even in remote-URL mode, and it is tempting to point it at an
+  // existing folder and assume nothing happens. That is wrong: `cap sync` copies webDir into
+  // android/app/src/main/assets/public regardless of whether the app will ever read it. With
+  // webDir: 'public' every build shipped 8MB of files the app never opens — and once
+  // public/siqt.apk existed as the download link, each APK contained a complete copy of the
+  // previous APK. Caught only by reading the built package's contents; nothing warns about it.
+  webDir: 'capacitor-webdir',
   android: {
     // Cleartext stays off: everything goes to https://siqt.no, and allowing plain http would only
     // widen what the WebView will load.
@@ -35,8 +41,17 @@ const config: CapacitorConfig = {
     // up until the web app is actually on screen, which is the gap that was showing as white.
     SplashScreen: {
       backgroundColor: '#0A0A0A',
-      androidSplashResourceName: 'splash',
-      androidScaleType: 'CENTER_CROP',
+      // splash_spinner, not the generated splash.png: a frame animation of the icon foreground
+      // turning, which spins because AnimationDrawable implements Animatable and the plugin calls
+      // start() on anything that does. A plain PNG fails that check and just sits there.
+      androidSplashResourceName: 'splash_spinner',
+      // CENTER, not CENTER_CROP: the drawable is now a logo on transparency rather than a
+      // full-bleed canvas, so it should be drawn at its own size over the background colour above.
+      // CENTER_CROP would blow a 432px icon up to fill the screen.
+      androidScaleType: 'CENTER',
+      // Still off, and now for a better reason than "it looked busy": the logo itself is the
+      // loading indicator. A separate spinner beside a spinning logo is two things saying the same
+      // thing.
       showSpinner: false,
       // Hidden from JS as soon as the app has rendered (components/NativeSplashGate.tsx), so this
       // duration is only ever a ceiling. It stays an *auto*-hide on purpose: with
