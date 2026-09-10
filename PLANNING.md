@@ -4580,3 +4580,31 @@ and rejected: the phone's *browser* would need a valid session cookie, and the u
 the PWA, so the download would most likely just 401. **Delete `public/siqt.apk` once it has been
 installed**, and do not let it become the normal distribution channel — that is what a release build
 and the Play Store are for.
+
+### Same session — first install on a real phone: what worked and what did not
+
+The debug APK reached the phone from `https://siqt.no/siqt.apk` and installed. Two findings, both
+about the device and the platform rather than about our code.
+
+**Xiaomi's Chinese-region HyperOS blocks sideloading.** The install screen showed 增强防护
+("enhanced protection") refusing the APK, with the way through buried in its own message: ⋮ in the
+top-right → 单次安装授权 ("authorise this one install"). Failing that, 设置 → 隐私保护 → 增强防护
+turned off entirely. *Which of the two the user actually used is not known* — he reported the block,
+then reported being past it. Note this affects any app not signed by Google Play or a Chinese store,
+so it will recur on every update to that phone, and Play Store is not usefully available in China
+anyway. The screen did confirm the build is sound: correct name, correct icon, "Version: 1.0".
+
+**Google sign-in does not work in the app, as predicted.** Google deliberately refuses OAuth inside
+embedded WebViews — any app could read what you type in its own window — so this is a rule we hit,
+not a bug we introduced. For this user there is a second, independent reason: Google is blocked in
+China, so that provider will be unreliable for him regardless of what we build.
+
+*Workaround in place today:* `auth.ts` has a Credentials provider, so email + password works in the
+app right now. A Google-only account has no password, but the forgot-password flow (Resend, working
+since earlier this session) sets one.
+
+*The real fix, deliberately deferred:* a native Google sign-in plugin, where Android performs the
+sign-in outside the WebView and hands the app an ID token that a new server endpoint exchanges for
+an Auth.js session. That needs a Google Cloud OAuth client tied to **the app's signing certificate
+fingerprint** — which is why it should be done alongside the signed release build rather than
+against this throwaway-signed debug APK. Doing it now would mean configuring it twice.
