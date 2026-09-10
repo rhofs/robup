@@ -213,15 +213,18 @@ const NATIVE_WAVEFORMS: Partial<
   Record<Exclude<HapticStrength, 'off'>, Partial<Record<'tap' | 'strong', { timings: number[]; amplitudes: number[] }>>>
 > = {
   strong: {
-    // Kick, then body: 12ms at full amplitude is the hit, and 28ms at ~37% is the sustain trailing
-    // off behind it. Asked for directly — "mulig å få vibrasjon på toppen av den kick følelsen?
-    // kjennes litt kort ut."
+    // Kick, then body, then a longer tail: 12ms at full amplitude is the hit, 30ms at ~39% is the
+    // weight behind it, and 22ms at ~24% fades it out instead of cutting. 64ms total.
     //
-    // 40ms total does cross the ~45ms "reads as a buzz" line noted at the top of this file, but not
-    // by accident: that line describes a pulse held at CONSTANT amplitude, where length is all the
-    // motor communicates. Here the buzz is deliberate and sits under a sharp attack, which is what
-    // separates "a hit with weight behind it" from "the motor is on".
-    strong: { timings: [0, 12, 28], amplitudes: [0, 255, 95] },
+    // This is well past the "~45ms reads as a buzz" line at the top of this file, and that is
+    // deliberate rather than forgotten: **that rule describes a pulse held at CONSTANT amplitude**,
+    // where duration is the only thing the motor can express, and where length therefore reads as
+    // "still on". A decaying envelope under a sharp attack is a different thing entirely — the same
+    // reason a struck drum can ring for half a second without sounding like a buzzer.
+    //
+    // Tune by moving the middle segment's duration; the 12ms attack is what makes it read as a hit
+    // and should stay short whatever else changes.
+    strong: { timings: [0, 12, 30, 22], amplitudes: [0, 255, 100, 60] },
   },
 };
 
@@ -229,14 +232,20 @@ const NATIVE_COMPOSITIONS: Partial<
   Record<Exclude<HapticStrength, 'off'>, Partial<Record<'tap' | 'strong', NativePrimitive[]>>>
 > = {
   strong: {
+    // Only PRIMITIVE_CLICK, repeated. The previous version reached for `thud` because it is the
+    // low, heavy one — but support is checked all-or-nothing in SiqtHapticsPlugin
+    // (areAllPrimitivesSupported over the whole list), so a device missing the *least* common
+    // primitive in the recipe silently drops the entire composition and falls through. `thud`,
+    // `spin` and the rise/fall primitives are exactly the ones a mid-range or vendor-modified phone
+    // is likeliest to lack, so including one puts the whole pulse at risk to gain a flavour.
+    //
+    // Three clicks at delay 0 run back to back and fuse into one pulse roughly three times the
+    // length, decaying as they go. Asked for directly: "fortsatt bare et hakk... litt for kort".
+    // Lengthen by adding another entry; shorten by removing one.
     strong: [
       { id: 'click', scale: 1 },
-      // thud, not a second click: it is the low, heavy, longer primitive, so it reads as weight
-      // trailing the hit rather than as a second hit. That is the "vibrasjon på toppen av kicket"
-      // being asked for. Alternatives if this is wrong in either direction: `lowTick` for something
-      // subtler, a second `click` for more of a double-tap character, or raising the scale for more
-      // of it.
-      { id: 'thud', scale: 0.6, delay: 0 },
+      { id: 'click', scale: 0.8, delay: 0 },
+      { id: 'click', scale: 0.55, delay: 0 },
     ],
   },
 };

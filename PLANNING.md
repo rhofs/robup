@@ -5118,3 +5118,39 @@ predefined effects are fixed and the one longer option (`doubleClick`) reads as 
 haptics go silent again with the setting confirmed on, that is no longer ambiguous** — it means the
 MIUI theory was right. Either outcome is information, which is why it is worth shipping rather than
 leaving as an unanswered maybe. Both this and the correction above are web-only; no new APK.
+
+### Same session — a longer pulse, and the all-or-nothing primitive check that may have been eating it
+
+"mulig å få til en lengre puls? fortsatt bare et hakk, kjennes bra ut, men litt for kort (i appen,
+web er ok)."
+
+First, a settled question: **the waveform did not silence the phone.** With haptics confirmed on, the
+device kept vibrating, so the MIUI-ignores-custom-waveforms theory is dead for this device and the
+earlier entry blaming it was wrong on both counts. `USE_WAVEFORM_FALLBACK` stays on.
+
+Second, a likely cause of "still just a notch" that is worth remembering:
+**`areAllPrimitivesSupported` is checked over the whole recipe at once**, so a device missing the
+*least* common primitive in a list silently drops the entire composition and falls through to the
+next path. The previous recipe included `thud` — which, along with `spin` and the rise/fall
+primitives, is exactly what a mid-range or vendor-modified phone is likeliest to lack. Including one
+uncommon primitive to gain a flavour risked the whole pulse.
+
+The recipe is now three `PRIMITIVE_CLICK`s at delay 0 with decaying scales (1.0 / 0.8 / 0.55) —
+back-to-back, so they fuse into one pulse about three times the length rather than reading as three
+taps. The waveform path grew a third segment too: 12ms attack, 30ms body, 22ms fade, 64ms total.
+
+**On deliberately breaking this file's own rule:** the comments here have warned since the web-only
+days that anything past ~45ms "reads as a buzz, i.e. long, not strong". Both new values exceed that,
+and it is not an oversight — **that rule was derived for a pulse held at constant amplitude**, where
+duration is the only thing the motor can express. A decaying envelope behind a sharp attack is a
+different instrument: the same reason a struck drum rings without sounding like a buzzer. The rule
+still holds for anything the web path does, where amplitude is out of reach entirely.
+
+**A better fix exists but needs an APK:** filtering a composition down to the primitives a device
+actually supports, instead of discarding it whole. Worth doing next time the native code changes for
+another reason; not worth a reinstall on its own.
+
+**Still not known:** which path this phone takes. The Settings diagnostics line answers it and has
+been asked for twice without an answer yet — worth one more ask, because it decides whether future
+tuning belongs in NATIVE_COMPOSITIONS or NATIVE_WAVEFORMS, and half of the guessing this session
+came from not knowing.
