@@ -13,8 +13,8 @@ android {
         // nothing on the phone distinguishes the two builds. versionName is the human half, shown
         // in Android's own app info screen, and is the only way a user can report which build they
         // are on.
-        versionCode 2
-        versionName "1.1"
+        versionCode 3
+        versionName "1.2"
         testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
         aaptOptions {
              // Files and dirs to omit from the packaged assets dir, modified to accommodate modern web apps.

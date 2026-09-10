@@ -4842,3 +4842,51 @@ header fix and the shortened haptic durations ride along with the web deploy rat
 
 **Both a server re-install and an app re-install are needed to see all of it** — the web half ships
 with the redeploy, the native half only with the new APK.
+
+### Same session — the splash was still white, one layer above where it was fixed
+
+Reported after installing 1.1: "splash skjermen er fortsatt bare helt hvit." The earlier fix was
+real but aimed at the wrong layer, and this is the useful lesson from it — **startup has four
+separate surfaces that can each be white independently:**
+
+1. the system splash (Android 12+), drawn from the launch *theme*
+2. the plugin's own splash, from `@capacitor/splash-screen`
+3. the WebView's background, from `android.backgroundColor`
+4. the rendered page itself
+
+`android.backgroundColor: '#0A0A0A'` and the SplashScreen plugin config covered 2 and 3 — both were
+verified present in the built `capacitor.config.json` inside the APK, so the configuration was
+working exactly as written. It simply applies *after* the screen that was white had already come and
+gone.
+
+**The actual cause was in `android/app/src/main/res/values/styles.xml`**, in Capacitor's own
+generated template. `AppTheme.NoActionBarLaunch` has `parent="Theme.SplashScreen"` — the Android 12+
+splash system — but sets only `android:background`, **which that system ignores**. It draws from
+`windowSplashScreenBackground` plus a centred icon, and with those unset it falls back to a white
+default. So the template's one line has only ever done anything on Android 11 and older.
+
+Now set: `windowSplashScreenBackground` (new `@color/splashBackground`, `#0A0A0A`),
+`windowSplashScreenAnimatedIcon`, and `postSplashScreenTheme` pointing at `AppTheme.NoActionBar` —
+without that last one the activity lands on the manifest's application-level theme, which is the
+*light* `Theme.AppCompat.Light.DarkActionBar`. `android:background` is kept for old Androids.
+
+That dark value now appears in four places (`app/layout.tsx` themeColor, the web manifest,
+`capacitor.config.ts`, `colors.xml`) because those are four different moments of startup, and any
+one of them left white shows as a flash.
+
+### Same session — a longer "kick", and making the feel tunable without an APK
+
+"kan vi få sparket bitte litt lenger?" Predefined effects are fixed vendor-tuned waveforms, so there
+is no duration to turn up — a different length means a different effect. The ladder, shortest first,
+is `tick → click → heavyClick → doubleClick`; the deliberate pulse moved from `click` to
+`heavyClick`, leaving `doubleClick` as the next step up and `click` as the step back.
+
+More importantly, **which effect to play is now chosen in `lib/haptics.ts` and passed to the plugin,
+rather than derived inside the Java from a strength name.** The two halves update on completely
+different schedules — JS with every web deploy, the plugin only when someone installs an APK — so
+keeping the mapping on the web side means further tuning costs a redeploy instead of a rebuild,
+redistribution and reinstall. Given this has already taken several rounds of on-device feedback, it
+would be surprising if it were finished. The plugin now only needs rebuilding to gain a *new kind*
+of effect.
+
+APK is 1.2 (versionCode 3), verified with `aapt dump badging` rather than assumed.

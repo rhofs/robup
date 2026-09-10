@@ -16,7 +16,24 @@
     </style>
 
 
+    <!-- The launch theme, and the reason the first screen was white despite capacitor.config.ts
+         setting a dark background everywhere it could.
+
+         The parent here is Theme.SplashScreen — the Android 12+ splash system — and that system
+         does NOT read `android:background`. It draws its own screen from windowSplashScreenBackground
+         plus a centred icon, and with those unset it falls back to a default that is white. So the
+         generated template's single `android:background` line only ever did anything on Android 11
+         and older; on any modern phone it was ignored, and the WebView background fixed earlier was
+         a layer too late to help — it applies after this screen is already gone.
+
+         android:background is kept below for exactly that older-Android case. -->
     <style name="AppTheme.NoActionBarLaunch" parent="Theme.SplashScreen">
+        <item name="windowSplashScreenBackground">@color/splashBackground</item>
+        <item name="windowSplashScreenAnimatedIcon">@mipmap/ic_launcher_foreground</item>
+        <!-- Where the activity lands once the splash is done. Without this the theme after launch
+             is whatever the manifest's application-level theme is, which is the light
+             Theme.AppCompat.Light.DarkActionBar above. -->
+        <item name="postSplashScreenTheme">@style/AppTheme.NoActionBar</item>
         <item name="android:background">@drawable/splash</item>
     </style>
 </resources>

@@ -14,8 +14,10 @@ import { Haptics } from '@capacitor/haptics';
 
 // Our own tiny native plugin (android/app/src/main/java/no/siqt/app/SiqtHapticsPlugin.java). It
 // exists for one reason @capacitor/haptics cannot cover — see NATIVE_DURATIONS below.
+type NativeEffect = 'tick' | 'click' | 'heavyClick' | 'doubleClick';
+
 interface SiqtHapticsPlugin {
-  click(options: { style: 'light' | 'strong'; fallbackMs: number }): Promise<void>;
+  click(options: { effect: NativeEffect; fallbackMs: number }): Promise<void>;
 }
 const SiqtHaptics = registerPlugin<SiqtHapticsPlugin>('SiqtHaptics');
 
@@ -111,6 +113,21 @@ const NATIVE_DURATIONS: Record<Exclude<HapticStrength, 'off'>, { tap: number; st
 //
 // The duration below is still passed along: the plugin uses it for its own fallback on a device
 // with no tuned effect, so the two stay in step instead of drifting apart in two files.
+// Which predefined effect each combination plays. This table lives here rather than in the plugin
+// on purpose: it ships with every web deploy, while the plugin only changes when someone installs a
+// new APK, so the feel stays tunable without redistributing an app. Getting this right has already
+// taken several rounds of on-device feedback, and it would be surprising if it were finished.
+//
+// EFFECT_HEAVY_CLICK on the deliberate pulse is the answer to "kan vi få sparket bitte litt lenger":
+// the predefined effects are fixed, vendor-tuned waveforms, so length is chosen by picking a
+// different one — there is no duration to turn up. The ladder, shortest first, is
+// tick → click → heavyClick → doubleClick, which leaves doubleClick as the next step if this is
+// still short, and click as the step back if it is now too much.
+const NATIVE_EFFECTS: Record<Exclude<HapticStrength, 'off'>, { tap: NativeEffect; strong: NativeEffect }> = {
+  light: { tap: 'tick', strong: 'click' },
+  strong: { tap: 'click', strong: 'heavyClick' },
+};
+
 function nativeImpact(kind: 'tap' | 'strong', strength: Exclude<HapticStrength, 'off'>): void {
   const fallbackMs = NATIVE_DURATIONS[strength][kind];
   // Fire-and-forget: the promise only reports whether the platform accepted the request, and a
@@ -121,8 +138,8 @@ function nativeImpact(kind: 'tap' | 'strong', strength: Exclude<HapticStrength, 
   // implemented". Since the JS ships from the web and updates the moment production redeploys,
   // while the APK only changes when someone installs a new one, those two versions are routinely
   // out of step. Falling back keeps haptics working on the older build instead of silently dying.
-  void SiqtHaptics.click({ style: strength === 'light' ? 'light' : 'strong', fallbackMs }).catch(
-    () => Haptics.vibrate({ duration: fallbackMs }).catch(() => {}),
+  void SiqtHaptics.click({ effect: NATIVE_EFFECTS[strength][kind], fallbackMs }).catch(() =>
+    Haptics.vibrate({ duration: fallbackMs }).catch(() => {}),
   );
 }
 

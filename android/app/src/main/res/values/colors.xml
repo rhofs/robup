@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- The app's own dark surface, matching themeColor in app/layout.tsx, the web manifest, and
+         `android.backgroundColor` in capacitor.config.ts. Four places now agree on this value; they
+         cover four different moments of startup (system splash, plugin splash, WebView background,
+         rendered page) and any one of them left white shows as a flash. -->
+    <color name="splashBackground">#0A0A0A</color>
+</resources>

@@ -28,9 +28,31 @@ import com.getcapacitor.annotation.CapacitorPlugin;
 @CapacitorPlugin(name = "SiqtHaptics")
 public class SiqtHapticsPlugin extends Plugin {
 
+    /**
+     * Which effect to play is chosen by the CALLER, not derived here from a strength name.
+     *
+     * That is deliberate and worth preserving: the JS half ships with every web deploy while this
+     * half only changes when someone installs a new APK. Keeping the mapping in lib/haptics.ts means
+     * the feel can be retuned — which has already taken several rounds of real-device feedback — by
+     * redeploying the site, instead of rebuilding, redistributing and reinstalling an app. This
+     * class only needs rebuilding to gain a *new kind* of effect.
+     */
+    private static int effectIdFor(String effect) {
+        switch (effect == null ? "" : effect) {
+            case "tick":
+                return VibrationEffect.EFFECT_TICK;
+            case "heavyClick":
+                return VibrationEffect.EFFECT_HEAVY_CLICK;
+            case "doubleClick":
+                return VibrationEffect.EFFECT_DOUBLE_CLICK;
+            default:
+                return VibrationEffect.EFFECT_CLICK;
+        }
+    }
+
     @PluginMethod
     public void click(PluginCall call) {
-        String style = call.getString("style", "strong");
+        String effect = call.getString("effect", "click");
         // The JS side passes the duration it would otherwise have used, so the fallback below stays
         // in sync with lib/haptics.ts rather than duplicating its numbers here where they would
         // silently drift.
@@ -45,9 +67,8 @@ public class SiqtHapticsPlugin extends Plugin {
         }
 
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-            int effect = "light".equals(style) ? VibrationEffect.EFFECT_TICK : VibrationEffect.EFFECT_CLICK;
             try {
-                vibrator.vibrate(VibrationEffect.createPredefined(effect));
+                vibrator.vibrate(VibrationEffect.createPredefined(effectIdFor(effect)));
                 call.resolve();
                 return;
             } catch (Exception ignored) {
