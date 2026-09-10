@@ -25,6 +25,13 @@ type NativePrimitive = {
   delay?: number;
 };
 
+export type NativeHapticCapabilities = {
+  apiLevel: number;
+  hasVibrator: boolean;
+  hasAmplitudeControl: boolean;
+  supportsPrimitives: boolean;
+};
+
 interface SiqtHapticsPlugin {
   click(options: {
     effect: NativeEffect;
@@ -32,9 +39,26 @@ interface SiqtHapticsPlugin {
     // Tried first; `effect` is what plays if this device has no primitives, which is a per-device
     // property rather than a per-Android-version one.
     primitives?: NativePrimitive[];
+    // Tried second, above the predefined effects, because it is the last place amplitude can be
+    // controlled. Paired arrays: durations in ms, and 0-255 strengths for each.
+    waveformTimings?: number[];
+    waveformAmplitudes?: number[];
   }): Promise<void>;
+  capabilities(): Promise<NativeHapticCapabilities>;
 }
+
 const SiqtHaptics = registerPlugin<SiqtHapticsPlugin>('SiqtHaptics');
+
+// What the device can actually do, for the diagnostics line in Settings. Resolves to null outside
+// the app, and on an APK built before this method existed (the call rejects as "not implemented").
+export async function readNativeHapticCapabilities(): Promise<NativeHapticCapabilities | null> {
+  if (!Capacitor.isNativePlatform()) return null;
+  try {
+    return await SiqtHaptics.capabilities();
+  } catch {
+    return null;
+  }
+}
 
 export type HapticStrength = 'off' | 'light' | 'strong';
 
@@ -155,6 +179,20 @@ const NATIVE_EFFECTS: Record<Exclude<HapticStrength, 'off'>, { tap: NativeEffect
 // bare click. `quickRise` before a click reads as a swell into the hit; `thud` is the heaviest and
 // longest primitive if this is still not enough. Everything below falls back to NATIVE_EFFECTS
 // above on a device without primitives, so nothing here can leave someone with no feedback at all.
+// The fallback for a device with no composition primitives, which is a per-device property — a
+// phone can be on Android 15 and have none. Without this such a phone drops straight to a predefined
+// effect, i.e. exactly what it already played, and a change that shipped correctly is indistinguishable
+// from one that never arrived. Paired arrays: 18ms at full strength, then 12ms at roughly half, so
+// the pulse hits hard and decays rather than stopping dead — the same shape the composition above
+// produces, built by hand. Total 30ms, still inside the "reads as a click, not a buzz" band.
+const NATIVE_WAVEFORMS: Partial<
+  Record<Exclude<HapticStrength, 'off'>, Partial<Record<'tap' | 'strong', { timings: number[]; amplitudes: number[] }>>>
+> = {
+  strong: {
+    strong: { timings: [0, 18, 12], amplitudes: [0, 255, 120] },
+  },
+};
+
 const NATIVE_COMPOSITIONS: Partial<
   Record<Exclude<HapticStrength, 'off'>, Partial<Record<'tap' | 'strong', NativePrimitive[]>>>
 > = {
@@ -180,6 +218,8 @@ function nativeImpact(kind: 'tap' | 'strong', strength: Exclude<HapticStrength, 
     effect: NATIVE_EFFECTS[strength][kind],
     fallbackMs,
     primitives: NATIVE_COMPOSITIONS[strength]?.[kind],
+    waveformTimings: NATIVE_WAVEFORMS[strength]?.[kind]?.timings,
+    waveformAmplitudes: NATIVE_WAVEFORMS[strength]?.[kind]?.amplitudes,
   }).catch(() => Haptics.vibrate({ duration: fallbackMs }).catch(() => {}));
 }
 

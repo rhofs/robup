@@ -4,7 +4,13 @@ import { useEffect, useRef, useState } from 'react';
 import Papa from 'papaparse';
 import { X, Settings, Check, Trash2, Plus, Link2, Upload, Share2, Download, Monitor, Sun, Moon, Smartphone } from 'lucide-react';
 import { readThemePreference, setThemePreference, type ThemePreference } from '../lib/theme';
-import { readHapticStrength, setHapticStrength, type HapticStrength } from '../lib/haptics';
+import {
+  readHapticStrength,
+  setHapticStrength,
+  readNativeHapticCapabilities,
+  type HapticStrength,
+  type NativeHapticCapabilities,
+} from '../lib/haptics';
 import { useTaskStore, type HierarchyWorkspace, type AppUser } from '../store/useTaskStore';
 import { useChatStore } from '../store/useChatStore';
 import { getPushStatus, enablePush, disablePush } from '../lib/pushClient';
@@ -82,6 +88,49 @@ function AndroidAppRow() {
         </span>
       </span>
     </a>
+  );
+}
+
+// What the phone's motor can actually do, shown only inside the app.
+//
+// This exists because every fallback in SiqtHapticsPlugin is silent by design: a device without
+// composition primitives quietly plays a predefined effect instead, which feels exactly like the
+// change never having shipped. Tuning the haptics has taken several rounds of "does this feel
+// different?" over chat, and twice the honest answer could not be distinguished from a bug. One
+// readable line ends that — it says which of the three paths the device is actually taking.
+function HapticDiagnostics() {
+  const [caps, setCaps] = useState<NativeHapticCapabilities | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    void readNativeHapticCapabilities().then((value) => {
+      if (!cancelled) setCaps(value);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  // Null outside the app, and on an APK older than the plugin method — in both cases there is
+  // nothing useful to say, so the line simply is not there.
+  if (!caps) return null;
+
+  const path = caps.supportsPrimitives
+    ? 'composed pulse'
+    : caps.hasAmplitudeControl
+      ? 'custom waveform'
+      : 'built-in effect';
+
+  return (
+    <div className="text-[10px] text-neutral-500 px-1 pb-3 leading-relaxed">
+      Native haptics: <span className="text-neutral-400">{path}</span>
+      {' · '}
+      primitives {caps.supportsPrimitives ? 'yes' : 'no'}
+      {' · '}
+      amplitude {caps.hasAmplitudeControl ? 'yes' : 'no'}
+      {' · '}
+      Android API {caps.apiLevel}
+    </div>
   );
 }
 
@@ -588,6 +637,7 @@ export default function SettingsPanel({
                     </button>
                   ))}
                 </div>
+                <HapticDiagnostics />
               </>
             )}
 

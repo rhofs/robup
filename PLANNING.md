@@ -4979,3 +4979,41 @@ installed a stale `siqt.apk` already in his Downloads folder (Chrome saves a sec
 Android's app-info screen — that is exactly what `versionName` was added for, and it answers the
 question outright: 1.3 means the APK is fine and the problem is elsewhere; 1.2 or lower means the
 install never took.
+
+### Same session — why neither native change appeared, and a way to stop guessing
+
+The user confirmed the installed version was **1.3**, so the APK was right and the fault was ours.
+Two separate causes, found by reading the plugin's source rather than by theorising.
+
+**The splash could never have animated — an ordering bug in @capacitor/splash-screen.** Its
+`buildViews()` calls `((Animatable) splash).start()` at SplashScreen.java:311 but only calls
+`setImageDrawable(splash)` at :336. An AnimationDrawable advances by scheduling frames through the
+Callback that a View sets on it, so at the moment `start()` runs there is no callback, the schedule
+goes nowhere, and frame 0 stays up forever. Nothing is logged. Note this means **the `instanceof
+Animatable` check that made the whole approach look supported is dead code in practice** — the
+plugin cannot animate an image splash at all.
+
+The fix goes around it: the plugin also accepts a **custom layout** (`layoutName`, undocumented in
+the config typings but read at SplashScreenPlugin.java:161). `res/layout/splash_layout.xml` holds
+`no.siqt.app.SpinningSplashView`, an ImageView subclass that starts the animation in
+`onAttachedToWindow()` — the one moment it works — and stops it on detach. `backgroundColor` and
+`androidScaleType` are ignored while a layout is set, so both now live in the layout.
+
+**The haptic change may have been real and invisible.** `areAllPrimitivesSupported` is a *per-device*
+property — a phone can be on Android 15 with none — and when it fails the plugin silently drops to
+the predefined effect, which is precisely what 1.2 already played. A correctly shipped change and a
+change that never arrived feel identical. Two responses:
+
+- **A middle fallback that we control**: a hand-built `createWaveform` (18ms at full amplitude, then
+  12ms at ~47%, so it hits and decays) tried above the predefined effects whenever the device has
+  amplitude control. Previously a phone without primitives got nothing new at all.
+- **A diagnostics line in Settings → General, inside the app only.** It reports which of the three
+  paths the device actually takes, plus primitives/amplitude/API level. Tuning the feel has now
+  taken several rounds of "does this feel different?" over chat, and twice the honest answer was
+  indistinguishable from a bug. This ends that.
+
+**Still unverified:** everything above. Whether the layout path animates, and which haptic path this
+Xiaomi takes, are both answerable only on the device — but the second one is now answerable *by
+reading a line in Settings* instead of by guessing.
+
+APK 1.4 (versionCode 5), 4.5MB, clean build, `layoutName` confirmed present in the packaged config.

@@ -1,0 +1,30 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  The splash screen as a custom layout rather than a bare drawable.
+
+  @capacitor/splash-screen takes either an image (androidSplashResourceName) or a layout
+  (layoutName), and the image path cannot animate: it calls start() on the drawable before attaching
+  it to any view, so an AnimationDrawable never advances. See SpinningSplashView for the detail.
+
+  Going through a layout hands us the view, and SpinningSplashView starts the animation at the one
+  moment it works — when it is attached to a window.
+
+  The background lives here rather than in the plugin's backgroundColor, which is only applied on
+  the image path.
+-->
+<FrameLayout
+    xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:background="@color/splashBackground">
+
+    <!-- scaleType center: the frames are pre-sized artwork in drawable-nodpi, so they should be
+         drawn at their own size rather than stretched to the screen. -->
+    <no.siqt.app.SpinningSplashView
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_gravity="center"
+        android:scaleType="center"
+        android:src="@drawable/splash_spinner"
+        android:contentDescription="@string/app_name" />
+</FrameLayout>

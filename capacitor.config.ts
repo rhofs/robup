@@ -41,14 +41,14 @@ const config: CapacitorConfig = {
     // up until the web app is actually on screen, which is the gap that was showing as white.
     SplashScreen: {
       backgroundColor: '#0A0A0A',
-      // splash_spinner, not the generated splash.png: a frame animation of the icon foreground
-      // turning, which spins because AnimationDrawable implements Animatable and the plugin calls
-      // start() on anything that does. A plain PNG fails that check and just sits there.
-      androidSplashResourceName: 'splash_spinner',
-      // CENTER, not CENTER_CROP: the drawable is now a logo on transparency rather than a
-      // full-bleed canvas, so it should be drawn at its own size over the background colour above.
-      // CENTER_CROP would blow a 432px icon up to fill the screen.
-      androidScaleType: 'CENTER',
+      // A custom LAYOUT, not an image. The plugin's image path cannot animate: it calls start() on
+      // the drawable before attaching it to any view, so an AnimationDrawable never advances and
+      // shows frame 0 forever (see SpinningSplashView.java). The layout path hands us the view, so
+      // the animation can be started at the moment it actually works.
+      //
+      // androidSplashResourceName and androidScaleType are ignored while layoutName is set — the
+      // layout owns both the image and how it is scaled.
+      layoutName: 'splash_layout',
       // Still off, and now for a better reason than "it looked busy": the logo itself is the
       // loading indicator. A separate spinner beside a spinning logo is two things saying the same
       // thing.

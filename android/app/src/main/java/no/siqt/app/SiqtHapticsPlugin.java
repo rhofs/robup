@@ -7,6 +7,7 @@ import android.os.Vibrator;
 import android.os.VibratorManager;
 
 import com.getcapacitor.JSArray;
+import com.getcapacitor.JSObject;
 import com.getcapacitor.Plugin;
 import com.getcapacitor.PluginCall;
 import com.getcapacitor.PluginMethod;
@@ -87,6 +88,26 @@ public class SiqtHapticsPlugin extends Plugin {
             // cheaper hardware rather than an error worth reporting.
         }
 
+        // Second choice: a waveform we describe ourselves. This sits ABOVE the predefined effects
+        // because it is the only remaining way to control amplitude — a device can lack composition
+        // primitives (checked above) and still have amplitude control, and on such a phone the
+        // predefined effects are the vendor's fixed idea of a click with no way to ask for more.
+        JSArray timings = call.getArray("waveformTimings", null);
+        JSArray amplitudes = call.getArray("waveformAmplitudes", null);
+        if (
+            timings != null &&
+            amplitudes != null &&
+            Build.VERSION.SDK_INT >= Build.VERSION_CODES.O &&
+            vibrator.hasAmplitudeControl()
+        ) {
+            VibrationEffect waveform = buildWaveform(timings, amplitudes);
+            if (waveform != null) {
+                vibrator.vibrate(waveform);
+                call.resolve();
+                return;
+            }
+        }
+
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
             try {
                 vibrator.vibrate(VibrationEffect.createPredefined(effectIdFor(effect)));
@@ -147,6 +168,55 @@ public class SiqtHapticsPlugin extends Plugin {
         } catch (Exception e) {
             return null;
         }
+    }
+
+    private VibrationEffect buildWaveform(JSArray timings, JSArray amplitudes) {
+        try {
+            int count = timings.length();
+            if (count == 0 || amplitudes.length() != count) return null;
+            long[] t = new long[count];
+            int[] a = new int[count];
+            for (int i = 0; i < count; i++) {
+                t[i] = timings.getLong(i);
+                // Clamped rather than trusted: an out-of-range amplitude throws from
+                // createWaveform, which would turn a typo in the JS table into a crash inside a tap
+                // handler.
+                a[i] = Math.max(0, Math.min(255, amplitudes.getInt(i)));
+            }
+            return VibrationEffect.createWaveform(t, a, -1);
+        } catch (Exception e) {
+            return null;
+        }
+    }
+
+    /**
+     * What this device can actually do. Surfaced in Settings inside the app, because the haptic
+     * feel has now taken several rounds of "does it feel different?" over chat, and every fallback
+     * in this class is silent by design — a phone that cannot compose primitives quietly plays a
+     * predefined effect instead, which looks identical to the change not having shipped at all.
+     * Being able to read the answer off the device ends that guessing.
+     */
+    @PluginMethod
+    public void capabilities(PluginCall call) {
+        JSObject result = new JSObject();
+        result.put("apiLevel", Build.VERSION.SDK_INT);
+
+        Vibrator vibrator = resolveVibrator();
+        boolean hasVibrator = vibrator != null && vibrator.hasVibrator();
+        result.put("hasVibrator", hasVibrator);
+
+        boolean amplitude = hasVibrator && Build.VERSION.SDK_INT >= Build.VERSION_CODES.O && vibrator.hasAmplitudeControl();
+        result.put("hasAmplitudeControl", amplitude);
+
+        boolean primitives = false;
+        if (hasVibrator && Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+            try {
+                primitives = vibrator.areAllPrimitivesSupported(VibrationEffect.Composition.PRIMITIVE_CLICK);
+            } catch (Exception ignored) {}
+        }
+        result.put("supportsPrimitives", primitives);
+
+        call.resolve(result);
     }
 
     private Integer primitiveIdFor(String id) {
