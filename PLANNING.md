@@ -5043,3 +5043,24 @@ device cannot play. Worth remembering as the general shape here: when native cod
 *driven* by the web side, most feel-level mistakes stay fixable without redistributing an app.
 
 The Settings diagnostics line no longer offers a "custom waveform" branch, since nothing takes it.
+
+### Same session — "ingen haptic nå heller" was a deploy that had not happened
+
+Worth recording as a debugging failure, not just a fix. After disabling the silent waveform, haptics
+were still dead — which looked like a second bug. It was not.
+
+Two checks settled it, both of which should have come earlier:
+
+- The fix is genuinely in the build: `waveformTimings:void 0` in the compiled chunk, so the constant
+  folded and the parameter is never sent.
+- **Production had not been redeployed.** `/api/version` returned the app's HTML rather than JSON,
+  and that route ships in the latest commit, so the running checkout predates it.
+
+The app loads all its JS from the server, so a web-side fix reaches the phone only after a
+re-install. That is stated plainly in this file's Capacitor entry, and it *still* cost two rounds,
+because from the outside a fix that shipped and a fix that never deployed produce identical symptoms.
+
+Hence `/api/version` (commit hash + process start time, read from git at request time so it reports
+the running checkout rather than what was compiled). The only signal available before it was the byte
+size of `public/siqt.apk`, which says nothing about changes that do not touch that file. **Check it
+before diagnosing anything that "did not work" — this is now the cheapest possible first question.**
