@@ -4793,3 +4793,31 @@ that file once it has served its purpose, rather than treating it as the distrib
 **Unverified, all of it:** the plugin has never run on a device. Registration order, EFFECT_CLICK
 support on that particular Xiaomi, and whether the splash actually covers the load are all things
 only an install can show.
+
+### Same session — "Download the Android app" in Settings
+
+Requested: a way to get the APK from inside the product rather than by someone sending the file by
+hand. Added as `AndroidAppRow` in `components/SettingsPanel.tsx`, Account tab, directly under the
+existing `InstallRow` (the PWA installer) since the two answer the same question.
+
+Decisions worth keeping:
+
+- **Hidden inside the app itself** (`Capacitor.isNativePlatform()`) and **on iOS**. An APK cannot be
+  installed on an iPhone at any price, so the row there would be a dead end rather than an option;
+  iPhone users already get InstallRow's "Add to Home Screen" line.
+- **The unknown-sources warning is stated up front.** Android's warning for any non-store app is
+  alarming, and someone who has not been told to expect it reasonably reads it as "this file is
+  unsafe" and stops — which is exactly the failure this row exists to prevent.
+- **No version number shown.** There is no way to read the APK's version at runtime from a static
+  file, and a hard-coded "1.0" in the row would drift out of step with the file the moment a new
+  build is committed. A silently-wrong version claim is worse than none.
+- Platform checks run in an effect, not during render: this component is server-rendered, and
+  `navigator` / `Capacitor` there would either throw or produce markup the client contradicts.
+
+**This changes the status of `public/siqt.apk`.** Earlier this session it was a temporary handoff to
+be deleted once installed; it is now the product's actual download link and has to stay. The cost is
+real and should be revisited rather than forgotten: **every new build commits another ~8MB blob to
+git history forever.** Two better homes when it becomes annoying — GitHub Releases (a link, nothing
+in the repo) or Play Store (which also removes the unknown-sources warning entirely, though it is
+not usefully reachable from China). Until then, replacing the file in place at least keeps the
+working tree at one copy.

@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState } from 'react';
 import Papa from 'papaparse';
-import { X, Settings, Check, Trash2, Plus, Link2, Upload, Share2, Download, Monitor, Sun, Moon } from 'lucide-react';
+import { X, Settings, Check, Trash2, Plus, Link2, Upload, Share2, Download, Monitor, Sun, Moon, Smartphone } from 'lucide-react';
 import { readThemePreference, setThemePreference, type ThemePreference } from '../lib/theme';
 import { readHapticStrength, setHapticStrength, type HapticStrength } from '../lib/haptics';
 import { useTaskStore, type HierarchyWorkspace, type AppUser } from '../store/useTaskStore';
@@ -39,6 +39,50 @@ function InstallRow() {
     );
   }
   return null;
+}
+
+// The Android app, offered as a plain download because it is not on Play Store yet. Without this
+// the only way for a colleague to get it was for someone to send them the file by hand.
+//
+// Deliberately a real <a href> to a static file rather than anything cleverer: the point is that it
+// behaves like any other download, including on the corporate-managed and Chinese-region phones
+// this is actually going to be installed on.
+function AndroidAppRow() {
+  // Resolved in an effect, not during render: this component is server-rendered too, and both
+  // checks below read browser-only state. Deciding during render would either throw or produce
+  // markup the client immediately contradicts.
+  const [show, setShow] = useState(false);
+
+  useEffect(() => {
+    // Already inside the app — offering it its own installer is noise.
+    if (Capacitor.isNativePlatform()) return;
+    // An APK cannot be installed on iOS at any price, so the row would be a dead end rather than
+    // an option. iPhone users are covered by InstallRow's "Add to Home Screen" note above.
+    if (/iPhone|iPad|iPod/.test(navigator.userAgent)) return;
+    setShow(true);
+  }, []);
+
+  if (!show) return null;
+
+  return (
+    <a
+      href="/siqt.apk"
+      download
+      className="w-full flex items-start gap-2.5 px-3 py-2.5 rounded hover:bg-neutral-800/60 cursor-pointer text-left transition"
+    >
+      <Smartphone className="w-3.5 h-3.5 text-neutral-400 shrink-0 mt-0.5" />
+      <span className="text-xs text-neutral-300">
+        Download the Android app
+        {/* Said up front rather than left as a surprise: the warning Android shows for any app not
+            installed from a store is alarming, and someone who has not been told to expect it
+            reasonably reads it as "this file is unsafe" and stops. Naming it here turns it into a
+            step instead of a reason to give up. */}
+        <span className="block text-neutral-500 mt-0.5">
+          Not from Play Store, so Android will ask you to allow installing from this source
+        </span>
+      </span>
+    </a>
+  );
 }
 
 const HIDDEN_NAV_TABS_STORAGE_KEY = 'siqt.hiddenNavTabs';
@@ -946,6 +990,7 @@ export default function SettingsPanel({
                   </span>
                 </a>
                 <InstallRow />
+                <AndroidAppRow />
               </>
             ) : (
               <p className="text-xs text-neutral-500 px-1 py-1">Signed-out session — try reloading the page.</p>
