@@ -5189,3 +5189,33 @@ The two upper paths are aimed at roughly the same 50-65ms decaying pulse so the 
 across phones. **None of this has been tested on a non-Xiaomi device** — worth borrowing a colleague's
 Samsung or Pixel once, since that is the path most future users will actually take and it is
 currently unverified.
+
+## Today's session (2026-09-11) — push notifications: where they stand, verified
+
+Asked where to turn on push. Checked rather than assumed, and the answer is worse than "not turned
+on yet".
+
+**The UI exists**: Settings → General → Notifications, with an Enable/Disable button
+(`SettingsPanel.tsx`, `lib/pushClient.ts`). Two things stop it working.
+
+**1. Production has no VAPID keys.** `curl https://siqt.no/api/push/vapid-public-key` returns
+**503 `{"error":"Push notifications are not configured on this server"}`**. This has been an open
+item since the keys were first discussed and never done. To close it: generate with
+`npx web-push generate-vapid-keys` (the user runs this himself — the private key must not pass
+through a chat log), then set `VAPID_PUBLIC_KEY`, `VAPID_PRIVATE_KEY` and `VAPID_SUBJECT`
+(`mailto:…`) in Pterodactyl, creating the egg variables with `nullable|string|max:191` if absent.
+That endpoint going from 503 to returning the key is the check that it worked.
+
+**2. Web push cannot work inside the app at all, keys or no keys.** Android's WebView does not
+implement `PushManager`, so `isPushSupported()` in `lib/pushClient.ts` is false there and the panel
+shows "Push notifications aren't supported in this browser." Setting the VAPID keys therefore buys
+push in **Chrome and the installed PWA** (desktop and Android) — and nothing in the Capacitor app.
+
+**This is worth stating plainly because it is the reason the app exists.** The user's words when the
+app was first proposed were "grunnen er at jeg ønsker ordentlige pushvarsler". That capability is
+still not built. It needs Firebase: a project on his Google account, `@capacitor/push-notifications`,
+a `google-services.json` in the build, and the server sending through FCM instead of directly. It
+also needs a new APK, and the Firebase project has to be created by him.
+
+Offered; awaiting his decision. **Do not let the VAPID work be mistaken for finishing this** — it is
+the web half only.
