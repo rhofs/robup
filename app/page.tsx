@@ -1479,6 +1479,27 @@ function PageContent() {
     if (wantSpacesSheet !== mobileSpacesOpen) setMobileSpacesOpen(wantSpacesSheet);
     if (wantPersonalSheet !== mobilePersonalSpacesOpen) setMobilePersonalSpacesOpen(wantPersonalSheet);
 
+    // A cold start on mobile opens the Spaces overview instead of dropping straight onto a board.
+    // Requested after using the Android app: launching landed inside All Tasks — 244 rows with no
+    // indication of which Space they came from — when the useful first screen is the list of Spaces
+    // to choose from. The board is one tap away; the overview was not reachable without first
+    // realising you were already past it.
+    //
+    // The condition is "the URL carries no state whatsoever", and that is what makes this safe
+    // rather than a return of the old "havner i nytt view" bug. Effect 1 above writes the full nav
+    // state into the URL, so the moment anything has been chosen — a workspace, a view, a list —
+    // there are parameters, and a reload restores exactly that. Only a genuine cold launch
+    // (Capacitor always opens https://siqt.no bare) and a fresh visit to the naked domain are
+    // empty. Deliberately NOT keyed on "no sheet in the URL", which would have re-opened the sheet
+    // on every reload of a board the user had chosen on purpose.
+    //
+    // hasHydratedFromUrlRef is still false here (it is set immediately below), so this runs on the
+    // first pass only — this effect re-runs whenever searchParams or the workspace list changes,
+    // and without that guard the sheet would spring open again mid-session.
+    if (!hasHydratedFromUrlRef.current && isMobile && searchParams.toString() === '') {
+      setMobileSpacesOpen(true);
+    }
+
     hasHydratedFromUrlRef.current = true;
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [searchParams, workspaces.length]);

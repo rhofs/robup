@@ -5219,3 +5219,30 @@ also needs a new APK, and the Firebase project has to be created by him.
 
 Offered; awaiting his decision. **Do not let the VAPID work be mistaken for finishing this** — it is
 the web half only.
+
+### Same session — a cold start now lands on the Spaces overview, not inside a board
+
+Reported from the Android app: launching dropped straight into All Tasks — 244 rows, no indication
+which Space they belong to — when the useful first screen is the list of Spaces. "i feel like its
+better to launch at the overview."
+
+The mobile sheet's open state already round-trips through the URL (that was the fix for reloading
+dumping you into an unrelated view), so a cold launch — where Capacitor always opens `https://siqt.no`
+bare — has no sheet and falls through to the board.
+
+**The condition that makes this safe is "the URL carries no state whatsoever", not "no sheet in the
+URL".** Effect 1 in `app/page.tsx` writes the whole nav state to the query string, so the instant
+anything is chosen there are parameters and a reload restores exactly that. Keying on the absence of
+`sheet=` alone would have re-opened the overview on every reload of a board the user had deliberately
+navigated to — reintroducing the "havner i nytt view" bug this file has an entry about from a week
+ago. Only a genuine cold launch and a fresh visit to the naked domain are empty.
+
+Guarded on `hasHydratedFromUrlRef` being still false, because that effect re-runs on every
+`searchParams` change and when the workspace list loads; without it the sheet would spring open again
+mid-session.
+
+Unverified on a device. Desktop is unaffected (`isMobile` gate, and the sidebar tree is always
+visible there anyway).
+
+**Also noted:** the VAPID keys are still not set — the user has the command and the values but has
+not added them to Pterodactyl yet, so push remains 503. Not blocked on anything here.
