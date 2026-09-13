@@ -195,6 +195,57 @@ export default function ChatPanel() {
     : null;
   const activeChannelLabel = isDM ? dmLabel : activeChannel?.name;
   const messages = activeChannelId ? messagesByChannel[activeChannelId] || [] : [];
+
+  // Scrolling: a conversation opens at the newest message, and follows new ones as they arrive.
+  //
+  // Neither happened before — this list had no scroll handling whatsoever, so opening a DM left you
+  // at the oldest message in it and sending one put your own reply out of sight below the fold.
+  // Reported as two bugs, but they are one missing piece.
+  const scrollRef = useRef<HTMLDivElement | null>(null);
+  // Whether to follow new messages. Set from the scroll position, so someone reading back through
+  // history is not yanked to the bottom every time a message arrives — the single most irritating
+  // way to get this wrong.
+  const stickToBottomRef = useRef(true);
+  // Reset per conversation: the first render with messages in a newly-opened channel jumps instantly
+  // (no smooth scroll — an animated scroll through a long history on open looks like a glitch).
+  const initialJumpDoneRef = useRef(false);
+  const lastCountRef = useRef(0);
+
+  useEffect(() => {
+    initialJumpDoneRef.current = false;
+    stickToBottomRef.current = true;
+    lastCountRef.current = 0;
+  }, [activeChannelId]);
+
+  useEffect(() => {
+    const el = scrollRef.current;
+    if (!el || messages.length === 0) return;
+
+    if (!initialJumpDoneRef.current) {
+      el.scrollTop = el.scrollHeight;
+      initialJumpDoneRef.current = true;
+      lastCountRef.current = messages.length;
+      return;
+    }
+
+    if (messages.length > lastCountRef.current) {
+      // Your own message always scrolls, whatever you were reading: you just pressed send, so the
+      // result belongs on screen. Someone else's only scrolls if you were already at the bottom.
+      const last = messages[messages.length - 1];
+      if (last?.authorId === currentUserId || stickToBottomRef.current) {
+        el.scrollTo({ top: el.scrollHeight, behavior: 'smooth' });
+      }
+    }
+    lastCountRef.current = messages.length;
+  }, [messages, currentUserId]);
+
+  // 120px of slack rather than an exact match: a list is "at the bottom" for this purpose well
+  // before it is pixel-perfect, and momentum scrolling rarely lands exactly at zero.
+  const handleMessagesScroll = () => {
+    const el = scrollRef.current;
+    if (!el) return;
+    stickToBottomRef.current = el.scrollHeight - el.scrollTop - el.clientHeight < 120;
+  };
   // Has this conversation ever finished loading? Cached messages render instantly on a second
   // visit; the very first open genuinely has nothing to show yet, and the difference matters
   // because "empty" and "not loaded" look identical from `messages.length` alone.
@@ -384,7 +435,12 @@ export default function ChatPanel() {
           ut". Genuinely wide content keeps its own escape hatch — code blocks carry their own
           overflow-x-auto (lib/chatFormat.tsx), so they scroll within themselves rather than
           widening the page. */}
-      <div className="flex-1 overflow-y-auto overflow-x-hidden px-1 py-3 space-y-4" onClick={() => setHeldMessageId(null)}>
+      <div
+        ref={scrollRef}
+        onScroll={handleMessagesScroll}
+        className="flex-1 overflow-y-auto overflow-x-hidden px-1 py-3 space-y-4"
+        onClick={() => setHeldMessageId(null)}
+      >
         {/* Only once we actually know. Previously this rendered during the first load of every
             conversation, telling the user it was empty before the messages had arrived — which is
             most of what "det tar litt tid før chatten vises" was describing: not the wait itself,

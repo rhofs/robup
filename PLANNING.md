@@ -5378,3 +5378,41 @@ registered can only produce a confusing failure.
 Note for whoever tests it: with the app in the **foreground**, Android does not display an FCM
 `notification` payload — the plugin hands it to JS instead. The app has to be backgrounded to see
 the notification itself, which is why the success message says so.
+
+### Same session — four reported bugs, all fixed
+
+**1 and 2 were one missing piece.** "Når jeg går inn på DM så havner jeg øverst i chatten" and "på dm
+når man skriver, og sender melding, så må man scrolle ned for å se." `ChatPanel` had **no scroll
+handling at all** — the message list was a plain overflow container, so it opened at the oldest
+message and never moved. Added:
+
+- an instant jump to the bottom on the first render with messages in a newly-opened conversation
+  (instant, not smooth — an animated scroll through a long history on open reads as a glitch);
+- following new messages, but **only when already near the bottom** (120px of slack). Yanking
+  someone back down while they read history is the single most irritating way to get this wrong;
+- **your own message always scrolls**, whatever you were reading — you just pressed send, so the
+  result belongs on screen.
+
+**4 was self-inflicted, from earlier this same session.** "Det røde varselikonet forsvinner i det man
+trykker på chat, noen ganger før også." The sidebar prefetches the five most recent DMs so opening
+one feels instant — and `fetchMessages` is also the mark-as-read trigger, server-side and locally.
+**"Noen ganger før også" is the tell**: nothing was being read, the prefetch was simply running
+early.
+
+`GET /api/channels/[id]/messages?peek=1` now returns the messages without touching `lastReadAt`, and
+the store skips zeroing badges for a peek. Both halves are needed — zeroing locally while the server
+still counts them unread would clear the badge until the next poll put it straight back, which is a
+flicker rather than a fix. **A prefetch has to be invisible; marking a conversation read is the
+opposite of invisible.**
+
+**3 was a misfiring `autoFocus`.** "Om jeg starter å skrive en task i My Tasks, for så å bytte tabs,
+så åpner keyboardet om jeg bytter til spaces." Tapping the tab both changes the view and opens the
+sheet, and the board re-renders in between; `activeAdd` is still true, so the quick-add input mounts
+again and `autoFocus` fires **on a screen the user has already left**. Replaced with a ref plus an
+effect keyed on `activeAdd`, living in the page component — which does not remount — so focus
+happens when the composer is *opened* rather than whenever its element happens to mount. The
+half-typed draft still survives switching tabs; only the keyboard stops following.
+
+Worth generalising: `autoFocus` is a property of mounting, and any component that can remount for
+reasons unrelated to the user's intent will misuse it. The subtask composer inside the task modal
+keeps its `autoFocus` deliberately — a modal mounting *is* the user's intent.

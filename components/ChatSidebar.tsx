@@ -70,7 +70,7 @@ export default function ChatSidebar({ workspaceId }: ChatSidebarProps) {
     const recent = [...dms].slice(0, 5);
     if (recent.length === 0) return;
     prefetchedRef.current = true;
-    for (const c of recent) fetchMessages(c.id);
+    for (const c of recent) fetchMessages(c.id, { peek: true });
   }, [dms, fetchMessages]);
 
   const handleCreateChannel = async (name: string) => {

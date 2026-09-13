@@ -151,7 +151,9 @@ interface ChatStore {
   // caller.
   lookupUser: (query: string) => Promise<ConnectionSearchResult[]>;
   sendConnectionRequestTo: (userId: string) => Promise<{ status: string } | null>;
-  fetchMessages: (channelId: string) => Promise<void>;
+  // `peek` loads a conversation's messages without marking it read — for prefetching only. Reading
+  // is a thing a person does, not a thing a cache warmer does.
+  fetchMessages: (channelId: string, opts?: { peek?: boolean }) => Promise<void>;
   // Which channels have completed at least one message fetch. Without this, an unopened channel and
   // an genuinely empty one are indistinguishable — both are `messagesByChannel[id] === undefined` —
   // so ChatPanel confidently rendered "No messages yet, say hello" during the first load of every
@@ -376,8 +378,9 @@ export const useChatStore = create<ChatStore>((set, get) => ({
     return result;
   },
 
-  fetchMessages: async (channelId) => {
-    const res = await fetch(`/api/channels/${channelId}/messages`);
+  fetchMessages: async (channelId, opts) => {
+    const peek = opts?.peek === true;
+    const res = await fetch(`/api/channels/${channelId}/messages${peek ? '?peek=1' : ''}`);
     if (!res.ok) return;
     const messages = await res.json();
     set((state) => ({
@@ -385,10 +388,17 @@ export const useChatStore = create<ChatStore>((set, get) => ({
       loadedChannelIds: state.loadedChannelIds.includes(channelId)
         ? state.loadedChannelIds
         : [...state.loadedChannelIds, channelId],
-      dms: zeroUnread(state.dms, channelId),
-      channelsByWorkspace: Object.fromEntries(
-        Object.entries(state.channelsByWorkspace).map(([wsId, channels]) => [wsId, zeroUnread(channels, channelId)])
-      ),
+      // A peek leaves the badges exactly as they were, matching what the server did (or rather,
+      // did not do). Zeroing locally while the server still considers them unread would clear the
+      // badge until the next poll put it straight back — a flicker rather than a fix.
+      ...(peek
+        ? {}
+        : {
+            dms: zeroUnread(state.dms, channelId),
+            channelsByWorkspace: Object.fromEntries(
+              Object.entries(state.channelsByWorkspace).map(([wsId, channels]) => [wsId, zeroUnread(channels, channelId)])
+            ),
+          }),
     }));
   },
 

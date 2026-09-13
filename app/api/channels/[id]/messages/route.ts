@@ -6,8 +6,15 @@ import { broadcastChatSignal } from '@/lib/collab/broadcastChatSignal';
 import { validateChatAttachment } from '@/lib/chatAttachment';
 import { sendPushToUser } from '@/lib/push';
 
-export async function GET(_req: Request, { params }: { params: Promise<{ id: string }> }) {
+export async function GET(req: Request, { params }: { params: Promise<{ id: string }> }) {
   const { id: channelId } = await params;
+  // ?peek=1 fetches the messages WITHOUT marking them read. The sidebar prefetches the few most
+  // recent conversations so opening one feels instant, and that prefetch was silently clearing the
+  // unread badge — reported as "det røde varselikonet forsvinner i det man trykker på chat, noen
+  // ganger før også". The "sometimes before" is the giveaway: nothing was being read, the prefetch
+  // was just running early. A prefetch has to be invisible, and marking a conversation read is the
+  // opposite of invisible.
+  const peek = new URL(req.url).searchParams.get('peek') === '1';
   const userId = await getCurrentUserId();
   if (!userId) return NextResponse.json([]);
 
@@ -31,11 +38,13 @@ export async function GET(_req: Request, { params }: { params: Promise<{ id: str
   // caller up to the latest message that existed at fetch time (Phase 8, unread badges). A
   // message that arrives a moment after this response is correctly still unread until the next
   // open. The membership row is guaranteed to exist from the upsert just above, plain update.
-  const latest = messages[messages.length - 1];
-  await prisma.chatChannelMember.update({
-    where: { channelId_userId: { channelId, userId } },
-    data: { lastReadAt: new Date(), lastReadMessageId: latest?.id ?? null },
-  });
+  if (!peek) {
+    const latest = messages[messages.length - 1];
+    await prisma.chatChannelMember.update({
+      where: { channelId_userId: { channelId, userId } },
+      data: { lastReadAt: new Date(), lastReadMessageId: latest?.id ?? null },
+    });
+  }
 
   return NextResponse.json(messages);
 }

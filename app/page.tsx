@@ -871,6 +871,21 @@ function PageContent() {
   const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('asc');
 
   const [activeAdd, setActiveAdd] = useState(false);
+  // Focus the quick-add field when it is OPENED, rather than whenever the element happens to mount.
+  //
+  // It used to carry a plain `autoFocus`, and that misfired in a way that was hard to attribute:
+  // start typing a task in My Tasks, switch to the Spaces tab, and the keyboard sprang open on a
+  // screen with no text field in sight. The cause is that tapping the tab both changes the view and
+  // opens the sheet, and the board re-renders in between — `activeAdd` is still true, so the input
+  // mounts once more and `autoFocus` fires again, on a screen the user has already left.
+  //
+  // This effect lives in the page component, which does not remount, so it runs only when the
+  // composer is actually opened. The half-typed draft survives a trip to another tab exactly as
+  // before; what no longer survives is the keyboard following you there.
+  const newTaskInputRef = useRef<HTMLInputElement | null>(null);
+  useEffect(() => {
+    if (activeAdd) newTaskInputRef.current?.focus();
+  }, [activeAdd]);
   const [newTaskTitle, setNewTaskTitle] = useState('');
 
   const [modalTaskStack, setModalTaskStack] = useState<string[]>([]);
@@ -5344,7 +5359,7 @@ function PageContent() {
                   <div className="p-2.5 bg-neutral-950/40 flex gap-2 items-center">
                     <input
                       type="text"
-                      autoFocus
+                      ref={newTaskInputRef}
                       placeholder="Type a title and press Enter..."
                       value={newTaskTitle}
                       onChange={(e) => setNewTaskTitle(e.target.value)}
