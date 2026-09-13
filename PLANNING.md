@@ -5301,3 +5301,29 @@ Then a new APK (native plugin = rebuild) and a redeploy.
 avatar → "Remove from workspace", Owner/Admin only, and the Owner cannot be removed because there is
 no ownership transfer. The user could not find it, which is fair: it is nowhere in Settings, where
 anyone would look first. Offered to surface it there; not done.
+
+### Same session — Firebase wired in, APK 1.5 built
+
+`google-services.json` arrived (project `siqt-c65af`, package `no.siqt.app`) and went into
+`android/app/`. **Nothing in Gradle needed changing** — Capacitor's template already carries the
+`com.google.gms:google-services` classpath and applies the plugin conditionally on that file
+existing, and `@capacitor/push-notifications` brings `firebase-messaging:24.1.0` itself. The whole
+"Add Firebase SDK" page the console shows is already satisfied, just written in the older
+`buildscript` syntax rather than the plugins DSL the console now suggests.
+
+**Verified in the built package rather than assumed**, because a silently-skipped google-services
+plugin produces a working APK that simply never receives anything:
+
+- `versionCode 6 / versionName 1.5`
+- `uses-permission: android.permission.POST_NOTIFICATIONS` present
+- the Firebase project number (`205105329639`) and app id baked into resources — this is the proof
+  the plugin actually ran, since those values come from `google-services.json` and appear nowhere
+  else
+- 121 `firebase/messaging` references in the dex
+
+APK is 5.4MB, up from 4.66MB, entirely the Firebase messaging library. Copied to `public/siqt.apk`.
+
+**Still blocked on one thing:** the service account key. Until
+`firebase-service-account.json` exists at the container's repo root, `lib/fcm.ts` no-ops and the app
+will register a device token that nothing ever sends to. So the app half is complete and the server
+half is not — and the symptom of that gap is silence, which looks identical to a bug.

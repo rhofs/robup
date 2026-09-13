@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "205105329639",
+    "project_id": "siqt-c65af",
+    "storage_bucket": "siqt-c65af.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:205105329639:android:409006ba412962aa48f942",
+        "android_client_info": {
+          "package_name": "no.siqt.app"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyC-zNS7G56uHYhPBpBm02q3WPrgCk6KD-I"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
