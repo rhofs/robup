@@ -5416,3 +5416,28 @@ half-typed draft still survives switching tabs; only the keyboard stops followin
 Worth generalising: `autoFocus` is a property of mounting, and any component that can remount for
 reasons unrelated to the user's intent will misuse it. The subtask composer inside the task modal
 keeps its `autoFocus` deliberately — a modal mounting *is* the user's intent.
+
+### Same session — opening a DM still landed mid-conversation, and images were why
+
+Reported with a screenshot: the scrollbar sits about halfway down a conversation just opened. The
+jump-to-bottom added an hour earlier was working; it was being invalidated immediately afterwards.
+
+**A conversation containing an image proves the flaw in "scroll to the bottom on open".** At the
+moment the messages render, an image has loaded no pixels and occupies no height, so the bottom is
+measured against content that is about to get taller. The image loads, pushes everything down, and
+leaves the view stranded in the middle. Nothing is wrong with the scroll — the content moved after
+it.
+
+Fixed with a `ResizeObserver` on the message content, re-pinning to the bottom whenever its height
+changes *and* the user is already at the bottom. Chosen over listening for image `load` events
+because it also covers attachment previews, a font swapping, a quoted message expanding, and
+whatever else grows later — the class of bug rather than the instance.
+
+Two details that matter if this is ever touched:
+
+- **The observer needs its own element.** A ResizeObserver reports the box it observes, so watching
+  the scroll container would only report the window resizing, never the messages inside growing.
+  The container is now a viewport wrapping a content div, with the padding and spacing moved onto
+  the inner one so they count toward the measured height.
+- **Instant, never smooth**, inside the observer: it fires repeatedly while content settles, and
+  animating each step reads as the list sliding around on its own.

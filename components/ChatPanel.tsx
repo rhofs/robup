@@ -246,6 +246,33 @@ export default function ChatPanel() {
     if (!el) return;
     stickToBottomRef.current = el.scrollHeight - el.scrollTop - el.clientHeight < 120;
   };
+
+  // Stay pinned to the bottom while the content is still growing.
+  //
+  // Jumping to the bottom when the messages render is not enough on its own, and a conversation
+  // containing an image proves it: at that moment the image has loaded no pixels and occupies no
+  // height, so "the bottom" is measured against content that is about to get taller. The image then
+  // loads, pushes everything down, and leaves the view stranded in the middle — reported with a
+  // screenshot of exactly that, scrollbar halfway down a conversation that had just been opened.
+  //
+  // A ResizeObserver on the content catches every version of this — images, attachment previews,
+  // fonts swapping, a quoted message expanding — rather than special-casing image load events.
+  // Gated on stickToBottomRef so it only ever acts when the user is already at the bottom; someone
+  // reading history is never moved.
+  const contentRef = useRef<HTMLDivElement | null>(null);
+  useEffect(() => {
+    const content = contentRef.current;
+    const el = scrollRef.current;
+    if (!content || !el) return;
+    const observer = new ResizeObserver(() => {
+      if (!stickToBottomRef.current) return;
+      // Instant, never smooth: this fires while content is settling, and animating each step would
+      // read as the list sliding around on its own.
+      el.scrollTop = el.scrollHeight;
+    });
+    observer.observe(content);
+    return () => observer.disconnect();
+  }, []);
   // Has this conversation ever finished loading? Cached messages render instantly on a second
   // visit; the very first open genuinely has nothing to show yet, and the difference matters
   // because "empty" and "not loaded" look identical from `messages.length` alone.
@@ -435,12 +462,18 @@ export default function ChatPanel() {
           ut". Genuinely wide content keeps its own escape hatch — code blocks carry their own
           overflow-x-auto (lib/chatFormat.tsx), so they scroll within themselves rather than
           widening the page. */}
+      {/* Two elements, not one: the outer is the scroll viewport, the inner is the content whose
+          height the ResizeObserver above watches. A ResizeObserver reports the box it observes, so
+          watching the scroll container itself would only report the window changing size — never
+          the messages inside it growing, which is the thing that matters here. The padding and
+          spacing live on the inner one so they count as part of that measured height. */}
       <div
         ref={scrollRef}
         onScroll={handleMessagesScroll}
-        className="flex-1 overflow-y-auto overflow-x-hidden px-1 py-3 space-y-4"
+        className="flex-1 overflow-y-auto overflow-x-hidden"
         onClick={() => setHeldMessageId(null)}
       >
+      <div ref={contentRef} className="px-1 py-3 space-y-4">
         {/* Only once we actually know. Previously this rendered during the first load of every
             conversation, telling the user it was empty before the messages had arrived — which is
             most of what "det tar litt tid før chatten vises" was describing: not the wait itself,
@@ -554,6 +587,7 @@ export default function ChatPanel() {
             })}
           </div>
         ))}
+      </div>
       </div>
 
       {typingUsers.length > 0 && (
