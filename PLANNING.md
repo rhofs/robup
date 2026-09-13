@@ -5327,3 +5327,29 @@ APK is 5.4MB, up from 4.66MB, entirely the Firebase messaging library. Copied to
 `firebase-service-account.json` exists at the container's repo root, `lib/fcm.ts` no-ops and the app
 will register a device token that nothing ever sends to. So the app half is complete and the server
 half is not — and the symptom of that gap is silence, which looks identical to a bug.
+
+### Same session — both push transports confirmed configured in production
+
+```
+{"commit":"cce6756","webPush":true,"nativePush":true}
+```
+
+**The service account file survives a re-install — now verified, not assumed.** It was uploaded
+through Pterodactyl's file manager, the server was re-installed (which runs `git clean -fd`), and
+`nativePush` still reads true afterwards. That is the same `.gitignore`-spares-ignored-files
+mechanism that protects `prisma/siqt.db`, and it now has a second confirmed user.
+
+A **521 appeared during the re-install** and looked alarming — nothing listening on port 3000,
+Cloudflare unable to reach the origin. It was only the gap between stop and start; the server came
+up on its own. Worth remembering before debugging one: check `ss -ltn | grep :3000` on the host
+first. Nothing on that port plus a low load average means the process is not running rather than
+struggling, and during a deploy that is expected for a minute or two.
+
+Also checked and cleared while the site was down: the `prisma/migrations/migration_lock.toml` change
+in that commit is two added comment lines, `provider = "sqlite"` unchanged — it looked like a
+candidate for a failed `migrate deploy` and was not one.
+
+**Remaining, all on the device:** install APK 1.5, enable notifications (Android should now show a
+real permission dialog — if the panel still says "not supported in this browser", 1.4 is still
+installed), and have someone send a message with the app closed. Nothing further is known to be
+missing on the server side.
