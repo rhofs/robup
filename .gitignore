@@ -79,3 +79,10 @@ next-env.d.ts
 /prisma/*.db-journal
 /prisma/*.db-wal
 /prisma/*.db-shm
+
+# Firebase service account for native app push (lib/fcm.ts). A real secret — ~2.3KB of JSON with a
+# private key — and far too large for the `max:191` egg variables this project's other secrets use,
+# so it is a file uploaded through Pterodactyl's file manager instead. Ignored rather than untracked
+# on purpose: the install script ends in `git clean -fd`, which deletes untracked files but spares
+# ignored ones, so this survives every re-install for the same reason /prisma/*.db does.
+/firebase-service-account.json

@@ -1,3 +1,18 @@
+import { Capacitor } from '@capacitor/core';
+import { enableNativePush, disableNativePush, isNativePushRegistered } from './nativePush';
+
+// Inside the Android app this module delegates to ./nativePush, and that indirection is the reason
+// SettingsPanel needed no changes at all when native push was added.
+//
+// The two transports are not interchangeable: Android's WebView does not implement PushManager, so
+// every function below would report "unsupported" in the app however the server is configured —
+// which is exactly what the Settings panel used to say. Branching here rather than at the UI keeps
+// a single three-state interface for callers and puts the platform knowledge next to the code that
+// acts on it.
+function isNative(): boolean {
+  return Capacitor.isNativePlatform();
+}
+
 // Boilerplate conversion the Push API itself requires: applicationServerKey wants a raw
 // Uint8Array, but the VAPID public key is handed around everywhere else (server env var, this
 // fetch) as a URL-safe base64 string. Standard, widely-copied snippet — not this app's own
@@ -18,6 +33,11 @@ export function isPushSupported(): boolean {
 // The three-state read SettingsPanel.tsx needs: 'unsupported' (browser can't do this at all),
 // 'subscribed' (this browser already has a live PushSubscription), or 'not-subscribed'.
 export async function getPushStatus(): Promise<'unsupported' | 'subscribed' | 'not-subscribed'> {
+  // In the app, "subscribed" is read from the OS permission rather than from a server round trip.
+  // The two can in principle disagree — permission granted but the token never stored — but the
+  // only path that grants permission also registers the token immediately afterwards, and a token
+  // that later goes stale is deleted by lib/fcm.ts the first time Google rejects it.
+  if (isNative()) return (await isNativePushRegistered()) ? 'subscribed' : 'not-subscribed';
   if (!isPushSupported()) return 'unsupported';
   const reg = await navigator.serviceWorker.getRegistration();
   if (!reg) return 'not-subscribed';
@@ -26,6 +46,10 @@ export async function getPushStatus(): Promise<'unsupported' | 'subscribed' | 'n
 }
 
 export async function enablePush(): Promise<{ ok: boolean; error?: string }> {
+  if (isNative()) {
+    const result = await enableNativePush();
+    return result.ok ? { ok: true } : { ok: false, error: result.error };
+  }
   if (!isPushSupported()) return { ok: false, error: 'Push isn’t supported in this browser' };
 
   const permission = await Notification.requestPermission();
@@ -54,6 +78,10 @@ export async function enablePush(): Promise<{ ok: boolean; error?: string }> {
 }
 
 export async function disablePush(): Promise<void> {
+  if (isNative()) {
+    await disableNativePush();
+    return;
+  }
   if (!isPushSupported()) return;
   const reg = await navigator.serviceWorker.getRegistration();
   if (!reg) return;

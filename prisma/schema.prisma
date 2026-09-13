@@ -434,6 +434,7 @@ model User {
   chatMessages  ChatMessage[]
   chatReactions ChatReaction[]
   pushSubscriptions PushSubscription[]
+  deviceTokens      DeviceToken[]
   passwordResetTokens PasswordResetToken[]
   // Null until the first-run walkthrough is finished or dismissed. Stored on the user rather than
   // in localStorage so it follows the person across devices — someone who onboarded on their
@@ -481,6 +482,30 @@ model PushSubscription {
   p256dh    String
   auth      String
   createdAt DateTime @default(now()) @map("created_at")
+}
+
+// Native app push, kept SEPARATE from PushSubscription above rather than folded into it.
+//
+// They are not the same thing wearing different names. A web subscription is a triple (endpoint +
+// two encryption keys) delivered by the browser's own push service, which the server talks to
+// directly over VAPID. An FCM registration token is a single opaque string that only Google can
+// deliver to, and reaching it needs a service account rather than a VAPID pair. Sharing one table
+// would mean three columns that are meaningless for half the rows and a "which kind is this?"
+// check at every use.
+//
+// The token is the unique key, not (user, device): Firebase reissues a token when the app is
+// reinstalled or its data is cleared, and the same physical phone can therefore hold several over
+// time. Old ones are removed when Google reports them as gone (see lib/push.ts), not on a schedule.
+model DeviceToken {
+  id        String   @id @default(uuid())
+  userId    String   @map("user_id")
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  token     String   @unique
+  // 'android' today; the column exists so an iOS build does not need a migration, and so a
+  // platform-specific delivery bug can be isolated without guessing from the token format.
+  platform  String
+  createdAt DateTime @default(now()) @map("created_at")
+  @@index([userId])
 }
 
 // Standard @auth/prisma-adapter model, needed only for Google OAuth account linking — sessions

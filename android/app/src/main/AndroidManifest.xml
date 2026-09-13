@@ -32,4 +32,15 @@
     <!-- Permissions -->
 
     <uses-permission android:name="android.permission.INTERNET" />
+
+    <!-- Required from Android 13 (API 33) onwards, and NOT declared by @capacitor/push-notifications
+         itself — checked rather than assumed. Without it the runtime permission request silently
+         resolves to "denied" without ever showing the user a dialog, so notifications appear to be
+         refused by a person who was never asked. -->
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+
+    <!-- Declared explicitly rather than inherited from @capacitor/haptics' own manifest, because
+         SiqtHapticsPlugin is ours and now depends on it directly; removing that plugin some day
+         should not silently take the app's haptics with it. -->
+    <uses-permission android:name="android.permission.VIBRATE" />
 </manifest>

@@ -20,12 +20,39 @@ function ensureConfigured(): boolean {
 
 export type PushPayload = { title: string; body: string; url?: string };
 
+// Imported lazily inside sendPushToUser rather than at module scope: firebase-admin is a large
+// dependency that pulls in gRPC, and nothing should pay for loading it on a request that sends no
+// push at all.
+type FcmModule = typeof import('./fcm');
+
 // Fire-and-forget from a caller's point of view — never throws, so a route sending a chat
 // message never has its own response blocked or broken by a push provider being slow/down.
 // Sends to every device/browser this user has ever subscribed from; a dead one (the push
 // service itself returns 404/410 — uninstalled, browser data cleared, etc.) is deleted here as
 // it's discovered, not swept proactively.
 export async function sendPushToUser(userId: string, payload: PushPayload): Promise<void> {
+  // Both transports, always. A person routinely has both — the site open on a desktop browser and
+  // the app on their phone — and they are genuinely separate registrations, so sending to one is
+  // not a substitute for the other. Each no-ops on its own when unconfigured or when this user has
+  // nothing registered for it, so "send to both" costs nothing in the common case.
+  //
+  // Run in parallel and never awaited for failure: neither can throw (both swallow their own
+  // errors), so the chat route calling this is never blocked or broken by a push provider.
+  await Promise.all([sendWebPushToUser(userId, payload), sendNativePushToUser(userId, payload)]);
+}
+
+async function sendNativePushToUser(userId: string, payload: PushPayload): Promise<void> {
+  try {
+    const fcm: FcmModule = await import('./fcm');
+    await fcm.sendFcmToUser(userId, payload);
+  } catch (err) {
+    // Reaching here means the module itself failed to load, not that a send failed — worth a line
+    // in the log, but never worth failing the caller's request over.
+    console.error('FCM module failed to load:', err);
+  }
+}
+
+async function sendWebPushToUser(userId: string, payload: PushPayload): Promise<void> {
   if (!ensureConfigured()) return;
 
   const subs = await prisma.pushSubscription.findMany({ where: { userId } });

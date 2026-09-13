@@ -5246,3 +5246,58 @@ visible there anyway).
 
 **Also noted:** the VAPID keys are still not set — the user has the command and the values but has
 not added them to Pterodactyl yet, so push remains 503. Not blocked on anything here.
+
+### Same session — native push: everything built except the credentials
+
+VAPID keys are finally set in production — `/api/push/vapid-public-key` returns 200 with an 87-char
+key, verified from outside. Web push therefore works in Chrome and the installed PWA. It still
+cannot work in the app (no `PushManager` in Android's WebView), so the Firebase half was started.
+
+**Built and committed, inert until credentials arrive:**
+
+- `DeviceToken` model + migration `20260913102049_add_device_token`. Kept **separate** from
+  `PushSubscription` rather than folded in: a web subscription is an endpoint plus two encryption
+  keys that the server talks to directly over VAPID, while an FCM token is one opaque string only
+  Google can deliver to. One table would mean three columns meaningless for half the rows. The
+  token is the unique key, not (user, device) — Firebase reissues it on reinstall, and the same
+  phone holds several over time.
+- `lib/fcm.ts` — sends via firebase-admin, deletes tokens Google reports as dead, no-ops entirely
+  when unconfigured.
+- `sendPushToUser` now fans out to **both** transports in parallel. A person routinely has the site
+  open on a desktop and the app on a phone; those are separate registrations and one is not a
+  substitute for the other. firebase-admin is imported lazily so a request that sends no push never
+  pays to load gRPC.
+- `POST/DELETE /api/push/device-token`. The upsert reassigns `userId` on conflict deliberately: a
+  token identifies an app install, not a person, so a handed-down phone must stop notifying whoever
+  signed in before.
+- `lib/nativePush.ts`. **Registration is not request/response** — `register()` resolves when the
+  request is *made*, and the token arrives later on a listener, so the promise is settled by the
+  listener with a 15s ceiling. Awaiting `register()` and assuming a token exists is the classic
+  mistake here, and it fails intermittently rather than consistently.
+- `lib/pushClient.ts` delegates to the native path inside the app, so `SettingsPanel` needed no
+  change at all and keeps one three-state interface.
+- `POST_NOTIFICATIONS` added to the manifest — **the plugin does not declare it**, checked rather
+  than assumed. Without it the runtime request silently resolves to "denied" with no dialog ever
+  shown, which reads as a user refusing something they were never asked. `VIBRATE` declared
+  explicitly too, since SiqtHapticsPlugin now depends on it rather than inheriting it.
+
+**Nothing to do in Gradle:** Capacitor's template already applies the google-services plugin only
+when `android/app/google-services.json` exists, and the classpath is already in the root
+build.gradle. So the build keeps working without the file, and starts wiring Firebase in the moment
+it appears.
+
+**Waiting on the user**, and this is the whole remaining blocker:
+
+1. `android/app/google-services.json` from the Firebase project (package name must be `no.siqt.app`).
+   Not a secret; goes in git.
+2. A service account key — **a real secret**. It is ~2.3KB of JSON with a PEM private key, far past
+   the `max:191` of this project's egg variables, so it is a **file** at the repo root
+   (`firebase-service-account.json`), gitignored, uploaded through Pterodactyl's file manager. It
+   survives re-installs for the same reason `prisma/*.db` does: `git clean -fd` spares ignored files.
+
+Then a new APK (native plugin = rebuild) and a redeploy.
+
+**Also answered in passing:** removing someone from a workspace *does* exist — Office tab → their
+avatar → "Remove from workspace", Owner/Admin only, and the Owner cannot be removed because there is
+no ownership transfer. The user could not find it, which is fair: it is nowhere in Settings, where
+anyone would look first. Offered to surface it there; not done.
