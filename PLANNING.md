@@ -5353,3 +5353,28 @@ candidate for a failed `migrate deploy` and was not one.
 real permission dialog — if the panel still says "not supported in this browser", 1.4 is still
 installed), and have someone send a message with the app closed. Nothing further is known to be
 missing on the server side.
+
+### Same session — testing your own notifications, without a second person
+
+"hvordan kan jeg teste selv, pushvarslene mine, må jeg lage ny bruker?" No — but until now there was
+genuinely no way to check alone, because push is only ever sent to the *other* party in a chat. That
+made "did I set this up right?" unanswerable without recruiting a colleague, on a feature whose
+failure mode is silence. Every colleague installing the app would have hit the same wall.
+
+`POST /api/push/test` sends a notification to the caller, and **only** to the caller — there is no
+user parameter, so it cannot be turned into a way to make someone else's phone buzz. Rate limited to
+10 per 5 minutes per user+IP, because it produces real notifications on a real device and a stuck
+retry loop should not be able to hammer a phone.
+
+**It reports what it sent to** — "Sent to 1 phone and 1 browser" — and that is the part worth
+keeping. "Nothing arrived" has two causes that feel identical: nothing was registered to send to, or
+something was and delivery failed. The first is far more common and entirely fixable by the user, so
+the counts separate them at a glance. A registration count of zero is refused with a clear message
+rather than reported as a successful send of nothing.
+
+The button appears only once `pushStatus === 'subscribed'`, since offering a test before anything is
+registered can only produce a confusing failure.
+
+Note for whoever tests it: with the app in the **foreground**, Android does not display an FCM
+`notification` payload — the plugin hands it to JS instead. The app has to be backgrounded to see
+the notification itself, which is why the success message says so.

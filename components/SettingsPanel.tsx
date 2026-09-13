@@ -332,6 +332,7 @@ export default function SettingsPanel({
   // --- Push notifications --- per-browser, not per-account (a phone and a laptop are two
   // separate subscriptions) — see lib/pushClient.ts.
   const [pushStatus, setPushStatus] = useState<'unsupported' | 'subscribed' | 'not-subscribed' | 'loading'>('loading');
+  const [pushTest, setPushTest] = useState<string | null>(null);
   const [pushError, setPushError] = useState<string | null>(null);
   useEffect(() => {
     getPushStatus().then(setPushStatus);
@@ -719,6 +720,36 @@ export default function SettingsPanel({
                   {pushStatus === 'subscribed' ? 'Disable push notifications' : 'Enable push notifications'}
                 </button>
               )}
+              {/* Only once something is registered — offering a test before there is anywhere to
+                  send it would just produce a confusing failure. */}
+              {pushStatus === 'subscribed' && (
+                <button
+                  onClick={async () => {
+                    setPushTest('Sending…');
+                    try {
+                      const res = await fetch('/api/push/test', { method: 'POST' });
+                      const data = await res.json().catch(() => null);
+                      if (!res.ok) {
+                        setPushTest(data?.error || 'Could not send a test notification');
+                        return;
+                      }
+                      // Naming what it was sent to is the useful part. If this says "1 phone" and
+                      // nothing arrives, the problem is delivery; if it says "0 phones", this
+                      // device was never registered and that is the thing to fix.
+                      const parts: string[] = [];
+                      if (data?.devices) parts.push(`${data.devices} phone${data.devices === 1 ? '' : 's'}`);
+                      if (data?.browsers) parts.push(`${data.browsers} browser${data.browsers === 1 ? '' : 's'}`);
+                      setPushTest(`Sent to ${parts.join(' and ')}. Background the app to see it.`);
+                    } catch {
+                      setPushTest('Could not reach the server');
+                    }
+                  }}
+                  className="w-full mt-1.5 text-xs py-1.5 rounded border border-neutral-700 text-neutral-300 hover:border-neutral-600 cursor-pointer"
+                >
+                  Send a test notification
+                </button>
+              )}
+              {pushTest && <p className="text-[11px] text-neutral-400 mt-1">{pushTest}</p>}
               {pushError && <p className="text-[11px] text-red-400 mt-1">{pushError}</p>}
             </div>
           </div>
