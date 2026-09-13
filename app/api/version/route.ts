@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { execFile } from 'child_process';
 import { promisify } from 'util';
+import { existsSync } from 'fs';
 
 const run = promisify(execFile);
 
@@ -32,11 +33,12 @@ export async function GET() {
       commit: hash.stdout.trim(),
       committedAt: date.stdout.trim(),
       startedAt: startedAt.toISOString(),
+      ...notificationConfig(),
     });
   } catch {
     // No git in the container, or not a checkout — say so plainly rather than 500ing, since the
     // whole point of this route is to be readable when things are wrong.
-    return NextResponse.json({ commit: null, startedAt: startedAt.toISOString() });
+    return NextResponse.json({ commit: null, startedAt: startedAt.toISOString(), ...notificationConfig() });
   }
 }
 
@@ -44,3 +46,22 @@ export async function GET() {
 // with the commit it distinguishes "the code is old" from "the code is new but this process has been
 // up since before it landed".
 const startedAt = new Date();
+
+// Whether each notification transport is configured, as plain booleans.
+//
+// Every missing-secret path in this codebase degrades to silence on purpose — a chat message must
+// never fail because a push provider is unconfigured. The cost is that "notifications do not
+// arrive" looks exactly the same whether a key is missing, a file was uploaded under the wrong
+// name, or something is genuinely broken. This session lost several rounds to that ambiguity in
+// other forms, so the state is readable rather than inferred.
+//
+// Booleans only, never the values: the point is to answer "did the upload land?" without putting
+// anything worth stealing on a public endpoint. The service account file in particular is checked
+// by existence rather than by parsing it, so a malformed file still reports true — it is a check on
+// the step a human just performed, not on the credential's validity.
+function notificationConfig() {
+  return {
+    webPush: Boolean(process.env.VAPID_PUBLIC_KEY && process.env.VAPID_PRIVATE_KEY),
+    nativePush: existsSync(process.env.FIREBASE_SERVICE_ACCOUNT_PATH || './firebase-service-account.json'),
+  };
+}
