@@ -449,12 +449,7 @@ export default function MobileSpacesSheet({
                         (FolderTree.tsx). Mobile ignored it entirely, so "Edit appearance" offered a
                         setting that changed nothing on a phone — and the person changing it
                         reasonably concluded the whole control was broken. */}
-                    <span
-                      className="min-w-0 flex-1 text-sm text-neutral-200 truncate"
-                      style={space.textColor ? { color: space.textColor } : undefined}
-                    >
-                      {space.name}
-                    </span>
+                    <span className="min-w-0 flex-1 text-sm text-neutral-200 truncate">{space.name}</span>
                     {isExpanded ? (
                       <ChevronDown className="w-4 h-4 text-neutral-600 shrink-0" />
                     ) : (

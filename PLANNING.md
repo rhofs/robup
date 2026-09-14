@@ -5635,3 +5635,35 @@ step.
 This also matters for the iOS question raised earlier — whether to build a real iOS app. An iPhone
 user who adds Siqt to the Home Screen now gets notifications for free, which is most of what an app
 would have bought, at no cost and with no Mac.
+
+### Same session — user-chosen text colour dropped; it could never work in two themes
+
+Raised by the user before deploying, and correct: "om jeg velger svart, så er den mørk for de med
+dark mode... burde vi skrinlegge tekstfarge helt?"
+
+**Yes, and the timing mattered** — the mobile change an hour earlier made it *worse*. Mobile had
+ignored `textColor` entirely; teaching it to honour that setting meant a black label would now be
+unreadable on a phone in dark mode too. Deploying would have spread the bug rather than fixed one.
+
+**The principle: a colour chosen once cannot sit on two opposite backgrounds.** Any user-picked
+colour applied to text on a neutral surface is theme-blind, because that surface flips from
+near-black to near-white. Colour is only safe where the surface behind it is also fixed.
+
+Everything here was written while the app was dark-only, and it shows. `activeGlowStyle` blended the
+item's colour 65% toward white to read as "lit up" — which on a light background makes the label
+*paler*, so the active row became the hardest one to read.
+
+What changed:
+
+- Labels in the desktop tree, the doc subpages panel, the mobile Spaces sheet, the calendar filter
+  sheet, and the Office rooms no longer take a user colour.
+- `activeGlowStyle` returns weight only.
+- **All four "Text color" pickers removed** from the Space/Folder/List/Doc edit dialogs. A control
+  that no longer does anything is worse than no control — that is exactly the trap the user fell
+  into earlier today, changing a setting and concluding the feature was broken.
+
+**Nothing is lost and nothing is deleted.** The colour still appears, on each row's **icon**, where
+the surface is fixed and contrast can be relied on — and that is also the treatment that makes
+ClickUp's lists read as coherent. The `textColor` columns and every stored value stay untouched, and
+the edit dialogs still write them back unchanged, so reinstating this is a revert rather than a
+migration.

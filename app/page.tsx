@@ -4217,7 +4217,7 @@ function PageContent() {
                             {/* Own color always — only the checkbox indicates "checked" (Google
                                 Calendar's sidebar convention); when active, the name glows a
                                 bright version of that same color instead of switching to blue. */}
-                            <span className="truncate" style={isSpaceActive ? activeGlowStyle(space.textColor || space.color) : { color: space.textColor || space.color || undefined }}>
+                            <span className="truncate" style={isSpaceActive ? activeGlowStyle() : undefined}>
                               {space.name}
                             </span>
                             {space.isPrivate && <Lock className="w-2.5 h-2.5 text-neutral-500 shrink-0" />}
@@ -5954,10 +5954,6 @@ function PageContent() {
                 <ColorSwatchPicker value={editSpaceColor} onChange={setEditSpaceColor} choices={FIELD_COLOR_CHOICES} />
               </div>
               <div>
-                <label className="text-[11px] text-neutral-400 mb-1 block">Text color (defaults to Color above)</label>
-                <ColorSwatchPicker value={editSpaceTextColor} onChange={setEditSpaceTextColor} choices={FIELD_COLOR_CHOICES} />
-              </div>
-              <div>
                 <label className="text-[11px] text-neutral-400 mb-1 block">Icon</label>
                 <div className="flex flex-wrap gap-1.5">
                   <button
@@ -6055,21 +6051,6 @@ function PageContent() {
                 </div>
               </div>
               <div>
-                <label className="text-[11px] text-neutral-400 mb-1 block">Text color (defaults to Color above)</label>
-                <div className="flex flex-wrap items-center gap-1.5">
-                  <button
-                    onClick={() => setEditFolderTextColor(null)}
-                    title="Default"
-                    className={`w-6 h-6 rounded-full cursor-pointer bg-neutral-700 flex items-center justify-center shrink-0 ${
-                      editFolderTextColor === null ? 'ring-2 ring-app-strong' : ''
-                    }`}
-                  >
-                    {editFolderTextColor === null && <Check className="w-3 h-3 text-app-strong" />}
-                  </button>
-                  <ColorSwatchPicker value={editFolderTextColor} onChange={setEditFolderTextColor} choices={FIELD_COLOR_CHOICES} />
-                </div>
-              </div>
-              <div>
                 <label className="text-[11px] text-neutral-400 mb-1 block">Icon</label>
                 <div className="flex flex-wrap gap-1.5">
                   <button
@@ -6148,21 +6129,6 @@ function PageContent() {
                 </div>
               </div>
               <div>
-                <label className="text-[11px] text-neutral-400 mb-1 block">Text color (defaults to Color above)</label>
-                <div className="flex flex-wrap items-center gap-1.5">
-                  <button
-                    onClick={() => setEditListTextColor(null)}
-                    title="Default"
-                    className={`w-6 h-6 rounded-full cursor-pointer bg-neutral-700 flex items-center justify-center shrink-0 ${
-                      editListTextColor === null ? 'ring-2 ring-app-strong' : ''
-                    }`}
-                  >
-                    {editListTextColor === null && <Check className="w-3 h-3 text-app-strong" />}
-                  </button>
-                  <ColorSwatchPicker value={editListTextColor} onChange={setEditListTextColor} choices={FIELD_COLOR_CHOICES} />
-                </div>
-              </div>
-              <div>
                 <label className="text-[11px] text-neutral-400 mb-1 block">Icon</label>
                 <div className="flex flex-wrap gap-1.5">
                   <button
@@ -6229,21 +6195,6 @@ function PageContent() {
                     {editDocColor === null && <Check className="w-3 h-3 text-app-strong" />}
                   </button>
                   <ColorSwatchPicker value={editDocColor} onChange={setEditDocColor} choices={FIELD_COLOR_CHOICES} />
-                </div>
-              </div>
-              <div>
-                <label className="text-[11px] text-neutral-400 mb-1 block">Text color (defaults to Color above)</label>
-                <div className="flex flex-wrap items-center gap-1.5">
-                  <button
-                    onClick={() => setEditDocTextColor(null)}
-                    title="Default"
-                    className={`w-6 h-6 rounded-full cursor-pointer bg-neutral-700 flex items-center justify-center shrink-0 ${
-                      editDocTextColor === null ? 'ring-2 ring-app-strong' : ''
-                    }`}
-                  >
-                    {editDocTextColor === null && <Check className="w-3 h-3 text-app-strong" />}
-                  </button>
-                  <ColorSwatchPicker value={editDocTextColor} onChange={setEditDocTextColor} choices={FIELD_COLOR_CHOICES} />
                 </div>
               </div>
               <div className="flex items-center gap-2 bg-neutral-950/60 border border-neutral-800 rounded px-3 py-2">

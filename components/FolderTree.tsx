@@ -516,7 +516,7 @@ function DocRow({
       >
         <span className="truncate flex items-center gap-1.5 min-w-0">
           <FileText className="w-3 h-3 shrink-0" style={{ color: doc.color || undefined }} />
-          <span className="truncate" style={isActive ? activeGlowStyle(doc.textColor || doc.color) : { color: doc.textColor || doc.color || undefined }}>
+          <span className="truncate" style={isActive ? activeGlowStyle() : undefined}>
             {doc.title || 'Untitled'}
           </span>
         </span>
@@ -703,7 +703,7 @@ function FolderRow(props: FolderTreeProps & { folder: HierarchyFolder; parentId:
               already use (only the checkbox itself indicates "checked"). This span had no color
               override before, so it silently inherited the row wrapper's text-blue-400 whenever
               checked, unlike List/Space which already got an explicit style here. */}
-          <span className="truncate" style={{ color: folder.textColor || folder.color || undefined }}>{folder.name}</span>
+          <span className="truncate">{folder.name}</span>
           {folder.isPrivate && <Lock className="w-2.5 h-2.5 text-neutral-500 shrink-0" />}
         </span>
         <span className="flex items-center gap-1 shrink-0">
@@ -939,7 +939,7 @@ function ListRow({
         {/* Own color always — only the checkbox indicates "checked" (Google Calendar's sidebar
             convention); when active/open, the name glows a bright version of that same color
             instead of switching to blue. */}
-        <span className="truncate" style={isActive ? activeGlowStyle(list.textColor || list.color) : { color: list.textColor || list.color || undefined }}>
+        <span className="truncate" style={isActive ? activeGlowStyle() : undefined}>
           {list.name}
         </span>
         {list.isPrivate && <Lock className="w-2.5 h-2.5 text-neutral-500 shrink-0" />}

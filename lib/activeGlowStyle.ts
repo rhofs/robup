@@ -1,17 +1,15 @@
 import type { CSSProperties } from 'react';
 
-// Only the icon indicates an item's assigned color in the sidebar; the name text no longer turns
-// blue when a row is the currently active/open one — instead it shows a brighter, bolder version
-// of the item's own color. Colorless items (no custom color set) get nothing at all — a lit-up
-// gray reads as broken, not intentional — the caller's own default className handles that case.
+// How an active row in a tree is distinguished: weight only, never colour.
 //
-// First cut used a `text-shadow` halo (a real glow) — reported back as "too hazy on the text
-// itself" with a visible rectangular artifact around it (the shadow's bounding box showing
-// through, a known text-shadow-on-inline-text rendering quirk). Replaced with the simpler,
-// visually reliable fallback the user offered instead of guessing at blur/opacity values with no
-// browser available to check the result: a lightened tint of the same color (`color-mix`, blended
-// toward white so it reads as "lit up" without being a different hue) plus bold weight — no shadow.
-export function activeGlowStyle(color: string | null | undefined): CSSProperties | undefined {
-  if (!color) return undefined;
-  return { color: `color-mix(in srgb, ${color} 65%, white)`, fontWeight: 600 };
+// This used to blend the item's own colour 65% toward white — "lit up" — and that worked because it
+// was designed while the app was dark-only. On a light background the same blend makes the label
+// PALER, so the active row became the hardest one to read. It is the same theme-blindness that ran
+// through every user-chosen text colour here, and it is why those were dropped: a colour chosen once
+// cannot sit on two opposite backgrounds.
+//
+// The colour is not lost — it lives on each row's icon, where the surface behind it is fixed and
+// contrast can be relied on. The label's job is to be read.
+export function activeGlowStyle(_color?: string | null): CSSProperties {
+  return { fontWeight: 600 };
 }

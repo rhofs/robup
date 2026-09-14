@@ -62,7 +62,7 @@ export default function MobileCalendarFilterSheet({ open, onClose, spaces, visib
                         {allChecked && <Check className="w-3 h-3" />}
                       </span>
                       <span className="w-2 h-2 rounded-full shrink-0" style={{ backgroundColor: space.color }} />
-                      <span style={{ color: space.textColor ?? undefined }}>{space.name}</span>
+                      <span>{space.name}</span>
                     </button>
                     <div className="flex flex-col gap-0.5">
                       {orderedListIds.map((listId) => {

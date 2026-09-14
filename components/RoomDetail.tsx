@@ -76,7 +76,7 @@ export default function RoomDetail({ room, members, workspace, currentUserId, ca
               <button
                 onClick={() => setEditingName(true)}
                 className="text-lg font-semibold text-app-strong cursor-text text-left"
-                style={{ color: room.textColor || undefined }}
+                
               >
                 {room.name}
               </button>

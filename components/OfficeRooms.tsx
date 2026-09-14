@@ -339,7 +339,7 @@ function RoomBox({ room, members, workspace, currentUserId, canManage, taskCount
             <button
               onClick={() => setEditingName(true)}
               className="text-xs font-semibold text-neutral-200 truncate cursor-text text-left"
-              style={{ color: room.textColor || undefined }}
+              
             >
               {room.name}
             </button>
