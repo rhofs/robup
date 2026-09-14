@@ -5537,3 +5537,22 @@ Events are now included, with two details worth keeping:
 
 **Unverified:** no iPhone has actually subscribed to this feed yet. The ICS is generated correctly by
 inspection, but rendering is the calendar client's business and only a device shows it.
+
+### Same session — the card filled the screen, so it read as a page
+
+The layering change *had* landed — the device screenshot shows a grey ground, a white card with
+margins and full rounding, and a shadow under the nav island. It still looked wrong, and the reason
+is worth recording because it is the same mistake in a new place.
+
+**The card was the scroll container, with `flex-1`.** So it stretched to whatever height was left
+and ran to the bottom of the screen regardless of how few Spaces it held. With three Spaces that is
+a white page with a grey strip at the top — not a card lying on a grey page, which is the entire
+point of the change.
+
+Split into an invisible scroll viewport plus a card sized by its content, so the ground shows
+underneath. Same shape as the fix in `ChatPanel` earlier: **a scrolling region and a visible surface
+want to be two different elements**, and merging them quietly couples the surface's size to the
+viewport's.
+
+This also retires the "fill the empty half of the screen" advice from the design page. The empty
+area was never the problem; a surface that grew to cover it was.

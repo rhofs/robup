@@ -376,7 +376,15 @@ export default function MobileSpacesSheet({
               a plain flat seam there read as a hard cutoff; the reference the user pointed at
               (ClickUp's own Chats list) has the scrollable content sit on a distinctly rounded
               "sheet" starting just below the header instead. */}
-          <div className="flex-1 overflow-y-auto mx-2 px-2 py-2 pb-28 space-y-0.5 bg-neutral-900 rounded-2xl elevated">
+          {/* Two elements: an invisible scroll viewport, and the white card inside it.
+              The card used to BE the scroll container, with flex-1 — so it stretched to fill
+              whatever height was left and ran to the bottom of the screen no matter how few Spaces
+              there were. The result reads as a white page with a grey strip at the top rather than
+              a card lying on a grey page, which is the thing this whole change was for. Reported
+              from a device with three Spaces and most of the screen white below them.
+              Height now comes from the content, so the ground shows underneath. */}
+          <div className="flex-1 overflow-y-auto pb-28">
+          <div className="mx-2 px-2 py-2 space-y-0.5 bg-neutral-900 rounded-2xl elevated">
             <button
               onClick={() => {
                 onSelectSpace('everything');
@@ -464,6 +472,7 @@ export default function MobileSpacesSheet({
                 </div>
               );
             })}
+          </div>
           </div>
         </div>
       )}
