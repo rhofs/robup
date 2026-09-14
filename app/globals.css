@@ -131,7 +131,7 @@ html[data-theme='light'] {
      Nothing else had to move for this: the app shell, the mobile sheet and the header all already
      use -950, and the lists and panels inside them already use -900. They were simply pointing at
      the wrong two values. */
-  --color-neutral-950: #f1f2f5; /* page ground, headers, chrome */
+  --color-neutral-950: #eceef2; /* page ground, headers, chrome */
   --color-neutral-900: #ffffff; /* panels, cards, sheets — the elevated surfaces */
   --color-neutral-800: #e4e4e7; /* borders, dividers */
   --color-neutral-700: #d4d4d8; /* stronger borders, inactive chips */

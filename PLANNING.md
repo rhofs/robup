@@ -5493,3 +5493,47 @@ than a refactor. The suggested palette in `ColorSwatchPicker` is untouched too, 
 **Unverified on a device.** Dark mode should be untouched — every value changed lives inside
 `html[data-theme='light']`, and `--color-raised` matches the old `-950` exactly in dark — but that
 is reasoning, not a screenshot.
+
+### Same session — the layering change shipped but was too timid, and the iPhone feed was missing Planner
+
+**"jeg ser ikke noe særlig endringer."** Checked in the order that should now be habit, and every
+step was clean:
+
+- `/api/version` reported the newest commit, so it was deployed.
+- The built CSS contained `html[data-theme=light]{--color-neutral-950:#f1f2f5;--color-neutral-900:#fff}`.
+- The **live** CSS fetched from siqt.no contained it too.
+- `public/sw.js` caches nothing — it is push-only, so no stale service worker.
+- CSS is served `max-age=31536000, immutable`, which would be a serious bug if filenames were
+  stable. **Tested rather than assumed**: changing one colour changed the chunk name
+  (`1us4173ia1947.css` → `3bfik42qekd7o.css`), so content hashing works and the caching is safe.
+
+So nothing was broken — **the change was simply too small to notice.** `#ffffff` → `#f1f2f5` with a
+white card is about four percent apart, and the *relationship* flipped without the *appearance*
+changing much.
+
+What was missing is what actually makes ClickUp's list read as an object: **air around it.** Their
+card has side margins and full rounding; ours ran edge to edge with only the top corners rounded, so
+it stayed a region rather than a card. Now `mx-2 rounded-2xl`, and the ground deepened to `#eceef2`
+so white reads as white.
+
+Worth keeping as a lesson: a correct fix that no one can see is indistinguishable from no fix, and
+the instinct to double-check the pipeline was right but found nothing — because the problem was the
+size of the change, not its delivery.
+
+### Same session — Planner events now reach the iPhone calendar
+
+"jeg vil fikse så planner også er med på iphone." The iCal feed at `/api/calendar/[token]` queried
+**only tasks**, so the entire Planner was invisible to anyone subscribing from an iPhone — which is
+the one place that feed matters, since Apple has no equivalent of the two-way Google sync.
+
+Events are now included, with two details worth keeping:
+
+- **"Assigned to you", not "created by you"** — the same rule `lib/google/calendarSync.ts` already
+  applies. Two calendars fed by the same app should not quietly disagree about what belongs on them.
+- **Timed events emit UTC instants** (`DTSTART:…Z`), not local times with a VTIMEZONE block. The
+  stored values are already absolute, and a wrong or missing VTIMEZONE shifts events by hours in a
+  way that is very hard to notice — worse than not supporting times at all. All-day events keep the
+  exclusive-DTEND rule the tasks already use.
+
+**Unverified:** no iPhone has actually subscribed to this feed yet. The ICS is generated correctly by
+inspection, but rendering is the calendar client's business and only a device shows it.

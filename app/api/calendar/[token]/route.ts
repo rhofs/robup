@@ -19,18 +19,32 @@ export async function GET(_req: Request, { params }: { params: Promise<{ token: 
   const user = await prisma.user.findUnique({ where: { calendarToken: token } });
   if (!user) return new Response('Not found', { status: 404 });
 
-  const tasks = await prisma.task.findMany({
-    where: {
-      archived: false,
-      deletedAt: null,
-      assignees: { some: { id: user.id } },
-      OR: [{ startDate: { not: null } }, { dueDate: { not: null } }],
-    },
-    orderBy: { dueDate: 'asc' },
-  });
+  // Tasks AND Planner events. Events were missing from this feed entirely — the whole Planner was
+  // invisible to anyone subscribing from an iPhone, which is the one place this feed matters, since
+  // Apple has no equivalent of the two-way Google sync. Asked for directly: "jeg vil fikse så
+  // planner også er med på iphone".
+  //
+  // Both use "assigned to you", not "created by you". That is the same rule lib/google/calendarSync
+  // already applies (see EventGoogleSync's own note in schema.prisma) — one calendar should not
+  // quietly disagree with the other about what belongs on it.
+  const [tasks, events] = await Promise.all([
+    prisma.task.findMany({
+      where: {
+        archived: false,
+        deletedAt: null,
+        assignees: { some: { id: user.id } },
+        OR: [{ startDate: { not: null } }, { dueDate: { not: null } }],
+      },
+      orderBy: { dueDate: 'asc' },
+    }),
+    prisma.event.findMany({
+      where: { deletedAt: null, assignees: { some: { id: user.id } } },
+      orderBy: { startDate: 'asc' },
+    }),
+  ]);
 
   const now = icsStamp(new Date());
-  const events = tasks.map((t) => {
+  const taskEvents = tasks.map((t) => {
     const start = t.startDate ?? t.dueDate!;
     const end = t.dueDate ?? t.startDate!;
     // All-day events: ICS DTEND is exclusive, so a task due the same day it starts still needs
@@ -49,6 +63,28 @@ export async function GET(_req: Request, { params }: { params: Promise<{ token: 
     return lines.join('\r\n');
   });
 
+  const plannerEvents = events.map((e) => {
+    const lines = ['BEGIN:VEVENT', `UID:${e.id}@siqt-event`, `DTSTAMP:${now}`];
+
+    if (e.allDay) {
+      // Same exclusive-DTEND rule as the tasks above: a one-day all-day event has to end on the
+      // following date or calendars render it as zero-length.
+      lines.push(`DTSTART;VALUE=DATE:${icsDate(e.startDate)}`, `DTEND;VALUE=DATE:${icsDate(addDays(e.endDate, 1))}`);
+    } else {
+      // A timed event carries real times, unlike everything else in this feed. Emitted as UTC
+      // instants (the trailing Z) rather than local times with a VTIMEZONE block: the stored values
+      // are already absolute, and a wrong or missing VTIMEZONE shifts events by hours in a way that
+      // is very hard to notice and worse than not supporting times at all.
+      lines.push(`DTSTART:${icsStamp(e.startDate)}`, `DTEND:${icsStamp(e.endDate)}`);
+    }
+
+    lines.push(`SUMMARY:${icsEscape(e.title)}`);
+    if (e.location) lines.push(`LOCATION:${icsEscape(e.location)}`);
+    if (e.description) lines.push(`DESCRIPTION:${icsEscape(e.description)}`);
+    lines.push('STATUS:CONFIRMED', 'END:VEVENT');
+    return lines.join('\r\n');
+  });
+
   const calendar = [
     'BEGIN:VCALENDAR',
     'VERSION:2.0',
@@ -56,7 +92,8 @@ export async function GET(_req: Request, { params }: { params: Promise<{ token: 
     'CALSCALE:GREGORIAN',
     'METHOD:PUBLISH',
     `X-WR-CALNAME:Siqt \u2014 ${icsEscape(user.name)}`,
-    ...events,
+    ...taskEvents,
+    ...plannerEvents,
     'END:VCALENDAR',
   ].join('\r\n');
 

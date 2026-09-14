@@ -376,7 +376,7 @@ export default function MobileSpacesSheet({
               a plain flat seam there read as a hard cutoff; the reference the user pointed at
               (ClickUp's own Chats list) has the scrollable content sit on a distinctly rounded
               "sheet" starting just below the header instead. */}
-          <div className="flex-1 overflow-y-auto px-3 py-2 pb-28 space-y-0.5 bg-neutral-900 rounded-t-2xl elevated">
+          <div className="flex-1 overflow-y-auto mx-2 px-2 py-2 pb-28 space-y-0.5 bg-neutral-900 rounded-2xl elevated">
             <button
               onClick={() => {
                 onSelectSpace('everything');
