@@ -433,6 +433,33 @@ const DEFAULT_COLUMN_WIDTHS: Record<string, number> = { name: 280 };
 // produce no CSS at all. Used by Planner's Month "Fit" view, which has no scroll of its own (unlike
 // Chat/Board) to bring a nav-obscured bottom row back into view, so it needs real, precisely-sized
 // clearance instead of the "just let content run under it" treatment that works for scrolling lists.
+
+// Keeps a right-click / long-press menu inside the screen.
+//
+// All six menus below were positioned with the raw pointer coordinates, which is fine on a desktop
+// where you rarely click within 200px of the right edge, and wrong on a phone where half the screen
+// is within 200px of it. Reported from a device: long-pressing a Space on the right-hand side of the
+// row opened a menu with its labels cut off past the edge.
+//
+// The width is the one thing here that is not measured, because every one of these menus is `w-48`
+// by construction — if that ever stops being true, this constant is where it breaks. Vertical uses a
+// deliberately generous estimate rather than a measurement: these menus hold between two and six
+// short items, and opening slightly higher than strictly necessary near the bottom of the screen is
+// invisible, while overflowing it is not.
+const CONTEXT_MENU_WIDTH_PX = 192; // w-48
+const CONTEXT_MENU_MAX_HEIGHT_PX = 240;
+const CONTEXT_MENU_MARGIN_PX = 8;
+
+function contextMenuPosition(x: number, y: number): { top: number; left: number } {
+  if (typeof window === 'undefined') return { top: y, left: x };
+  const maxLeft = window.innerWidth - CONTEXT_MENU_WIDTH_PX - CONTEXT_MENU_MARGIN_PX;
+  const maxTop = window.innerHeight - CONTEXT_MENU_MAX_HEIGHT_PX - CONTEXT_MENU_MARGIN_PX;
+  return {
+    left: Math.max(CONTEXT_MENU_MARGIN_PX, Math.min(x, maxLeft)),
+    top: Math.max(CONTEXT_MENU_MARGIN_PX, Math.min(y, maxTop)),
+  };
+}
+
 const NAV_TOTAL_HEIGHT_PB_CLASS = 'pb-[calc(4.75rem+env(safe-area-inset-bottom)+10px)]';
 
 // The search pill's own *static* label (shown before it's even tapped), not just what
@@ -5525,7 +5552,7 @@ function PageContent() {
       {taskMenu && (
         <>
           <div className="fixed inset-0 z-[60]" onClick={() => setTaskMenu(null)} onContextMenu={(e) => { e.preventDefault(); setTaskMenu(null); }} />
-          <div className="fixed z-[61] w-48 bg-neutral-900 border border-neutral-800 rounded shadow-2xl py-1" style={{ top: taskMenu.y, left: taskMenu.x }}>
+          <div className="fixed z-[61] w-48 bg-neutral-900 border border-neutral-800 rounded shadow-2xl py-1" style={contextMenuPosition(taskMenu.x, taskMenu.y)}>
             <button
               onClick={() => {
                 setModalTaskStack([taskMenu.task.id]);
@@ -5616,7 +5643,7 @@ function PageContent() {
       {spaceMenu && (
         <>
           <div className="fixed inset-0 z-[60]" onClick={() => setSpaceMenu(null)} onContextMenu={(e) => { e.preventDefault(); setSpaceMenu(null); }} />
-          <div className="fixed z-[61] w-48 bg-neutral-900 border border-neutral-800 rounded shadow-2xl py-1" style={{ top: spaceMenu.y, left: spaceMenu.x }}>
+          <div className="fixed z-[61] w-48 bg-neutral-900 border border-neutral-800 rounded shadow-2xl py-1" style={contextMenuPosition(spaceMenu.x, spaceMenu.y)}>
             <button onClick={() => startEditSpace(spaceMenu.space)} className="w-full text-left px-3 py-1.5 text-xs text-neutral-300 hover:bg-neutral-800/60 cursor-pointer flex items-center gap-2">
               <Pencil className="w-3.5 h-3.5" /> Edit appearance
             </button>
@@ -5648,7 +5675,7 @@ function PageContent() {
       {folderMenu && (
         <>
           <div className="fixed inset-0 z-[60]" onClick={() => setFolderMenu(null)} onContextMenu={(e) => { e.preventDefault(); setFolderMenu(null); }} />
-          <div className="fixed z-[61] w-48 bg-neutral-900 border border-neutral-800 rounded shadow-2xl py-1" style={{ top: folderMenu.y, left: folderMenu.x }}>
+          <div className="fixed z-[61] w-48 bg-neutral-900 border border-neutral-800 rounded shadow-2xl py-1" style={contextMenuPosition(folderMenu.x, folderMenu.y)}>
             <button onClick={() => startEditFolder(folderMenu.folder)} className="w-full text-left px-3 py-1.5 text-xs text-neutral-300 hover:bg-neutral-800/60 cursor-pointer flex items-center gap-2">
               <Pencil className="w-3.5 h-3.5" /> Edit appearance
             </button>
@@ -5689,7 +5716,7 @@ function PageContent() {
       {listMenu && (
         <>
           <div className="fixed inset-0 z-[60]" onClick={() => setListMenu(null)} onContextMenu={(e) => { e.preventDefault(); setListMenu(null); }} />
-          <div className="fixed z-[61] w-48 bg-neutral-900 border border-neutral-800 rounded shadow-2xl py-1" style={{ top: listMenu.y, left: listMenu.x }}>
+          <div className="fixed z-[61] w-48 bg-neutral-900 border border-neutral-800 rounded shadow-2xl py-1" style={contextMenuPosition(listMenu.x, listMenu.y)}>
             <button
               onClick={() => startEditList(listMenu.list, listMenu.spaceId)}
               className="w-full text-left px-3 py-1.5 text-xs text-neutral-300 hover:bg-neutral-800/60 cursor-pointer flex items-center gap-2"
@@ -5759,7 +5786,7 @@ function PageContent() {
       {docMenu && (
         <>
           <div className="fixed inset-0 z-[60]" onClick={() => setDocMenu(null)} onContextMenu={(e) => { e.preventDefault(); setDocMenu(null); }} />
-          <div className="fixed z-[61] w-48 bg-neutral-900 border border-neutral-800 rounded shadow-2xl py-1" style={{ top: docMenu.y, left: docMenu.x }}>
+          <div className="fixed z-[61] w-48 bg-neutral-900 border border-neutral-800 rounded shadow-2xl py-1" style={contextMenuPosition(docMenu.x, docMenu.y)}>
             <button
               onClick={() => startEditDoc(docMenu.doc, docMenu.spaceId)}
               className="w-full text-left px-3 py-1.5 text-xs text-neutral-300 hover:bg-neutral-800/60 cursor-pointer flex items-center gap-2"
@@ -5818,7 +5845,7 @@ function PageContent() {
       {columnMenu && (
         <>
           <div className="fixed inset-0 z-[60]" onClick={() => setColumnMenu(null)} onContextMenu={(e) => { e.preventDefault(); setColumnMenu(null); }} />
-          <div className="fixed z-[61] w-48 bg-neutral-900 border border-neutral-800 rounded shadow-2xl py-1" style={{ top: columnMenu.y, left: columnMenu.x }}>
+          <div className="fixed z-[61] w-48 bg-neutral-900 border border-neutral-800 rounded shadow-2xl py-1" style={contextMenuPosition(columnMenu.x, columnMenu.y)}>
             <button
               onClick={() => {
                 toggleColumn(columnMenu.col.key);

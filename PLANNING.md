@@ -5556,3 +5556,36 @@ viewport's.
 
 This also retires the "fill the empty half of the screen" advice from the design page. The empty
 area was never the problem; a surface that grew to cover it was.
+
+### Same session — clipped context menus, and a mis-converted colour token
+
+**1. Long-press menus ran off the right edge.** All six (task, Space, Folder, List, Doc, column) were
+positioned with the raw pointer coordinates — fine on a desktop, where you rarely click within 200px
+of the right edge, and wrong on a phone where half the screen is. `FloatingPopover` already clamps
+properly; these six simply never went through it. Now they share `contextMenuPosition()`.
+
+Width is the one value not measured, because every one of these is `w-48` by construction — that
+constant is where it breaks if that changes. Vertical uses a generous estimate rather than a
+measurement: these menus hold two to six short items, and opening a little higher than necessary
+near the bottom is invisible while overflowing is not.
+
+**2. `text-app-strong` on a coloured tile was a mis-conversion**, and it explains a report that
+sounded like a broken feature. The Space icon tile is filled with the Space's own colour, and the
+glyph inside was `text-app-strong` — a token that follows the *neutral* scale, so it is white in
+dark mode and **near-black in light**. Reported as "jeg prøvde å endre farge på teksten, for å se om
+ikonet ble hvit... hverken tekst eller ikon er hvit."
+
+`globals.css`'s own note on that token says the call sites sitting on genuinely dark or coloured
+surfaces were meant to stay `text-white`; this one was swept up by mistake. Worth remembering as a
+shape: **a token named for a role ("strongest text") silently assumes a surface**, and any call site
+that breaks that assumption inverts when the theme does.
+
+**3. Mobile ignored a Space's `textColor` entirely.** The desktop tree honours it; the mobile sheet
+hard-coded `text-neutral-200`. So "Edit appearance" offered a setting that did nothing on a phone,
+and the person changing it reasonably concluded the control was broken rather than unimplemented.
+Now applied.
+
+**Not built, and offered rather than assumed:** a separate colour for the glyph inside the tile. The
+request was "burde det være mulig å endre fargen inni ikonet", but with the default now correct
+(white on the fill) the need is much smaller, and it would mean a third colour field per Space plus
+UI. Left as the user's call.

@@ -431,14 +431,30 @@ export default function MobileSpacesSheet({
                       activeSpaceId === space.id ? 'bg-neutral-800' : 'hover:bg-neutral-800/60'
                     }`}
                   >
+                    {/* text-white, NOT text-app-strong. This tile's background is the Space's own
+                        colour, not a neutral surface, so the glyph needs the one colour that reads
+                        on a saturated fill in either theme. text-app-strong follows the neutral
+                        scale and therefore turns near-black in light mode — which is exactly what
+                        was reported: "hverken tekst eller ikon er hvit". globals.css's own note on
+                        that token says the call sites sitting on coloured surfaces were meant to
+                        stay text-white; this one was converted by mistake. */}
                     <span className="w-8 h-8 rounded-lg flex items-center justify-center shrink-0" style={{ backgroundColor: space.color || '#6366f1' }}>
                       {Icon ? (
-                        <Icon className="w-4 h-4 text-app-strong" />
+                        <Icon className="w-4 h-4 text-white" />
                       ) : (
-                        <span className="text-app-strong text-xs font-bold">{space.name.slice(0, 1).toUpperCase()}</span>
+                        <span className="text-white text-xs font-bold">{space.name.slice(0, 1).toUpperCase()}</span>
                       )}
                     </span>
-                    <span className="min-w-0 flex-1 text-sm text-neutral-200 truncate">{space.name}</span>
+                    {/* Honours the Space's text colour, the same way the desktop tree does
+                        (FolderTree.tsx). Mobile ignored it entirely, so "Edit appearance" offered a
+                        setting that changed nothing on a phone — and the person changing it
+                        reasonably concluded the whole control was broken. */}
+                    <span
+                      className="min-w-0 flex-1 text-sm text-neutral-200 truncate"
+                      style={space.textColor ? { color: space.textColor } : undefined}
+                    >
+                      {space.name}
+                    </span>
                     {isExpanded ? (
                       <ChevronDown className="w-4 h-4 text-neutral-600 shrink-0" />
                     ) : (
