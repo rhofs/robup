@@ -5589,3 +5589,26 @@ Now applied.
 request was "burde det være mulig å endre fargen inni ikonet", but with the default now correct
 (white on the fill) the need is much smaller, and it would mean a third colour field per Space plus
 UI. Left as the user's call.
+
+### Same session — the DM row's highlight now leaves with the page
+
+"når jeg går tilbake, så er Yang navnet highlightet, helt til chatten er ute av bildet, så popper
+highlighten."
+
+Exactly what the code did. `closeChatConversation` keeps the store's `activeChannelId` for the full
+`CHAT_PUSH_MS` so the leaving panel still has its messages — correct for the panel, wrong for the
+sidebar, which read the same value and therefore held a full-strength highlight for the entire slide
+and dropped it the instant the panel was gone.
+
+Two separate causes, and fixing only one would not have helped:
+
+- **Timing.** `ChatSidebar` now takes a `closing` prop and derives `highlightedChannelId`, which goes
+  null the moment Back is pressed. Everything else there still uses the real `activeChannelId` —
+  this is appearance only.
+- **Duration.** The row carried Tailwind's default `transition`, 150ms. **A 150ms fade against a
+  520ms slide is a cut with extra steps** — it finishes long before the panel has left, so the eye
+  still registers two events. Both now run the same duration and the same curve.
+
+`CHAT_PUSH_MS` and the easing moved to `lib/chatTransition.ts`, because two components have to agree
+on them exactly and a copy in each would drift apart silently — the symptom being precisely this
+kind of "almost synchronised" motion, which is harder to diagnose than something plainly broken.

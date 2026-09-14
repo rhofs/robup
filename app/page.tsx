@@ -68,6 +68,7 @@ import {
 import { useTaskStore, HierarchySpace, HierarchyFolder, HierarchyList, HierarchyDocFolder, HierarchyRoom, HierarchyWorkspace, StatusDef, CustomFieldDef, Task, TaskDoc, AppUser } from '../store/useTaskStore';
 import { useHistoryStore } from '../store/useHistoryStore';
 import { hapticTap } from '../lib/haptics';
+import { CHAT_PUSH_MS, CHAT_PUSH_EASE } from '../lib/chatTransition';
 import TaskListSentinel from '../components/TaskListSentinel';
 import { useSessionStore } from '../store/useSessionStore';
 import { useChatStore } from '../store/useChatStore';
@@ -478,12 +479,14 @@ const NAV_TOTAL_HEIGHT_PB_CLASS = 'pb-[calc(4.75rem+env(safe-area-inset-bottom)+
 // It was never linear, but it has been a pure ease-out until now, which starts at maximum speed —
 // and a movement that begins abruptly cannot feel smooth however carefully it lands. Both ends are
 // eased now, with the acceleration kept short so the response to the tap is still immediate.
-const CHAT_PUSH_MS = 520;
 // Now an ease-in-OUT, not a pure ease-out. The previous curve started at full speed, which is what
 // kept it from feeling smooth however long it ran: motion that begins abruptly reads as a jump no
 // matter how gracefully it ends. A short acceleration at the start gives the eye something to
 // follow into the movement, and the long tail still does the braking.
-const CHAT_PUSH_TRANSITION = { duration: CHAT_PUSH_MS / 1000, ease: [0.42, 0, 0.18, 1] as const };
+//
+// Both values moved to lib/chatTransition.ts, because ChatSidebar has to fade its selected row out
+// on exactly the same curve and duration — see that file.
+const CHAT_PUSH_TRANSITION = { duration: CHAT_PUSH_MS / 1000, ease: CHAT_PUSH_EASE };
 
 const searchPillLabel = (view: string) =>
   view === 'docs' ? 'Search docs...' : view === 'chat' ? 'Search chats and channels...' : 'Search...';
@@ -4052,7 +4055,7 @@ function PageContent() {
                 })}
               </div>
             ) : activeView === 'chat' ? (
-              <ChatSidebar workspaceId={activeWorkspaceId} />
+              <ChatSidebar workspaceId={activeWorkspaceId} closing={chatClosing} />
             ) : (
             <div className="space-y-3">
               <div className="flex items-center justify-between px-2">
@@ -5165,7 +5168,7 @@ function PageContent() {
                             exit={{ x: '-33%' }}
                             transition={CHAT_PUSH_TRANSITION}
                           >
-                            <ChatSidebar workspaceId={activeWorkspaceId} />
+                            <ChatSidebar workspaceId={activeWorkspaceId} closing={chatClosing} />
                           </motion.div>
                         ) : (
                           <motion.div

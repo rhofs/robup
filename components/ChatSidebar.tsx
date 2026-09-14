@@ -5,11 +5,17 @@ import { Hash, MessageCircle, Pencil, Plus, Check, Bell, BellOff } from 'lucide-
 import { useChatStore, type ChatChannel, type Connection } from '../store/useChatStore';
 import { useSessionStore } from '../store/useSessionStore';
 import { useIsMobile } from '../hooks/useIsMobile';
+import { CHAT_PUSH_MS, CHAT_PUSH_EASE_CSS } from '../lib/chatTransition';
 import { hapticTap } from '../lib/haptics';
 import FloatingPopover from './FloatingPopover';
 
 type ChatSidebarProps = {
   workspaceId: string | null;
+  // True while a conversation is sliding back out (app/page.tsx owns that animation). The store
+  // still holds the channel for the whole ~520ms so the panel can finish leaving with its content
+  // intact, which meant this sidebar kept the row fully highlighted the entire time and then
+  // dropped it the instant the panel was gone. Reported as the name "popping" or being "cut".
+  closing?: boolean;
 };
 
 // Swaps in for the Space/Folder/List tree in the main left `<aside>` while activeView === 'chat',
@@ -21,7 +27,7 @@ type ChatSidebarProps = {
 // here — Connections (finding/managing who you can message) is still its own smaller destination,
 // reachable from the Me-zone, since a Connection you haven't messaged yet has no ChatChannel row
 // at all and showing one for every Connection would mean inventing fake conversations.
-export default function ChatSidebar({ workspaceId }: ChatSidebarProps) {
+export default function ChatSidebar({ workspaceId, closing = false }: ChatSidebarProps) {
   const isMobile = useIsMobile();
   const {
     channelsByWorkspace,
@@ -41,6 +47,17 @@ export default function ChatSidebar({ workspaceId }: ChatSidebarProps) {
     toggleChannelMute,
   } = useChatStore();
   const currentUserId = useSessionStore((s) => s.currentUserId);
+  // What the sidebar should show as selected, which is NOT the same as what the store considers
+  // active. The store keeps the channel for the whole slide-out so the leaving panel still has its
+  // messages; the highlight, by contrast, should start fading the moment Back is pressed, so it
+  // travels with the page instead of surviving it. Everything else in here still uses the real
+  // activeChannelId — this affects appearance only.
+  const highlightedChannelId = closing ? null : activeChannelId;
+  // Matched to the push, not to Tailwind's default 150ms. A 150ms fade against a 520ms slide is a
+  // cut with extra steps: it is over long before the panel has left, so the eye still registers two
+  // separate events rather than one movement.
+  const highlightFade = { transitionDuration: `${CHAT_PUSH_MS}ms`, transitionTimingFunction: CHAT_PUSH_EASE_CSS };
+
   const channels = workspaceId ? channelsByWorkspace[workspaceId] || [] : [];
   const [editingChannelId, setEditingChannelId] = useState<string | null>(null);
   const [newChannelOpen, setNewChannelOpen] = useState(false);
@@ -166,8 +183,9 @@ export default function ChatSidebar({ workspaceId }: ChatSidebarProps) {
                     hapticTap();
                     setActiveChannelId(c.id);
                   }}
+                  style={highlightFade}
                   className={`w-full text-left py-1.5 pr-11 rounded text-xs font-medium transition flex items-center gap-1.5 cursor-pointer border-l-2 ${
-                    activeChannelId === c.id
+                    highlightedChannelId === c.id
                       ? 'bg-neutral-800 text-app-strong border-blue-500 pl-2'
                       : 'text-neutral-400 hover:bg-neutral-800/40 hover:text-neutral-200 border-transparent pl-2.5'
                   }`}
@@ -220,8 +238,9 @@ export default function ChatSidebar({ workspaceId }: ChatSidebarProps) {
               <div key={dm.id} className={`group relative ${dm.muted ? 'opacity-60' : ''}`}>
               <button
                 onClick={() => setActiveChannelId(dm.id)}
+                style={highlightFade}
                 className={`w-full text-left py-1.5 pl-2 pr-6 rounded text-xs font-medium transition flex items-center gap-1.5 cursor-pointer border-l-2 ${
-                  activeChannelId === dm.id
+                  highlightedChannelId === dm.id
                     ? 'bg-neutral-800 text-app-strong border-blue-500'
                     : 'text-neutral-400 hover:bg-neutral-800/40 hover:text-neutral-200 border-transparent'
                 }`}
