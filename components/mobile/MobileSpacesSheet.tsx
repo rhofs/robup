@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState } from 'react';
 import { ChevronRight, ChevronDown, Globe, Search, X, Plus, Folder as FolderIconLucide, List as ListIconLucide, FileText } from 'lucide-react';
+import { AnimatePresence, motion } from 'framer-motion';
 import { useTaskStore, type HierarchySpace } from '../../store/useTaskStore';
 import { FOLDER_ICON_MAP } from '../FolderTree';
 import FloatingPopover from '../FloatingPopover';
@@ -193,6 +194,24 @@ export default function MobileSpacesSheet({
     setNewSpaceDraft('');
     setCreatingSpace(false);
   };
+  // Why this sheet is closing, which decides whether it animates on the way out.
+  //
+  // Closing because a tab was tapped stays instant, deliberately — see the comment above the render
+  // below: the other mobile tabs have no entrance of their own, and a sheet that fades while they
+  // snap reads as a blink rather than as polish.
+  //
+  // Closing because a List or Doc was *chosen* is a different act: you are moving to a page, and the
+  // sheet is a drawer lying over it. Sliding it away to the left reveals what you picked, which is
+  // the motion ClickUp's own mobile Spaces drawer makes and what was asked for here — "kun når vi
+  // skifter side til en list, eller doc".
+  //
+  // State rather than a ref, and set in the same handler as onClose: the last render before unmount
+  // then carries the flag, which is what AnimatePresence reads when it runs the exit.
+  const [exitByNavigation, setExitByNavigation] = useState(false);
+  useEffect(() => {
+    if (open) setExitByNavigation(false);
+  }, [open]);
+
   const [expandedSpaceIds, setExpandedSpaceIds] = useState<Set<string>>(new Set());
   const [expandedFolderIds, setExpandedFolderIds] = useState<Set<string>>(new Set());
 
@@ -256,8 +275,17 @@ export default function MobileSpacesSheet({
   // tabs" rather than a fade that's merely shorter/simpler than the last one.
   return (
     <>
+      <AnimatePresence>
       {open && (
-        <div
+        <motion.div
+          initial={false}
+          // Only the *exit* is animated. Opening stays instant so this still matches Planner and
+          // Chat, neither of which animates in — that parity is what the note above is about.
+          exit={
+            exitByNavigation
+              ? { x: '-28%', opacity: 0, transition: { duration: 0.26, ease: [0.4, 0, 0.2, 1] } }
+              : { opacity: 0, transition: { duration: 0 } }
+          }
           // pt-[env(safe-area-inset-top)]: this sheet is `top-0` and covers the global mobile
           // header, so it has to repeat that header's own status-bar clearance — otherwise its
           // title lands under the clock in the Android app, where the WebView is edge-to-edge.
@@ -424,12 +452,19 @@ export default function MobileSpacesSheet({
               const isExpanded = expandedSpaceIds.has(space.id);
               return (
                 <div key={space.id}>
+                    {/* No "currently active" highlight, on purpose.
+                        This sheet is a place you pass through: open it, pick something, it closes.
+                        The highlight therefore never showed where you *are* — only where you were
+                        last, which on returning reads as a selection you did not make. Asked for
+                        directly: "er det ikke bedre å droppe highlight, i allefall på mobilen".
+                        The desktop tree keeps its own, where it does mean "you are here" because
+                        the tree stays on screen the whole time you work.
+                        Note the Space still auto-expands to wherever you are — that is a separate
+                        mechanism, kept: it answers "where am I" without claiming you chose it. */}
                   <SpaceRowButton
                     onOpenMenu={onSpaceMenu ? (x, y) => onSpaceMenu(space.id, x, y) : undefined}
                     onClick={() => toggleSpace(space.id)}
-                    className={`w-full flex items-center gap-3 px-2 py-2.5 rounded-lg text-left transition cursor-pointer ${
-                      activeSpaceId === space.id ? 'bg-neutral-800' : 'hover:bg-neutral-800/60'
-                    }`}
+                    className="w-full flex items-center gap-3 px-2 py-2.5 rounded-lg text-left transition cursor-pointer hover:bg-neutral-800/60"
                   >
                     {/* text-white, NOT text-app-strong. This tile's background is the Space's own
                         colour, not a neutral surface, so the glyph needs the one colour that reads
@@ -465,10 +500,12 @@ export default function MobileSpacesSheet({
                         expandedFolderIds={expandedFolderIds}
                         onToggleFolder={toggleFolder}
                         onSelectList={(listId) => {
+                          setExitByNavigation(true);
                           onSelectList(space.id, listId);
                           onClose();
                         }}
                         onSelectDoc={(docId) => {
+                          setExitByNavigation(true);
                           onSelectDoc(space.id, docId);
                           onClose();
                         }}
@@ -485,8 +522,9 @@ export default function MobileSpacesSheet({
             })}
           </div>
           </div>
-        </div>
+        </motion.div>
       )}
+      </AnimatePresence>
     </>
   );
 }

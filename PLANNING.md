@@ -5667,3 +5667,36 @@ the surface is fixed and contrast can be relied on — and that is also the trea
 ClickUp's lists read as coherent. The `textColor` columns and every stored value stay untouched, and
 the edit dialogs still write them back unchanged, so reinstating this is a revert rather than a
 migration.
+
+### Same session — the Spaces drawer now slides away when you pick a List, and stops highlighting where you were
+
+**A misread, caught by the user before it cost anything.** He wrote that ClickUp's lists "kommer inn
+fra siden som DMs gjør", and the first reading was that the tree itself should become drill-down
+navigation — Space > Folder as pushed panels. Rebuilding for that had already started when he
+clarified: **"pilen er jo fortsatt gjeldene for å åpne spacen, og folderne osv. kun når vi skifter
+side til en list, eller doc"**. The chevrons keep expanding in place; only *leaving* for a List or
+Doc should slide.
+
+That reading is also the one that survives this file's own recorded history. An earlier version
+navigated away to a card screen and was reverted after "this looks like it should expand right here,
+but instead takes me somewhere else" — the drill-down rebuild would have re-litigated a settled
+decision. The restructure was reverted with `git checkout` before anything was committed.
+
+Looking again at his ClickUp screenshots settles the motion too: **their Spaces list is a drawer
+lying over the content**, not a page beside it. Picking a List slides the drawer off to the left and
+reveals what you chose. So the sheet now exits with `x: '-28%'` and a fade over 260ms —
+
+- **only when a List or Doc was chosen** (`exitByNavigation`, set in the same handler as `onClose` so
+  the last render before unmount carries it);
+- **instantly for anything else**, because closing via a tab tap has to keep matching Planner and
+  Chat, which have no entrance of their own. A sheet that fades while they snap reads as a blink,
+  which is the exact complaint that removed the old animation.
+
+This also avoids touching the board's own rendering, which took four attempts to stop stuttering —
+the drawer is already `fixed`, so transforming it cannot relocate anything else.
+
+**Separately, the Space highlight is gone from the mobile sheet.** It never showed where you *are*,
+only where you were last, so returning showed a selection you had not made. The desktop tree keeps
+its own, where the tree stays on screen and "you are here" is true. **The auto-expand is deliberately
+kept** — it answers "where am I" without claiming you chose it, and its own three-attempt history is
+recorded above.
