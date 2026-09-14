@@ -5612,3 +5612,26 @@ Two separate causes, and fixing only one would not have helped:
 `CHAT_PUSH_MS` and the easing moved to `lib/chatTransition.ts`, because two components have to agree
 on them exactly and a copy in each would drift apart silently — the symptom being precisely this
 kind of "almost synchronised" motion, which is harder to diagnose than something plainly broken.
+
+### Same session — "Push notifications not supported" on an iPhone was untrue and a dead end
+
+Reported from a colleague's iPhone. The message was doing real harm: **iOS does support web push**,
+since 16.4 — but only for a site added to the Home Screen, never for a Safari tab. So the panel told
+someone their phone could not do a thing their phone can do, and gave them nowhere to go.
+
+`PushUnsupportedNote` now answers per platform, using the `isIOS`/`isStandalone` the install hook
+already computes:
+
+- **iPhone, in Safari** — the actual instructions: Share → Add to Home Screen → open from that icon.
+- **iPhone, already on the Home Screen and still unsupported** — the iOS version predates web push.
+  Said plainly, because no instruction works around it and sending someone round the loop again is
+  worse than telling them no.
+- **Anything else** — the original sentence, which is true there.
+
+The general shape is worth keeping: **"not supported" is a verdict, and a verdict is only the right
+message when nothing the person can do would change it.** Everywhere else it should be the next
+step.
+
+This also matters for the iOS question raised earlier — whether to build a real iOS app. An iPhone
+user who adds Siqt to the Home Screen now gets notifications for free, which is most of what an app
+would have bought, at no cost and with no Mac.

@@ -148,6 +148,35 @@ function HapticDiagnostics({ strength }: { strength: HapticStrength }) {
   );
 }
 
+// Why push is unavailable, and what to do about it — which differs enough per platform that one
+// sentence cannot serve all of them.
+function PushUnsupportedNote() {
+  const { isIOS, isStandalone } = useInstallPrompt();
+
+  if (isIOS && !isStandalone) {
+    return (
+      <p className="text-xs text-neutral-500 leading-relaxed">
+        On iPhone, notifications work once Siqt is on your Home Screen. Tap Share in Safari, choose
+        &quot;Add to Home Screen&quot;, then open Siqt from that icon and come back here. Needs iOS
+        16.4 or newer.
+      </p>
+    );
+  }
+
+  if (isIOS) {
+    // Already on the Home Screen and still unsupported: the iOS version predates web push, and no
+    // instruction can work around that — so say so plainly instead of sending them in a circle.
+    return (
+      <p className="text-xs text-neutral-500 leading-relaxed">
+        This iPhone is on an iOS older than 16.4, the first version that can receive web
+        notifications.
+      </p>
+    );
+  }
+
+  return <p className="text-xs text-neutral-500">Push notifications aren't supported in this browser.</p>;
+}
+
 const HIDDEN_NAV_TABS_STORAGE_KEY = 'siqt.hiddenNavTabs';
 
 export type NavTabId = 'board' | 'calendar' | 'docs' | 'office' | 'chat';
@@ -697,7 +726,12 @@ export default function SettingsPanel({
               {pushStatus === 'loading' ? (
                 <p className="text-xs text-neutral-500">Checking…</p>
               ) : pushStatus === 'unsupported' ? (
-                <p className="text-xs text-neutral-500">Push notifications aren't supported in this browser.</p>
+                /* On an iPhone "not supported in this browser" is both untrue and a dead end. iOS
+                   does support web push — but only for a site added to the Home Screen, never for a
+                   Safari tab, so what someone needs here is the way forward, not a verdict.
+                   Reported from a colleague's iPhone; every iPhone user would have hit the same
+                   wall with nothing telling them what to do about it. */
+                <PushUnsupportedNote />
               ) : (
                 <button
                   onClick={async () => {
