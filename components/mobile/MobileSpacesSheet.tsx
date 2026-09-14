@@ -2,7 +2,6 @@
 
 import { useEffect, useRef, useState } from 'react';
 import { ChevronRight, ChevronDown, Globe, Search, X, Plus, Folder as FolderIconLucide, List as ListIconLucide, FileText } from 'lucide-react';
-import { AnimatePresence, motion } from 'framer-motion';
 import { useTaskStore, type HierarchySpace } from '../../store/useTaskStore';
 import { FOLDER_ICON_MAP } from '../FolderTree';
 import FloatingPopover from '../FloatingPopover';
@@ -194,24 +193,6 @@ export default function MobileSpacesSheet({
     setNewSpaceDraft('');
     setCreatingSpace(false);
   };
-  // Why this sheet is closing, which decides whether it animates on the way out.
-  //
-  // Closing because a tab was tapped stays instant, deliberately — see the comment above the render
-  // below: the other mobile tabs have no entrance of their own, and a sheet that fades while they
-  // snap reads as a blink rather than as polish.
-  //
-  // Closing because a List or Doc was *chosen* is a different act: you are moving to a page, and the
-  // sheet is a drawer lying over it. Sliding it away to the left reveals what you picked, which is
-  // the motion ClickUp's own mobile Spaces drawer makes and what was asked for here — "kun når vi
-  // skifter side til en list, eller doc".
-  //
-  // State rather than a ref, and set in the same handler as onClose: the last render before unmount
-  // then carries the flag, which is what AnimatePresence reads when it runs the exit.
-  const [exitByNavigation, setExitByNavigation] = useState(false);
-  useEffect(() => {
-    if (open) setExitByNavigation(false);
-  }, [open]);
-
   const [expandedSpaceIds, setExpandedSpaceIds] = useState<Set<string>>(new Set());
   const [expandedFolderIds, setExpandedFolderIds] = useState<Set<string>>(new Set());
 
@@ -234,6 +215,13 @@ export default function MobileSpacesSheet({
     const space = spaces.find((s) => s.id === activeSpaceId);
     if (!space) return;
     const activeList = space.lists.find((l) => activeListIds.has(l.id));
+    // Nothing is open, so there is nothing to reveal — and crucially, nothing to *hide* either.
+    // Without this, pressing Back from a List cleared activeListIds, which counted as a new target,
+    // which replaced the expanded set with an empty one: the Folder you had just been inside
+    // collapsed the instant you returned to the sheet. Reported exactly that way — "trykker
+    // tilbake, da er gaming foldern lukka, plutselig". This effect exists to *reveal* where you
+    // are; it has no business tidying up after you.
+    if (!activeList) return;
     const targetKey = `${space.id}:${activeList?.id ?? ''}`;
     if (lastAutoExpandTargetRef.current === targetKey) return;
     lastAutoExpandTargetRef.current = targetKey;
@@ -275,17 +263,8 @@ export default function MobileSpacesSheet({
   // tabs" rather than a fade that's merely shorter/simpler than the last one.
   return (
     <>
-      <AnimatePresence>
       {open && (
-        <motion.div
-          initial={false}
-          // Only the *exit* is animated. Opening stays instant so this still matches Planner and
-          // Chat, neither of which animates in — that parity is what the note above is about.
-          exit={
-            exitByNavigation
-              ? { x: '-28%', opacity: 0, transition: { duration: 0.26, ease: [0.4, 0, 0.2, 1] } }
-              : { opacity: 0, transition: { duration: 0 } }
-          }
+        <div
           // pt-[env(safe-area-inset-top)]: this sheet is `top-0` and covers the global mobile
           // header, so it has to repeat that header's own status-bar clearance — otherwise its
           // title lands under the clock in the Android app, where the WebView is edge-to-edge.
@@ -500,12 +479,10 @@ export default function MobileSpacesSheet({
                         expandedFolderIds={expandedFolderIds}
                         onToggleFolder={toggleFolder}
                         onSelectList={(listId) => {
-                          setExitByNavigation(true);
                           onSelectList(space.id, listId);
                           onClose();
                         }}
                         onSelectDoc={(docId) => {
-                          setExitByNavigation(true);
                           onSelectDoc(space.id, docId);
                           onClose();
                         }}
@@ -522,9 +499,8 @@ export default function MobileSpacesSheet({
             })}
           </div>
           </div>
-        </motion.div>
+        </div>
       )}
-      </AnimatePresence>
     </>
   );
 }

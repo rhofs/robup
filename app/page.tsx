@@ -3,7 +3,7 @@
 import { Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useRouter, usePathname, useSearchParams } from 'next/navigation';
 import dynamic from 'next/dynamic';
-import { AnimatePresence, motion } from 'framer-motion';
+import { AnimatePresence, motion, useAnimationControls } from 'framer-motion';
 import {
   DndContext,
   closestCenter,
@@ -843,6 +843,28 @@ function PageContent() {
   const TASK_PAGE_SIZE = 30;
   const [visibleTaskCount, setVisibleTaskCount] = useState(TASK_PAGE_SIZE);
   const [selectionMode, setSelectionMode] = useState(false);
+  // Choosing a List or Doc in the Spaces drawer pushes the board in from the right, the same way
+  // opening a DM pushes a conversation in. Before this the board simply appeared the moment the
+  // drawer unmounted, which reads as a cut — reported as "den cutter inn, skyves altså ikke inn fra
+  // høyre mot venstre, som DMs gjør".
+  //
+  // Driven by animation controls rather than by a `key` on the list: re-keying would remount every
+  // TaskRow, and this is the list measured at 370ms of blocked main thread when it re-renders
+  // needlessly. A counter is enough to say "a navigation just happened"; the rows never unmount.
+  //
+  // Safe to transform here specifically because TaskRow contains no `position: fixed` descendants —
+  // checked, not assumed. A transform creates a containing block, so wrapping anything that did
+  // would silently relocate it (the mobile nav's own comment further down is about exactly that
+  // trap). The app shell is `overflow-hidden`, so starting off-screen right cannot leave a stray
+  // horizontal scroll behind either.
+  const boardPushControls = useAnimationControls();
+  const [boardPushSeq, setBoardPushSeq] = useState(0);
+  useEffect(() => {
+    if (boardPushSeq === 0) return;
+    boardPushControls.set({ x: '100%' });
+    void boardPushControls.start({ x: 0, transition: CHAT_PUSH_TRANSITION });
+  }, [boardPushSeq, boardPushControls]);
+
   const [chatClosing, setChatClosing] = useState(false);
   const activeChatEntityRaw = useChatStore((s) => {
     const id = s.activeChannelId;
@@ -5326,7 +5348,10 @@ function PageContent() {
                 <div className="text-right">Action</div>
               </div>
 
-              <div className={isMobile ? 'flex flex-col gap-2' : 'divide-y divide-neutral-800/50'}>
+              <motion.div
+                animate={boardPushControls}
+                className={isMobile ? 'flex flex-col gap-2' : 'divide-y divide-neutral-800/50'}
+              >
                 {/* The check sits OUTSIDE AnimatePresence, not inside it. Inside, flipping to
                     null asked AnimatePresence to play an exit animation for every row at once —
                     each TaskRow exits with opacity, scale, a y-offset and a blur filter, and with
@@ -5416,7 +5441,7 @@ function PageContent() {
                     </button>
                   )
                 )}
-              </div>
+              </motion.div>
               </div>
             </div>
             </>
@@ -7230,6 +7255,7 @@ function PageContent() {
           setActiveView('board');
         }}
         onSelectList={(spaceId, listId) => {
+          setBoardPushSeq((n) => n + 1);
           setModalTaskStack([]);
           setNavigation(spaceId, [listId]);
           setActiveView('board');

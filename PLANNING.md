@@ -5700,3 +5700,40 @@ only where you were last, so returning showed a selection you had not made. The 
 its own, where the tree stays on screen and "you are here" is true. **The auto-expand is deliberately
 kept** — it answers "where am I" without claiming you chose it, and its own three-attempt history is
 recorded above.
+
+### Same session — the drawer exit never ran, and the board now pushes in from the right
+
+**My own fix from an hour earlier did nothing, and the reason is worth writing down.** The sheet's
+exit variant was chosen from `exitByNavigation`, state set in the same handler as `onClose`. But
+**AnimatePresence reads a leaving element's props from its last render — which is the render *before*
+that state update landed.** The flag was always false at the moment it was read. The animation was
+correct and simply never played. (`AnimatePresence`'s `custom` prop exists precisely for this case;
+it was not needed in the end.)
+
+More importantly the approach was wrong anyway. "Den cutter inn, skyves altså ikke inn fra høyre mot
+venstre, som DMs gjør" — the *incoming* page should move, not the outgoing drawer. A drawer leaving
+leftwards is the shape of going **back**; arriving somewhere is the new surface coming from the
+right. Reverted, and replaced with the thing actually asked for.
+
+**The board's task list now pushes in from the right** on the same curve and duration as the chat
+push. Three constraints shaped how:
+
+- **Animation controls, not a `key`.** Re-keying the list would remount every `TaskRow`, and this is
+  the exact list measured at 370ms of blocked main thread when it re-renders for no reason. A
+  counter says "a navigation happened"; the rows never unmount.
+- **Transforming this container is safe, checked rather than assumed** — `TaskRow.tsx` contains no
+  `position: fixed` descendants. A transform creates a containing block, so wrapping anything that
+  did would silently relocate it; the mobile nav carries a comment about that same trap.
+- **No stray horizontal scroll**, because the app shell is `overflow-hidden`, so starting at
+  `x: 100%` stays clipped.
+
+### Same session — going Back collapsed the Folder you were just inside
+
+"Trykker tilbake, da er gaming foldern lukka, plutselig." The auto-expand effect was doing it.
+Pressing Back clears `activeListIds`, which counts as a *new* target, which replaced the expanded
+set with the ancestors of nothing — an empty set. So the effect whose whole purpose is to reveal
+where you are was quietly tidying up after you the moment you left.
+
+Now it returns early when there is no active List. **It exists to reveal, never to hide** — worth
+stating plainly in the effect, because its three previous rounds of fixes were all about *when* to
+expand and none of them noticed it could also collapse.
