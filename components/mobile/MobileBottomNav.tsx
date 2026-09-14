@@ -407,7 +407,7 @@ export default function MobileBottomNav({
               blended into whatever was scrolled under it instead of reading as its own chrome. */}
           <div
             aria-hidden
-            className={`absolute inset-x-0 bottom-0 pointer-events-none ${blurDisabled ? 'bg-neutral-950' : 'bg-neutral-950/95'}`}
+            className={`absolute inset-x-0 bottom-0 pointer-events-none elevated ${blurDisabled ? 'bg-raised' : 'bg-raised/95'}`}
             style={{
               height: islandHeightPx,
               // Opaque instead of translucent where the blur is dropped: a see-through panel with

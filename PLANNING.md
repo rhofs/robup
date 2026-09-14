@@ -5441,3 +5441,55 @@ Two details that matter if this is ever touched:
   the inner one so they count toward the measured height.
 - **Instant, never smooth**, inside the observer: it fires repeatedly while content settles, and
   animating each step reads as the list sliding around on its own.
+
+## Today's session (2026-09-14) — light mode read as "kommunalt"; the cause was layer order, not colour
+
+Asked for colour suggestions after the app's light mode was described as grey and municipal. A
+proposal page was made (three palettes on a mock of the real Spaces screen, plus non-colour
+recommendations) and published as an artifact:
+https://claude.ai/code/artifact/77e6c596-2b79-4117-a63e-32fcf58948f5
+
+**Then the user sent ClickUp screenshots, and they disproved the first diagnosis.** The page had
+claimed cool greys were the cause. **ClickUp's greys are just as cool** and nobody calls it
+municipal. The page was corrected rather than quietly edited — the wrong point is left struck
+through, because a corrected claim is more useful to the next reader than a vanished one.
+
+**The real cause: the light theme inverted elevation.**
+
+```
+dark   : canvas darkest (-950), panels a step lighter (-900)   → panels read as raised
+light  : canvas #ffffff (-950), panels #f7f7f8 (-900)          → panels read as RECESSED
+```
+
+The light values were produced by mapping the dark relationship literally rather than by its
+meaning. Every card, sheet and list was therefore *dimmer* than the page behind it, so nothing read
+as an object sitting on a surface. ClickUp does the opposite: grey ground, white card, soft shadow.
+
+**The fix needed no component restructuring**, because the app shell, the mobile header and the
+sheet already use -950 while the lists and panels inside them already use -900 — they were pointing
+at the wrong two values:
+
+- `--color-neutral-950: #f1f2f5` (ground, headers, chrome)
+- `--color-neutral-900: #ffffff` (panels, cards, sheets)
+
+**Two things did not fit that swap, and both are worth knowing:**
+
+1. **`--color-raised`, a new token.** Elevation runs in opposite directions per theme, and the mobile
+   nav island was written as `bg-neutral-950` *because* it had to be darker than the -900 content
+   behind it. Under the swap that becomes a grey slab floating over white — the elevated thing
+   reading as the recessed one. Following the neutral scale is right for surfaces that are part of
+   the page and wrong for surfaces that sit on top of it; those two meanings were sharing one
+   variable. Same precedent as `--color-scrim`, split out earlier for exactly this reason.
+2. **`.elevated`, a shadow applied in light mode only.** A dark interface separates layers by
+   lightness and a shadow on near-black is invisible work; a light interface has no such room, and
+   white on off-white is the flattest pairing there is. The asymmetry is deliberate, not an
+   oversight.
+
+**Deliberately not done:** the user's existing Space colours (dusty red, mustard, saturated blue)
+clash because they differ in saturation, not because they are filled tiles — ClickUp's are filled
+and work fine. Those values are **his data**, chosen per Space, so changing them is his call rather
+than a refactor. The suggested palette in `ColorSwatchPicker` is untouched too, pending that call.
+
+**Unverified on a device.** Dark mode should be untouched — every value changed lives inside
+`html[data-theme='light']`, and `--color-raised` matches the old `-950` exactly in dark — but that
+is reasoning, not a screenshot.

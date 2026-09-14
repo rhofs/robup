@@ -63,6 +63,29 @@
      the other `bg-neutral-950/xx` uses are inset surfaces sitting on a panel, where following the
      neutral scale into light mode is exactly right. */
   --color-scrim: #0a0a0a;
+
+  /* An ELEVATED surface — one that floats above the page rather than being part of it.
+     Currently the mobile nav island; anything else that hovers over content belongs here too.
+
+     It needs its own token because elevation runs in opposite directions in the two themes. In
+     dark, raising something means making it *darker* than the content behind it, so the island was
+     written as `bg-neutral-950` against -900 content. In light that same rule produces a grey slab
+     floating over white — the elevated thing reading as the recessed one. Following the neutral
+     scale is right for surfaces that are part of the page, and wrong for surfaces that sit on top
+     of it; the two meanings were sharing one variable. */
+  --color-raised: #0a0a0a;
+}
+
+/* Elevation by shadow, in light mode only, and that asymmetry is deliberate rather than an
+   oversight. A dark interface separates layers by lightness — a raised surface is simply a
+   different grey, and a shadow on near-black is invisible work. A light interface has no such
+   room: white on off-white is the flattest possible pairing, which is exactly what made this app's
+   light mode read as one undifferentiated sheet. The shadow is what does the separating there.
+
+   Applied by class rather than by element so the decision stays visible at the call site. */
+.elevated { box-shadow: none; }
+html[data-theme='light'] .elevated {
+  box-shadow: 0 1px 2px rgb(24 24 27 / 0.05), 0 10px 26px -16px rgb(24 24 27 / 0.30);
 }
 
 /* ============================================================================
@@ -95,8 +118,21 @@
    this block wins outright regardless of where the framework's output lands. */
 html[data-theme='light'] {
   /* Surfaces, back to front. */
-  --color-neutral-950: #ffffff; /* page canvas */
-  --color-neutral-900: #f7f7f8; /* panels, cards, sheets */
+  /* THE GROUND IS GREY AND THE PANELS ARE WHITE — this pair used to be the other way round, and
+     reversing it is the single change that most alters how the app reads.
+     
+     The dark theme's own relationship is "canvas darkest, panels a step lighter", and the light
+     theme was written by mapping that literally: canvas to pure white, panels to a step *darker*.
+     The result is that every card, sheet and list is dimmer than the page behind it — recessed
+     rather than raised — so nothing reads as an object sitting on a surface. Reported as the app
+     looking flat and "kommunal"; the comparison that settled it was ClickUp, whose greys are just
+     as cool as these but whose cards are white on a grey ground.
+     
+     Nothing else had to move for this: the app shell, the mobile sheet and the header all already
+     use -950, and the lists and panels inside them already use -900. They were simply pointing at
+     the wrong two values. */
+  --color-neutral-950: #f1f2f5; /* page ground, headers, chrome */
+  --color-neutral-900: #ffffff; /* panels, cards, sheets — the elevated surfaces */
   --color-neutral-800: #e4e4e7; /* borders, dividers */
   --color-neutral-700: #d4d4d8; /* stronger borders, inactive chips */
 
@@ -112,6 +148,8 @@ html[data-theme='light'] {
   --background: #ffffff;
   --foreground: #18181b;
   --color-app-strong: #18181b;
+  /* White, not the grey ground — see the token's own note above. */
+  --color-raised: #ffffff;
 
   --scrollbar-thumb: #c4c4c8;
   --scrollbar-thumb-hover: #a1a1aa;
