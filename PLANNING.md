@@ -6965,3 +6965,38 @@ shell no longer moving. The pill arriving last may not be — it has its own `An
 state change that brings it back is deliberately deferred to the end of the push, so it can only
 start animating after the push finishes. Not changed, because the deferral is load-bearing (see the
 previous round) and the alternative needs thought rather than another guess.
+
+### Same session — the fix that was already written down, and I went the other way
+
+Five rounds on one animation, and the answer was in this file the whole time. The user found it by
+asking "har vi vært gjennom noe lignende tidligere?" — which is the question this file exists to
+answer, and which I had not asked myself once.
+
+**"Same session — the title row joins the push"**, two rounds before the contexts layout existed:
+
+> "Titlene skyves ut fint til venstre, men den som kommer fra høyre bare fader inn." The global
+> title row sits **outside `<main>`**, so the push moved everything except it... It is now a
+> `motion.header` driven by **the same `boardPushControls`** as `<main>`.
+
+Yesterday I took the title row back *out* of the push for context navigation, reasoning that its
+content is identical on both sides so moving it is "an animation of nothing". That reasoning is
+refuted by the entry above, which was written after the user asked for exactly the opposite. A band
+that stands still beside a surface that slides reads as a cut — which is precisely what "klipper
+øverste del" was saying, and my change made it more static rather than less.
+
+Reverted: context pushes drive `boardPushControls` like every other push, `contentPushControls` is
+gone, and so is the measured header offset that only existed to support it.
+
+**And the consequence I had been avoiding, which is why I went the wrong way in the first place.**
+If the shell moves, the layer behind it has to cover the shell — otherwise the top band has nothing
+behind it while it travels, which is the same cut by another route. `MobileSpacesSheet` is `top-0`
+and repeats the global header's own safe-area clearance and draws its own title and search rows, and
+that is exactly why the classic layout never had this problem. The context layer is now `top-0` too
+and draws static, non-interactive copies of both bands. They exist so the top of the outgoing screen
+has something to *be*, not so it can be used — the whole layer is `pointer-events-none`.
+
+**The lesson, and it is about process rather than about framer-motion:** five rounds were spent
+re-deriving a conclusion this file already held, in a section written days earlier about the same
+band of pixels. Before changing how a push behaves, grep PLANNING for the surface being changed.
+"Is this a decision we already made and paid for?" is cheaper than any amount of reasoning from the
+code, and the code cannot tell you that a user asked for the opposite last week.

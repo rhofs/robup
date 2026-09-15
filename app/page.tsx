@@ -864,18 +864,6 @@ function PageContent() {
   // trap). The app shell is `overflow-hidden`, so starting off-screen right cannot leave a stray
   // horizontal scroll behind either.
   const boardPushControls = useAnimationControls();
-  // A second target, driven by the same effect and the same timing, used for context pushes only.
-  //
-  // The shell version moves <main> AND the title bar, because in the classic layout the whole page
-  // changes: a different Space, a different title, a drawer underneath. A context push changes none
-  // of that — the header still says Home, still carries the same avatar and the same +, and the
-  // search row below it is identical on both sides. Sliding those out and a copy of them back in is
-  // an animation of nothing, and what it actually looks like is a cut: "i det animeringen skjer,
-  // klipper øverste del (søk, profil, pluss kontakt og Home tittel)".
-  //
-  // So a context push moves only the content box. That also puts the moving element in exactly the
-  // same place as the layer behind it, which is what the measured top offset was working around.
-  const contentPushControls = useAnimationControls();
   const [boardPushSeq, setBoardPushSeq] = useState(0);
   // True for the length of the push. Two things depend on it, and both are why the sheet cannot
   // simply close the moment a List is tapped:
@@ -899,8 +887,7 @@ function PageContent() {
   // time it renders, the state that would have told us (showingHomeContext) is already false — the
   // navigation that started the push is what made it false.
   const pushContextRef = useRef<'home' | 'office'>('home');
-  const viewHeaderRef = useRef<HTMLElement | null>(null);
-  const [contextPushOffset, setContextPushOffset] = useState(0);
+
 
   // `boardPushing` is set HERE, in the same batch as the tap that closes the drawer — not in the
   // effect below. That ordering is the whole difference between the drawer sliding and the drawer
@@ -913,13 +900,6 @@ function PageContent() {
   // klipper bare rett ut, så den skyves over et tomt område."
   const startContextPush = (dir: 'forward' | 'back', which: 'home' | 'office') => {
     pushContextRef.current = which;
-    // The layer covers <main>'s box, but the real screen sits below <main>'s own per-view header
-    // (the search pill row). Without this offset the layer's content starts one header higher than
-    // the content it is standing in for, and the two are visibly out of register for the whole
-    // animation — "bakgrunnen ... hakker liksom litt ned, den er feilplassert i forhold til vinduet
-    // foran". Measured rather than hardcoded: that row sizes off its own padding and has already
-    // been adjusted three times.
-    setContextPushOffset(viewHeaderRef.current?.offsetHeight ?? 0);
     startBoardPush(dir, 'context');
   };
 
@@ -933,11 +913,10 @@ function PageContent() {
   useEffect(() => {
     if (boardPushSeq === 0) return;
     const back = boardPushDirRef.current === 'back';
-    const controls = boardPushSheetRef.current === 'context' ? contentPushControls : boardPushControls;
 
     // Forward: the board arrives from the right. Back: it leaves to the right, uncovering the
     // drawer settling in behind it.
-    controls.set({ x: back ? 0 : '100%' });
+    boardPushControls.set({ x: back ? 0 : '100%' });
 
     // Started on the next frame rather than immediately. Going back mounts the Spaces tree, which
     // is the most expensive render on mobile in this app — the one measured at 370ms of blocked
@@ -956,7 +935,7 @@ function PageContent() {
     let inner = 0;
     const frame = requestAnimationFrame(() => {
       inner = requestAnimationFrame(() => {
-      void controls
+      void boardPushControls
         .start({ x: back ? '100%' : 0, transition: CHAT_PUSH_TRANSITION })
         // Ended by the animation's own completion, NOT by a timer running alongside it. A parallel
         // `setTimeout(CHAT_PUSH_MS)` finished a frame too early — because of the rAF delay above —
@@ -983,7 +962,7 @@ function PageContent() {
       if (inner) cancelAnimationFrame(inner);
       window.clearTimeout(safety);
     };
-  }, [boardPushSeq, boardPushControls, contentPushControls]);
+  }, [boardPushSeq, boardPushControls]);
 
   // THE BOARD MUST NEVER BE LEFT OFF-SCREEN, and this is the guarantee of it.
   //
@@ -998,11 +977,8 @@ function PageContent() {
   // somewhere off the edge. The drawer still covers it at that instant, so the correction is never
   // seen. Idempotent on the forward direction, which already finishes at 0.
   useEffect(() => {
-    if (!boardPushing) {
-      boardPushControls.set({ x: 0 });
-      contentPushControls.set({ x: 0 });
-    }
-  }, [boardPushing, boardPushControls, contentPushControls]);
+    if (!boardPushing) boardPushControls.set({ x: 0 });
+  }, [boardPushing, boardPushControls]);
 
   // Going back to the Spaces drawer, as the reverse of picking a List.
   //
@@ -5166,10 +5142,7 @@ function PageContent() {
         {/* Mobile: no border framing this row at all, and the same bg-neutral-950 as the title bar
             above — reads as one continuous header block instead of two visually distinct bands.
             Desktop keeps its original border+lighter-bg treatment unchanged. */}
-        <header
-          ref={viewHeaderRef}
-          className="border-b-0 md:border-b border-neutral-800/80 bg-neutral-950 md:bg-neutral-900/40 shrink-0"
-        >
+        <header className="border-b-0 md:border-b border-neutral-800/80 bg-neutral-950 md:bg-neutral-900/40 shrink-0">
           {/* md:h-11 + md:py-0 restore the original fixed-height compact desktop row exactly —
               mobile instead sizes naturally off its own padding (pt-2 pb-8 — bumped twice now,
               pb-3 -> pb-5 -> pb-8, per repeated direct feedback that it still felt tight) so the
@@ -5432,12 +5405,7 @@ function PageContent() {
           </div>
         </header>
 
-        {/* motion.div, and animated by contentPushControls rather than by the shell's — see that
-            control's own comment. In a classic push this element sits inside <main> and travels with
-            it, exactly as before; in a context push <main> and the title bar stay put and this box
-            is the only thing that moves. */}
-        <motion.div
-          animate={contentPushControls}
+        <div
           className={
             // Planner's month grid sizes its own rows to exactly fill this box's measured height
             // (CalendarView.tsx's `containerHeight`, via `clientHeight`). Dropping the old `pb-28`
@@ -6318,7 +6286,7 @@ function PageContent() {
             </>
             )}
           </div>
-        </motion.div>
+        </div>
       </motion.main>
       </div>
 
@@ -8151,10 +8119,73 @@ function PageContent() {
                     opacity: { duration: (CHAT_PUSH_MS * 0.35) / 1000, ease: 'easeOut' },
                   }
             }
-            style={{ willChange: 'transform', top: `calc(3.5rem + env(safe-area-inset-top) + ${contextPushOffset}px)` }}
-            className="fixed inset-x-0 bottom-0 z-30 md:hidden bg-neutral-950 flex flex-col overflow-hidden p-6 pb-28 pointer-events-none"
+            style={{ willChange: 'transform' }}
+            // top-0, covering the global title bar, and NOT starting below it.
+            //
+            // This is the correction that took five rounds. The title row was deliberately made
+            // part of the push two rounds before this layout existed — "titlene skyves ut fint til
+            // venstre, men den som kommer fra høyre bare fader inn" — and a layer that begins below
+            // it leaves that band with nothing behind it while it travels. The band then reads
+            // exactly as it did before that fix: as a cut. MobileSpacesSheet is `top-0` for this
+            // same reason and repeats the header's own safe-area clearance, which is why the old
+            // layout never had this problem.
+            //
+            // The consequence is that this layer has to draw the bands it now covers. They are
+            // static copies, never interactive (the whole layer is pointer-events-none) — they
+            // exist so the top of the outgoing screen has something to be, not so it can be used.
+            className="fixed inset-0 z-30 md:hidden bg-neutral-950 flex flex-col pt-[env(safe-area-inset-top)] pointer-events-none"
           >
-            {pushContextRef.current === 'home' ? homeContextEl : officeContextEl}
+            {/* The title row, matching the real header's h-14 and padding exactly. */}
+            <div className="h-14 shrink-0 flex items-center px-3 gap-4">
+              {pushContextRef.current === 'office' ? (
+                <span className="flex items-center gap-1.5 min-w-0 shrink">
+                  <span
+                    className="w-6 h-6 rounded-md shrink-0 flex items-center justify-center text-[11px] font-bold text-white"
+                    style={{ backgroundColor: '#2563eb' }}
+                  >
+                    {(currentWorkspace?.name ?? '?').slice(0, 1).toUpperCase()}
+                  </span>
+                  <span className="text-lg font-semibold text-app-strong truncate">
+                    {currentWorkspace?.name ?? 'No workspace'}
+                  </span>
+                  <ChevronDown className="w-4 h-4 text-neutral-500 shrink-0" />
+                </span>
+              ) : (
+                <span className="text-lg font-semibold text-app-strong shrink-0">Home</span>
+              )}
+              <span className="flex items-center gap-1.5 ml-auto shrink-0">
+                <span className="w-8 h-8 rounded-full flex items-center justify-center text-neutral-400">
+                  <UserPlus className="w-[18px] h-[18px]" />
+                </span>
+                {(() => {
+                  const me = users.find((u) => u.id === currentUserId);
+                  return me?.avatarUrl ? (
+                    // eslint-disable-next-line @next/next/no-img-element
+                    <img src={me.avatarUrl} alt="" className="w-8 h-8 rounded-full object-cover" />
+                  ) : (
+                    <span
+                      className="w-8 h-8 rounded-full flex items-center justify-center text-[11px] font-bold text-white"
+                      style={{ backgroundColor: me?.color ?? '#6366f1' }}
+                    >
+                      {me?.initials ?? '?'}
+                    </span>
+                  );
+                })()}
+              </span>
+            </div>
+            {/* The search row below it, same height and same pill geometry. */}
+            <div className="relative pt-2 pb-9 px-3 flex items-center gap-2 justify-between shrink-0">
+              <div className="w-7 h-7 shrink-0" />
+              <div className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 w-[min(calc(100%-88px),420px)]">
+                <div className="w-full flex items-center gap-1.5 bg-neutral-900/60 border border-neutral-800/80 rounded-full px-3 py-3 text-neutral-500">
+                  <Search className="w-3.5 h-3.5 shrink-0" />
+                  <span className="text-[11px] truncate">{searchPillLabel('board')}</span>
+                </div>
+              </div>
+            </div>
+            <div className="flex-1 overflow-hidden p-6 pb-28">
+              {pushContextRef.current === 'home' ? homeContextEl : officeContextEl}
+            </div>
           </motion.div>
         )}
       </AnimatePresence>
