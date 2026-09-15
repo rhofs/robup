@@ -873,6 +873,10 @@ function PageContent() {
   // directions read as two unrelated effects — asked for directly: "husk at den samme effekten skal
   // skje reversert når vi går tilbake".
   const boardPushDirRef = useRef<'forward' | 'back'>('forward');
+  // Which drawer this push belongs to. Both sheets are the same component with different data, and
+  // both need to stay mounted while they slide — but only the one the gesture actually came from.
+  // Keying both off `boardPushing` alone would open the other one on top of the app.
+  const boardPushSheetRef = useRef<'spaces' | 'personal'>('spaces');
 
   // `boardPushing` is set HERE, in the same batch as the tap that closes the drawer — not in the
   // effect below. That ordering is the whole difference between the drawer sliding and the drawer
@@ -883,8 +887,9 @@ function PageContent() {
   // one render in between where both were false: the drawer unmounted, then remounted an instant
   // later already sitting at its animation target, invisible. Reported exactly — "hovedsida
   // klipper bare rett ut, så den skyves over et tomt område."
-  const startBoardPush = (dir: 'forward' | 'back') => {
+  const startBoardPush = (dir: 'forward' | 'back', sheet: 'spaces' | 'personal' = 'spaces') => {
     boardPushDirRef.current = dir;
+    boardPushSheetRef.current = sheet;
     setBoardPushing(true);
     setBoardPushSeq((n) => n + 1);
   };
@@ -967,7 +972,7 @@ function PageContent() {
   // that way: "den list viewen klipper til et annet bilde, ser nesten ut som en kopi av spaces
   // viewen."
   const pushBackToSpaces = (openSheet: () => void, afterPush?: () => void) => {
-    startBoardPush('back');
+    startBoardPush('back', currentWorkspace?.isPersonal ? 'personal' : 'spaces');
     openSheet();
     if (afterPush) window.setTimeout(afterPush, CHAT_PUSH_MS);
   };
@@ -7490,9 +7495,9 @@ function PageContent() {
         // `|| boardPushing` keeps the drawer on screen while it slides away. Closing it on the tap
         // is what made this a cut: the outgoing view vanished in one frame and the incoming one
         // then animated in on its own, which reads as two events rather than one movement.
-        open={mobileSpacesOpen || boardPushing}
-        pushingOut={boardPushing && boardPushDirRef.current === 'forward'}
-        pushingIn={boardPushing && boardPushDirRef.current === 'back'}
+        open={mobileSpacesOpen || (boardPushing && boardPushSheetRef.current === 'spaces')}
+        pushingOut={boardPushing && boardPushSheetRef.current === 'spaces' && boardPushDirRef.current === 'forward'}
+        pushingIn={boardPushing && boardPushSheetRef.current === 'spaces' && boardPushDirRef.current === 'back'}
         onClose={() => setMobileSpacesOpen(false)}
         title="Spaces"
         onOpenSearch={() => setCommandPaletteOpen(true)}
@@ -7550,7 +7555,12 @@ function PageContent() {
           the real sheet's above except they don't need any workspace-switching logic (My Tasks
           already switched activeWorkspaceId to the personal one before opening this). */}
       <MobileSpacesSheet
-        open={mobilePersonalSpacesOpen}
+        // The same three props the Spaces drawer above has had since the push was built. My Tasks
+        // is the identical component with the personal workspace's data, and it was left out —
+        // so picking a List there slid the board in over a drawer that had already vanished.
+        open={mobilePersonalSpacesOpen || (boardPushing && boardPushSheetRef.current === 'personal')}
+        pushingOut={boardPushing && boardPushSheetRef.current === 'personal' && boardPushDirRef.current === 'forward'}
+        pushingIn={boardPushing && boardPushSheetRef.current === 'personal' && boardPushDirRef.current === 'back'}
         onClose={() => setMobilePersonalSpacesOpen(false)}
         title="Personal Spaces"
         onOpenSearch={() => setCommandPaletteOpen(true)}
@@ -7560,13 +7570,13 @@ function PageContent() {
         activeSpaceId={activeSpaceId}
         activeListIds={activeListIds}
         onSelectSpace={(spaceId) => {
-          startBoardPush('forward');
+          startBoardPush('forward', 'personal');
           setModalTaskStack([]);
           setNavigation(spaceId, []);
           setActiveView('board');
         }}
         onSelectList={(spaceId, listId) => {
-          startBoardPush('forward');
+          startBoardPush('forward', 'personal');
           setModalTaskStack([]);
           setNavigation(spaceId, [listId]);
           setActiveView('board');
@@ -7590,7 +7600,7 @@ function PageContent() {
           if (list) setListMenu({ x, y, list, spaceId });
         }}
         onSelectDoc={(spaceId, docId) => {
-          startBoardPush('forward');
+          startBoardPush('forward', 'personal');
           setModalTaskStack([]);
           setNavigation(spaceId, []);
           setDocsNavigation(null, docId);

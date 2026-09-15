@@ -6414,3 +6414,23 @@ both cheap to remove, and both now removed rather than guessed between:
 The second is the same trick the Spaces push uses, for the same reason: **do not begin a movement in
 the frame where the expensive work lands.** That is now three separate places in this app — the
 drawer, the board, and here.
+
+### Same session — My Tasks was left out of the push, again
+
+"My Tasks animasjonen funker ish, men bakgrunnen klippes ut med en gang." The board slid in
+correctly; the drawer behind it vanished on the tap.
+
+**The same omission as the Docs one, in a second place.** `MobileSpacesSheet` is rendered twice — once
+for Spaces, once for My Tasks with the personal workspace's data — and only the first had `open={... ||
+boardPushing}`, `pushingOut` and `pushingIn`. So the personal drawer closed instantly and the board
+pushed in over nothing.
+
+**It could not simply be given the same flags.** Both sheets keying off `boardPushing` alone would
+have opened the *other* drawer on top of the app during every push. The push now records which
+drawer it belongs to (`boardPushSheetRef`), set at `startBoardPush` and derived from
+`currentWorkspace?.isPersonal` when going back.
+
+Second time a feature shipped wired to one of several equivalent call sites. The earlier note said an
+asymmetric transition points at a missed handler rather than a wrong animation; this is the same
+lesson from the other direction — **when a component is rendered more than once, wiring one instance
+is half a feature**, and the half that works is the one that hides the other.
