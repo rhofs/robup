@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useRef } from 'react';
+import { useRef } from 'react';
 import { ChevronRight, ChevronDown, Folder as FolderIcon, List as ListIcon } from 'lucide-react';
 import type { HierarchySpace } from '../../store/useTaskStore';
 import { FOLDER_ICON_MAP } from '../FolderTree';
@@ -28,25 +28,34 @@ const LONG_PRESS_MOVE_TOLERANCE = 10;
 
 type Props = {
   spaces: HierarchySpace[];
+  // Which rows are open, owned by the page rather than by this component.
+  //
+  // It lived here first, and collapsed every time you tapped anything: navigating unmounts this
+  // list, and the push layer renders a second instance of it that started life with its own empty
+  // Set — so the screen you were leaving visibly shut itself the instant the animation began, and
+  // coming back put you at the top again. Reported as "spaces og folders lukker seg i det jeg
+  // trykker". Two instances of one screen have to read one state.
+  openSpaceIds: Set<string>;
+  openFolderIds: Set<string>;
+  onToggleSpace: (spaceId: string) => void;
+  onToggleFolder: (folderId: string) => void;
   emptyText: string;
   onSelectSpace: (spaceId: string) => void;
   onSelectList: (spaceId: string, listId: string) => void;
   onSpaceMenu: (x: number, y: number, space: HierarchySpace) => void;
 };
 
-export default function ContextSpaceList({ spaces, emptyText, onSelectSpace, onSelectList, onSpaceMenu }: Props) {
-  const [openSpaceIds, setOpenSpaceIds] = useState<Set<string>>(new Set());
-  const [openFolderIds, setOpenFolderIds] = useState<Set<string>>(new Set());
-
-  const toggle = (setter: React.Dispatch<React.SetStateAction<Set<string>>>, id: string) => {
-    hapticTap();
-    setter((prev) => {
-      const next = new Set(prev);
-      if (next.has(id)) next.delete(id);
-      else next.add(id);
-      return next;
-    });
-  };
+export default function ContextSpaceList({
+  spaces,
+  emptyText,
+  openSpaceIds,
+  openFolderIds,
+  onToggleSpace,
+  onToggleFolder,
+  onSelectSpace,
+  onSelectList,
+  onSpaceMenu,
+}: Props) {
 
   // One timer for the whole list: only one finger is ever held at a time, and keeping it here
   // rather than per row means a row that unmounts mid-hold cannot leave a timer running.
@@ -111,7 +120,8 @@ export default function ContextSpaceList({ spaces, emptyText, onSelectSpace, onS
                     firedRef.current = false;
                     return;
                   }
-                  toggle(setOpenSpaceIds, space.id);
+                  hapticTap();
+                  onToggleSpace(space.id);
                 }}
                 {...holdHandlers(space)}
                 className="min-w-0 flex-1 flex items-center gap-3 px-2 py-2.5 rounded-lg text-left cursor-pointer"
@@ -156,7 +166,10 @@ export default function ContextSpaceList({ spaces, emptyText, onSelectSpace, onS
                   return (
                     <div key={folder.id}>
                       <button
-                        onClick={() => toggle(setOpenFolderIds, folder.id)}
+                        onClick={() => {
+                          hapticTap();
+                          onToggleFolder(folder.id);
+                        }}
                         className="w-full flex items-center gap-2 px-2 py-2 rounded-lg text-left cursor-pointer hover:bg-neutral-800/60"
                       >
                         {folderOpen ? (

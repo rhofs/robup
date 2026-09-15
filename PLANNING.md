@@ -6938,3 +6938,30 @@ has always deferred exactly this with its own `afterPush`; the contexts path sim
 **Copying a working animation is not the same as understanding it.** Both faults came from lifting
 `MobileSpacesSheet`'s values while leaving behind the assumptions they depend on — that the sheet is
 already mounted, and that the state change is deferred. The values were right; the context was not.
+
+### Same session — fifth contexts round: the top bar was animating for no reason
+
+**The shell should not move during a context push.** `startBoardPush` drives `<main>` *and* the
+title bar, because in the classic layout the whole page changes — different Space, different title,
+a drawer underneath. A context push changes none of that: the header still says Home, still carries
+the same avatar and the same `+`, and the search row below it is identical on both sides. Sliding
+those away and a copy of them back in is an animation of nothing, and what it looks like is a cut —
+"i det animeringen skjer, klipper øverste del (søk, profil, pluss kontakt og Home tittel)".
+
+A context push now drives a second control, `contentPushControls`, bound to the content box alone.
+The classic path is untouched and still moves the shell. A useful side effect: the moving element is
+now exactly the box the push layer stands behind, which is what the measured top offset from the
+previous round was compensating for.
+
+**The expansion state collapsed on every tap**, because it lived in `ContextSpaceList` and the push
+layer renders a *second instance* of the same screen — one that starts life with its own empty Set.
+So the screen being left visibly shut itself the moment the animation began. Lifted to
+`openContextSpaceIds`/`openContextFolderIds` in `page.tsx`. Two instances of one screen have to read
+one state, and this is the second time that exact lesson has cost a round (the tabs were the first).
+
+**Partly addressed, and worth flagging as such:** on chat back the user also reported the search bar
+animating in after everything else. The "rest of the top bar cut in" half of that is gone with the
+shell no longer moving. The pill arriving last may not be — it has its own `AnimatePresence`, and the
+state change that brings it back is deliberately deferred to the end of the push, so it can only
+start animating after the push finishes. Not changed, because the deferral is load-bearing (see the
+previous round) and the alternative needs thought rather than another guess.

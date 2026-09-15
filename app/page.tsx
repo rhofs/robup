@@ -864,6 +864,18 @@ function PageContent() {
   // trap). The app shell is `overflow-hidden`, so starting off-screen right cannot leave a stray
   // horizontal scroll behind either.
   const boardPushControls = useAnimationControls();
+  // A second target, driven by the same effect and the same timing, used for context pushes only.
+  //
+  // The shell version moves <main> AND the title bar, because in the classic layout the whole page
+  // changes: a different Space, a different title, a drawer underneath. A context push changes none
+  // of that — the header still says Home, still carries the same avatar and the same +, and the
+  // search row below it is identical on both sides. Sliding those out and a copy of them back in is
+  // an animation of nothing, and what it actually looks like is a cut: "i det animeringen skjer,
+  // klipper øverste del (søk, profil, pluss kontakt og Home tittel)".
+  //
+  // So a context push moves only the content box. That also puts the moving element in exactly the
+  // same place as the layer behind it, which is what the measured top offset was working around.
+  const contentPushControls = useAnimationControls();
   const [boardPushSeq, setBoardPushSeq] = useState(0);
   // True for the length of the push. Two things depend on it, and both are why the sheet cannot
   // simply close the moment a List is tapped:
@@ -921,10 +933,11 @@ function PageContent() {
   useEffect(() => {
     if (boardPushSeq === 0) return;
     const back = boardPushDirRef.current === 'back';
+    const controls = boardPushSheetRef.current === 'context' ? contentPushControls : boardPushControls;
 
     // Forward: the board arrives from the right. Back: it leaves to the right, uncovering the
     // drawer settling in behind it.
-    boardPushControls.set({ x: back ? 0 : '100%' });
+    controls.set({ x: back ? 0 : '100%' });
 
     // Started on the next frame rather than immediately. Going back mounts the Spaces tree, which
     // is the most expensive render on mobile in this app — the one measured at 370ms of blocked
@@ -943,7 +956,7 @@ function PageContent() {
     let inner = 0;
     const frame = requestAnimationFrame(() => {
       inner = requestAnimationFrame(() => {
-      void boardPushControls
+      void controls
         .start({ x: back ? '100%' : 0, transition: CHAT_PUSH_TRANSITION })
         // Ended by the animation's own completion, NOT by a timer running alongside it. A parallel
         // `setTimeout(CHAT_PUSH_MS)` finished a frame too early — because of the rAF delay above —
@@ -970,7 +983,7 @@ function PageContent() {
       if (inner) cancelAnimationFrame(inner);
       window.clearTimeout(safety);
     };
-  }, [boardPushSeq, boardPushControls]);
+  }, [boardPushSeq, boardPushControls, contentPushControls]);
 
   // THE BOARD MUST NEVER BE LEFT OFF-SCREEN, and this is the guarantee of it.
   //
@@ -985,8 +998,11 @@ function PageContent() {
   // somewhere off the edge. The drawer still covers it at that instant, so the correction is never
   // seen. Idempotent on the forward direction, which already finishes at 0.
   useEffect(() => {
-    if (!boardPushing) boardPushControls.set({ x: 0 });
-  }, [boardPushing, boardPushControls]);
+    if (!boardPushing) {
+      boardPushControls.set({ x: 0 });
+      contentPushControls.set({ x: 0 });
+    }
+  }, [boardPushing, boardPushControls, contentPushControls]);
 
   // Going back to the Spaces drawer, as the reverse of picking a List.
   //
@@ -1036,6 +1052,21 @@ function PageContent() {
   // remounting with its own useState default — landing you on My Spaces after a round trip that
   // started in Messages. Reported twice, both times as Back going to the wrong place.
   const [homeTab, setHomeTab] = useState<'spaces' | 'messages'>('spaces');
+  // Which Spaces/folders are expanded in the context screens. Up here for the same reason as the
+  // tabs, plus one more: the push layer renders a SECOND instance of the same screen, and the two
+  // have to agree or the screen visibly collapses the moment an animation starts.
+  const [openContextSpaceIds, setOpenContextSpaceIds] = useState<Set<string>>(new Set());
+  const [openContextFolderIds, setOpenContextFolderIds] = useState<Set<string>>(new Set());
+  const toggleInSet = (
+    setter: React.Dispatch<React.SetStateAction<Set<string>>>,
+    id: string
+  ) =>
+    setter((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
   const [officeTab, setOfficeTab] = useState<'spaces' | 'rooms'>('spaces');
 
   // True while a conversation opened from a context is on screen. It suppresses the conversation
@@ -4131,6 +4162,10 @@ function PageContent() {
   const homeContextEl = (
               <HomeContext
                 tab={homeTab}
+                openSpaceIds={openContextSpaceIds}
+                openFolderIds={openContextFolderIds}
+                onToggleSpace={(id) => toggleInSet(setOpenContextSpaceIds, id)}
+                onToggleFolder={(id) => toggleInSet(setOpenContextFolderIds, id)}
                 onTabChange={setHomeTab}
                 spaces={personalWorkspace?.spaces ?? []}
                 dms={chatDms.map((d) => {
@@ -4184,6 +4219,10 @@ function PageContent() {
   const officeContextEl = (
               <OfficeContext
                 tab={officeTab}
+                openSpaceIds={openContextSpaceIds}
+                openFolderIds={openContextFolderIds}
+                onToggleSpace={(id) => toggleInSet(setOpenContextSpaceIds, id)}
+                onToggleFolder={(id) => toggleInSet(setOpenContextFolderIds, id)}
                 onTabChange={setOfficeTab}
                 spaces={currentWorkspace?.spaces ?? []}
                 rooms={currentWorkspace?.rooms ?? []}
@@ -5393,7 +5432,12 @@ function PageContent() {
           </div>
         </header>
 
-        <div
+        {/* motion.div, and animated by contentPushControls rather than by the shell's — see that
+            control's own comment. In a classic push this element sits inside <main> and travels with
+            it, exactly as before; in a context push <main> and the title bar stay put and this box
+            is the only thing that moves. */}
+        <motion.div
+          animate={contentPushControls}
           className={
             // Planner's month grid sizes its own rows to exactly fill this box's measured height
             // (CalendarView.tsx's `containerHeight`, via `clientHeight`). Dropping the old `pb-28`
@@ -6274,7 +6318,7 @@ function PageContent() {
             </>
             )}
           </div>
-        </div>
+        </motion.div>
       </motion.main>
       </div>
 

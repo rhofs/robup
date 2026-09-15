@@ -36,6 +36,10 @@ type Props = {
   suggestions: Suggestion[];
   tab: HomeTab;
   onTabChange: (tab: HomeTab) => void;
+  openSpaceIds: Set<string>;
+  openFolderIds: Set<string>;
+  onToggleSpace: (spaceId: string) => void;
+  onToggleFolder: (folderId: string) => void;
   onSelectSpace: (spaceId: string) => void;
   onSelectList: (spaceId: string, listId: string) => void;
   onSpaceMenu: (x: number, y: number, space: HierarchySpace) => void;
@@ -51,6 +55,10 @@ export default function HomeContext({
   suggestions,
   tab,
   onTabChange,
+  openSpaceIds,
+  openFolderIds,
+  onToggleSpace,
+  onToggleFolder,
   onSelectSpace,
   onSelectList,
   onSpaceMenu,
@@ -104,6 +112,10 @@ export default function HomeContext({
           <div className="mx-2 rounded-2xl bg-neutral-900 px-2 py-2 space-y-0.5 elevated">
             <ContextSpaceList
               spaces={spaces}
+              openSpaceIds={openSpaceIds}
+              openFolderIds={openFolderIds}
+              onToggleSpace={onToggleSpace}
+              onToggleFolder={onToggleFolder}
               emptyText="Nothing here yet — your private lists live in this half."
               onSelectSpace={onSelectSpace}
               onSelectList={onSelectList}

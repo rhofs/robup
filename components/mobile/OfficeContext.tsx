@@ -29,6 +29,10 @@ type Props = {
   occupantsByRoom: Record<string, { id: string; initials: string; color: string }[]>;
   tab: OfficeTab;
   onTabChange: (tab: OfficeTab) => void;
+  openSpaceIds: Set<string>;
+  openFolderIds: Set<string>;
+  onToggleSpace: (spaceId: string) => void;
+  onToggleFolder: (folderId: string) => void;
   onSelectSpace: (spaceId: string) => void;
   onSelectList: (spaceId: string, listId: string) => void;
   onSpaceMenu: (x: number, y: number, space: HierarchySpace) => void;
@@ -45,6 +49,10 @@ export default function OfficeContext({
   occupantsByRoom,
   tab,
   onTabChange,
+  openSpaceIds,
+  openFolderIds,
+  onToggleSpace,
+  onToggleFolder,
   onSelectSpace,
   onSelectList,
   onSpaceMenu,
@@ -91,6 +99,10 @@ export default function OfficeContext({
         <div className="mx-2 rounded-2xl bg-neutral-900 px-2 py-2 space-y-0.5 elevated">
           <ContextSpaceList
             spaces={spaces}
+            openSpaceIds={openSpaceIds}
+            openFolderIds={openFolderIds}
+            onToggleSpace={onToggleSpace}
+            onToggleFolder={onToggleFolder}
             emptyText="No spaces in this workspace yet."
             onSelectSpace={onSelectSpace}
             onSelectList={onSelectList}
