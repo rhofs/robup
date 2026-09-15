@@ -6396,3 +6396,21 @@ moment.
 Worth keeping as a diagnosis: **an animation that "jumps" at irregular intervals is usually being
 restarted, not starved.** Starvation looks like slowing down; a restart looks like a jump. Checking
 whether the element is being remounted is a faster first question than looking at compositing.
+
+### Same session — the last hitch, at the handover itself
+
+"En bitteliten hakk helt i starten, i det den går fra S til å starte animasjonen." Two candidates,
+both cheap to remove, and both now removed rather than guessed between:
+
+- **The mark decoded asynchronously.** `<img>` decoding is async by default *even for a data URI*, so
+  the boot screen's first frame could paint before the S was ready — the splash's S giving way to an
+  empty circle for a frame, then coming back. That reads as the animation stumbling rather than as a
+  missing image, which is why it was worth ruling out first. `decoding="sync"` fixes it.
+- **The rotation started in the busiest frames there are.** Hydration and the first fetches land
+  exactly then. A 220ms `animation-delay` moves the start just past it — and the delay is invisible,
+  because the splash draws this same ring in this same position, so a fraction of a second of
+  stillness is indistinguishable from the image it replaced.
+
+The second is the same trick the Spaces push uses, for the same reason: **do not begin a movement in
+the frame where the expensive work lands.** That is now three separate places in this app — the
+drawer, the board, and here.

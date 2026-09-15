@@ -3736,6 +3736,14 @@ function PageContent() {
           <img
             src={BOOT_MARK_SRC}
             alt=""
+            // Decoded synchronously, which is not the default even for a data URI. Without it the
+            // first frame of this screen can paint before the image is ready — so the splash's S
+            // gives way to an empty circle for a frame and then the S returns. That is the hitch
+            // right at the handover, and it looks like the animation stumbling rather than like a
+            // missing image.
+            decoding="sync"
+            fetchPriority="high"
+            draggable={false}
             style={{
               width: `${BOOT_MARK_WIDTH_SHARE * 100}vw`,
               height: `${(BOOT_MARK_WIDTH_SHARE / BOOT_MARK_ASPECT) * 100}vw`,

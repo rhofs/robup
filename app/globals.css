@@ -365,7 +365,15 @@ body {
      needs one. This screen runs while the app is hydrating and fetching, so the main thread is as
      contended as it ever gets — which is exactly when an unpromoted animation drops frames. */
   will-change: transform;
-  animation: siqt-boot-ring-spin 1.15s linear infinite;
+  /* A short pause before it starts turning, and the pause is invisible: the splash draws this same
+     ring in this same position, so the first fraction of a second on screen is indistinguishable
+     from the image it replaced.
+     
+     What it buys is the handover itself. Those frames are the busiest the main thread ever gets —
+     React hydrating, the first fetches going out — and an animation beginning in the middle of that
+     stutters on its opening steps. Starting just after, against a settled screen, is the same trick
+     the Spaces drawer's own push uses for the same reason. */
+  animation: siqt-boot-ring-spin 1.15s linear 220ms infinite;
 }
 @keyframes siqt-boot-ring-spin {
   to {
