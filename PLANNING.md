@@ -5786,3 +5786,28 @@ behind rather than vanished.
 and the board to become two panes of one container, the way ChatSidebar and ChatPanel already are.
 That is a real restructure of the mobile board rather than an animation tweak, so it was not done
 unasked — but it is the only way to get the incoming page genuinely on top.
+
+### Same session — and the same movement, reversed, on the way back
+
+"Husk at den samme effekten skal skje reversert når vi går tilbake." It was not — forward was a push,
+back was a cut. Two directions of one gesture behaving like two unrelated effects is worse than
+neither, because the first one teaches you to expect the second.
+
+The push is now direction-aware, held in a ref (`boardPushDirRef`) rather than state, since it is
+read by the effect that runs the animation and never needs to cause a render of its own:
+
+- **Forward** — board arrives from the right, drawer slides a third left and dissolves.
+- **Back** — board leaves to the right, drawer settles in *from* a third left and fades up,
+  uncovered by the board as it goes.
+
+The drawer's `initial` matters only in the back case: it mounts the instant Back is pressed, and
+without a starting offset it would appear first and have nothing left to animate.
+
+The two fades are deliberately different lengths — 60% of the travel going out, 45% coming in. On the
+way out the drawer has to clear the board's path early; on the way back it is the destination and
+should be solid well before it settles.
+
+The board's Back button now routes through `pushBackToSpaces`, which sets the direction before
+opening the sheet. Note the Spaces *tab* (`openMobileSpaces`) deliberately does not — arriving at
+Spaces from Planner or Chat is not a "back", and animating it as one would claim a history that does
+not exist.

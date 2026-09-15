@@ -59,6 +59,10 @@ type Props = {
   // works because the incoming page is drawn ON TOP; this sheet is the top layer, so anything less
   // than a full exit would still be covering the list it is meant to reveal.
   pushingOut?: boolean;
+  // The same movement played backwards: the drawer settles in from a third of the way left while
+  // the board slides off to the right, uncovering it. Without this, going forward was a push and
+  // going back was a cut — two directions of one gesture behaving like two unrelated effects.
+  pushingIn?: boolean;
 };
 
 // Mobile Spaces landing — reachable from the bottom nav's "Spaces" tab (see MobileBottomNav.tsx)
@@ -181,6 +185,7 @@ export default function MobileSpacesSheet({
   onFolderMenu,
   onListMenu,
   pushingOut = false,
+  pushingIn = false,
 }: Props) {
   // Called directly via the store, same as FolderTree.tsx's own create-Folder/List/Space
   // buttons already do — no need to thread these through app/page.tsx as props.
@@ -298,6 +303,10 @@ export default function MobileSpacesSheet({
           // So it dissolves instead of being covered. The fade finishes at roughly 60% of the
           // travel, before the board has landed, so the eye reads it as having gone behind rather
           // than as having vanished.
+          // initial matters only for the arriving case: the drawer mounts the moment Back is
+          // pressed, and without a starting offset it would simply appear and then have nothing
+          // left to animate.
+          initial={pushingIn ? { x: '-33%', opacity: 0 } : false}
           animate={pushingOut ? { x: '-33%', opacity: 0 } : { x: 0, opacity: 1 }}
           transition={
             pushingOut
@@ -305,7 +314,15 @@ export default function MobileSpacesSheet({
                   x: CHAT_PUSH_TRANSITION,
                   opacity: { duration: (CHAT_PUSH_MS * 0.6) / 1000, ease: 'easeOut' },
                 }
-              : { duration: 0 }
+              : pushingIn
+                ? {
+                    x: CHAT_PUSH_TRANSITION,
+                    // Fading IN faster than it faded out, and deliberately so: on the way out the
+                    // drawer has to get out of the board's way early, while on the way back it is
+                    // the destination and should be solid well before it settles.
+                    opacity: { duration: (CHAT_PUSH_MS * 0.45) / 1000, ease: 'easeOut' },
+                  }
+                : { duration: 0 }
           }
           // pt-[env(safe-area-inset-top)]: this sheet is `top-0` and covers the global mobile
           // header, so it has to repeat that header's own status-bar clearance — otherwise its

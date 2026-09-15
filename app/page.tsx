@@ -867,14 +867,28 @@ function PageContent() {
   //     behind a static sheet; here the render is the entire point, and it is bounded to one
   //     deliberate navigation rather than happening on every workspace switch.
   const [boardPushing, setBoardPushing] = useState(false);
+  // Which way the movement runs. Going back has to be the same gesture played backwards, or the two
+  // directions read as two unrelated effects — asked for directly: "husk at den samme effekten skal
+  // skje reversert når vi går tilbake".
+  const boardPushDirRef = useRef<'forward' | 'back'>('forward');
   useEffect(() => {
     if (boardPushSeq === 0) return;
+    const back = boardPushDirRef.current === 'back';
     setBoardPushing(true);
-    boardPushControls.set({ x: '100%' });
-    void boardPushControls.start({ x: 0, transition: CHAT_PUSH_TRANSITION });
+    // Forward: the board arrives from the right. Back: it leaves to the right, uncovering the
+    // drawer settling in behind it.
+    boardPushControls.set({ x: back ? 0 : '100%' });
+    void boardPushControls.start({ x: back ? '100%' : 0, transition: CHAT_PUSH_TRANSITION });
     const t = window.setTimeout(() => setBoardPushing(false), CHAT_PUSH_MS);
     return () => window.clearTimeout(t);
   }, [boardPushSeq, boardPushControls]);
+
+  // Going back to the Spaces drawer, as the reverse of picking a List.
+  const pushBackToSpaces = (openSheet: () => void) => {
+    boardPushDirRef.current = 'back';
+    setBoardPushSeq((n) => n + 1);
+    openSheet();
+  };
 
   const [chatClosing, setChatClosing] = useState(false);
   const activeChatEntityRaw = useChatStore((s) => {
@@ -4397,11 +4411,13 @@ function PageContent() {
                     // straight back into the same List anyway. Applies to both "My Tasks" and real
                     // Spaces now that both skip the picker sheet when a position is remembered.
                     if (activeSpaceId !== 'everything') setNavigation(activeSpaceId, []);
-                    if (currentWorkspace?.isPersonal) {
-                      setMobilePersonalSpacesOpen(true);
-                    } else {
-                      setMobileSpacesOpen(true);
-                    }
+                    pushBackToSpaces(() => {
+                      if (currentWorkspace?.isPersonal) {
+                        setMobilePersonalSpacesOpen(true);
+                      } else {
+                        setMobileSpacesOpen(true);
+                      }
+                    });
                   }}
                   title="Back"
                   className="p-1.5 rounded text-neutral-400 hover:text-app-strong hover:bg-neutral-800/60 cursor-pointer"
@@ -7250,7 +7266,8 @@ function PageContent() {
         // is what made this a cut: the outgoing view vanished in one frame and the incoming one
         // then animated in on its own, which reads as two events rather than one movement.
         open={mobileSpacesOpen || boardPushing}
-        pushingOut={boardPushing}
+        pushingOut={boardPushing && boardPushDirRef.current === 'forward'}
+        pushingIn={boardPushing && boardPushDirRef.current === 'back'}
         onClose={() => setMobileSpacesOpen(false)}
         title="Spaces"
         onOpenSearch={() => setCommandPaletteOpen(true)}
@@ -7270,6 +7287,7 @@ function PageContent() {
           setActiveView('board');
         }}
         onSelectList={(spaceId, listId) => {
+          boardPushDirRef.current = 'forward';
           setBoardPushSeq((n) => n + 1);
           setModalTaskStack([]);
           setNavigation(spaceId, [listId]);
