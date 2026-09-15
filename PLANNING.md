@@ -6377,3 +6377,22 @@ look like on top of an existing tint.
 
 Worth generalising: **conditional Tailwind classes that set the same property are a coin toss.** The
 fix is not ordering them more carefully, it is making sure only one is ever produced.
+
+### Same session — the boot screen's ring jumped, because the screen was being rebuilt
+
+"Den kan hoppe litt, at den hakker." Not a dropped frame — a restart.
+
+`fetchInitialData` set `isLoading: true` on every call, and the effect that calls it depends on
+`currentUserId`. On a cold start that resolves a moment *after* the first call, so the sequence was
+`true → false → true`: the boot screen unmounted and mounted again. **Its ring is a CSS animation,
+and a remounted element starts its animation from zero** — which looks exactly like a stutter and is
+not one.
+
+Only the first load blanks the app now (`hasLoadedOnce`). That is better independently of the
+animation: a later refetch has data on screen already, and replacing it with a logo because
+something is being refreshed in the background is worse than showing slightly stale rows for a
+moment.
+
+Worth keeping as a diagnosis: **an animation that "jumps" at irregular intervals is usually being
+restarted, not starved.** Starvation looks like slowing down; a restart looks like a jump. Checking
+whether the element is being remounted is a faster first question than looking at compositing.

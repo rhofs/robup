@@ -292,6 +292,9 @@ interface TaskStore {
   activeOfficeUserId: string | null;
   activeOfficeRoomId: string | null;
   isLoading: boolean;
+  // True once the first load has completed. Only that first one shows the boot screen; see
+  // fetchInitialData.
+  hasLoadedOnce: boolean;
   showArchived: boolean;
 
   fetchInitialData: () => Promise<void>;
@@ -636,10 +639,21 @@ export const useTaskStore = create<TaskStore>((set, get) => {
     activeOfficeUserId: null,
     activeOfficeRoomId: null,
     isLoading: true,
+    hasLoadedOnce: false,
     showArchived: false,
 
     fetchInitialData: async () => {
-      set({ isLoading: true });
+      // Only the FIRST load blanks the app.
+      //
+      // This effect re-runs when the identity resolves, which on a cold start happens a moment
+      // after the first call — so isLoading went true, false, then true again, and the boot screen
+      // unmounted and remounted. Its ring is a CSS animation, and a remounted element starts its
+      // animation over: the jump reported as the loading screen "hakker".
+      //
+      // A later refetch should not blank a working app anyway. It has data on screen; replacing it
+      // with a logo because something is being refreshed in the background is worse than showing
+      // slightly stale rows for a moment.
+      if (!get().hasLoadedOnce) set({ isLoading: true });
       try {
         // Workspace-scoped endpoints need to know who's asking — "You are: (none)" deliberately
         // sees zero workspaces (see PLANNING.md), so this can genuinely come back empty.
@@ -731,6 +745,7 @@ export const useTaskStore = create<TaskStore>((set, get) => {
           activeSpaceId,
           activeListIds,
           isLoading: false,
+          hasLoadedOnce: true,
           // Seeds setActiveWorkspaceId's own restore map with wherever this call resolved to, so
           // a later switch away and back (e.g. to My Tasks and back) has a record even right after
           // a reload, before setNavigation would otherwise get a chance to record one itself.
@@ -741,7 +756,7 @@ export const useTaskStore = create<TaskStore>((set, get) => {
         }));
       } catch (error) {
         console.error('Error fetching data:', error);
-        set({ isLoading: false });
+        set({ isLoading: false, hasLoadedOnce: true });
       }
     },
 
