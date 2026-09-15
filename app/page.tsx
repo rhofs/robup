@@ -3656,22 +3656,50 @@ function PageContent() {
         role="status"
         aria-label="Loading Siqt"
       >
-        <div className="relative flex items-center justify-center" style={{ width: 176, height: 176 }}>
-          <svg width="176" height="176" viewBox="0 0 176 176" className="absolute inset-0 siqt-boot-ring">
-            <circle cx="88" cy="88" r="82" fill="none" stroke="#60a5fa" strokeOpacity="0.14" strokeWidth="4" />
-            <circle
-              cx="88"
-              cy="88"
-              r="82"
-              fill="none"
-              stroke="#60a5fa"
-              strokeWidth="4"
-              strokeLinecap="round"
-              // 2πr ≈ 515; about a quarter of it lit, the rest gap.
-              strokeDasharray="134 381"
-            />
-          </svg>
-          <span style={{ fontSize: 84, fontWeight: 700, color: '#60a5fa', lineHeight: 1 }}>S</span>
+        {/* Sized in vw so the mark matches the native splash at any screen width. The splash is a
+            bitmap scaled CENTER_CROP to fill the display, so its S is a fixed fraction of the
+            screen; a fixed pixel size here could only match one phone. Measured against a device
+            screenshot: the S spans roughly 23% of the width, which is a ~38vw font. Getting this
+            wrong is visible as the mark jumping size at the handover — reported as "den er først
+            stor, så mindre". */}
+        <div
+          className="relative flex items-center justify-center"
+          style={{ width: 'min(58vw, 300px)', height: 'min(58vw, 300px)' }}
+        >
+          {/* The rotation is on this wrapper, not on the <svg>. A transform on a plain element gets
+              its own compositing layer and runs off the main thread; the same transform applied to
+              an SVG element does not reliably, and this screen exists precisely while the main
+              thread is at its busiest — hydrating and fetching. That is the stutter that was
+              reported. */}
+          <div className="absolute inset-0 siqt-boot-ring">
+            <svg width="100%" height="100%" viewBox="0 0 100 100">
+              <circle cx="50" cy="50" r="47" fill="none" stroke="#60a5fa" strokeOpacity="0.14" strokeWidth="2" />
+              <circle
+                cx="50"
+                cy="50"
+                r="47"
+                fill="none"
+                stroke="#60a5fa"
+                strokeWidth="2"
+                strokeLinecap="round"
+                // 2πr ≈ 295; about a quarter lit, the rest gap.
+                strokeDasharray="77 218"
+              />
+            </svg>
+          </div>
+          {/* sans-serif, not the app's own font: lib/pwaIcon.tsx draws the icon with exactly this
+              family, so matching it is what keeps the two marks the same shape. */}
+          <span
+            style={{
+              fontSize: 'min(38vw, 190px)',
+              fontWeight: 700,
+              color: '#60a5fa',
+              lineHeight: 1,
+              fontFamily: 'sans-serif',
+            }}
+          >
+            S
+          </span>
         </div>
       </div>
     );

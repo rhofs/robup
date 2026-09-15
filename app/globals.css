@@ -345,6 +345,10 @@ body {
    to be unreliable about. */
 .siqt-boot-ring {
   transform-origin: 50% 50%;
+  /* Promoted to its own layer up front rather than the browser discovering mid-animation that it
+     needs one. This screen runs while the app is hydrating and fetching, so the main thread is as
+     contended as it ever gets — which is exactly when an unpromoted animation drops frames. */
+  will-change: transform;
   animation: siqt-boot-ring-spin 1.15s linear infinite;
 }
 @keyframes siqt-boot-ring-spin {

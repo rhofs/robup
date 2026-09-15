@@ -6151,3 +6151,26 @@ Colours in the boot screen are hard-coded rather than tokens, on purpose — it 
 splash that is always dark, whatever theme the user has chosen.
 
 APK 1.8 (versionCode 9).
+
+### Same session — matching the splash's mark exactly, and a stutter with a specific cause
+
+The CSS boot screen works. Two things about it were wrong.
+
+**1. The mark changed size at the handover.** "Den er først stor, så mindre." The splash is a bitmap
+scaled CENTER_CROP to fill the display, so its S is a **fixed fraction of the screen** — measured off
+a device screenshot at roughly 23% of the width. The boot screen used a fixed 84px font, which could
+only ever match one phone and matched none. Now sized in `vw` (a ~38vw font inside a 58vw box, both
+capped), so the two agree at any width, and the ring is drawn with a `viewBox` so its stroke scales
+with it.
+
+Also switched to `font-family: sans-serif`, which is what `lib/pwaIcon.tsx` draws the icon with.
+Matching the family is what keeps the two marks the same *shape*, not just the same size.
+
+**2. The rotation stuttered, and the reason is worth keeping.** The animation was applied to the
+`<svg>` element itself. **A transform on a plain element gets its own compositing layer and runs off
+the main thread; the same transform on an SVG element does not reliably** — and this screen exists
+precisely while the main thread is at its busiest, hydrating and fetching. The rotation moved to a
+plain wrapper `div` with `will-change: transform`, so the layer is promoted up front rather than
+discovered mid-animation.
+
+**No new APK.** Both are web-side; 1.8 is still the current app.
