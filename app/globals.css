@@ -338,3 +338,22 @@ body {
   user-select: none;
   pointer-events: none;
 }
+
+/* The boot screen's ring (app/page.tsx). A plain CSS rotation, which is the whole reason it exists:
+   the Android splash was given an AnimationDrawable doing the same job and it never once ran on a
+   device — that API is silently unreliable about when it is allowed to start. Here there is nothing
+   to be unreliable about. */
+.siqt-boot-ring {
+  transform-origin: 50% 50%;
+  animation: siqt-boot-ring-spin 1.15s linear infinite;
+}
+@keyframes siqt-boot-ring-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .siqt-boot-ring {
+    animation: none;
+  }
+}

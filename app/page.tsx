@@ -3633,11 +3633,45 @@ function PageContent() {
   const docBookHasPages = !!(currentSpace && docBookRoot && getChildDocs(currentSpace, docBookRoot.id).length > 0);
 
   if (isLoading) {
+    // Deliberately identical to the native splash screen the Android app shows before this page
+    // exists: same #0a0a0a ground, same mark. That mark is not an image anywhere — lib/pwaIcon.tsx
+    // generates every Siqt icon from a bold sans "S" at #60a5fa on #0a0a0a — so it can be reproduced
+    // here exactly rather than approximated.
+    //
+    // The point is that the handover stops being visible. Before, the splash gave way to a
+    // monospace "Loading Siqt..." on a themed background: a second waiting screen, in a different
+    // style, which reads as something having gone wrong. Reported as "den føles veldig out of
+    // place".
+    //
+    // The ring is CSS rather than the animated drawable the native splash was given. That drawable
+    // never ran on a real device across two attempts (see PLANNING.md) — AnimationDrawable is
+    // silently unreliable about when it may start. This is the same idea somewhere it cannot fail.
+    //
+    // Hard-coded colours, not theme tokens: this has to match a native splash that is always dark,
+    // whatever theme the user has chosen.
     return (
-      <div className="flex h-dvh w-screen items-center justify-center bg-neutral-950 text-blue-400 font-mono text-sm">
-        <div className="flex items-center gap-3">
-          <div className="w-5 h-5 border-2 border-blue-500 border-t-transparent rounded-full animate-spin"></div>
-          <span>Loading Siqt...</span>
+      <div
+        className="flex h-dvh w-screen items-center justify-center"
+        style={{ background: '#0a0a0a' }}
+        role="status"
+        aria-label="Loading Siqt"
+      >
+        <div className="relative flex items-center justify-center" style={{ width: 176, height: 176 }}>
+          <svg width="176" height="176" viewBox="0 0 176 176" className="absolute inset-0 siqt-boot-ring">
+            <circle cx="88" cy="88" r="82" fill="none" stroke="#60a5fa" strokeOpacity="0.14" strokeWidth="4" />
+            <circle
+              cx="88"
+              cy="88"
+              r="82"
+              fill="none"
+              stroke="#60a5fa"
+              strokeWidth="4"
+              strokeLinecap="round"
+              // 2πr ≈ 515; about a quarter of it lit, the rest gap.
+              strokeDasharray="134 381"
+            />
+          </svg>
+          <span style={{ fontSize: 84, fontWeight: 700, color: '#60a5fa', lineHeight: 1 }}>S</span>
         </div>
       </div>
     );

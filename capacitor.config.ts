@@ -41,14 +41,21 @@ const config: CapacitorConfig = {
     // up until the web app is actually on screen, which is the gap that was showing as white.
     SplashScreen: {
       backgroundColor: '#0A0A0A',
-      // A custom LAYOUT, not an image. The plugin's image path cannot animate: it calls start() on
-      // the drawable before attaching it to any view, so an AnimationDrawable never advances and
-      // shows frame 0 forever (see SpinningSplashView.java). The layout path hands us the view, so
-      // the animation can be started at the moment it actually works.
+      // A plain static image, after two attempts at animating it natively.
       //
-      // androidSplashResourceName and androidScaleType are ignored while layoutName is set — the
-      // layout owns both the image and how it is scaled.
-      layoutName: 'splash_layout',
+      // The plugin cannot animate its own image path — it calls start() on the drawable before
+      // attaching it to any view — so this went through its custom-layout path with an ImageView
+      // subclass starting the AnimationDrawable itself. That is the documented approach and it
+      // never ran on a real device, at attachment, on a posted runnable, on window visibility or
+      // on window focus. AnimationDrawable is silently unreliable about when it may begin: no
+      // exception, nothing logged, just a still first frame.
+      //
+      // The animation now lives in the app's own boot screen instead (app/page.tsx), which is CSS
+      // and cannot fail, and which is drawn to look identical to this image so the handover between
+      // them is invisible. That is also why this stays a static image rather than being made
+      // fancier: its job is to match, not to perform.
+      androidSplashResourceName: 'splash',
+      androidScaleType: 'CENTER_CROP',
       // Still off, and now for a better reason than "it looked busy": the logo itself is the
       // loading indicator. A separate spinner beside a spinning logo is two things saying the same
       // thing.

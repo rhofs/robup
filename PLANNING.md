@@ -6120,3 +6120,34 @@ device. If 1.7 is still static, the next thing to rule out is the system honouri
 animations" in Developer options or battery saver, which stops AnimationDrawable outright.
 
 APK 1.7 (versionCode 8).
+
+### Same session — the native splash animation abandoned, and the idea moved somewhere it works
+
+Still static in 1.7, after trying `start()` at attachment, on a posted runnable, on window
+visibility and on window focus. **Two attempts, four placements, nothing.** `AnimationDrawable` is
+silently unreliable about when it is allowed to begin: no exception, nothing logged, just a still
+first frame — and there is no way to tell from outside whether it refused or was never asked.
+
+**Stopped rather than tried a third time.** Everything verifiable had already been verified — the
+layout, the 36 frames and `layoutName` were all confirmed present *in the built APK* — so further
+attempts would have been guesses at a black box.
+
+**The idea moved to where it cannot fail.** `lib/pwaIcon.tsx` generates every Siqt icon from a bold
+sans "S" at `#60a5fa` on `#0a0a0a` — no image file anywhere — so the app's own boot screen can
+reproduce the native splash *exactly* rather than approximately. It now does, with the ring animated
+in CSS.
+
+That inverts the earlier fix: the splash is hidden as soon as the page can paint again, instead of
+being held until loading finishes. Once the two screens are identical, handing over early is what you
+want — the boot screen's ring moves and the splash's cannot, so the sooner the web one is up, the
+sooner there is any sign of life.
+
+**Deleted:** `SpinningSplashView.java`, `splash_layout.xml`, `splash_spinner.xml` and all 36 frames.
+The APK drops from 5.5MB to 5.0MB, and `android/` goes back to one piece of hand-written code
+(`SiqtHapticsPlugin`) instead of two. Code that provably does nothing is worse than no code: it
+invites a third attempt at repairing it.
+
+Colours in the boot screen are hard-coded rather than tokens, on purpose — it has to match a native
+splash that is always dark, whatever theme the user has chosen.
+
+APK 1.8 (versionCode 9).

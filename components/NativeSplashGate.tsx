@@ -2,7 +2,6 @@
 
 import { useEffect } from 'react';
 import { Capacitor } from '@capacitor/core';
-import { useTaskStore } from '../store/useTaskStore';
 
 // Dismisses the native splash screen once the web app has actually rendered.
 //
@@ -16,18 +15,15 @@ import { useTaskStore } from '../store/useTaskStore';
 // makes it disappear *sooner*. That ordering is deliberate: if this code never runs — or if loading
 // never finishes — the user still gets into the app rather than staring at a logo forever.
 export default function NativeSplashGate() {
-  // Read straight from the store rather than taken as a prop: this sits in the root layout, above
-  // the page that knows about loading, and a Zustand store needs no provider to reach from here.
-  const isLoading = useTaskStore((s) => s.isLoading);
-
   useEffect(() => {
     if (!Capacitor.isNativePlatform()) return;
-    // Held until the app is actually usable, not merely mounted.
+    // Hidden as soon as this page can paint, NOT held until loading finishes.
     //
-    // Hiding on mount meant the splash gave way to the app's own "Loading Siqt..." screen — two
-    // different waiting screens in a row, the second in a different style, which reads as the
-    // launch having gone wrong. Reported as it feeling "very out of place". One wait, one screen.
-    if (isLoading) return;
+    // Holding it was the previous answer to the splash handing over to a differently-styled
+    // "Loading Siqt..." screen. The better answer was to make that screen identical to the splash
+    // (see the isLoading branch in app/page.tsx), and once it is, handing over early is what you
+    // want: the boot screen's ring animates and the splash's cannot, so the sooner the web one is
+    // on screen the sooner there is any sign of life at all.
     let cancelled = false;
     // Imported lazily so the plugin's module never has to load in a browser or an installed PWA,
     // which is every visitor who is not using the Android app.
@@ -48,7 +44,7 @@ export default function NativeSplashGate() {
     return () => {
       cancelled = true;
     };
-  }, [isLoading]);
+  }, []);
 
   return null;
 }
