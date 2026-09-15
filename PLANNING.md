@@ -6207,3 +6207,35 @@ CENTER_CROPped regardless, so a single file is both simpler and sharper. APK 4.6
 
 APK 1.9 (versionCode 10). Needs both a redeploy and a reinstall — the mark is in the web bundle and
 the splash is in the app.
+
+### Same session — amber was unreadable in light mode, and invites now actually send
+
+**1. Amber text vanished on a white card.** Reported from the Office tab: the message-of-the-day
+banner and the room labels. **Tailwind's amber shades are not remapped by a theme the way the
+neutrals in this file are**, so every `text-amber-100`/`-200`/`-300` — each chosen against a dark
+surface, where a pale amber is the readable one — stayed pale on white.
+
+Inverted in the light block, mirroring the neutral scale: 100→#78350f, 200→#92400e, 300→#b45309,
+400→#d97706. **500 is deliberately untouched**: every amber tint and border in the app is built from
+it (`bg-amber-500/10`, `border-amber-500/40`) and those already read on both grounds — changing it
+would repaint surfaces to fix text.
+
+This also fixes the archive banner, which had the same fault and which nobody had happened to open
+in light mode yet.
+
+**2. "Invite via email" existed in name only.** You could type an address, but only to find someone
+who already had an account, and **no email was ever sent** — an address with no account returned a
+404 telling the inviter to go and share a link themselves. That was the right design when the app
+could not send mail. It can now, and asking someone to paste a URL into their own mail client is not
+an invitation feature, it is the absence of one.
+
+- **No account:** a reusable `WorkspaceInvite` link is created and emailed. Reusable rather than
+  targeted because the targeted kind points at a user id, and the point here is that there is no
+  user yet. Anyone holding the link can join — the same exposure the existing "copy invite link"
+  button already has.
+- **Existing account:** the in-app invite is created as before, and an email is sent as well. The
+  invite reaches them either way; the email is what makes them look.
+
+The recipient's address is fetched separately because `publicUserSelect` omits it, and that
+projection is right: the address is needed to send *to*, never to return. Names and workspace titles
+are escaped before going into the HTML.

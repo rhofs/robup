@@ -147,6 +147,22 @@ html[data-theme='light'] {
 
   --background: #ffffff;
   --foreground: #18181b;
+  /* Amber, inverted for the same reason the neutral scale above is.
+     
+     Tailwind's amber shades are NOT remapped by a theme the way the neutrals are, so every
+     `text-amber-100`/`-200`/`-300` in this app — chosen against a dark surface, where a pale amber
+     is the readable one — stayed pale on a white card and became unreadable. Reported from the
+     Office tab, where the message-of-the-day banner and the room labels both vanished; the archive
+     banner had the same fault and nobody had happened to open it in light mode yet.
+     
+     Only the text shades move. 500 is left alone deliberately: it is what every amber tint and
+     border in the app is built from (`bg-amber-500/10`, `border-amber-500/40`), and those work on
+     both grounds already — changing it would repaint surfaces to fix text. */
+  --color-amber-100: #78350f;
+  --color-amber-200: #92400e;
+  --color-amber-300: #b45309;
+  --color-amber-400: #d97706;
+
   --color-app-strong: #18181b;
   /* White, not the grey ground — see the token's own note above. */
   --color-raised: #ffffff;
