@@ -5762,3 +5762,27 @@ their adjacent edges travel together like two panes on one track.
 The transition constants come from `lib/chatTransition.ts` rather than being redeclared: this is the
 same gesture as opening a DM wearing a different name, and two page transitions in one app that are
 almost but not quite alike are worse than either alone.
+
+### Same session — matching the chat push's parallax, and the seam it exposed
+
+"I dms så går den siden bak bare 30% til venstre, mens den nye siden som kommer over dekker over
+hele. her skjer det noe rart, med en ramme på slutten som også skyves ut av bildet."
+
+Both observations are one structural fact. **In the chat push both panes live in a single `relative
+overflow-hidden` container, absolutely positioned and overlapping**, which is what lets the incoming
+conversation be drawn *on top* while the outgoing list moves only a third. The Spaces drawer is not a
+pane in that sense — it is `fixed z-30` over the entire app, header included — so the board cannot
+paint above it without moving both into a shared container.
+
+That is why the full `-100%` exit was chosen a round earlier, and why it produced the "ramme": the
+drawer's own right edge sweeping across as a vertical seam, visible precisely *because* it stays on
+top the whole way.
+
+Now `-33%` to match the chat push, with the drawer **dissolving** rather than being covered — the
+fade finishing at about 60% of the travel, before the board lands, so the eye reads it as having gone
+behind rather than vanished.
+
+**This is an approximation and is labelled as one in the code.** The exact behaviour needs the drawer
+and the board to become two panes of one container, the way ChatSidebar and ChatPanel already are.
+That is a real restructure of the mobile board rather than an animation tweak, so it was not done
+unasked — but it is the only way to get the incoming page genuinely on top.

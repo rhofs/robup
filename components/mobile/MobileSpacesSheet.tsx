@@ -283,8 +283,30 @@ export default function MobileSpacesSheet({
     <>
       {open && (
         <motion.div
-          animate={{ x: pushingOut ? '-100%' : 0 }}
-          transition={pushingOut ? CHAT_PUSH_TRANSITION : { duration: 0 }}
+          // A third of the way left, matching the chat push exactly — the asymmetry is the effect:
+          // the page behind moves a little, the page arriving moves all the way, and the difference
+          // between them reads as depth rather than as a carousel.
+          //
+          // The fade is a compromise, and an honest one. In the chat push the incoming conversation
+          // is drawn ON TOP of the outgoing list, because both panes live in one `relative
+          // overflow-hidden` container and are absolutely positioned. This drawer is not a pane in
+          // that sense — it is `fixed z-30` over the entire app, header included — so the board can
+          // never paint above it without moving both into a shared container. Left solid, its right
+          // edge sweeps across as a vertical seam, which is exactly what was reported: "en ramme på
+          // slutten som også skyves ut av bildet".
+          //
+          // So it dissolves instead of being covered. The fade finishes at roughly 60% of the
+          // travel, before the board has landed, so the eye reads it as having gone behind rather
+          // than as having vanished.
+          animate={pushingOut ? { x: '-33%', opacity: 0 } : { x: 0, opacity: 1 }}
+          transition={
+            pushingOut
+              ? {
+                  x: CHAT_PUSH_TRANSITION,
+                  opacity: { duration: (CHAT_PUSH_MS * 0.6) / 1000, ease: 'easeOut' },
+                }
+              : { duration: 0 }
+          }
           // pt-[env(safe-area-inset-top)]: this sheet is `top-0` and covers the global mobile
           // header, so it has to repeat that header's own status-bar clearance — otherwise its
           // title lands under the clock in the Android app, where the WebView is edge-to-edge.
