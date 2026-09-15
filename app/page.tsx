@@ -70,7 +70,7 @@ import { useHistoryStore } from '../store/useHistoryStore';
 import { hapticTap } from '../lib/haptics';
 import { BOOT_MARK_SRC, BOOT_MARK_ASPECT, BOOT_MARK_WIDTH_SHARE, BOOT_RING_BOX_SHARE } from '../lib/bootMark';
 import { setNativeBackHandler } from '../lib/nativeBack';
-import { readLayoutPreference, LAYOUT_STORAGE_KEY } from '../lib/layoutPreference';
+import { readLayoutPreference, LAYOUT_STORAGE_KEY, LAYOUT_CHANGE_EVENT } from '../lib/layoutPreference';
 import OfficeContext from '../components/mobile/OfficeContext';
 import HomeContext from '../components/mobile/HomeContext';
 import { CHAT_PUSH_MS, CHAT_PUSH_EASE } from '../lib/chatTransition';
@@ -987,11 +987,18 @@ function PageContent() {
   const [layoutPref, setLayoutPref] = useState<'classic' | 'contexts'>('classic');
   useEffect(() => {
     setLayoutPref(readLayoutPreference());
+    const sync = () => setLayoutPref(readLayoutPreference());
+    // Both, and they cover different things: the custom event is the only one that fires in the tab
+    // that flipped the switch, and `storage` is the only one that fires in the others.
+    window.addEventListener(LAYOUT_CHANGE_EVENT, sync);
     const onStorage = (e: StorageEvent) => {
-      if (e.key === LAYOUT_STORAGE_KEY || e.key === null) setLayoutPref(readLayoutPreference());
+      if (e.key === LAYOUT_STORAGE_KEY || e.key === null) sync();
     };
     window.addEventListener('storage', onStorage);
-    return () => window.removeEventListener('storage', onStorage);
+    return () => {
+      window.removeEventListener(LAYOUT_CHANGE_EVENT, sync);
+      window.removeEventListener('storage', onStorage);
+    };
   }, []);
   const useContexts = layoutPref === 'contexts';
 

@@ -31,9 +31,23 @@ export function readLayoutPreference(): LayoutPreference {
   }
 }
 
+// Fired when the preference changes, so the app can react in THIS tab.
+//
+// `storage` is not enough and is the trap this exists to avoid: the browser fires it only in *other*
+// tabs, never in the one that made the change. Reading the preference once on mount and listening
+// for `storage` therefore looks completely correct and does nothing at all — the switch writes, the
+// app never hears, and nothing happens until a reload. Reported exactly that way: "bryteren er på",
+// with the old layout still on screen.
+export const LAYOUT_CHANGE_EVENT = 'siqt:layout-change';
+
 export function setLayoutPreference(value: LayoutPreference): void {
   try {
     if (value === 'contexts') localStorage.setItem(LAYOUT_STORAGE_KEY, 'contexts');
     else localStorage.removeItem(LAYOUT_STORAGE_KEY);
   } catch {}
+  // Outside the try: a browser that refuses to store still changed the preference for this
+  // session, and the app should follow it rather than ignore the tap.
+  if (typeof window !== 'undefined') {
+    window.dispatchEvent(new CustomEvent(LAYOUT_CHANGE_EVENT, { detail: value }));
+  }
 }

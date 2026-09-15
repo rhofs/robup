@@ -6589,3 +6589,32 @@ header mark currently falls back to the accent for want of one.
 the old screen. The most likely cause is a restored `activeOfficeUserId`/`activeOfficeRoomId` from
 the URL, since the new screen is gated on both being empty and tapping the tab clears them. Asked him
 to tap Office directly and confirm.
+
+### Same session — the layout switch wrote, and nothing listened
+
+"Bryteren er på", with a screenshot showing it on and the old layout still behind it.
+
+`setLayoutPreference` wrote to localStorage; `page.tsx` read the preference once on mount and
+listened for `storage`. **The browser fires `storage` only in *other* tabs, never in the one that
+made the change.** So the switch worked, the app never heard about it, and nothing happened short of
+a reload — which in the Android app means force-closing it.
+
+The trap is that the code reads as obviously correct. Writing to storage and listening for a storage
+event is the documented way to share a preference between tabs; it is simply not a way to tell
+*yourself*.
+
+`setLayoutPreference` now dispatches a `siqt:layout-change` CustomEvent as well, and the page listens
+for both — the custom event is the only one that fires in the tab that flipped the switch, and
+`storage` is the only one that fires in the others. The dispatch sits outside the `try`: a browser
+that refuses to store still changed the preference for this session, and the app should follow the
+tap rather than ignore it.
+
+**Worth checking elsewhere:** every other preference in this app is read at the point of use
+(`readHapticStrength` is called per pulse, `readThemePreference` has its own watcher), so this is the
+only one that cached a value at mount. It was the first preference that needed to change what
+*renders* rather than what *happens*.
+
+**Also corrected here:** I read "kun 3 menyvalg" as evidence the new layout was active and went
+straight to debugging the Office screen. It was the user's own hidden-tabs configuration. One
+screenshot settled in seconds what a round of reasoning had got wrong — **a detail that merely fits
+the hypothesis is not confirmation of it.**
