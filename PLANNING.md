@@ -6028,3 +6028,37 @@ problem by taking control away, and the memory was never missing.
 What is genuinely lost: opening the sheet no longer reveals where you are. That is consistent with
 removing the active-Space highlight for the same reason — this sheet is somewhere you pass through to
 choose a destination, not a map of where you have been.
+
+### Same session — why Siqt opens slower than ClickUp, measured
+
+Asked, not built. Recorded because the numbers took a while to gather and the conclusion is a
+design decision rather than a bug.
+
+**Measured:**
+
+- Origin TTFB **~110ms** from a shell on the same host. The server is not slow.
+- **2.2MB** of JS chunks in `.next/static/chunks`, the two largest being 636KB and 531KB.
+- Startup then makes three parallel calls, of which `/api/workspaces` is heavy: every Space, Folder,
+  List, status, custom field, membership, role and room in one response.
+- `CollabDocEditor` is already `dynamic(..., { ssr: false })`, which is why opening a Doc for the
+  first time lags — that is the editor chunk downloading, and it is the correct trade.
+- `papaparse` is **not** lazy, and it exists only for the ClickUp CSV import.
+
+**Why ClickUp wins, structurally rather than through better engineering:** it is a native app. The
+interface is already on the device and it paints last-known data immediately while syncing behind
+it. Siqt downloads its entire interface from Europe on every launch, over a VPN from China. Each of
+those steps is a round trip; the distance and the volume are the cost, not the server.
+
+**Ranked, if this is taken on:**
+
+1. **Persist the last response and hydrate from it on boot**, refreshing in the background. This is
+   the only one that actually closes the gap — it moves the app from "wait for the network" to "see
+   your data now", which is the whole of what makes a native app feel instant.
+2. **Lazy-load what is not needed on first paint** — `papaparse` most obviously.
+3. **Service-worker precache of the app shell**, as insurance against the WebView evicting the HTTP
+   cache. The chunks are already `immutable` and content-hashed, so this is belt-and-braces rather
+   than a fix.
+
+**Stated to the user plainly:** a WebView app will never match a native cold start, because the
+native app skips the download entirely. The reachable goal is "see something immediately", not
+parity.
