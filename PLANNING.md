@@ -6091,3 +6091,32 @@ resizing to 228 in one chain fails with "Image to composite must have same dimen
 Composite at full size, resize in a second pass.
 
 APK 1.6 (versionCode 7). Both halves need it — the hide timing is web-side but the frames are not.
+
+### Same session — CORRECTION: the splash never animated at all
+
+The user: "jeg vil bare poengtere at den forrige S'en var helt statisk, den snurra ikke?"
+
+**It was, and that invalidates a claim made three rounds earlier.** The entry describing the frame
+animation was written as though the spin worked and only its *style* was in question. It never ran.
+
+What was verified this time, in the built package rather than reasoned about:
+
+- `res/layout/splash_layout.xml` **is** in the APK;
+- all 36 frames **are** in the APK;
+- `layoutName: 'splash_layout'` **is** in the packaged `capacitor.config.json`.
+
+So the plugin's custom-layout path was being taken and the drawable was reaching the view. The
+failure was narrower: **`AnimationDrawable.start()` called from `onAttachedToWindow()` quietly
+refuses when the window is not yet visible** — no exception, nothing logged, just a still first
+frame. A well-known Android trap, and the one placement that looks most obviously correct.
+
+`SpinningSplashView` now tries at four moments — attachment, a posted runnable, window-visibility,
+and window-focus. `start()` on an already-running drawable is a no-op, so trying at all of them costs
+nothing and removes the guessing about which one arrives first in a plugin-owned dialog rather than
+an ordinary activity.
+
+**Still unverified, and this is the second attempt** — whether it animates can only be seen on a
+device. If 1.7 is still static, the next thing to rule out is the system honouring "remove
+animations" in Developer options or battery saver, which stops AnimationDrawable outright.
+
+APK 1.7 (versionCode 8).
