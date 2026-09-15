@@ -5973,3 +5973,30 @@ Worth keeping as a shape: **an asymmetric transition is a strong signal that a h
 not that the animation is subtly wrong.** Movement that works in one direction is already proof the
 mechanism is sound; what differs is which taps reach it. That is a much faster thing to check than
 re-reading easing curves.
+
+### Same session — a Space collapsing mid-transition, and a Doc heavy enough to eat the animation
+
+**1. Switching Space collapsed the previous one in full view.** "Om jeg så åpner admin, går inn i
+timeplan, så lukker innholdsskapelse seg (klipper)."
+
+The auto-expand effect replaces the expanded set with just the Space you entered — which is the
+behaviour that was wanted, and was fixed three times to get there. The fault was only *when*: it ran
+on the tap, so the previous Space snapped shut on a drawer that was still sliding away.
+
+It now skips while `pushingOut`, and deliberately does not update `lastAutoExpandTargetRef` when it
+does — so it re-runs the moment the push clears, by which point the drawer is gone and the
+rearrangement happens unseen. **Rearranging a view that is still on screen is a different act from
+rearranging one that is not**, even when the end state is identical.
+
+**2. Docs still cut in, and this one is only mitigated.** The push was wired correctly (verified in
+the deployed code, not assumed) and Docs sits inside `<main>` like everything else. The problem is
+that the doc editor is expensive to mount, and its mount lands in the animation's opening frames —
+which does not read as a slow animation, it reads as no animation at all.
+
+The delay before starting is now **two frames instead of one**: the first lets the incoming view
+mount and paint, the second starts the movement. One frame was enough for the task list and is not
+for the editor.
+
+**Stated plainly because it will come back:** this is a mitigation, not a cure. A mount slow enough
+will starve the opening frames whenever it happens. The real fix is a cheaper first paint for the
+doc editor, which is its own piece of work and was not attempted here.

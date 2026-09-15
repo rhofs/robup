@@ -234,6 +234,15 @@ export default function MobileSpacesSheet({
   // to the same one you already left expanded (or collapsed) leaves whatever you last did alone.
   const lastAutoExpandTargetRef = useRef<string | null>(null);
   useEffect(() => {
+    // Not while the drawer is sliding away. This effect expands the Space you just entered and
+    // collapses the one you left — which is right, but only once nobody is looking. Running it on
+    // the tap meant the previous Space snapped shut on a screen that was still on its way out:
+    // "om jeg så åpner admin, går inn i timeplan, så lukker innholdsskapelse seg (klipper)".
+    //
+    // Returning without touching lastAutoExpandTargetRef is deliberate — the effect re-runs the
+    // moment `pushingOut` clears, by which point the drawer is gone and the rearrangement happens
+    // unseen.
+    if (pushingOut) return;
     if (!activeSpaceId) return;
     const space = spaces.find((s) => s.id === activeSpaceId);
     if (!space) return;
@@ -260,7 +269,7 @@ export default function MobileSpacesSheet({
     }
     setExpandedFolderIds(ancestorIds);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [activeSpaceId, activeListIds, spaces]);
+  }, [activeSpaceId, activeListIds, spaces, pushingOut]);
 
 
   const toggleSpace = (spaceId: string) =>

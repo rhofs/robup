@@ -900,8 +900,18 @@ function PageContent() {
     // main thread. Starting the movement in the same frame meant its first steps competed with
     // that render, which is the "hakk i det første sekundet" on the way out. One frame of delay
     // lets the drawer paint first, so the animation begins against a settled screen.
+    // TWO frames, not one. The first lets the incoming view mount and paint; the second is when the
+    // movement begins. One frame was enough for the task list and not for a Doc, whose editor is
+    // heavy enough to starve the animation's opening frames — which does not look like a slow
+    // animation, it looks like no animation at all. Reported as Docs being "smooth ut" but
+    // cutting in.
+    //
+    // This is a mitigation rather than a cure: a mount slow enough will still eat the first frames
+    // whenever it happens. The honest fix is a cheaper first paint for the doc editor.
     let cancelled = false;
+    let inner = 0;
     const frame = requestAnimationFrame(() => {
+      inner = requestAnimationFrame(() => {
       void boardPushControls
         .start({ x: back ? '100%' : 0, transition: CHAT_PUSH_TRANSITION })
         // Ended by the animation's own completion, NOT by a timer running alongside it. A parallel
@@ -912,6 +922,7 @@ function PageContent() {
         .then(() => {
           if (!cancelled) setBoardPushing(false);
         });
+      });
     });
 
     // Backstop. If the animation is interrupted rather than completed, its promise may never
@@ -925,6 +936,7 @@ function PageContent() {
     return () => {
       cancelled = true;
       cancelAnimationFrame(frame);
+      if (inner) cancelAnimationFrame(inner);
       window.clearTimeout(safety);
     };
   }, [boardPushSeq, boardPushControls]);
