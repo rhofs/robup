@@ -72,6 +72,7 @@ import { BOOT_MARK_SRC, BOOT_MARK_ASPECT, BOOT_MARK_WIDTH_SHARE, BOOT_RING_BOX_S
 import { setNativeBackHandler } from '../lib/nativeBack';
 import { readLayoutPreference, LAYOUT_STORAGE_KEY } from '../lib/layoutPreference';
 import OfficeContext from '../components/mobile/OfficeContext';
+import HomeContext from '../components/mobile/HomeContext';
 import { CHAT_PUSH_MS, CHAT_PUSH_EASE } from '../lib/chatTransition';
 import TaskListSentinel from '../components/TaskListSentinel';
 import { useSessionStore } from '../store/useSessionStore';
@@ -1852,12 +1853,41 @@ function PageContent() {
   // workspace is active, since "Spaces" and "My Tasks" are genuinely different destinations that
   // happen to share one activeView value.
   const mobileHeaderTitle = activeView === 'board' && currentWorkspace?.isPersonal ? 'My Tasks' : breadcrumbViewLabel;
+
+  // Which of the two contexts the new layout considers you to be in. Home is the personal
+  // workspace; everything else that is not Planner or a launcher screen is Office. Derived rather
+  // than stored, because storing it would be a second source of truth for something activeView and
+  // the workspace already answer between them — and those two can change from a dozen places.
+  const inOfficeContext = !currentWorkspace?.isPersonal && activeView !== 'calendar';
   // Gates the Tasks/Planner/Docs/Office nav tabs — before creating/joining a real workspace,
   // those tabs have nothing to show (every Space/List lives under a real workspace, never the
   // personal one), so showing them just to render empty is more confusing than hiding them until
   // there's something behind them. My tasks/Network/Chat aren't gated by this — they're
   // cross-workspace by design.
   const hasRealWorkspace = useMemo(() => workspaces.some((w) => !w.isPersonal), [workspaces]);
+
+  // The two counts Home shows above your lists, and the only thing on that screen that is NOT
+  // scoped to the personal workspace. "What have I let slip" is not a question about one workspace,
+  // so answering it inside one would make the number quietly wrong in the only direction that
+  // matters — too low.
+  const [myOverdueCount, myTodayCount] = useMemo(() => {
+    if (!currentUserId) return [0, 0];
+    const startOfToday = new Date();
+    startOfToday.setHours(0, 0, 0, 0);
+    const startOfTomorrow = new Date(startOfToday);
+    startOfTomorrow.setDate(startOfTomorrow.getDate() + 1);
+
+    let overdue = 0;
+    let today = 0;
+    for (const task of tasks) {
+      if (task.archived || !task.dueDate) continue;
+      if (!task.assignees.some((a) => a.id === currentUserId)) continue;
+      const due = new Date(task.dueDate);
+      if (due < startOfToday) overdue += 1;
+      else if (due < startOfTomorrow) today += 1;
+    }
+    return [overdue, today];
+  }, [tasks, currentUserId]);
   // MobilePersonalSpacesSheet's own data source — a plain find (not useMemo) since `workspaces`
   // already changes identity on every relevant update and this isn't hot-path.
   const personalWorkspace = workspaces.find((w) => w.isPersonal);
@@ -3922,7 +3952,45 @@ function PageContent() {
           <div className="hidden md:flex w-8 h-8 rounded bg-gradient-to-br from-blue-500 to-blue-700 items-center justify-center font-black text-white shadow-lg shadow-blue-500/20 shrink-0">
             S
           </div>
-          <span className="md:hidden text-lg font-semibold text-app-strong shrink-0">{mobileHeaderTitle}</span>
+          {/* The mobile title. In the new layout it also says which context you are in, and in
+              Office it is the workspace switcher itself — the single most-used control in the app
+              by the user's own account ("alfa og omega"), so it is one tap from anywhere rather
+              than folded into a settings panel, which is where I first proposed putting it. */}
+          {useContexts && isMobile ? (
+            inOfficeContext ? (
+              <button
+                onClick={() => {
+                  hapticTap();
+                  setWorkspaceSwitcherOpen((o) => !o);
+                }}
+                className="md:hidden flex items-center gap-1.5 min-w-0 shrink cursor-pointer"
+                title="Switch workspace"
+              >
+                <span
+                  className="w-6 h-6 rounded-md shrink-0 flex items-center justify-center text-[11px] font-bold text-white"
+                  // Workspaces have no colour of their own, so the accent stands in. Giving them
+                  // one is a real feature (several workspaces should be told apart at a glance) and
+                  // belongs with the workspace settings panel, not smuggled in here.
+                  style={{ backgroundColor: '#2563eb' }}
+                >
+                  {(currentWorkspace?.name ?? '?').slice(0, 1).toUpperCase()}
+                </span>
+                <span className="text-lg font-semibold text-app-strong truncate">
+                  {currentWorkspace?.name ?? 'No workspace'}
+                </span>
+                <ChevronDown className="w-4 h-4 text-neutral-500 shrink-0" />
+                {memberInvitesIncoming.length > 0 && (
+                  <span className="shrink-0 min-w-[16px] h-4 px-1 rounded-full bg-red-500 text-white text-[9px] font-bold flex items-center justify-center leading-none">
+                    {memberInvitesIncoming.length}
+                  </span>
+                )}
+              </button>
+            ) : (
+              <span className="md:hidden text-lg font-semibold text-app-strong shrink-0">Home</span>
+            )
+          ) : (
+            <span className="md:hidden text-lg font-semibold text-app-strong shrink-0">{mobileHeaderTitle}</span>
+          )}
           <FloatingPopover
             open={workspaceSwitcherOpen}
             onClose={() => {
@@ -5436,6 +5504,63 @@ function PageContent() {
                 onSetUsername={(username) =>
                   currentUserId ? setUsername(currentUserId, username) : Promise.resolve({ ok: false, error: 'Not signed in' })
                 }
+              />
+            ) : useContexts &&
+              isMobile &&
+              activeView === 'board' &&
+              currentWorkspace?.isPersonal &&
+              activeListIds.size === 0 &&
+              !mobilePersonalSpacesOpen ? (
+              // Home. Only when nothing more specific is open — picking a list still opens the board
+              // exactly as before, which is what keeps this a navigation change rather than a
+              // rewrite of everything underneath it.
+              <HomeContext
+                spaces={personalWorkspace?.spaces ?? []}
+                dms={chatDms.map((d) => {
+                  const others = (d.members ?? []).map((m) => m.user).filter((u) => u.id !== currentUserId);
+                  const first = others[0];
+                  return {
+                    id: d.id,
+                    label: others.map((u) => u.name).join(', ') || 'Just you',
+                    initials: first?.initials ?? '?',
+                    color: first?.color ?? '#6366f1',
+                    unreadCount: d.unreadCount,
+                  };
+                })}
+                // Everyone you share a workspace with and have no conversation with yet. The
+                // answer to "who can I talk to" that needs nobody to type a name.
+                suggestions={users
+                  .filter((u) => u.id !== currentUserId)
+                  .filter(
+                    (u) =>
+                      !chatDms.some((d) => (d.members ?? []).some((m) => m.user.id === u.id))
+                  )
+                  .slice(0, 4)
+                  .map((u) => ({
+                    id: u.id,
+                    name: u.name,
+                    initials: u.initials,
+                    color: u.color,
+                    reason: currentWorkspace?.name ? `Works in ${currentWorkspace.name}` : 'In your workspace',
+                  }))}
+                overdueCount={myOverdueCount}
+                todayCount={myTodayCount}
+                onSelectSpace={(spaceId) => {
+                  startBoardPush('forward', 'personal');
+                  setModalTaskStack([]);
+                  setNavigation(spaceId, []);
+                  setActiveView('board');
+                }}
+                onSelectDm={(channelId) => {
+                  setActiveChatChannelId(channelId);
+                  setActiveView('chat');
+                }}
+                onStartDm={(userId) => void handleStartDMFromOffice(userId)}
+                onOpenOverdue={() => {
+                  setNavigation('everything', []);
+                  setActiveView('board');
+                }}
+                onCreateSpace={() => setMobilePersonalSpacesOpen(true)}
               />
             ) : activeView === 'office' && useContexts && isMobile && !activeOfficeUserId && !activeOfficeRoomId ? (
               // The new Office: one workspace, seen as either the work in it or the conversations

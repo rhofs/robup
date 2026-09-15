@@ -6555,3 +6555,37 @@ existing screens, so nothing that already worked had to be rebuilt to try this.
 
 **Not yet built:** Home's own `My Spaces / Messages` toggle, the two profile panels, and the Planner
 personal/work filter. Home currently behaves exactly as My Tasks does today.
+
+### Same session — the rest of the layout, built in one go
+
+Asked, after the Office-only increment landed and read as "looks the same": should the whole thing
+be built at once? **Yes, and this is the case where the usual advice does not apply.** The value of
+this change is the symmetry, and you cannot feel half a symmetry — shipping one context alone
+produces exactly the report it produced. The thing that normally makes big changes bad is that they
+are hard to undo, and that does not apply behind a switch.
+
+**`HomeContext`** is deliberately the same component shape as `OfficeContext`: a two-option toggle
+over a list. `My Spaces` first, matching Office's `Spaces` first. Messages holds the DMs plus
+**suggestions** — everyone you share a workspace with and have never spoken to, which answers "who
+can I talk to" without anyone typing a name.
+
+**One row on Home is not scoped to the personal workspace:** overdue and due-today, counted across
+everything assigned to you. "What have I let slip" is not a question about one workspace, and
+scoping it would make the number wrong in the only direction that matters — too low.
+
+**The mobile title is now the workspace switcher in Office.** One tap from anywhere, not folded into
+a settings panel, which is where I first proposed putting it and was corrected: it is the most-used
+control in the app by the user's own account.
+
+`inOfficeContext` is derived, not stored — storing it would be a second source of truth for
+something `activeView` and the current workspace already answer between them, and both of those
+change from a dozen places.
+
+**Still to build:** the two settings panels from the sketch (personal under Home's avatar, workspace
+under Office's mark), and a colour per workspace so several can be told apart at a glance — the
+header mark currently falls back to the accent for want of one.
+
+**Reported and unexplained:** the user saw the new nav (three tabs) but the Office tab still rendering
+the old screen. The most likely cause is a restored `activeOfficeUserId`/`activeOfficeRoomId` from
+the URL, since the new screen is gated on both being empty and tapping the tab clears them. Asked him
+to tap Office directly and confirm.
