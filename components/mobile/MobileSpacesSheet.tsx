@@ -219,57 +219,23 @@ export default function MobileSpacesSheet({
   const [expandedSpaceIds, setExpandedSpaceIds] = useState<Set<string>>(new Set());
   const [expandedFolderIds, setExpandedFolderIds] = useState<Set<string>>(new Set());
 
-  // Auto-expands the tree to wherever activeSpaceId/activeListIds actually point right now,
-  // instead of relying purely on manual taps — but only when that target has genuinely *changed*
-  // since the last time this ran, tracked via lastAutoExpandTargetRef rather than reacting to
-  // `open` at all. Two failed attempts before this shape: (1) merging into the expand-state on
-  // every open accumulated every Space ever visited forever, since this component is deliberately
-  // never unmounted (see the file-level comment above) — the first Space it ever auto-expanded
-  // never left the set again, reported live as "Test Space er alltid åpen, uansett hvor jeg er."
-  // (2) *replacing* the expand-state on every closed->open transition fixed that, but then fought
-  // the user's own manual taps: collapsing the current Space, navigating away, and back (still the
-  // *same* target) re-expanded it anyway, reported live as toggling a Space "look[ing] like it did
-  // nothing" once you left and returned. Comparing against the last *target* solves both — arriving
-  // at a genuinely different Space/List replaces the expand-state to show exactly that; returning
-  // to the same one you already left expanded (or collapsed) leaves whatever you last did alone.
-  const lastAutoExpandTargetRef = useRef<string | null>(null);
-  useEffect(() => {
-    // Not while the drawer is sliding away. This effect expands the Space you just entered and
-    // collapses the one you left — which is right, but only once nobody is looking. Running it on
-    // the tap meant the previous Space snapped shut on a screen that was still on its way out:
-    // "om jeg så åpner admin, går inn i timeplan, så lukker innholdsskapelse seg (klipper)".
-    //
-    // Returning without touching lastAutoExpandTargetRef is deliberate — the effect re-runs the
-    // moment `pushingOut` clears, by which point the drawer is gone and the rearrangement happens
-    // unseen.
-    if (pushingOut) return;
-    if (!activeSpaceId) return;
-    const space = spaces.find((s) => s.id === activeSpaceId);
-    if (!space) return;
-    const activeList = space.lists.find((l) => activeListIds.has(l.id));
-    // Nothing is open, so there is nothing to reveal — and crucially, nothing to *hide* either.
-    // Without this, pressing Back from a List cleared activeListIds, which counted as a new target,
-    // which replaced the expanded set with an empty one: the Folder you had just been inside
-    // collapsed the instant you returned to the sheet. Reported exactly that way — "trykker
-    // tilbake, da er gaming foldern lukka, plutselig". This effect exists to *reveal* where you
-    // are; it has no business tidying up after you.
-    if (!activeList) return;
-    const targetKey = `${space.id}:${activeList?.id ?? ''}`;
-    if (lastAutoExpandTargetRef.current === targetKey) return;
-    lastAutoExpandTargetRef.current = targetKey;
-    setExpandedSpaceIds(new Set([space.id]));
-    const ancestorIds = new Set<string>();
-    if (activeList?.folderId) {
-      let folderId: string | null = activeList.folderId;
-      while (folderId) {
-        ancestorIds.add(folderId);
-        const folder = space.folders.find((f) => f.id === folderId);
-        folderId = folder?.parentId ?? null;
-      }
-    }
-    setExpandedFolderIds(ancestorIds);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [activeSpaceId, activeListIds, spaces, pushingOut]);
+  // NOTHING EXPANDS OR COLLAPSES THIS TREE EXCEPT A TAP.
+  //
+  // There used to be an effect here that expanded the Space you were in and collapsed every other
+  // one. It took three rounds to get its *timing* right and a fourth to stop it running mid-slide,
+  // and it was still wrong, because the timing was never the problem — a tree that rearranges itself
+  // is. Reported three separate times in two days, most recently: "samme bug om at space lukker seg
+  // når jeg bytter space hvor jeg går inn."
+  //
+  // Removing it also answers the complaint that created it ("husker ikke hvor Spaces var"). That was
+  // about the tree *forgetting*, and manual expansion state already persists — this component is
+  // deliberately never unmounted, so whatever you opened is still open when you come back. The
+  // effect was solving a memory problem by taking control away, and the memory was never missing.
+  //
+  // What is lost: opening the sheet no longer reveals where you are. That is consistent with the
+  // active-Space highlight being removed for the same reason — this sheet is somewhere you pass
+  // through to choose a destination, not a map of where you have been.
+
 
 
   const toggleSpace = (spaceId: string) =>

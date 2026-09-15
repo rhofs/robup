@@ -6000,3 +6000,31 @@ for the editor.
 **Stated plainly because it will come back:** this is a mitigation, not a cure. A mount slow enough
 will starve the opening frames whenever it happens. The real fix is a cheaper first paint for the
 doc editor, which is its own piece of work and was not attempted here.
+
+### Same session — the auto-expand is gone, and it should have gone three rounds ago
+
+"Samme bug om at space lukker seg når jeg bytter space hvor jeg går inn."
+
+The previous fix made the collapse happen *invisibly* rather than mid-slide. The collapse still
+happened. That is the distinction that took too long to see: **the complaint was never about when the
+tree rearranged itself, it was that it rearranged itself at all.**
+
+The effect is removed. Its history is worth keeping as a warning, because it was repaired four times
+and each repair was competent:
+
+1. merging on every open accumulated every Space ever visited — "Test Space er alltid åpen";
+2. replacing on every open fought the user's own taps — collapsing a Space then returning re-expanded it;
+3. comparing against the last *target* fixed both, and still collapsed folders when you pressed Back;
+4. skipping while a push ran stopped it happening in full view.
+
+Four rounds of increasingly precise answers to the wrong question. **A mechanism that needs this many
+corrections is usually not mis-tuned but unwanted.**
+
+Removing it also answers the complaint that created it — "husker ikke hvor Spaces var" — which was
+about the tree *forgetting*. Manual expansion already persists: this component is deliberately never
+unmounted, so whatever you opened is still open when you return. The effect was solving a memory
+problem by taking control away, and the memory was never missing.
+
+What is genuinely lost: opening the sheet no longer reveals where you are. That is consistent with
+removing the active-Space highlight for the same reason — this sheet is somewhere you pass through to
+choose a destination, not a map of where you have been.
