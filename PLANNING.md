@@ -6263,3 +6263,27 @@ JavaScript without it.
 Numbered 2.0 rather than 1.10 because this is the release where the app stops behaving like a web
 page in a frame: real notifications, a matching launch screen, and now the platform's own back
 navigation.
+
+### Same session — Back went back, but skipped the animations
+
+Two faults from the same cause. In a DM, swiping back played the slide-out but **cleared the
+conversation's contents first**, so it slid away empty. In a List or Doc it cut straight back with no
+movement at all.
+
+`history.back()` changes the URL, and the page restores its state from the URL *immediately*. The
+visible Back buttons do not work that way: each runs an exit animation and changes state afterwards
+(`closeChatConversation` holds the channel for the length of the push; `pushBackToSpaces` defers the
+navigation clear to `afterPush`). So routing the hardware gesture through the URL bypassed every one
+of those deliberate delays — the same class of mistake as the leaving page changing its contents,
+recorded above, arriving from a different direction.
+
+`lib/nativeBack.ts` lets the page register what Back should mean, and the listener asks it first. The
+handler mirrors the two header buttons exactly and returns false for everything else, which falls
+through to `history.back()` — the right answer for a task modal, a Doc, the Planner: real history,
+no animation of their own.
+
+The registering effect has **no dependency array**, deliberately: the handler closes over a dozen
+pieces of state, and a stale closure would run the wrong exit animation or none at all. One function
+assignment per render is cheaper than keeping that list correct.
+
+**No new APK** — all three files are web-side. 2.0 still applies.

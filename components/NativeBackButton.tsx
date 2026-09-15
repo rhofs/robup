@@ -2,6 +2,7 @@
 
 import { useEffect } from 'react';
 import { Capacitor } from '@capacitor/core';
+import { runNativeBackHandler } from '../lib/nativeBack';
 
 // Makes Android's Back gesture go back *within* Siqt instead of closing it.
 //
@@ -25,8 +26,15 @@ export default function NativeBackButton() {
       .then(async ({ App }) => {
         if (cancelled) return;
         const handle = await App.addListener('backButton', ({ canGoBack }) => {
-          // canGoBack is the WebView's own history, which includes the pushState entries above —
-          // they are same-document entries but still history entries.
+          // The page gets first refusal. Some destinations have a real exit animation attached to
+          // them — a conversation sliding away, a List pushing back to the Spaces drawer — and
+          // those run from the page's own handlers. Going straight to history.back() instead
+          // changes the URL, and the page restores from the URL at once, so the animation plays
+          // over contents that have already been cleared. See lib/nativeBack.ts.
+          if (runNativeBackHandler()) return;
+
+          // canGoBack is the WebView's own history, which includes the pushState entries the page
+          // writes — same-document entries, but history entries all the same.
           if (canGoBack) {
             window.history.back();
             return;

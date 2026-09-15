@@ -69,6 +69,7 @@ import { useTaskStore, HierarchySpace, HierarchyFolder, HierarchyList, Hierarchy
 import { useHistoryStore } from '../store/useHistoryStore';
 import { hapticTap } from '../lib/haptics';
 import { BOOT_MARK_SRC, BOOT_MARK_ASPECT, BOOT_MARK_WIDTH_SHARE, BOOT_RING_BOX_SHARE } from '../lib/bootMark';
+import { setNativeBackHandler } from '../lib/nativeBack';
 import { CHAT_PUSH_MS, CHAT_PUSH_EASE } from '../lib/chatTransition';
 import TaskListSentinel from '../components/TaskListSentinel';
 import { useSessionStore } from '../store/useSessionStore';
@@ -990,6 +991,48 @@ function PageContent() {
       setChatClosing(false);
     }, CHAT_PUSH_MS);
   };
+
+  // What Android's Back gesture should do, registered for components/NativeBackButton.tsx.
+  //
+  // It mirrors the two visible Back buttons in the header, and it exists because they are not
+  // interchangeable with history.back(): each runs an exit animation and changes state afterwards,
+  // while history.back() changes the URL and the page restores from it at once. Going through the
+  // URL therefore cleared a conversation before it had finished sliding away, and took a List
+  // straight back with no movement at all — both reported.
+  //
+  // Returns false for everything else, which falls through to history.back(). That is the right
+  // answer for an open task modal, a Doc, the Planner: real history, no animation of their own.
+  useEffect(() => {
+    if (!isMobile) {
+      setNativeBackHandler(null);
+      return;
+    }
+    setNativeBackHandler(() => {
+      if (activeView === 'chat' && activeChatEntity) {
+        closeChatConversation();
+        return true;
+      }
+      // Same condition the header's own Back button renders under. The drawer being open already
+      // means we are *at* the overview, so there is nothing to go back to from here.
+      if ((activeView === 'board' || activeView === 'docs') && !mobileSpacesOpen && !mobilePersonalSpacesOpen) {
+        pushBackToSpaces(
+          () => {
+            if (currentWorkspace?.isPersonal) setMobilePersonalSpacesOpen(true);
+            else setMobileSpacesOpen(true);
+          },
+          () => {
+            if (activeSpaceId !== 'everything') setNavigation(activeSpaceId, []);
+          }
+        );
+        return true;
+      }
+      return false;
+    });
+    return () => setNativeBackHandler(null);
+    // No dependency array on purpose. The handler closes over a dozen pieces of state, and a stale
+    // closure here is not a subtle bug — it would run the wrong exit animation, or none. Re-assigning
+    // one function reference per render is cheaper than getting that list right and keeping it right.
+  });
 
   const activeChatChannelLabel = useMemo(() => {
     if (!activeChatEntity) return null;
