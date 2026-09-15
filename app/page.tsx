@@ -113,7 +113,7 @@ import TrashPanel from '../components/TrashPanel';
 import OnboardingFlow from '../components/OnboardingFlow';
 import SettingsPanel, { readHiddenNavTabs, readHideWeekNumbers, type NavTabId } from '../components/SettingsPanel';
 import type { NavTab, MenuTile } from '../components/mobile/navTypes';
-import { PRIMARY_NAV_TAB_IDS } from '../components/mobile/navTypes';
+import { primaryNavTabIds } from '../components/mobile/navTypes';
 import MobileBottomNav from '../components/mobile/MobileBottomNav';
 import MobileSpacesSheet from '../components/mobile/MobileSpacesSheet';
 import MobileDocPagesSheet from '../components/mobile/MobileDocPagesSheet';
@@ -1989,12 +1989,25 @@ function PageContent() {
     setActiveOfficeRoomId(null);
   };
 
+  // The contexts layout's Office tab. handleOfficeNavClick alone is not enough here: in the old
+  // layout Office was a view *within* whatever workspace was already active, but in the new one
+  // Office IS the team half, so arriving from Home (the personal workspace) has to switch workspace
+  // first — otherwise the Office screen lists the personal workspace's own Spaces, which is both
+  // wrong and indistinguishable from Home.
+  const openOfficeContext = () => {
+    if (currentWorkspace?.isPersonal && realSheetWorkspace) {
+      setActiveWorkspaceId(realSheetWorkspace.id);
+    }
+    handleOfficeNavClick();
+  };
+
   // Single source of truth for which view-switching tabs are visible right now — read by both the
   // desktop icon rail and the mobile bottom nav / app-launcher grid, so hiddenNavTabs/
   // hasRealWorkspace are never re-derived (and never drift) between the two surfaces.
-  // Lifted out of the My Tasks launcher tile so the new layout's Home tab can run exactly the
-  // same thing. Two entry points to one screen must not be two implementations of it — that is
-  // how "works from the menu, not from the tab" bugs are made.
+  // Lifted out of the My Tasks launcher tile when the new layout was first wired to it. The Home
+  // tab has since moved to openHome below — this one deliberately lands *past* Home (last list, or
+  // the tree sheet), which is right for a "My Tasks" shortcut and wrong for a context's front
+  // door. The launcher tile still uses this.
   const openMyTasks = useCallback(async () => {
         if (!currentUserId) {
           showToast('Signed-out session — try reloading the page.');
@@ -2044,6 +2057,35 @@ function PageContent() {
     // reason.
   }, [currentUserId, workspaces, ensurePersonalWorkspace, setActiveWorkspaceId, setActiveView]);
 
+  // Home's own entry point, and deliberately NOT openMyTasks.
+  //
+  // openMyTasks is built to skip the middle screen: it restores the last list you were in, and when
+  // there is none it opens the Personal Spaces tree sheet. Both of those land somewhere *past*
+  // Home, and HomeContext only renders when neither has happened — so wiring the Home tab to
+  // openMyTasks meant the tab could never show the screen it exists for. It looked exactly like the
+  // switch doing nothing.
+  //
+  // setNavigation('everything') is what clears the restored list; it has to run after
+  // setActiveWorkspaceId, which restores one as part of switching workspace.
+  const openHome = useCallback(async () => {
+    if (!currentUserId) {
+      showToast('Signed-out session — try reloading the page.');
+      return;
+    }
+    try {
+      const known = workspaces.find((w) => w.isPersonal)?.id;
+      const workspaceId = known ?? (await ensurePersonalWorkspace(currentUserId)).workspaceId;
+      setActiveWorkspaceId(workspaceId);
+      setNavigation('everything');
+      setMobilePersonalSpacesOpen(false);
+      setActiveView('board');
+    } catch (err) {
+      showToast(`Couldn't open Home: ${err instanceof Error ? err.message : 'unknown error'}`);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    // showToast: declared below this point — see openMyTasks' own note.
+  }, [currentUserId, workspaces, ensurePersonalWorkspace, setActiveWorkspaceId, setNavigation, setActiveView]);
+
   const visibleNavTabs: NavTab[] = useMemo(() => {
     const tabs: NavTab[] = [];
 
@@ -2064,7 +2106,7 @@ function PageContent() {
         id: 'board',
         label: 'Home',
         icon: ListIcon,
-        onClick: () => void openMyTasks(),
+        onClick: () => void openHome(),
         active: !!currentWorkspace?.isPersonal && (activeView === 'board' || mobilePersonalSpacesOpen),
       });
       if (hasRealWorkspace) {
@@ -2072,7 +2114,7 @@ function PageContent() {
           id: 'office',
           label: 'Office',
           icon: Building2,
-          onClick: handleOfficeNavClick,
+          onClick: openOfficeContext,
           active: (activeView === 'office' || (activeView === 'board' && !currentWorkspace?.isPersonal)) && !sheetOpen,
         });
         tabs.push({
@@ -2082,7 +2124,29 @@ function PageContent() {
           onClick: () => setActiveView('calendar'),
           active: activeView === 'calendar' && !sheetOpen,
         });
+        // Not bottom-nav tabs — primaryNavTabIds() pins only board/office/calendar, so these two
+        // fall through to the launcher grid, which is exactly where the user asked for them to
+        // stay ("Vi burde fortsatt beholde den menyløsningen vi har som en 4"). Without them the
+        // contexts layout has a launcher containing nothing but the Me tiles, and Docs becomes
+        // unreachable on mobile altogether.
+        tabs.push({
+          id: 'docs',
+          label: 'Docs',
+          icon: FileText,
+          onClick: () => setActiveView('docs'),
+          active: activeView === 'docs' && !sheetOpen,
+        });
       }
+      // Outside the hasRealWorkspace guard, matching the classic branch: DMs exist without a
+      // workspace, so Chat has to as well.
+      tabs.push({
+        id: 'chat',
+        label: 'Chat',
+        icon: MessageSquare,
+        onClick: () => setActiveView('chat'),
+        active: activeView === 'chat' && !sheetOpen,
+        badge: chatUnreadCount,
+      });
       return tabs;
     }
 
@@ -2148,7 +2212,7 @@ function PageContent() {
     }
     return tabs;
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [hiddenNavTabs, hasRealWorkspace, activeView, currentWorkspace, workspaces, chatUnreadCount, mobileSpacesOpen, mobilePersonalSpacesOpen, useContexts]);
+  }, [hiddenNavTabs, hasRealWorkspace, activeView, currentWorkspace, workspaces, chatUnreadCount, mobileSpacesOpen, mobilePersonalSpacesOpen, useContexts, openHome]);
 
   // The desktop sidebar's "Me zone" (My tasks/My assigned tasks/Network/Profile) has no mobile
   // equivalent — it's inside the same hidden-below-md <aside> as the Spaces/Lists tree, and unlike
@@ -2207,8 +2271,11 @@ function PageContent() {
   // MobileBottomNav (to resolve the dynamic 4th slot's icon/label/onClick) and AppLauncherGrid (to
   // render + highlight it), so both surfaces read the exact same "what's pinnable" list.
   const mobileGridTabs = useMemo(
-    () => visibleNavTabs.filter((tab) => !PRIMARY_NAV_TAB_IDS.includes(tab.id)),
-    [visibleNavTabs]
+    () => {
+      const pinned = primaryNavTabIds(layoutPref);
+      return visibleNavTabs.filter((tab) => !pinned.includes(tab.id));
+    },
+    [visibleNavTabs, layoutPref]
   );
   const pinnableMobileTiles: MenuTile[] = useMemo(() => [...mobileGridTabs, ...meNavItems], [mobileGridTabs, meNavItems]);
   // No `?? pinnableMobileTiles[0]` fallback any more — that silently pinned whatever happened to
@@ -5991,6 +6058,7 @@ function PageContent() {
       >
       <MobileBottomNav
         navTabs={visibleNavTabs}
+        layout={layoutPref}
         menuOpen={mobileMenuOpen}
         onOpenMenu={() => setMobileMenuOpen(true)}
         onCloseMenu={() => setMobileMenuOpen(false)}

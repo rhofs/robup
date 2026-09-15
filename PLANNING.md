@@ -6618,3 +6618,72 @@ only one that cached a value at mount. It was the first preference that needed t
 straight to debugging the Office screen. It was the user's own hidden-tabs configuration. One
 screenshot settled in seconds what a round of reasoning had got wrong — **a detail that merely fits
 the hypothesis is not confirmation of it.**
+
+### Same session — "Fortsatt samme": the nav bar was throwing the new tab list away
+
+The custom event above was a real bug and a real fix, and it changed nothing on screen. The layout
+switch had a *second*, completely independent reason for doing nothing, and this one was the reason
+the bar still read `Spaces · Planner · My Tasks`.
+
+**`MobileBottomNav` does not render the `navTabs` prop it is given.** It uses it as a lookup table:
+
+```ts
+const primaryTabs = PRIMARY_NAV_TAB_IDS        // ['board', 'calendar', 'chat']
+  .map((id) => navTabs.find((t) => t.id === id))
+  .filter(Boolean);
+```
+
+The contexts layout emits `board` (Home), `office` (Office), `calendar` (Planner). `office` is not in
+that list, so it was dropped on the floor; `chat` was looked up and not found. What survived was
+`board` and `calendar` — exactly the two fixed slots plus the launcher that the screenshot showed.
+
+And the labels: the same component special-cases `tab.id === 'board'` into label "Spaces", the
+LayoutGrid icon, and `onOpenSpaces` **instead of the tab's own `onClick`**. So Home was relabelled
+Spaces and, had it been tappable as Home, would have opened the old Spaces tree anyway.
+
+The switch had been working correctly the whole time. Both halves of the new layout were being
+discarded one layer below where they were built.
+
+**The lesson, and it generalises:** a prop named `navTabs` that is consumed as a lookup table is
+invisible at the call site. Building a nav list correctly proves nothing until you have read what
+consumes it. Two sessions were spent on a flag that was never the problem.
+
+Fixed by making the bar layout-aware rather than by widening the constant (widening it would have put
+Office into the *classic* layout too):
+
+- `navTypes.ts` gains `CONTEXT_NAV_TAB_IDS = ['board','office','calendar']` and
+  `primaryNavTabIds(layout)`. The comment there is the warning for the next reader.
+- `MobileBottomNav` takes a `layout` prop and gates the entire `board` → Spaces override on
+  `!contexts`. In the contexts layout `board` is Home: a real destination with its own handler.
+- `mobileGridTabs` in `page.tsx` filters against the same layout-aware list, so the launcher keeps
+  showing exactly what the bar does not.
+
+### Same session — two more things the new layout needed before it could work at all
+
+Found by reading the mount conditions rather than by testing, and both would have read as "the tab
+does nothing":
+
+**Home had no entry point of its own.** The Home tab called `openMyTasks`, which is deliberately
+built to *skip* the middle screen — it restores your last list, and failing that opens the Personal
+Spaces tree sheet. `HomeContext` only renders when neither has happened. So the tab could never show
+the screen it exists for. New `openHome` switches to the personal workspace, then
+`setNavigation('everything')` to clear the restored list (it must run *after* `setActiveWorkspaceId`,
+which restores one), closes the tree sheet, and sets the view. `openMyTasks` is unchanged and still
+used by the launcher tile — landing past Home is right for a "My Tasks" shortcut and wrong for a
+context's front door.
+
+**Office did not switch workspace.** In the old layout Office was a view *inside* whatever workspace
+was active; in the new one Office *is* the team half, so arriving from Home (the personal workspace)
+left it listing the personal workspace's own Spaces — wrong, and indistinguishable from Home. New
+`openOfficeContext` falls back to `lastRealWorkspaceId` first, same fallback `handleTasksNavClick`
+and `openMobileSpaces` already use.
+
+**Docs and Chat were about to disappear.** The contexts branch returned only three tabs, and
+`mobileGridTabs` is "everything not pinned to the bar" — so the launcher would have held nothing but
+the Me tiles, and Docs would have been unreachable on mobile entirely. Both are now pushed into the
+contexts list; `primaryNavTabIds` pins only three of them, so they land in the launcher. This is the
+menu the user asked to keep ("Vi burde fortsatt beholde den menyløsningen vi har som en 4").
+
+**Not verified on device.** Typecheck and production build are clean, and the reasoning above is
+read off the mount conditions — but nobody has yet tapped Home, Office or Planner with the switch on.
+Whether Chat deserves its own tab in this layout is still open.
