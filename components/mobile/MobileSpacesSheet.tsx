@@ -292,17 +292,16 @@ export default function MobileSpacesSheet({
           // the page behind moves a little, the page arriving moves all the way, and the difference
           // between them reads as depth rather than as a carousel.
           //
-          // The fade is a compromise, and an honest one. In the chat push the incoming conversation
-          // is drawn ON TOP of the outgoing list, because both panes live in one `relative
-          // overflow-hidden` container and are absolutely positioned. This drawer is not a pane in
-          // that sense — it is `fixed z-30` over the entire app, header included — so the board can
-          // never paint above it without moving both into a shared container. Left solid, its right
-          // edge sweeps across as a vertical seam, which is exactly what was reported: "en ramme på
-          // slutten som også skyves ut av bildet".
+          // The board now genuinely covers this, so no seam is left to hide: <main> carries the
+          // push and rises to z-40 while it moves, above this drawer's z-30. That is what the
+          // earlier full `-100%` exit was working around, and why it produced the vertical edge
+          // sweeping across the screen.
           //
-          // So it dissolves instead of being covered. The fade finishes at roughly 60% of the
-          // travel, before the board has landed, so the eye reads it as having gone behind rather
-          // than as having vanished.
+          // A short fade stays, for one band only. This drawer is `top-0` and covers the app's own
+          // global header too, while <main> begins below it — so during the push that top strip is
+          // the one place this is still visible, shifted a third left. Fading it there lets the
+          // board's identical header underneath take over instead of leaving a displaced copy
+          // sliding about.
           // initial matters only for the arriving case: the drawer mounts the moment Back is
           // pressed, and without a starting offset it would simply appear and then have nothing
           // left to animate.

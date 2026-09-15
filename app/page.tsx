@@ -4365,7 +4365,26 @@ function PageContent() {
           behind it... you can see the straight line go past where the corner starts to round
           off." Matching this to the header's own token removes the mismatched third shade
           entirely, rather than chasing the geometry of exactly where it peeks through. */}
-      <main className="flex-1 flex flex-col h-full overflow-hidden bg-neutral-950 relative">
+      {/* The whole page moves, not just the task rows.
+          Animating the rows alone was the remaining "it still cuts": the title row, the search
+          pill and the list header all swapped in one frame while only the rows slid, so the eye
+          read a cut with something sliding inside it. Reported precisely — "det eneste som
+          animerer inn er tasks. hele siden må animeres inn, over den forrige siden."
+
+          <main> is the right element and needed no restructuring: it already wraps the per-view
+          header and every view's content, is already `relative overflow-hidden`, and — checked
+          rather than assumed — contains no `position: fixed` descendants, which a transform would
+          otherwise reparent. The mobile nav, the drawer and the modals all live outside it.
+
+          zIndex 40 while moving puts it ABOVE the Spaces drawer's z-30, which is what finally makes
+          this the same effect as the chat push: the arriving page is drawn on top, so the drawer
+          behind it only has to move a third and never has to hide itself. Dropped back to `auto`
+          when idle so nothing else in the app has to reason about a permanently raised main. */}
+      <motion.main
+        animate={boardPushControls}
+        style={{ zIndex: boardPushing ? 40 : undefined }}
+        className="flex-1 flex flex-col h-full overflow-hidden bg-neutral-950 relative"
+      >
         {/* Mobile: no border framing this row at all, and the same bg-neutral-950 as the title bar
             above — reads as one continuous header block instead of two visually distinct bands.
             Desktop keeps its original border+lighter-bg treatment unchanged. */}
@@ -5375,10 +5394,7 @@ function PageContent() {
                 <div className="text-right">Action</div>
               </div>
 
-              <motion.div
-                animate={boardPushControls}
-                className={isMobile ? 'flex flex-col gap-2' : 'divide-y divide-neutral-800/50'}
-              >
+              <div className={isMobile ? 'flex flex-col gap-2' : 'divide-y divide-neutral-800/50'}>
                 {/* The check sits OUTSIDE AnimatePresence, not inside it. Inside, flipping to
                     null asked AnimatePresence to play an exit animation for every row at once —
                     each TaskRow exits with opacity, scale, a y-offset and a blur filter, and with
@@ -5468,14 +5484,14 @@ function PageContent() {
                     </button>
                   )
                 )}
-              </motion.div>
+              </div>
               </div>
             </div>
             </>
             )}
           </div>
         </div>
-      </main>
+      </motion.main>
       </div>
 
       {/* Hidden entirely (not just visually) while an actual conversation is open on mobile — an

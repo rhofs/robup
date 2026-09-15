@@ -5811,3 +5811,36 @@ The board's Back button now routes through `pushBackToSpaces`, which sets the di
 opening the sheet. Note the Spaces *tab* (`openMobileSpaces`) deliberately does not — arriving at
 Spaces from Planner or Chat is not a "back", and animating it as one would claim a history that does
 not exist.
+
+### Same session — the whole page moves now, and the limitation turned out not to be one
+
+"Det eneste som animerer inn er tasks. hele siden må animeres inn, over den forrige siden."
+
+Correct, and it exposed that the previous round's stated limitation was wrong. The claim was that the
+board could never paint above the drawer without restructuring both into one container, the way
+ChatSidebar and ChatPanel are. **It needed no restructuring at all — only the right element.**
+
+`<main>` already wraps the per-view header and every view's content, is already `relative
+overflow-hidden`, and contains **no `position: fixed` descendants** (checked, since a transform would
+otherwise reparent them — the mobile nav carries a comment about that exact trap). The nav, the
+drawer and the modals all live outside it. So `<main>` is the page, and animating it moves
+everything the eye expects to move.
+
+Raising it to `z-index: 40` while it travels puts it above the drawer's `z-30`, which finally makes
+this the same effect as the chat push rather than an imitation: **the arriving page is drawn on top,
+so the page behind only has to move a third and never has to hide itself.** Dropped back to `auto`
+when idle, so nothing else in the app has to reason about a permanently raised `main`.
+
+Two things worth carrying forward:
+
+- **Animating the wrong element is indistinguishable from not animating.** Three rounds went into the
+  rows sliding correctly while everything above them cut, and each round made the sliding better
+  without touching the actual complaint.
+- **A limitation asserted from structure deserves one more look before it is written down.** "These
+  would have to become panes of one container" was true of the components being compared and false
+  of the problem; the answer was one element up the tree.
+
+**One band still differs:** the drawer is `top-0` and covers the app's global header, while `<main>`
+starts below it. So during the push that top strip is the only place the drawer is still visible,
+shifted a third left — it keeps a short fade there so the board's identical header underneath takes
+over rather than leaving a displaced copy sliding about.
