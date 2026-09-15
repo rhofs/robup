@@ -53,10 +53,18 @@ export default function ChatSidebar({ workspaceId, closing = false }: ChatSideba
   // travels with the page instead of surviving it. Everything else in here still uses the real
   // activeChannelId — this affects appearance only.
   const highlightedChannelId = closing ? null : activeChannelId;
-  // Matched to the push, not to Tailwind's default 150ms. A 150ms fade against a 520ms slide is a
-  // cut with extra steps: it is over long before the panel has left, so the eye still registers two
-  // separate events rather than one movement.
-  const highlightFade = { transitionDuration: `${CHAT_PUSH_MS}ms`, transitionTimingFunction: CHAT_PUSH_EASE_CSS };
+  // Asymmetric on purpose, and the asymmetry is the whole point.
+  //
+  // Going OUT it matches the push: a 150ms fade against a 520ms slide is a cut with extra steps,
+  // finishing long before the panel has left, so the eye registers two events instead of one.
+  //
+  // Coming IN, the same 520ms was simply wrong. The highlight crept up while the conversation was
+  // already sliding in over it — decoration arriving slowly for a row you are about to stop looking
+  // at. Reported as distracting, and correctly: a press wants acknowledging *now*, not eased into.
+  // 90ms is fast enough to read as a response to the finger rather than as an animation.
+  const highlightFade = closing
+    ? { transitionDuration: `${CHAT_PUSH_MS}ms`, transitionTimingFunction: CHAT_PUSH_EASE_CSS }
+    : { transitionDuration: '90ms', transitionTimingFunction: 'ease-out' };
 
   const channels = workspaceId ? channelsByWorkspace[workspaceId] || [] : [];
   const [editingChannelId, setEditingChannelId] = useState<string | null>(null);

@@ -291,9 +291,25 @@ function vibrate(ms: number): void {
 // Read per call rather than cached at module load — the setting can change mid-session (see
 // SettingsPanel), and a cached copy would leave every already-mounted component on the old value
 // until reload.
+// Two pulses this close together are one tap being reported twice, not two taps. It exists because
+// haptics now come from two places: components that call hapticTap for a specific gesture, and the
+// global tap feedback in components/GlobalTapFeedback.tsx, which fires for any button. Both are
+// wanted — the global one covers the hundreds of controls nobody will ever wire up by hand, the
+// specific ones cover gestures that are not taps at all (long-press, drag pickup) — and where they
+// overlap the result must still be a single click, not a stutter.
+//
+// 60ms is comfortably below the fastest a person can deliberately tap twice, and comfortably above
+// the gap between a pointerdown listener and a React onClick for the same press.
+const DEDUPE_WINDOW_MS = 60;
+let lastPulseAt = 0;
+
 function pulse(kind: 'tap' | 'strong'): void {
   const strength = readHapticStrength();
   if (strength === 'off') return;
+
+  const now = Date.now();
+  if (now - lastPulseAt < DEDUPE_WINDOW_MS) return;
+  lastPulseAt = now;
   if (Capacitor.isNativePlatform()) {
     nativeImpact(kind, strength);
     return;

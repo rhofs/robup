@@ -6287,3 +6287,38 @@ pieces of state, and a stale closure would run the wrong exit animation or none 
 assignment per render is cheaper than keeping that list correct.
 
 **No new APK** — all three files are web-side. 2.0 still applies.
+
+### Same session — a press that answers immediately, everywhere
+
+**1. The DM row's highlight was easing IN.** "Den fader opp etter hvert som siden slider inn... litt
+distraherende." My own fault: the 520ms fade was added so the highlight would leave *with* the page,
+and I applied it in both directions. Coming in, it meant decoration creeping up slowly on a row you
+are already navigating away from. It is now asymmetric — 520ms on the way out, **90ms on the way
+in**. A press wants acknowledging now, not eased into.
+
+**2. Haptics and a press state, for every control at once.**
+
+Feedback had been added gesture by gesture, so the controls someone had happened to mention felt
+alive and the other few hundred did not. Wiring each one was never going to happen and never going
+to stay done, so both are delegated:
+
+- `GlobalTapFeedback` listens for `pointerdown` on the document and ticks for anything inside a
+  button, link or `role="button"`. **On press, not on click** — a tick when the finger lands reads as
+  the control responding; the same tick on click arrives after release and reads as a rattle.
+  Capture phase, so a handler that stops propagation cannot also stop feedback for a press that
+  plainly happened. Touch only: haptics on a desktop mean a phone buzzing in a pocket.
+- A CSS `:active` scale to 0.97, touch only. The haptic says a press registered; this says *which
+  thing* registered it, which is the half a vibration cannot carry. A scale rather than a tint
+  because this app has controls on white cards, the dark ground, saturated fills and photographs,
+  and a tint has to be chosen per surface. 60ms down, 110ms up — instant under the finger, slightly
+  slower on release so it reads as letting go.
+
+**The de-duplication in `lib/haptics.ts` is what makes this safe.** Components that already call
+`hapticTap` keep doing so — they cover gestures the listener cannot see, like long-press and drag
+pickup — and where both fire for one press, pulses within 60ms collapse to a single click. Without
+that, every hand-wired control would have started stuttering.
+
+Both carry an opt-out (`data-no-haptic`, `data-no-press`) that nothing uses yet. They exist so the
+answer to "this one shouldn't" is an attribute rather than unpicking the mechanism.
+
+**No new APK** — all web-side.

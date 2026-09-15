@@ -377,3 +377,42 @@ body {
     animation: none;
   }
 }
+
+/* Every control acknowledges a press, on touch devices.
+   
+   Asked for alongside the haptics: "kanskje alle knapper bør ha en slags animasjon om at vi trykker
+   på de?" The haptic says a press registered; this says *which thing* registered it, which is the
+   half a vibration cannot carry.
+   
+   Touch only. On a desktop the same job is already done by hover, and a pointer that never touches
+   the screen has no press to acknowledge.
+   
+   scale(0.97) rather than a colour change: it works on any background — this app has controls on
+   white cards, on the dark ground, on saturated fills and on photographs — where a tint has to be
+   chosen per surface and looks wrong on the ones nobody checked.
+   
+   60ms in, 110ms out. Going down should feel instantaneous, like the surface moving under the
+   finger; coming back up a little slower reads as release rather than as a snap.
+   
+   Opt out with [data-no-press] on the control or any ancestor. */
+@media (hover: none) and (pointer: coarse) {
+  button:not(:disabled):not([data-no-press] *):not([data-no-press]),
+  a[href]:not([data-no-press] *):not([data-no-press]),
+  [role='button']:not([aria-disabled='true']):not([data-no-press] *):not([data-no-press]) {
+    transition: transform 110ms cubic-bezier(0.2, 0, 0.2, 1);
+  }
+  button:not(:disabled):not([data-no-press] *):not([data-no-press]):active,
+  a[href]:not([data-no-press] *):not([data-no-press]):active,
+  [role='button']:not([aria-disabled='true']):not([data-no-press] *):not([data-no-press]):active {
+    transform: scale(0.97);
+    transition-duration: 60ms;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  button:active,
+  a[href]:active,
+  [role='button']:active {
+    transform: none;
+  }
+}

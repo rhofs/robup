@@ -6,6 +6,7 @@ import ServiceWorkerRegistrar from "../components/ServiceWorkerRegistrar";
 import ThemeWatcher from "../components/ThemeWatcher";
 import NativeSplashGate from "../components/NativeSplashGate";
 import NativeBackButton from "../components/NativeBackButton";
+import GlobalTapFeedback from "../components/GlobalTapFeedback";
 import { THEME_INIT_SCRIPT } from "../lib/theme";
 import "./globals.css";
 
@@ -69,6 +70,7 @@ export default function RootLayout({
         <ThemeWatcher />
         <NativeSplashGate />
         <NativeBackButton />
+        <GlobalTapFeedback />
         {/* framer-motion defaults to skipping animations outright (instant end-state, no tween)
             whenever the OS "Reduce Motion" accessibility setting is on — every animation this
             session iterated on (popup menu fade/slide/clip-path, nav pill spring, etc.) would
