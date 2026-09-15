@@ -929,9 +929,16 @@ function PageContent() {
   }, [boardPushing, boardPushControls]);
 
   // Going back to the Spaces drawer, as the reverse of picking a List.
-  const pushBackToSpaces = (openSheet: () => void) => {
+  //
+  // `afterPush` is for work that would change what the leaving page *shows*. A page sliding out has
+  // to keep showing what you were looking at — change its contents first and the movement is no
+  // longer that page leaving, it is a different screen appearing and then leaving. Reported exactly
+  // that way: "den list viewen klipper til et annet bilde, ser nesten ut som en kopi av spaces
+  // viewen."
+  const pushBackToSpaces = (openSheet: () => void, afterPush?: () => void) => {
     startBoardPush('back');
     openSheet();
+    if (afterPush) window.setTimeout(afterPush, CHAT_PUSH_MS);
   };
 
   const [chatClosing, setChatClosing] = useState(false);
@@ -4473,14 +4480,25 @@ function PageContent() {
                     // current activeListIds untouched, and the very next Spaces visit skipped
                     // straight back into the same List anyway. Applies to both "My Tasks" and real
                     // Spaces now that both skip the picker sheet when a position is remembered.
-                    if (activeSpaceId !== 'everything') setNavigation(activeSpaceId, []);
-                    pushBackToSpaces(() => {
-                      if (currentWorkspace?.isPersonal) {
-                        setMobilePersonalSpacesOpen(true);
-                      } else {
-                        setMobileSpacesOpen(true);
+                    //
+                    // Deferred until the push has finished, because it changes what the board
+                    // renders: clearing the List selection swaps the leaving page's contents for
+                    // the whole Space's, mid-flight. Nothing reads the cleared value before then —
+                    // the drawer is already being opened directly here rather than through
+                    // openMobileSpaces(), and everything else this call feeds is about the *next*
+                    // visit.
+                    pushBackToSpaces(
+                      () => {
+                        if (currentWorkspace?.isPersonal) {
+                          setMobilePersonalSpacesOpen(true);
+                        } else {
+                          setMobileSpacesOpen(true);
+                        }
+                      },
+                      () => {
+                        if (activeSpaceId !== 'everything') setNavigation(activeSpaceId, []);
                       }
-                    });
+                    );
                   }}
                   title="Back"
                   className="p-1.5 rounded text-neutral-400 hover:text-app-strong hover:bg-neutral-800/60 cursor-pointer"

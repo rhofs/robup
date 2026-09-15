@@ -5899,3 +5899,24 @@ Starting the movement in the same frame meant its first steps competed with that
 The animation now starts on the next frame (`requestAnimationFrame`), so the drawer paints first and
 the movement begins against a settled screen. One frame of delay is imperceptible; the first frames
 of a transform landing in a blocked main thread are not.
+
+### Same session — the leaving page changed its contents before leaving
+
+"Den list viewen klipper til et annet bilde, ser nesten ut som en kopi av spaces viewen."
+
+It was. The Back button called `setNavigation(activeSpaceId, [])` immediately, which clears the List
+selection — so the board re-rendered showing the whole Space's tasks, and *that* is what slid out.
+The animation was fine; it was animating the wrong contents.
+
+The rule this makes concrete: **a page sliding out has to keep showing what you were looking at.**
+Change its contents first and the movement stops reading as that page leaving; it becomes a different
+screen appearing and then leaving, which is why it looked like a cut to "a copy of the Spaces view".
+
+`pushBackToSpaces` now takes an `afterPush` callback for exactly this class of work, and the
+navigation clear moved into it. Nothing reads the cleared value in the meantime — the drawer is
+opened directly here rather than through `openMobileSpaces()`, and everything else that call feeds
+(`lastPositionByWorkspaceId`, the skip-the-picker check) is about the *next* visit.
+
+Three rounds of this transition have now failed for three different versions of the same mistake:
+animating the wrong element, failing to return it to neutral, and animating the right element with
+the wrong contents. Each looked like an animation problem and none of them was.
