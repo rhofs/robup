@@ -5949,3 +5949,27 @@ blank again.
 The push now ends on the animation's own completion promise. A backstop timer, deliberately longer
 than the movement, still clears the flag if the animation is interrupted rather than completed —
 `boardPushing` stuck true would leave the drawer mounted over the app with no way to dismiss it.
+
+### Same session — only one of the four ways out of the drawer was animated
+
+"Docs har en fin animasjon ut, men klipper bare inn."
+
+Exactly what the code did. `startBoardPush('forward')` had been wired to **one** handler — the Spaces
+sheet's `onSelectList` — while the Back button routes through `pushBackToSpaces` regardless of what
+you were looking at. So leaving always animated and arriving only did from a List.
+
+Four entry points existed and three were missing it:
+
+| | |
+|---|---|
+| Spaces sheet → List | had it |
+| Spaces sheet → Doc | missing — the reported case |
+| Spaces sheet → All Tasks (`onSelectSpace`) | missing |
+| My Tasks sheet → List and Doc | missing, both |
+
+All six call sites now push.
+
+Worth keeping as a shape: **an asymmetric transition is a strong signal that a handler was missed,
+not that the animation is subtly wrong.** Movement that works in one direction is already proof the
+mechanism is sound; what differs is which taps reach it. That is a much faster thing to check than
+re-reading easing curves.

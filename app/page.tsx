@@ -7382,6 +7382,7 @@ function PageContent() {
         activeSpaceId={activeSpaceId}
         activeListIds={activeListIds}
         onSelectSpace={(spaceId) => {
+          startBoardPush('forward');
           setModalTaskStack([]);
           setNavigation(spaceId, []);
           setActiveView('board');
@@ -7411,6 +7412,7 @@ function PageContent() {
           if (list) setListMenu({ x, y, list, spaceId });
         }}
         onSelectDoc={(spaceId, docId) => {
+          startBoardPush('forward');
           setModalTaskStack([]);
           setNavigation(spaceId, []);
           setDocsNavigation(null, docId);
@@ -7433,11 +7435,13 @@ function PageContent() {
         activeSpaceId={activeSpaceId}
         activeListIds={activeListIds}
         onSelectSpace={(spaceId) => {
+          startBoardPush('forward');
           setModalTaskStack([]);
           setNavigation(spaceId, []);
           setActiveView('board');
         }}
         onSelectList={(spaceId, listId) => {
+          startBoardPush('forward');
           setModalTaskStack([]);
           setNavigation(spaceId, [listId]);
           setActiveView('board');
@@ -7461,6 +7465,7 @@ function PageContent() {
           if (list) setListMenu({ x, y, list, spaceId });
         }}
         onSelectDoc={(spaceId, docId) => {
+          startBoardPush('forward');
           setModalTaskStack([]);
           setNavigation(spaceId, []);
           setDocsNavigation(null, docId);
