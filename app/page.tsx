@@ -3827,7 +3827,22 @@ function PageContent() {
           bar instead of leaving a bare strip above it. Both values are needed together: h-14 alone
           would keep the box the same height and merely squash its contents, since Tailwind sets
           border-box. Resolves to plain 3.5rem everywhere `env()` is 0 — desktop, and any browser. */}
-      <header className="h-[calc(3.5rem+env(safe-area-inset-top))] pt-[env(safe-area-inset-top)] shrink-0 border-b-0 md:border-b border-neutral-800/80 bg-neutral-950 flex items-center px-3 gap-4">
+      {/* The title row travels with the page, driven by the same controls as <main>.
+          
+          It sits outside <main>, so until now it was the one band that did not move: the outgoing
+          title slid away with the drawer while the incoming one simply appeared underneath.
+          Reported as the arriving title fading in rather than sliding — "burde ikke den også være
+          med skyvinga?". One animation driving two elements is what keeps them in step; giving the
+          header its own would be two things that agree until someone changes one of them.
+          
+          `relative` is permanent and inert; the zIndex below needs a positioned element to apply
+          to, and matching <main>'s z-40 while moving is what puts both above the drawer. Checked
+          for `position: fixed` descendants before wrapping it, as ever — there are none. */}
+      <motion.header
+        animate={boardPushControls}
+        style={{ zIndex: boardPushing ? 40 : undefined }}
+        className="relative h-[calc(3.5rem+env(safe-area-inset-top))] pt-[env(safe-area-inset-top)] shrink-0 border-b-0 md:border-b border-neutral-800/80 bg-neutral-950 flex items-center px-3 gap-4"
+      >
         {/* Workspace name/switcher is desktop-only now — mobile switches workspace from the
             popup menu's own "Workspace" section (AppLauncherGrid.tsx) instead, per explicit
             feedback that having it in both places (top bar AND the popup) was one too many. The
@@ -4023,7 +4038,7 @@ function PageContent() {
           </button>
         </div>
         <div className="hidden md:block w-64 shrink-0" aria-hidden />
-      </header>
+      </motion.header>
 
       <div className="flex flex-1 overflow-hidden">
       {/* ================= ICON RAIL ================= */}

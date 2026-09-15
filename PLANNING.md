@@ -6434,3 +6434,22 @@ Second time a feature shipped wired to one of several equivalent call sites. The
 asymmetric transition points at a missed handler rather than a wrong animation; this is the same
 lesson from the other direction — **when a component is rendered more than once, wiring one instance
 is half a feature**, and the half that works is the one that hides the other.
+
+### Same session — the title row joins the push
+
+"Titlene skyves ut fint til venstre, men den som kommer fra høyre bare fader inn."
+
+That band was named as a known compromise two rounds ago and is now closed. The global title row sits
+**outside `<main>`**, so the push moved everything except it: the outgoing title travelled with the
+drawer, while the arriving one simply appeared underneath as the drawer faded.
+
+It is now a `motion.header` driven by **the same `boardPushControls`** as `<main>`, not an animation
+of its own. One set of controls driving two elements is what keeps them in step; two animations
+configured identically are two things that agree until someone changes one of them.
+
+`relative` added permanently and inert, because the `zIndex` it takes during a push needs a
+positioned element to apply to — and matching `<main>`'s z-40 is what puts both above the drawer.
+Checked for `position: fixed` descendants before wrapping it; there are none.
+
+The drawer's fade can probably go now that nothing of it is left uncovered, but that is worth
+confirming on a device before removing.
