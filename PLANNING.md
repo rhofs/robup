@@ -6866,3 +6866,51 @@ Messages scrolling *behind* a translucent composer and header ("at meldingen gå
 is a real change to ChatPanel's layout on every surface, not a mobile tweak, and doing half of it
 would leave the chat worse than it is. Recorded here so it is not mistaken for something nobody
 thought of.
+
+### Same session — fourth contexts round: why every navigation blanked, finally traced to the push itself
+
+The same complaint had now been reported in four consecutive rounds, in almost the same words each
+time — "det blir blankt, og så kommer animasjonen inn fra høyre" — and three attempts had treated it
+as a chat problem. It was never about chat.
+
+**`startBoardPush` was built for a world with a drawer underneath.** It animates `<main>` (and the
+title bar) in from `x: 100%`, and what the arriving page slides *over* is the Spaces sheet, which is
+deliberately kept mounted for the length of the push and travels `-33%` in the opposite direction.
+That asymmetry is the whole effect. The contexts layout has no sheet — so `<main>` slid in over
+nothing, and "nothing" is the app background. Every navigation out of Home or Office was half a push.
+
+Fixed by giving the contexts layout the same thing the old one has: a layer that stays behind.
+`HomeContext`/`OfficeContext` are extracted into `homeContextEl`/`officeContextEl` so the *same*
+element renders in two places — the live screen inside `<main>`, and a `z-30` layer mounted only
+while a context push runs. `boardPushSheetRef` gains a third value, `'context'`, which opens neither
+drawer. `-33%` and the late opacity release are copied from `MobileSpacesSheet` on purpose: two
+different push feels in one app would read as a bug.
+
+**The geometry trap that came with it, found by reading rather than by testing.** The layer covers
+`<main>`'s box, but the real screen sits *below* `<main>`'s own per-view header (the search pill
+row). Left uncorrected the layer's content starts one header higher than the content it stands in
+for, and the two are out of register for the whole animation — which is exactly what had already
+been reported on the way back: "bakgrunnen ... hakker liksom litt ned, den er feilplassert i forhold
+til vinduet foran". The offset is **measured** off that header, not hardcoded: it sizes off its own
+padding and has been adjusted three separate times already.
+
+**"Open <space>" is gone**, one day after being added. Expanding a Space already shows its Lists, so
+a separate entry into the Space's own board read as the same action offered twice — "vi har jo
+allerede åpnet spacen ved å utvide den" — and cost every Space a row. The Space board is still
+reachable from the Spaces tree.
+
+### The pattern worth remembering from these four rounds
+
+Three fixes in a row were aimed at the component nearest the symptom (the chat panel), and the cause
+was in the shared navigation primitive all of them went through. The tell was there from the first
+round and was misread every time: **the same words kept coming back after each fix.** A report that
+survives a fix unchanged is evidence the fix was in the wrong place, not evidence that the problem
+is stubborn.
+
+### Still not done
+
+- Messages scrolling behind a translucent composer/header (asked for last round, still a real
+  ChatPanel change rather than a mobile tweak)
+- The personal and workspace settings panels from the sketch
+- Whether Chat needs its own tab
+- **Not verified on device.** Build and typecheck clean.

@@ -880,7 +880,15 @@ function PageContent() {
   // Which drawer this push belongs to. Both sheets are the same component with different data, and
   // both need to stay mounted while they slide — but only the one the gesture actually came from.
   // Keying both off `boardPushing` alone would open the other one on top of the app.
-  const boardPushSheetRef = useRef<'spaces' | 'personal'>('spaces');
+  // 'context' opens neither drawer — both sheets test for their own name — and instead keeps the
+  // context screen layer below mounted while <main> slides over it.
+  const boardPushSheetRef = useRef<'spaces' | 'personal' | 'context'>('spaces');
+  // Which context screen that layer should show for the duration of a push. A ref, because by the
+  // time it renders, the state that would have told us (showingHomeContext) is already false — the
+  // navigation that started the push is what made it false.
+  const pushContextRef = useRef<'home' | 'office'>('home');
+  const viewHeaderRef = useRef<HTMLElement | null>(null);
+  const [contextPushOffset, setContextPushOffset] = useState(0);
 
   // `boardPushing` is set HERE, in the same batch as the tap that closes the drawer — not in the
   // effect below. That ordering is the whole difference between the drawer sliding and the drawer
@@ -891,7 +899,19 @@ function PageContent() {
   // one render in between where both were false: the drawer unmounted, then remounted an instant
   // later already sitting at its animation target, invisible. Reported exactly — "hovedsida
   // klipper bare rett ut, så den skyves over et tomt område."
-  const startBoardPush = (dir: 'forward' | 'back', sheet: 'spaces' | 'personal' = 'spaces') => {
+  const startContextPush = (dir: 'forward' | 'back', which: 'home' | 'office') => {
+    pushContextRef.current = which;
+    // The layer covers <main>'s box, but the real screen sits below <main>'s own per-view header
+    // (the search pill row). Without this offset the layer's content starts one header higher than
+    // the content it is standing in for, and the two are visibly out of register for the whole
+    // animation — "bakgrunnen ... hakker liksom litt ned, den er feilplassert i forhold til vinduet
+    // foran". Measured rather than hardcoded: that row sizes off its own padding and has already
+    // been adjusted three times.
+    setContextPushOffset(viewHeaderRef.current?.offsetHeight ?? 0);
+    startBoardPush(dir, 'context');
+  };
+
+  const startBoardPush = (dir: 'forward' | 'back', sheet: 'spaces' | 'personal' | 'context' = 'spaces') => {
     boardPushDirRef.current = dir;
     boardPushSheetRef.current = sheet;
     setBoardPushing(true);
@@ -1044,7 +1064,7 @@ function PageContent() {
     if (origin) {
       chatOriginRef.current = null;
       setChatFromContext(false);
-      startBoardPush('back', origin === 'home' ? 'personal' : 'spaces');
+      startContextPush('back', origin);
       setActiveChatChannelId(null);
       if (origin === 'home') {
         setNavigation('everything');
@@ -2046,17 +2066,17 @@ function PageContent() {
   // kommer jeg på den gamle spaces-seksjonen"). The way out of a Space is the context it was
   // picked from.
   const backToContext = () => {
-    pushBackToSpaces(() => {
-      if (currentWorkspace?.isPersonal) {
-        // 'everything' is what Home means — see showingHomeContext.
-        setNavigation('everything');
-        setActiveView('board');
-      } else {
-        setActiveOfficeUserId(null);
-        setActiveOfficeRoomId(null);
-        setActiveView('office');
-      }
-    });
+    const toOffice = !currentWorkspace?.isPersonal;
+    startContextPush('back', toOffice ? 'office' : 'home');
+    if (toOffice) {
+      setActiveOfficeUserId(null);
+      setActiveOfficeRoomId(null);
+      setActiveView('office');
+    } else {
+      // 'everything' is what Home means — see showingHomeContext.
+      setNavigation('everything');
+      setActiveView('board');
+    }
   };
 
   // Opening a conversation from Home or Office.
@@ -2079,7 +2099,7 @@ function PageContent() {
     // slides over the same 520ms, one of them over an area the other had already moved off screen.
     // Opened from a context there should be exactly one: the same forward push a Space uses.
     setChatFromContext(true);
-    startBoardPush('forward', origin === 'home' ? 'personal' : 'spaces');
+    startContextPush('forward', origin);
     setActiveChatChannelId(channelId);
     setActiveView('chat');
   };
@@ -4084,6 +4104,107 @@ function PageContent() {
   // expand animation is unaffected.
   const navScope = `${activeSpaceId}|${activeListIdsKey}`;
 
+  // The two context screens, extracted from the view switch below so the SAME element can also be
+  // rendered as the layer a push slides away from. That layer is the whole point: the board push
+  // was built for a world where a Spaces drawer stays mounted underneath and slides a third of the
+  // way left, and the contexts layout had nothing underneath at all — so every navigation out of
+  // Home or Office animated the arriving page in over a blank screen. Reported every round since
+  // the layout went in, in the same words each time: "det blir blankt, og så kommer animasjonen
+  // inn fra høyre".
+  const homeContextEl = (
+              <HomeContext
+                tab={homeTab}
+                onTabChange={setHomeTab}
+                spaces={personalWorkspace?.spaces ?? []}
+                dms={chatDms.map((d) => {
+                  const others = (d.members ?? []).map((m) => m.user).filter((u) => u.id !== currentUserId);
+                  const first = others[0];
+                  return {
+                    id: d.id,
+                    label: others.map((u) => u.name).join(', ') || 'Just you',
+                    initials: first?.initials ?? '?',
+                    color: first?.color ?? '#6366f1',
+                    unreadCount: d.unreadCount,
+                  };
+                })}
+                // Everyone you share a workspace with and have no conversation with yet. The
+                // answer to "who can I talk to" that needs nobody to type a name.
+                suggestions={users
+                  .filter((u) => u.id !== currentUserId)
+                  .filter(
+                    (u) =>
+                      !chatDms.some((d) => (d.members ?? []).some((m) => m.user.id === u.id))
+                  )
+                  .slice(0, 4)
+                  .map((u) => ({
+                    id: u.id,
+                    name: u.name,
+                    initials: u.initials,
+                    color: u.color,
+                    reason: currentWorkspace?.name ? `Works in ${currentWorkspace.name}` : 'In your workspace',
+                  }))}
+                onSelectSpace={(spaceId) => {
+                  startContextPush('forward', 'home');
+                  setModalTaskStack([]);
+                  setNavigation(spaceId, []);
+                  setActiveView('board');
+                }}
+                onSelectList={(spaceId, listId) => {
+                  startContextPush('forward', 'home');
+                  setModalTaskStack([]);
+                  setNavigation(spaceId, [listId]);
+                  setActiveView('board');
+                }}
+                onSpaceMenu={(x, y, space) => setSpaceMenu({ x, y, space })}
+                onSelectDm={(channelId) => openConversationFromContext(channelId, 'home')}
+                onStartDm={(userId) => void handleStartDMFromOffice(userId)}
+                onCreateSpace={(name) => {
+                  if (personalWorkspace) createSpace(personalWorkspace.id, name);
+                }}
+              />
+  );
+
+  const officeContextEl = (
+              <OfficeContext
+                tab={officeTab}
+                onTabChange={setOfficeTab}
+                spaces={currentWorkspace?.spaces ?? []}
+                rooms={currentWorkspace?.rooms ?? []}
+                channels={(activeWorkspaceId ? chatChannelsByWorkspace[activeWorkspaceId] ?? [] : []).map((c) => ({
+                  id: c.id,
+                  name: c.name ?? '',
+                  unreadCount: c.unreadCount,
+                }))}
+                occupantsByRoom={(currentWorkspace?.rooms ?? []).reduce<Record<string, { id: string; initials: string; color: string }[]>>(
+                  (acc, room) => {
+                    acc[room.id] = users
+                      .filter((u) => u.roomId === room.id)
+                      .map((u) => ({ id: u.id, initials: u.initials, color: u.color }));
+                    return acc;
+                  },
+                  {}
+                )}
+                onSelectSpace={(spaceId) => {
+                  startContextPush('forward', 'office');
+                  setModalTaskStack([]);
+                  setNavigation(spaceId, []);
+                  setActiveView('board');
+                }}
+                onSelectList={(spaceId, listId) => {
+                  startContextPush('forward', 'office');
+                  setModalTaskStack([]);
+                  setNavigation(spaceId, [listId]);
+                  setActiveView('board');
+                }}
+                onSpaceMenu={(x, y, space) => setSpaceMenu({ x, y, space })}
+                onSelectRoom={setActiveOfficeRoomId}
+                onSelectChannel={(channelId) => openConversationFromContext(channelId, 'office')}
+                onCreateSpace={(name) => {
+                  if (currentWorkspace) createSpace(currentWorkspace.id, name);
+                }}
+              />
+  );
+
   return (
     <DndContext sensors={taskSensors} collisionDetection={closestCenter} onDragStart={handleTaskDragStart} onDragOver={handleTaskDragOver} onDragEnd={handleTaskDragEnd}>
     {/* select-none here is app-wide (mostly buttons/rows/drag targets, not prose) — CSS
@@ -4989,7 +5110,10 @@ function PageContent() {
         {/* Mobile: no border framing this row at all, and the same bg-neutral-950 as the title bar
             above — reads as one continuous header block instead of two visually distinct bands.
             Desktop keeps its original border+lighter-bg treatment unchanged. */}
-        <header className="border-b-0 md:border-b border-neutral-800/80 bg-neutral-950 md:bg-neutral-900/40 shrink-0">
+        <header
+          ref={viewHeaderRef}
+          className="border-b-0 md:border-b border-neutral-800/80 bg-neutral-950 md:bg-neutral-900/40 shrink-0"
+        >
           {/* md:h-11 + md:py-0 restore the original fixed-height compact desktop row exactly —
               mobile instead sizes naturally off its own padding (pt-2 pb-8 — bumped twice now,
               pb-3 -> pb-5 -> pb-8, per repeated direct feedback that it still felt tight) so the
@@ -5775,98 +5899,12 @@ function PageContent() {
               // Home. Only when nothing more specific is open — picking a list still opens the board
               // exactly as before, which is what keeps this a navigation change rather than a
               // rewrite of everything underneath it.
-              <HomeContext
-                tab={homeTab}
-                onTabChange={setHomeTab}
-                spaces={personalWorkspace?.spaces ?? []}
-                dms={chatDms.map((d) => {
-                  const others = (d.members ?? []).map((m) => m.user).filter((u) => u.id !== currentUserId);
-                  const first = others[0];
-                  return {
-                    id: d.id,
-                    label: others.map((u) => u.name).join(', ') || 'Just you',
-                    initials: first?.initials ?? '?',
-                    color: first?.color ?? '#6366f1',
-                    unreadCount: d.unreadCount,
-                  };
-                })}
-                // Everyone you share a workspace with and have no conversation with yet. The
-                // answer to "who can I talk to" that needs nobody to type a name.
-                suggestions={users
-                  .filter((u) => u.id !== currentUserId)
-                  .filter(
-                    (u) =>
-                      !chatDms.some((d) => (d.members ?? []).some((m) => m.user.id === u.id))
-                  )
-                  .slice(0, 4)
-                  .map((u) => ({
-                    id: u.id,
-                    name: u.name,
-                    initials: u.initials,
-                    color: u.color,
-                    reason: currentWorkspace?.name ? `Works in ${currentWorkspace.name}` : 'In your workspace',
-                  }))}
-                onSelectSpace={(spaceId) => {
-                  startBoardPush('forward', 'personal');
-                  setModalTaskStack([]);
-                  setNavigation(spaceId, []);
-                  setActiveView('board');
-                }}
-                onSelectList={(spaceId, listId) => {
-                  startBoardPush('forward', 'personal');
-                  setModalTaskStack([]);
-                  setNavigation(spaceId, [listId]);
-                  setActiveView('board');
-                }}
-                onSpaceMenu={(x, y, space) => setSpaceMenu({ x, y, space })}
-                onSelectDm={(channelId) => openConversationFromContext(channelId, 'home')}
-                onStartDm={(userId) => void handleStartDMFromOffice(userId)}
-                onCreateSpace={(name) => {
-                  if (personalWorkspace) createSpace(personalWorkspace.id, name);
-                }}
-              />
+              homeContextEl
             ) : activeView === 'office' && useContexts && isMobile && !activeOfficeUserId && !activeOfficeRoomId ? (
               // The new Office: one workspace, seen as either the work in it or the conversations
               // in it. Only at the top level — picking a room or a person still opens OfficePage's
               // own screens below, so nothing that already worked had to be rebuilt to try this.
-              <OfficeContext
-                tab={officeTab}
-                onTabChange={setOfficeTab}
-                spaces={currentWorkspace?.spaces ?? []}
-                rooms={currentWorkspace?.rooms ?? []}
-                channels={(activeWorkspaceId ? chatChannelsByWorkspace[activeWorkspaceId] ?? [] : []).map((c) => ({
-                  id: c.id,
-                  name: c.name ?? '',
-                  unreadCount: c.unreadCount,
-                }))}
-                occupantsByRoom={(currentWorkspace?.rooms ?? []).reduce<Record<string, { id: string; initials: string; color: string }[]>>(
-                  (acc, room) => {
-                    acc[room.id] = users
-                      .filter((u) => u.roomId === room.id)
-                      .map((u) => ({ id: u.id, initials: u.initials, color: u.color }));
-                    return acc;
-                  },
-                  {}
-                )}
-                onSelectSpace={(spaceId) => {
-                  startBoardPush('forward');
-                  setModalTaskStack([]);
-                  setNavigation(spaceId, []);
-                  setActiveView('board');
-                }}
-                onSelectList={(spaceId, listId) => {
-                  startBoardPush('forward');
-                  setModalTaskStack([]);
-                  setNavigation(spaceId, [listId]);
-                  setActiveView('board');
-                }}
-                onSpaceMenu={(x, y, space) => setSpaceMenu({ x, y, space })}
-                onSelectRoom={setActiveOfficeRoomId}
-                onSelectChannel={(channelId) => openConversationFromContext(channelId, 'office')}
-                onCreateSpace={(name) => {
-                  if (currentWorkspace) createSpace(currentWorkspace.id, name);
-                }}
-              />
+              officeContextEl
             ) : activeView === 'office' ? (
               <OfficePage
                 users={users}
@@ -8007,6 +8045,49 @@ function PageContent() {
         onOpenTask={(id) => setModalTaskStack([id])}
         scopeKind={activeView === 'docs' ? 'doc' : activeView === 'chat' ? 'channel' : undefined}
       />
+
+      {/* The context layer: the screen a push slides away from, and slides back to.
+          
+          It is the same element the view switch renders — not a copy — so there is no chance of the
+          two drifting. Mounted only while a context push is running; the rest of the time the real
+          one inside <main> is on screen and this would be a second copy of it.
+          
+          Geometry matches <main>'s box rather than the Spaces drawer's: the drawer is `top-0` and
+          covers the global header because it replaces it, while the contexts header stays put
+          across this navigation (it shows "Home" or the workspace either way), so covering it would
+          mean animating a band that has no reason to move.
+          
+          -33% and the late fade are copied deliberately from MobileSpacesSheet — the asymmetry IS
+          the effect: the page behind moves a little, the arriving page moves all the way, and the
+          difference reads as depth. Two different push feels in one app would read as a bug. */}
+      <AnimatePresence>
+        {boardPushing && boardPushSheetRef.current === 'context' && (
+          <motion.div
+            key="context-push-layer"
+            initial={boardPushDirRef.current === 'back' ? { x: '-33%', opacity: 0 } : false}
+            animate={
+              boardPushDirRef.current === 'forward'
+                ? { x: '-33%', opacity: [1, 1, 0] }
+                : { x: 0, opacity: 1 }
+            }
+            transition={
+              boardPushDirRef.current === 'forward'
+                ? {
+                    x: CHAT_PUSH_TRANSITION,
+                    opacity: { duration: CHAT_PUSH_MS / 1000, times: [0, 0.78, 1], ease: 'linear' },
+                  }
+                : {
+                    x: CHAT_PUSH_TRANSITION,
+                    opacity: { duration: (CHAT_PUSH_MS * 0.35) / 1000, ease: 'easeOut' },
+                  }
+            }
+            style={{ willChange: 'transform', top: `calc(3.5rem + env(safe-area-inset-top) + ${contextPushOffset}px)` }}
+            className="fixed inset-x-0 bottom-0 z-30 md:hidden bg-neutral-950 flex flex-col overflow-hidden p-6 pb-28 pointer-events-none"
+          >
+            {pushContextRef.current === 'home' ? homeContextEl : officeContextEl}
+          </motion.div>
+        )}
+      </AnimatePresence>
 
       <MobileSpacesSheet
         // `|| boardPushing` keeps the drawer on screen while it slides away. Closing it on the tap

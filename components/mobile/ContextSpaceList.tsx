@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useRef } from 'react';
-import { ArrowRight, ChevronRight, ChevronDown, Folder as FolderIcon, List as ListIcon } from 'lucide-react';
+import { ChevronRight, ChevronDown, Folder as FolderIcon, List as ListIcon } from 'lucide-react';
 import type { HierarchySpace } from '../../store/useTaskStore';
 import { FOLDER_ICON_MAP } from '../FolderTree';
 import { hapticTap } from '../../lib/haptics';
@@ -137,16 +137,12 @@ export default function ContextSpaceList({ spaces, emptyText, onSelectSpace, onS
 
             {open && (
               <div className="ml-5 pl-3 border-l border-neutral-800 space-y-0.5">
-                {/* The way into the Space itself — its board, overview and everything the expanded
-                    view above does not show. Inside rather than on the row, because opening a
-                    Space is the rarer intent: most taps here are looking for a List. */}
-                <button
-                  onClick={() => onSelectSpace(space.id)}
-                  className="w-full flex items-center gap-2 px-2 py-2 rounded-lg text-left cursor-pointer hover:bg-neutral-800/60"
-                >
-                  <ArrowRight className="w-3.5 h-3.5 shrink-0 text-blue-400" />
-                  <span className="min-w-0 flex-1 text-[13px] text-blue-400 truncate">Open {space.name}</span>
-                </button>
+                {/* No "Open this Space" entry. There was one, for a day: expanding shows the
+                    Lists, and the Space's own board was a separate destination below them. The user
+                    read that as the same action offered twice — "vi har jo allerede åpnet spacen ved
+                    å utvide den" — and he is right that it made every Space one row taller for
+                    something almost nobody wants from here. The Space board is still reachable from
+                    the Spaces tree; this list is for finding a List. */}
                 {space.folders.length === 0 && space.lists.length === 0 && (
                   <p className="px-2 py-2 text-[11px] text-neutral-600">Empty space.</p>
                 )}
