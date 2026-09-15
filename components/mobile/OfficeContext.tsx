@@ -27,6 +27,8 @@ type Props = {
   // Who is in which room right now, by room id. Presence lives with the room in this list rather
   // than on a separate screen — which is the point of merging Office into here at all.
   occupantsByRoom: Record<string, { id: string; initials: string; color: string }[]>;
+  tab: OfficeTab;
+  onTabChange: (tab: OfficeTab) => void;
   onSelectSpace: (spaceId: string) => void;
   onSelectList: (spaceId: string, listId: string) => void;
   onSpaceMenu: (x: number, y: number, space: HierarchySpace) => void;
@@ -41,6 +43,8 @@ export default function OfficeContext({
   rooms,
   channels,
   occupantsByRoom,
+  tab,
+  onTabChange,
   onSelectSpace,
   onSelectList,
   onSpaceMenu,
@@ -58,7 +62,9 @@ export default function OfficeContext({
     setDraft('');
     setCreatingSpace(false);
   };
-  const [tab, setTab] = useState<OfficeTab>('spaces');
+  // tab/onTabChange come from the page rather than useState: this component unmounts every
+  // time you open something from it, and a local default meant coming back always landed on the
+  // first half regardless of which one you left from.
 
   return (
     <div className="flex-1 overflow-y-auto pb-28">
@@ -70,7 +76,7 @@ export default function OfficeContext({
             key={id}
             onClick={() => {
               if (id !== tab) hapticTap();
-              setTab(id);
+              onTabChange(id);
             }}
             className={`flex-1 rounded-full py-1.5 text-[13px] font-semibold capitalize transition cursor-pointer ${
               tab === id ? 'bg-neutral-900 text-app-strong shadow-sm' : 'text-neutral-400'

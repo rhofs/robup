@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useRef } from 'react';
-import { ChevronRight, ChevronDown, Folder as FolderIcon, List as ListIcon } from 'lucide-react';
+import { ArrowRight, ChevronRight, ChevronDown, Folder as FolderIcon, List as ListIcon } from 'lucide-react';
 import type { HierarchySpace } from '../../store/useTaskStore';
 import { FOLDER_ICON_MAP } from '../FolderTree';
 import { hapticTap } from '../../lib/haptics';
@@ -98,16 +98,20 @@ export default function ContextSpaceList({ spaces, emptyText, onSelectSpace, onS
         const open = openSpaceIds.has(space.id);
         return (
           <div key={space.id}>
+            {/* Tapping the row OPENS THE SPACE IN PLACE. It used to navigate, with a separate
+                chevron for expanding, and that was reported twice as the same bug — "det ikke åpner
+                seg, det bare kommer inn i en ny". A row that looks like a folder should behave like
+                one; going into the Space is the rarer thing, so it moved to its own entry inside. */}
             <div className="w-full flex items-center gap-1 rounded-lg transition hover:bg-neutral-800/60">
               <button
                 onClick={() => {
                   // A long press that already opened the menu still produces a click on release —
-                  // swallow exactly that one rather than also navigating behind the menu.
+                  // swallow exactly that one rather than also acting behind the menu.
                   if (firedRef.current) {
                     firedRef.current = false;
                     return;
                   }
-                  onSelectSpace(space.id);
+                  toggle(setOpenSpaceIds, space.id);
                 }}
                 {...holdHandlers(space)}
                 className="min-w-0 flex-1 flex items-center gap-3 px-2 py-2.5 rounded-lg text-left cursor-pointer"
@@ -125,18 +129,24 @@ export default function ContextSpaceList({ spaces, emptyText, onSelectSpace, onS
                   )}
                 </span>
                 <span className="min-w-0 flex-1 text-sm text-neutral-200 truncate">{space.name}</span>
-              </button>
-              <button
-                onClick={() => toggle(setOpenSpaceIds, space.id)}
-                title={open ? 'Collapse' : 'Expand'}
-                className="shrink-0 w-9 h-9 flex items-center justify-center rounded-lg text-neutral-600 hover:text-neutral-300 active:bg-neutral-800 cursor-pointer"
-              >
-                {open ? <ChevronDown className="w-4 h-4" /> : <ChevronRight className="w-4 h-4" />}
+                <span className="shrink-0 text-neutral-600">
+                  {open ? <ChevronDown className="w-4 h-4" /> : <ChevronRight className="w-4 h-4" />}
+                </span>
               </button>
             </div>
 
             {open && (
               <div className="ml-5 pl-3 border-l border-neutral-800 space-y-0.5">
+                {/* The way into the Space itself — its board, overview and everything the expanded
+                    view above does not show. Inside rather than on the row, because opening a
+                    Space is the rarer intent: most taps here are looking for a List. */}
+                <button
+                  onClick={() => onSelectSpace(space.id)}
+                  className="w-full flex items-center gap-2 px-2 py-2 rounded-lg text-left cursor-pointer hover:bg-neutral-800/60"
+                >
+                  <ArrowRight className="w-3.5 h-3.5 shrink-0 text-blue-400" />
+                  <span className="min-w-0 flex-1 text-[13px] text-blue-400 truncate">Open {space.name}</span>
+                </button>
                 {space.folders.length === 0 && space.lists.length === 0 && (
                   <p className="px-2 py-2 text-[11px] text-neutral-600">Empty space.</p>
                 )}

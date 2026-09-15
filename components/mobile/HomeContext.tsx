@@ -34,6 +34,8 @@ type Props = {
   spaces: HierarchySpace[];
   dms: Dm[];
   suggestions: Suggestion[];
+  tab: HomeTab;
+  onTabChange: (tab: HomeTab) => void;
   onSelectSpace: (spaceId: string) => void;
   onSelectList: (spaceId: string, listId: string) => void;
   onSpaceMenu: (x: number, y: number, space: HierarchySpace) => void;
@@ -47,6 +49,8 @@ export default function HomeContext({
   spaces,
   dms,
   suggestions,
+  tab,
+  onTabChange,
   onSelectSpace,
   onSelectList,
   onSpaceMenu,
@@ -64,7 +68,9 @@ export default function HomeContext({
     setDraft('');
     setCreatingSpace(false);
   };
-  const [tab, setTab] = useState<HomeTab>('spaces');
+  // tab/onTabChange come from the page rather than useState: this component unmounts every
+  // time you open something from it, and a local default meant coming back always landed on the
+  // first half regardless of which one you left from.
 
   return (
     <div className="flex-1 overflow-y-auto pb-28">
@@ -77,7 +83,7 @@ export default function HomeContext({
             key={id}
             onClick={() => {
               if (id !== tab) hapticTap();
-              setTab(id);
+              onTabChange(id);
             }}
             className={`flex-1 rounded-full py-1.5 text-[13px] font-semibold transition cursor-pointer ${
               tab === id ? 'bg-neutral-900 text-app-strong shadow-sm' : 'text-neutral-400'

@@ -6823,3 +6823,46 @@ alone — the user was unsure it was a bug, and it is not.
   The user has seen this and deferred it ("det fikser vi sikkert senere").
 - Whether Chat needs its own tab in this layout.
 - **Not verified on device.** Build and typecheck clean; none of this round has been tapped yet.
+
+### Same session — third contexts round, and the animation mistake finally understood
+
+**Home had two backgrounds.** The mobile container for `activeView === 'board'` is itself a
+`bg-neutral-900 rounded-t-2xl` sheet, and Home puts its own cards of the same colour on top of it.
+Invisible in dark mode, glaring in light, where that token is white — "det er liksom en svær hvit
+bakgrunn bak. Det er det ikke på Office." Office lands in the plain branch, which is exactly why
+only Home showed it. Home is now excluded from the sheet.
+
+**The conversation animation — the fourth version, and the first one where the cause was actually
+understood rather than guessed at.** The conversation pane animates itself in from `x: '100%'` on
+mount (its own AnimatePresence, `initial` defaults to true). The previous fix *added* a full
+main-area push on top of that. So there were two slides over the same 520ms, one of them travelling
+across an area the other had already moved off screen — which is why the screen went blank mid-flight
+rather than merely looking wrong. `chatFromContext` now suppresses the pane's own slide when the
+stage is already moving, so there is exactly one animation, and it is the same forward push a Space
+uses. Closing does the mirror image: one back push, instead of letting the Chat list slide in from
+the left before the view changed (the "rar animasjonsgreie" on the way back).
+
+**Three wrong attempts at one animation is worth a rule:** when something is already animating,
+adding an animation is not a fix. Read what the destination component does on mount *before*
+deciding what the caller should do. Each of the first three attempts was a guess made without
+opening the component that owned the motion.
+
+**Back from a DM landed on My Spaces instead of Messages.** The two context screens kept their
+toggle in `useState`, and they unmount the moment you open anything from them — so the way back
+always remounted on the first half. Lifted to `homeTab`/`officeTab` in `page.tsx`.
+
+**Tapping a Space navigated instead of expanding.** Reported twice as the same thing. The chevron
+added last round was a separate target and nobody aimed at it; a row that looks like a folder is
+expected to behave like one. The row now expands, and going into the Space has moved to an explicit
+"Open <space>" entry inside the expanded area — the rarer intent, since most taps here are looking
+for a List.
+
+**The conversation runs edge to edge now.** The pane carried `p-2`, which drew a hard line across
+its top. Removed.
+
+### Asked for and NOT done
+
+Messages scrolling *behind* a translucent composer and header ("at meldingen går bak, liksom"). That
+is a real change to ChatPanel's layout on every surface, not a mobile tweak, and doing half of it
+would leave the chat worse than it is. Recorded here so it is not mistaken for something nobody
+thought of.

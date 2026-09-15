@@ -1011,6 +1011,18 @@ function PageContent() {
   // and it must be readable inside the close timeout without re-subscribing to anything.
   const chatOriginRef = useRef<'home' | 'office' | null>(null);
 
+  // Which half of each context is showing. Lifted out of the two screens because it has to survive
+  // them unmounting: opening a DM from Messages leaves Home entirely, and on the way back Home was
+  // remounting with its own useState default — landing you on My Spaces after a round trip that
+  // started in Messages. Reported twice, both times as Back going to the wrong place.
+  const [homeTab, setHomeTab] = useState<'spaces' | 'messages'>('spaces');
+  const [officeTab, setOfficeTab] = useState<'spaces' | 'rooms'>('spaces');
+
+  // True while a conversation opened from a context is on screen. It suppresses the conversation
+  // pane's own slide-in, because in that case the whole main area is already sliding — see
+  // openConversationFromContext.
+  const [chatFromContext, setChatFromContext] = useState(false);
+
   const [chatClosing, setChatClosing] = useState(false);
   const activeChatEntityRaw = useChatStore((s) => {
     const id = s.activeChannelId;
@@ -1024,23 +1036,30 @@ function PageContent() {
 
   const closeChatConversation = () => {
     hapticTap();
-    setChatClosing(true);
     const origin = chatOriginRef.current;
-    chatOriginRef.current = null;
-    window.setTimeout(() => {
+    // Opened from a context, so it closes back into that context — as one push, matching the way
+    // in. The old path let the Chat screen's own list slide in from the left first and only then
+    // changed view, which is the "rar animasjonsgreie" reported on the way back: a screen nobody
+    // asked for, appearing for half a second between two others.
+    if (origin) {
+      chatOriginRef.current = null;
+      setChatFromContext(false);
+      startBoardPush('back', origin === 'home' ? 'personal' : 'spaces');
       setActiveChatChannelId(null);
-      setChatClosing(false);
-      // Return to the context the conversation was opened from, once it has finished sliding out.
-      // Deferred with the rest of it deliberately: switching activeView any earlier swaps what is
-      // underneath the leaving panel mid-flight.
       if (origin === 'home') {
         setNavigation('everything');
         setActiveView('board');
-      } else if (origin === 'office') {
+      } else {
         setActiveOfficeUserId(null);
         setActiveOfficeRoomId(null);
         setActiveView('office');
       }
+      return;
+    }
+    setChatClosing(true);
+    window.setTimeout(() => {
+      setActiveChatChannelId(null);
+      setChatClosing(false);
     }, CHAT_PUSH_MS);
   };
 
@@ -2054,6 +2073,12 @@ function PageContent() {
   // commit — the whole main area slides, and nothing ever paints an intermediate screen.
   const openConversationFromContext = (channelId: string, origin: 'home' | 'office') => {
     chatOriginRef.current = origin;
+    // setChatFromContext is the half the previous attempt was missing, and it is why the screen
+    // "blir bare blank" mid-flight: the conversation pane animates itself in from x:100% on mount
+    // (see its AnimatePresence below) AND the main area was being pushed at the same time. Two
+    // slides over the same 520ms, one of them over an area the other had already moved off screen.
+    // Opened from a context there should be exactly one: the same forward push a Space uses.
+    setChatFromContext(true);
     startBoardPush('forward', origin === 'home' ? 'personal' : 'spaces');
     setActiveChatChannelId(channelId);
     setActiveView('chat');
@@ -5270,7 +5295,7 @@ function PageContent() {
                 isMobile
                 ? 'flex-1 min-h-0 overflow-hidden flex flex-col'
                 : 'flex-1 min-h-0 overflow-hidden p-2 md:p-6 flex flex-col'
-              : activeView === 'board'
+              : activeView === 'board' && !showingHomeContext
               ? // Same rounded-top sheet as Chat/Planner get, right below the search bar — put
                 // directly on this outermost scrollable element itself (not a nested inner div)
                 // specifically to avoid the "smaller rounded box inset inside a bigger straight
@@ -5278,7 +5303,12 @@ function PageContent() {
                 // padding just becomes the sheet's internal content inset instead of an external
                 // gap around a separately-colored box.
                 'flex-1 overflow-auto p-6 pb-28 md:pb-6 bg-neutral-900 md:bg-transparent rounded-t-2xl md:rounded-none'
-              : 'flex-1 overflow-auto p-6 pb-28 md:pb-6'
+              : // Home is excluded from that sheet above on purpose. It brings its own cards, so
+                // sitting them on a full-height panel of the same colour gave it two backgrounds —
+                // very visible in light mode, where the sheet is white: "det er liksom en svær hvit
+                // bakgrunn bak. Det er det ikke på Office." Office lands here, which is why only
+                // Home showed it.
+                'flex-1 overflow-auto p-6 pb-28 md:pb-6'
           }
           onClick={closeAllMenus}
         >
@@ -5746,6 +5776,8 @@ function PageContent() {
               // exactly as before, which is what keeps this a navigation change rather than a
               // rewrite of everything underneath it.
               <HomeContext
+                tab={homeTab}
+                onTabChange={setHomeTab}
                 spaces={personalWorkspace?.spaces ?? []}
                 dms={chatDms.map((d) => {
                   const others = (d.members ?? []).map((m) => m.user).filter((u) => u.id !== currentUserId);
@@ -5798,6 +5830,8 @@ function PageContent() {
               // in it. Only at the top level — picking a room or a person still opens OfficePage's
               // own screens below, so nothing that already worked had to be rebuilt to try this.
               <OfficeContext
+                tab={officeTab}
+                onTabChange={setOfficeTab}
                 spaces={currentWorkspace?.spaces ?? []}
                 rooms={currentWorkspace?.rooms ?? []}
                 channels={(activeWorkspaceId ? chatChannelsByWorkspace[activeWorkspaceId] ?? [] : []).map((c) => ({
@@ -5930,8 +5964,11 @@ function PageContent() {
                             // p-2 lives here, not on the shared wrapper — see that wrapper's own
                             // comment. Inside the animated pane it simply travels along.
                             style={{ willChange: 'transform' }}
-                            className="absolute inset-0 z-10 bg-neutral-950 p-2"
-                            initial={{ x: '100%' }}
+                            // No p-2: the conversation now runs edge to edge and full height. The
+                            // inset drew a hard line across the top of the panel — "chatten klipper
+                            // på en måte i toppen... hadde sett bedre hvis det gikk hele veien opp".
+                            className="absolute inset-0 z-10 bg-neutral-950"
+                            initial={chatFromContext ? false : { x: '100%' }}
                             animate={{ x: 0 }}
                             exit={{ x: '100%' }}
                             transition={CHAT_PUSH_TRANSITION}
