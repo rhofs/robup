@@ -34,27 +34,31 @@ type Props = {
   spaces: HierarchySpace[];
   dms: Dm[];
   suggestions: Suggestion[];
-  overdueCount: number;
-  todayCount: number;
   onSelectSpace: (spaceId: string) => void;
   onSelectDm: (channelId: string) => void;
   onStartDm: (userId: string) => void;
-  onOpenOverdue: () => void;
-  onCreateSpace: () => void;
+  onCreateSpace: (name: string) => void;
 };
 
 export default function HomeContext({
   spaces,
   dms,
   suggestions,
-  overdueCount,
-  todayCount,
   onSelectSpace,
   onSelectDm,
   onStartDm,
-  onOpenOverdue,
   onCreateSpace,
 }: Props) {
+  // Local, because creating a Space is a moment inside this screen and nothing above it needs to
+  // know it is happening.
+  const [creatingSpace, setCreatingSpace] = useState(false);
+  const [draft, setDraft] = useState('');
+  const commitSpace = () => {
+    const name = draft.trim();
+    if (name) onCreateSpace(name);
+    setDraft('');
+    setCreatingSpace(false);
+  };
   const [tab, setTab] = useState<HomeTab>('spaces');
 
   return (
@@ -81,31 +85,11 @@ export default function HomeContext({
 
       {tab === 'spaces' ? (
         <div className="space-y-2">
-          {/* The one row that crosses every boundary in the app. Everything else on this screen is
-              scoped to the personal workspace; these two counts are not, because "what have I let
-              slip" is not a question about one workspace. It sits above the lists for the same
-              reason — if it were below, it would only be seen by someone already scrolling. */}
-          {(overdueCount > 0 || todayCount > 0) && (
-            <button
-              onClick={onOpenOverdue}
-              className="mx-2 w-[calc(100%-1rem)] rounded-2xl bg-neutral-900 px-3 py-2.5 elevated flex items-center gap-3 text-left cursor-pointer"
-            >
-              {overdueCount > 0 && (
-                <span className="flex items-baseline gap-1.5">
-                  <span className="text-lg font-bold leading-none text-red-500">{overdueCount}</span>
-                  <span className="text-[11px] text-neutral-400">overdue</span>
-                </span>
-              )}
-              {todayCount > 0 && (
-                <span className="flex items-baseline gap-1.5">
-                  <span className="text-lg font-bold leading-none text-app-strong">{todayCount}</span>
-                  <span className="text-[11px] text-neutral-400">today</span>
-                </span>
-              )}
-              <ChevronRight className="w-4 h-4 text-neutral-600 ml-auto shrink-0" />
-            </button>
-          )}
-
+          {/* The overdue/today counts that used to sit here are gone. They led nowhere — tapping
+              them did nothing at all, because the only destination they had was the same Home
+              screen they were already on. A number that is not a way in is decoration, and this one
+              was taking the most valuable strip on the screen. If it comes back it has to arrive
+              with a real filtered view behind it. */}
           <div className="mx-2 rounded-2xl bg-neutral-900 px-2 py-2 space-y-0.5 elevated">
             {spaces.length === 0 && (
               <p className="px-2 py-3 text-xs text-neutral-500">
@@ -135,12 +119,43 @@ export default function HomeContext({
                 </button>
               );
             })}
-            <button
-              onClick={onCreateSpace}
-              className="w-full flex items-center gap-2 px-2 py-2.5 rounded-lg text-left text-xs text-neutral-500 hover:bg-neutral-800/60 cursor-pointer transition"
-            >
-              <span className="font-bold text-base leading-none">+</span> New space
-            </button>
+            {creatingSpace ? (
+              // Creates the Space right here instead of opening the Spaces tree to do it. Routing this to
+              // the tree was the original shortcut — the tree already has a create flow with naming, colour
+              // and icon — but from a context screen it reads as the button failing: you tap "New space"
+              // and land in a different navigation system with no space created. Reported as "Trykker jeg
+              // på New Space, så kommer jeg bare inn på Personal Spaces. Så den funker ikke." Name only
+              // here; colour and icon stay the tree's job, reachable by editing the Space afterwards.
+              <form
+                onSubmit={(e) => {
+                  e.preventDefault();
+                  commitSpace();
+                }}
+                className="flex items-center gap-2 px-2 py-1.5"
+              >
+                <input
+                  autoFocus
+                  value={draft}
+                  onChange={(e) => setDraft(e.target.value)}
+                  // Blur commits rather than discards: on a phone, dismissing the keyboard is the most
+                  // likely way out of this field, and losing a typed name to it would read as the same
+                  // "New space does nothing" bug all over again.
+                  onBlur={commitSpace}
+                  placeholder="Space name"
+                  className="flex-1 min-w-0 bg-neutral-800 rounded-lg px-2.5 py-2 text-sm text-app-strong placeholder:text-neutral-500 outline-none"
+                />
+              </form>
+            ) : (
+              <button
+                onClick={() => {
+                  hapticTap();
+                  setCreatingSpace(true);
+                }}
+                className="w-full flex items-center gap-2 px-2 py-2.5 rounded-lg text-left text-xs text-neutral-500 hover:bg-neutral-800/60 cursor-pointer transition"
+              >
+                <span className="font-bold text-base leading-none">+</span> New space
+              </button>
+            )}
           </div>
         </div>
       ) : (

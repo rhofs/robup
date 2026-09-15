@@ -1,6 +1,6 @@
 'use client';
 
-import { useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Plus, Pin, CalendarClock } from 'lucide-react';
 import GoogleIcon from '../icons/GoogleIcon';
 import { getISOWeek, isSameDay } from '../../lib/calendarDates';
@@ -166,6 +166,34 @@ export default function WeekRow({
   const [holdArmed, setHoldArmed] = useState(false);
   const LONG_PRESS_MOVE_TOLERANCE = 8;
 
+  // Stops the browser from taking the gesture over as a scroll once the hold has armed.
+  //
+  // The cells carry `touch-action: pan-y`, which says "a vertical drag is scrolling, not mine". That
+  // is right while the finger might still be scrolling past — and wrong the instant the hold arms,
+  // because from then on a vertical drag IS the gesture. The symptom was precise and repeatable:
+  // drag straight down from a held day and the selection vanished; go right first and then down and
+  // everything worked, because the browser had already committed the gesture to us.
+  //
+  // Changing touch-action mid-gesture is not reliable — browsers latch it when the touch sequence
+  // begins — so this blocks the scroll the one way that always works: a non-passive touchmove
+  // listener that calls preventDefault. Added only while a range is actually being drawn, and
+  // removed on every path out, because a forgotten one silently disables scrolling for the page.
+  const scrollBlockRef = useRef<((e: TouchEvent) => void) | null>(null);
+  const blockScrollWhileDragging = () => {
+    if (scrollBlockRef.current) return;
+    const handler = (e: TouchEvent) => e.preventDefault();
+    scrollBlockRef.current = handler;
+    window.addEventListener('touchmove', handler, { passive: false });
+  };
+  const releaseScrollBlock = () => {
+    if (!scrollBlockRef.current) return;
+    window.removeEventListener('touchmove', scrollBlockRef.current);
+    scrollBlockRef.current = null;
+  };
+  // A component unmounted mid-drag (switching month while holding) must not leave the listener
+  // behind — the page would simply stop scrolling, with nothing on screen to explain why.
+  useEffect(() => releaseScrollBlock, []);
+
   const clearLongPressTimer = () => {
     if (longPressTimerRef.current !== null) {
       window.clearTimeout(longPressTimerRef.current);
@@ -176,6 +204,7 @@ export default function WeekRow({
   // Cancels an in-flight hold outright (finger left the cell, gesture interrupted) — distinct
   // from a completed hold, which pointerup consumes.
   const abandonLongPress = () => {
+    releaseScrollBlock();
     clearLongPressTimer();
     longPressReadyRef.current = false;
     dragOriginRef.current = null;
@@ -385,6 +414,7 @@ export default function WeekRow({
                             longPressReadyRef.current = true;
                             draggingRangeRef.current = true;
                             setHoldArmed(true);
+                            blockScrollWhileDragging();
                             onPendingRangeChange({ start: day, end: day });
                             hapticTap();
                           }, LONG_PRESS_MS);
@@ -417,6 +447,7 @@ export default function WeekRow({
                   onPointerUp={
                     isMobile
                       ? () => {
+                          releaseScrollBlock();
                           clearLongPressTimer();
                           setPressedKey(null);
                           setHoldArmed(false);

@@ -1002,6 +1002,14 @@ function PageContent() {
   }, []);
   const useContexts = layoutPref === 'contexts';
 
+  // Which context screen a conversation was opened from, so Back can return there.
+  //
+  // Without it, opening a DM from Home's Messages list and pressing Back landed on the *old* Chat
+  // screen — a different navigation system than the one the tap started in, with no way back to
+  // Home except the bottom nav. A ref rather than state: nothing renders differently because of it,
+  // and it must be readable inside the close timeout without re-subscribing to anything.
+  const chatOriginRef = useRef<'home' | 'office' | null>(null);
+
   const [chatClosing, setChatClosing] = useState(false);
   const activeChatEntityRaw = useChatStore((s) => {
     const id = s.activeChannelId;
@@ -1016,9 +1024,22 @@ function PageContent() {
   const closeChatConversation = () => {
     hapticTap();
     setChatClosing(true);
+    const origin = chatOriginRef.current;
+    chatOriginRef.current = null;
     window.setTimeout(() => {
       setActiveChatChannelId(null);
       setChatClosing(false);
+      // Return to the context the conversation was opened from, once it has finished sliding out.
+      // Deferred with the rest of it deliberately: switching activeView any earlier swaps what is
+      // underneath the leaving panel mid-flight.
+      if (origin === 'home') {
+        setNavigation('everything');
+        setActiveView('board');
+      } else if (origin === 'office') {
+        setActiveOfficeUserId(null);
+        setActiveOfficeRoomId(null);
+        setActiveView('office');
+      }
     }, CHAT_PUSH_MS);
   };
 
@@ -1044,6 +1065,12 @@ function PageContent() {
       }
       // Same condition the header's own Back button renders under. The drawer being open already
       // means we are *at* the overview, so there is nothing to go back to from here.
+      // The contexts layout owns its own Back: everything below assumes the Spaces sheet is the
+      // level above a board, which stopped being true the moment Home and Office existed.
+      if (useContexts && activeView === 'board' && activeSpaceId !== 'everything') {
+        backToContext();
+        return true;
+      }
       if ((activeView === 'board' || activeView === 'docs') && !mobileSpacesOpen && !mobilePersonalSpacesOpen) {
         pushBackToSpaces(
           () => {
@@ -1994,6 +2021,24 @@ function PageContent() {
   // Office IS the team half, so arriving from Home (the personal workspace) has to switch workspace
   // first — otherwise the Office screen lists the personal workspace's own Spaces, which is both
   // wrong and indistinguishable from Home.
+  // Back, in the contexts layout. The old handler opened the Spaces sheet, which is a different
+  // navigation system entirely — reported from three separate places ("trykker meg tilbake, da
+  // kommer jeg på den gamle spaces-seksjonen"). The way out of a Space is the context it was
+  // picked from.
+  const backToContext = () => {
+    pushBackToSpaces(() => {
+      if (currentWorkspace?.isPersonal) {
+        // 'everything' is what Home means — see showingHomeContext.
+        setNavigation('everything');
+        setActiveView('board');
+      } else {
+        setActiveOfficeUserId(null);
+        setActiveOfficeRoomId(null);
+        setActiveView('office');
+      }
+    });
+  };
+
   const openOfficeContext = () => {
     if (currentWorkspace?.isPersonal && realSheetWorkspace) {
       setActiveWorkspaceId(realSheetWorkspace.id);
@@ -2263,8 +2308,13 @@ function PageContent() {
         onClick: () => setActiveView('profile'),
         active: activeView === 'profile',
       },
-    ],
-    [currentUserId, currentWorkspace, activeView, workspaces, mobilePersonalSpacesOpen, connectionRequestsIncoming, ensurePersonalWorkspace, setActiveWorkspaceId, setActiveView]
+    ]
+      // In the contexts layout Home IS this tile — same workspace, same view, and its `active`
+      // condition is word for word the Home tab's. Keeping both meant Home and My Tasks lit up
+      // together every time, which is what was reported. Home wins: it is the one with a slot in
+      // the bar. My Tasks stays in the classic layout untouched.
+      .filter((tile) => !(useContexts && tile.id === 'my-tasks')),
+    [currentUserId, currentWorkspace, activeView, workspaces, mobilePersonalSpacesOpen, connectionRequestsIncoming, ensurePersonalWorkspace, setActiveWorkspaceId, setActiveView, useContexts]
   );
 
   // Everything not already pinned to the bottom nav's 3 fixed slots — shared between
@@ -2315,6 +2365,24 @@ function PageContent() {
   // even with no List selected — SpaceHome has no concept of "archived", so it must yield to the
   // table here or the Archive toggle silently does nothing while on a Space's home page.
   const showingSpaceHome = activeView === 'board' && !!currentSpace && activeListIds.size === 0 && !showArchived;
+
+  // Is the contexts layout's Home screen the thing currently on screen?
+  //
+  // Keyed on activeSpaceId, NOT on activeListIds. The first version used
+  // `activeListIds.size === 0`, and picking a Space from Home sets a Space but no lists — so the
+  // condition stayed true and Home re-rendered itself. Reported as "trykker på Personal, får samme
+  // vindu som slider inn, kommer meg ikke videre". 'everything' is the store's own word for "no
+  // Space chosen", which is exactly what Home means.
+  //
+  // Derived once rather than repeated inline, because two copies of this condition that drift apart
+  // is how the board toolbar ends up rendering over a screen that has no board.
+  const showingHomeContext =
+    useContexts &&
+    isMobile &&
+    activeView === 'board' &&
+    !!currentWorkspace?.isPersonal &&
+    activeSpaceId === 'everything' &&
+    !mobilePersonalSpacesOpen;
 
   const statuses: StatusDef[] = currentSpace?.statuses?.length ? currentSpace.statuses : DEFAULT_STATUSES;
   // Space-wide fields (listId: null — every field created before per-List scoping existed) always
@@ -4247,6 +4315,67 @@ function PageContent() {
             <span className="hidden md:inline text-[9px] font-mono text-neutral-600">Ctrl+K</span>
           </button>
         </div>
+        {/* The contexts layout's header right side: who you are, and the one way to add someone.
+            Both were in the sketch and neither existed — reported for Home and Office separately.
+            The `+` is the only control here that differs between the two contexts, because adding
+            someone means a different thing in each: a connection is yours, a workspace member is
+            the company's. The avatar does the same thing in both, since there is only one you.
+
+            The dedicated personal/workspace settings panels from the sketch are still NOT built —
+            this opens the existing Settings panel on the account tab, which is the closest real
+            destination that exists today. */}
+        {useContexts && isMobile && (
+          <div className="md:hidden flex items-center gap-1.5 ml-auto shrink-0">
+            <button
+              onClick={() => {
+                hapticTap();
+                if (inOfficeContext) {
+                  setSettingsInitialTab('invite');
+                  setSettingsOpen(true);
+                } else {
+                  setActiveView('directMessages');
+                }
+              }}
+              title={inOfficeContext ? 'Invite to workspace' : 'Add a connection'}
+              className="w-8 h-8 rounded-full flex items-center justify-center text-neutral-400 hover:text-app-strong hover:bg-neutral-800/60 cursor-pointer relative"
+            >
+              <Plus className="w-5 h-5" />
+              {!inOfficeContext && connectionRequestsIncoming.length > 0 && (
+                <span className="absolute top-0 right-0 min-w-[15px] h-[15px] px-1 rounded-full bg-red-500 text-white text-[8px] font-bold flex items-center justify-center leading-none">
+                  {connectionRequestsIncoming.length > 99 ? '99+' : connectionRequestsIncoming.length}
+                </span>
+              )}
+            </button>
+            <button
+              onClick={() => {
+                hapticTap();
+                setSettingsInitialTab('account');
+                setSettingsOpen(true);
+              }}
+              title="Your settings"
+              className="shrink-0 cursor-pointer"
+            >
+              {(() => {
+                const me = users.find((u) => u.id === currentUserId);
+                return me?.avatarUrl ? (
+                  // eslint-disable-next-line @next/next/no-img-element
+                  <img
+                    src={me.avatarUrl}
+                    alt={me.name}
+                    className="w-8 h-8 rounded-full object-cover"
+                  />
+                ) : (
+                  <span
+                    className="w-8 h-8 rounded-full flex items-center justify-center text-[11px] font-bold text-white"
+                    style={{ backgroundColor: me?.color ?? '#6366f1' }}
+                  >
+                    {me?.initials ?? '?'}
+                  </span>
+                );
+              })()}
+            </button>
+          </div>
+        )}
         <div className="hidden md:block w-64 shrink-0" aria-hidden />
       </motion.header>
 
@@ -4857,6 +4986,10 @@ function PageContent() {
                     // the drawer is already being opened directly here rather than through
                     // openMobileSpaces(), and everything else this call feeds is about the *next*
                     // visit.
+                    if (useContexts) {
+                      backToContext();
+                      return;
+                    }
                     pushBackToSpaces(
                       () => {
                         if (currentWorkspace?.isPersonal) {
@@ -5129,7 +5262,7 @@ function PageContent() {
                 : 'max-w-6xl mx-auto space-y-2'
             }
           >
-            {activeView === 'board' && !showingSpaceHome && (
+            {activeView === 'board' && !showingSpaceHome && !showingHomeContext && (
             <div className="flex items-center justify-between">
               <div className="text-neutral-500 font-mono text-[10px]">{filteredTasks.length} tasks</div>
               <div className="flex items-center gap-1.5">
@@ -5579,12 +5712,7 @@ function PageContent() {
                   currentUserId ? setUsername(currentUserId, username) : Promise.resolve({ ok: false, error: 'Not signed in' })
                 }
               />
-            ) : useContexts &&
-              isMobile &&
-              activeView === 'board' &&
-              currentWorkspace?.isPersonal &&
-              activeListIds.size === 0 &&
-              !mobilePersonalSpacesOpen ? (
+            ) : showingHomeContext ? (
               // Home. Only when nothing more specific is open — picking a list still opens the board
               // exactly as before, which is what keeps this a navigation change rather than a
               // rewrite of everything underneath it.
@@ -5617,8 +5745,6 @@ function PageContent() {
                     color: u.color,
                     reason: currentWorkspace?.name ? `Works in ${currentWorkspace.name}` : 'In your workspace',
                   }))}
-                overdueCount={myOverdueCount}
-                todayCount={myTodayCount}
                 onSelectSpace={(spaceId) => {
                   startBoardPush('forward', 'personal');
                   setModalTaskStack([]);
@@ -5626,15 +5752,20 @@ function PageContent() {
                   setActiveView('board');
                 }}
                 onSelectDm={(channelId) => {
-                  setActiveChatChannelId(channelId);
+                  chatOriginRef.current = 'home';
+                  // View first, conversation on the next painted frame. Setting both at once mounts
+                  // the conversation already open, so there is nothing for it to slide over —
+                  // reported as "den klipper bare rett inn". Two frames, not one: the Chat screen
+                  // has to have actually painted its list before the push has anything to cover.
                   setActiveView('chat');
+                  requestAnimationFrame(() =>
+                    requestAnimationFrame(() => setActiveChatChannelId(channelId))
+                  );
                 }}
                 onStartDm={(userId) => void handleStartDMFromOffice(userId)}
-                onOpenOverdue={() => {
-                  setNavigation('everything', []);
-                  setActiveView('board');
+                onCreateSpace={(name) => {
+                  if (personalWorkspace) createSpace(personalWorkspace.id, name);
                 }}
-                onCreateSpace={() => setMobilePersonalSpacesOpen(true)}
               />
             ) : activeView === 'office' && useContexts && isMobile && !activeOfficeUserId && !activeOfficeRoomId ? (
               // The new Office: one workspace, seen as either the work in it or the conversations
@@ -5665,13 +5796,15 @@ function PageContent() {
                 }}
                 onSelectRoom={setActiveOfficeRoomId}
                 onSelectChannel={(channelId) => {
-                  setActiveChatChannelId(channelId);
+                  chatOriginRef.current = 'office';
                   setActiveView('chat');
+                  requestAnimationFrame(() =>
+                    requestAnimationFrame(() => setActiveChatChannelId(channelId))
+                  );
                 }}
-                // No new create-space flow of its own: the Spaces tree already has one, complete
-                // with naming, colour and icon. Opening it is both less code and one consistent
-                // place to create a Space from.
-                onCreateSpace={openMobileSpaces}
+                onCreateSpace={(name) => {
+                  if (currentWorkspace) createSpace(currentWorkspace.id, name);
+                }}
               />
             ) : activeView === 'office' ? (
               <OfficePage

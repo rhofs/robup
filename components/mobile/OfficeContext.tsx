@@ -30,7 +30,7 @@ type Props = {
   onSelectSpace: (spaceId: string) => void;
   onSelectRoom: (roomId: string) => void;
   onSelectChannel: (channelId: string) => void;
-  onCreateSpace: () => void;
+  onCreateSpace: (name: string) => void;
 };
 
 export default function OfficeContext({
@@ -43,6 +43,16 @@ export default function OfficeContext({
   onSelectChannel,
   onCreateSpace,
 }: Props) {
+  // Local, because creating a Space is a moment inside this screen and nothing above it needs to
+  // know it is happening.
+  const [creatingSpace, setCreatingSpace] = useState(false);
+  const [draft, setDraft] = useState('');
+  const commitSpace = () => {
+    const name = draft.trim();
+    if (name) onCreateSpace(name);
+    setDraft('');
+    setCreatingSpace(false);
+  };
   const [tab, setTab] = useState<OfficeTab>('spaces');
 
   return (
@@ -97,12 +107,43 @@ export default function OfficeContext({
               </button>
             );
           })}
-          <button
-            onClick={onCreateSpace}
-            className="w-full flex items-center gap-2 px-2 py-2.5 rounded-lg text-left text-xs text-neutral-500 hover:bg-neutral-800/60 cursor-pointer transition"
-          >
-            <span className="font-bold text-base leading-none">+</span> New space
-          </button>
+          {creatingSpace ? (
+            // Creates the Space right here instead of opening the Spaces tree to do it. Routing this to
+            // the tree was the original shortcut — the tree already has a create flow with naming, colour
+            // and icon — but from a context screen it reads as the button failing: you tap "New space"
+            // and land in a different navigation system with no space created. Reported as "Trykker jeg
+            // på New Space, så kommer jeg bare inn på Personal Spaces. Så den funker ikke." Name only
+            // here; colour and icon stay the tree's job, reachable by editing the Space afterwards.
+            <form
+              onSubmit={(e) => {
+                e.preventDefault();
+                commitSpace();
+              }}
+              className="flex items-center gap-2 px-2 py-1.5"
+            >
+              <input
+                autoFocus
+                value={draft}
+                onChange={(e) => setDraft(e.target.value)}
+                // Blur commits rather than discards: on a phone, dismissing the keyboard is the most
+                // likely way out of this field, and losing a typed name to it would read as the same
+                // "New space does nothing" bug all over again.
+                onBlur={commitSpace}
+                placeholder="Space name"
+                className="flex-1 min-w-0 bg-neutral-800 rounded-lg px-2.5 py-2 text-sm text-app-strong placeholder:text-neutral-500 outline-none"
+              />
+            </form>
+          ) : (
+            <button
+              onClick={() => {
+                hapticTap();
+                setCreatingSpace(true);
+              }}
+              className="w-full flex items-center gap-2 px-2 py-2.5 rounded-lg text-left text-xs text-neutral-500 hover:bg-neutral-800/60 cursor-pointer transition"
+            >
+              <span className="font-bold text-base leading-none">+</span> New space
+            </button>
+          )}
         </div>
       ) : (
         <div className="space-y-2">

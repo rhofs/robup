@@ -6687,3 +6687,84 @@ menu the user asked to keep ("Vi burde fortsatt beholde den menyløsningen vi ha
 **Not verified on device.** Typecheck and production build are clean, and the reasoning above is
 read off the mount conditions — but nobody has yet tapped Home, Office or Planner with the switch on.
 Whether Chat deserves its own tab in this layout is still open.
+
+## Today's session (2026-09-16, continued) — first real feedback round on the contexts layout: twelve reports, most of them one structural cause
+
+The layout switch finally took effect (see the nav-bar fix above), and the user walked through it on
+the phone. Twelve reports. Recording the shape of them first, because it is the useful part:
+
+**`useContexts` appeared in four places in an ~8000-line `page.tsx`** — the nav list, the header, and
+the two screen mounts. Everything else still ran the classic navigation: Back, the board toolbar, the
+launcher tiles, every "create" and "select" path. So the new layout was a thin skin over an app that
+still believed in the old one, and most reports were that skin tearing at a seam. This was the cost
+of shipping it as a switch, and it was underestimated when the approach was chosen — worth saying
+plainly, because the same trade-off will come up again when the settings panels are built.
+
+### Fixed this round
+
+**Home rendered itself instead of opening a Space.** Its mount gate was `activeListIds.size === 0`,
+but picking a Space sets a Space and no lists — so the gate stayed true and Home re-rendered.
+Reported as "trykker på Personal, får samme vindu som slider inn, kommer meg ikke videre". Now keyed
+on `activeSpaceId === 'everything'`, the store's own word for "no Space chosen", and extracted as
+`showingHomeContext` so the condition exists once.
+
+**Back landed in the old Spaces sheet** — from a Space in Home, from a Space in Office, and from
+"New space". Three reports, one cause: both the hardware Back handler and the header Back button call
+`pushBackToSpaces`, which opens a sheet belonging to the other navigation system. New `backToContext`
+sends you to the context you came from. Both call sites now check the layout first.
+
+**A DM opened from Home cut straight in, and Back left you in the old Chat screen.** Two separate
+bugs in one tap. The cut: setting the view and the channel in the same commit mounts the conversation
+already open, so there is nothing for it to slide over — now the view goes first and the channel
+follows two animation frames later. The wrong Back: `chatOriginRef` records which context a
+conversation was opened from, and `closeChatConversation` returns there after the slide-out.
+
+**Home and My Tasks lit up together.** Their `active` conditions were word for word identical,
+because in this layout they are the same destination. My Tasks is now filtered out of the launcher
+tiles when contexts is on. Only in that layout — classic keeps it.
+
+**The board toolbar rendered over Home** ("Select" and the task count belong to a board; Home has no
+board). Gated on `!showingHomeContext`.
+
+**"New space" opened the Spaces tree instead of creating anything.** The original reasoning was
+sound in isolation — the tree already has a create flow with naming, colour and icon, so reuse it —
+but from a context screen it reads as the button failing: you tap it and land in a different
+navigation system with no Space created. Both context screens now create inline, name only. Blur
+commits rather than discards, because dismissing the keyboard is the most likely way out of that
+field on a phone and losing the typed name would read as the same bug again.
+
+**The overdue/today counts are gone.** They led nowhere — the only destination they had was the same
+Home screen they were already on. User's call to remove rather than wire up ("Overdue skjer ingenting.
+Den kan vi fjerne."). If they come back they have to arrive with a real filtered view behind them.
+
+**No avatar and no `+` in either context header.** Both were in the sketch; neither existed. Added,
+with the `+` differing per context (connections in Home, workspace invite in Office) and the avatar
+the same in both. **The dedicated personal/workspace settings panels from the sketch are still not
+built** — the avatar opens the existing Settings panel on the account tab, which is the nearest real
+destination that exists today.
+
+**Planner: dragging straight down from a held day cancelled the selection; going right first and
+then anywhere worked.** The cells carry `touch-action: pan-y`, which tells the browser a vertical
+drag is a scroll and not our gesture — correct while the finger might still be scrolling past, wrong
+the instant the hold arms. Changing `touch-action` mid-gesture is not reliable (browsers latch it
+when the touch sequence begins), so the fix blocks the scroll the one way that always works: a
+non-passive `touchmove` listener calling `preventDefault`, added when the hold arms and removed on
+every path out — including unmount, since a forgotten one silently stops the whole page scrolling
+with nothing on screen to explain it.
+
+### Also worth recording
+
+A brace-escaping mistake mangled both context components mid-edit (a Python template with `{{`
+intended for `.format`, never formatted). Recovered with `git checkout` of those two files and a
+clean redo — cheap only because the surrounding work was already committed. The second attempt,
+which over-corrected and collapsed legitimate JSX `}}`, is the reason the third one built the block
+as a plain list of lines with no escaping at all.
+
+### Still open from this round
+
+- Whether Chat deserves its own tab in this layout (unanswered from last session)
+- The personal and workspace settings panels from the sketch
+- A colour per workspace (the header mark still falls back to the accent)
+- Planner's personal/work filter (deferred by the user earlier)
+- **None of this round is verified on device.** Typecheck and production build are clean; nobody has
+  tapped any of it yet.
