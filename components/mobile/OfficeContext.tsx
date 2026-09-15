@@ -3,7 +3,7 @@
 import { useState } from 'react';
 import { ChevronRight, Hash, Users } from 'lucide-react';
 import type { HierarchySpace, HierarchyRoom } from '../../store/useTaskStore';
-import { FOLDER_ICON_MAP } from '../FolderTree';
+import ContextSpaceList from './ContextSpaceList';
 import { hapticTap } from '../../lib/haptics';
 
 // The Office half of the new two-context layout: one workspace, seen either as the work in it or
@@ -28,6 +28,9 @@ type Props = {
   // than on a separate screen — which is the point of merging Office into here at all.
   occupantsByRoom: Record<string, { id: string; initials: string; color: string }[]>;
   onSelectSpace: (spaceId: string) => void;
+  onSelectList: (spaceId: string, listId: string) => void;
+  onSpaceMenu: (x: number, y: number, space: HierarchySpace) => void;
+
   onSelectRoom: (roomId: string) => void;
   onSelectChannel: (channelId: string) => void;
   onCreateSpace: (name: string) => void;
@@ -39,6 +42,8 @@ export default function OfficeContext({
   channels,
   occupantsByRoom,
   onSelectSpace,
+  onSelectList,
+  onSpaceMenu,
   onSelectRoom,
   onSelectChannel,
   onCreateSpace,
@@ -78,35 +83,13 @@ export default function OfficeContext({
 
       {tab === 'spaces' ? (
         <div className="mx-2 rounded-2xl bg-neutral-900 px-2 py-2 space-y-0.5 elevated">
-          {spaces.length === 0 && (
-            <p className="px-2 py-3 text-xs text-neutral-500">No spaces in this workspace yet.</p>
-          )}
-          {spaces.map((space) => {
-            const Icon = space.icon ? FOLDER_ICON_MAP[space.icon] : null;
-            return (
-              <button
-                key={space.id}
-                onClick={() => onSelectSpace(space.id)}
-                className="w-full flex items-center gap-3 px-2 py-2.5 rounded-lg text-left transition cursor-pointer hover:bg-neutral-800/60"
-              >
-                {/* text-white, not text-app-strong — the tile is filled with the Space's own
-                    colour, and that token follows the neutral scale into near-black in light mode.
-                    Same trap, already paid for once. */}
-                <span
-                  className="w-8 h-8 rounded-lg flex items-center justify-center shrink-0"
-                  style={{ backgroundColor: space.color || '#6366f1' }}
-                >
-                  {Icon ? (
-                    <Icon className="w-4 h-4 text-white" />
-                  ) : (
-                    <span className="text-white text-xs font-bold">{space.name.slice(0, 1).toUpperCase()}</span>
-                  )}
-                </span>
-                <span className="min-w-0 flex-1 text-sm text-neutral-200 truncate">{space.name}</span>
-                <ChevronRight className="w-4 h-4 text-neutral-600 shrink-0" />
-              </button>
-            );
-          })}
+          <ContextSpaceList
+            spaces={spaces}
+            emptyText="No spaces in this workspace yet."
+            onSelectSpace={onSelectSpace}
+            onSelectList={onSelectList}
+            onSpaceMenu={onSpaceMenu}
+          />
           {creatingSpace ? (
             // Creates the Space right here instead of opening the Spaces tree to do it. Routing this to
             // the tree was the original shortcut — the tree already has a create flow with naming, colour

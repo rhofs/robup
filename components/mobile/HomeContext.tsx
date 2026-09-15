@@ -3,7 +3,7 @@
 import { useState } from 'react';
 import { ChevronRight, MessageSquare, UserPlus } from 'lucide-react';
 import type { HierarchySpace } from '../../store/useTaskStore';
-import { FOLDER_ICON_MAP } from '../FolderTree';
+import ContextSpaceList from './ContextSpaceList';
 import { hapticTap } from '../../lib/haptics';
 
 // The private half of the two-context layout, and deliberately the same component shape as
@@ -35,6 +35,9 @@ type Props = {
   dms: Dm[];
   suggestions: Suggestion[];
   onSelectSpace: (spaceId: string) => void;
+  onSelectList: (spaceId: string, listId: string) => void;
+  onSpaceMenu: (x: number, y: number, space: HierarchySpace) => void;
+
   onSelectDm: (channelId: string) => void;
   onStartDm: (userId: string) => void;
   onCreateSpace: (name: string) => void;
@@ -45,6 +48,8 @@ export default function HomeContext({
   dms,
   suggestions,
   onSelectSpace,
+  onSelectList,
+  onSpaceMenu,
   onSelectDm,
   onStartDm,
   onCreateSpace,
@@ -91,34 +96,13 @@ export default function HomeContext({
               was taking the most valuable strip on the screen. If it comes back it has to arrive
               with a real filtered view behind it. */}
           <div className="mx-2 rounded-2xl bg-neutral-900 px-2 py-2 space-y-0.5 elevated">
-            {spaces.length === 0 && (
-              <p className="px-2 py-3 text-xs text-neutral-500">
-                Nothing here yet — your private lists live in this half.
-              </p>
-            )}
-            {spaces.map((space) => {
-              const Icon = space.icon ? FOLDER_ICON_MAP[space.icon] : null;
-              return (
-                <button
-                  key={space.id}
-                  onClick={() => onSelectSpace(space.id)}
-                  className="w-full flex items-center gap-3 px-2 py-2.5 rounded-lg text-left transition cursor-pointer hover:bg-neutral-800/60"
-                >
-                  <span
-                    className="w-8 h-8 rounded-lg flex items-center justify-center shrink-0"
-                    style={{ backgroundColor: space.color || '#6366f1' }}
-                  >
-                    {Icon ? (
-                      <Icon className="w-4 h-4 text-white" />
-                    ) : (
-                      <span className="text-white text-xs font-bold">{space.name.slice(0, 1).toUpperCase()}</span>
-                    )}
-                  </span>
-                  <span className="min-w-0 flex-1 text-sm text-neutral-200 truncate">{space.name}</span>
-                  <ChevronRight className="w-4 h-4 text-neutral-600 shrink-0" />
-                </button>
-              );
-            })}
+            <ContextSpaceList
+              spaces={spaces}
+              emptyText="Nothing here yet — your private lists live in this half."
+              onSelectSpace={onSelectSpace}
+              onSelectList={onSelectList}
+              onSpaceMenu={onSpaceMenu}
+            />
             {creatingSpace ? (
               // Creates the Space right here instead of opening the Spaces tree to do it. Routing this to
               // the tree was the original shortcut — the tree already has a create flow with naming, colour

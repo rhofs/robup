@@ -24,6 +24,7 @@ import {
   List as ListIcon,
   Folder as FolderIconLucide,
   Calendar as CalendarIcon,
+  UserPlus,
   UserCircle,
   LogOut,
   Archive,
@@ -2037,6 +2038,25 @@ function PageContent() {
         setActiveView('office');
       }
     });
+  };
+
+  // Opening a conversation from Home or Office.
+  //
+  // Two wrong versions preceded this one, and the difference is worth keeping. Setting the view and
+  // the channel in one commit mounts the conversation already open, so it has nothing to slide over
+  // and simply appears — "den klipper bare rett inn". Setting the view a frame earlier fixed the
+  // slide but introduced a worse thing: for that one frame the Chat screen paints its own DM list,
+  // so the background visibly cut from Home to a different screen behind the incoming panel —
+  // "animasjonen er feil på bakgrunnsbildet... det klipper i hvert fall".
+  //
+  // The conversation is not arriving over the Chat list; it is arriving over the context you were
+  // just looking at. So it uses the same forward push a Space does, with both values set in one
+  // commit — the whole main area slides, and nothing ever paints an intermediate screen.
+  const openConversationFromContext = (channelId: string, origin: 'home' | 'office') => {
+    chatOriginRef.current = origin;
+    startBoardPush('forward', origin === 'home' ? 'personal' : 'spaces');
+    setActiveChatChannelId(channelId);
+    setActiveView('chat');
   };
 
   const openOfficeContext = () => {
@@ -4337,9 +4357,15 @@ function PageContent() {
                 }
               }}
               title={inOfficeContext ? 'Invite to workspace' : 'Add a connection'}
-              className="w-8 h-8 rounded-full flex items-center justify-center text-neutral-400 hover:text-app-strong hover:bg-neutral-800/60 cursor-pointer relative"
+              // active: styles, not just the global press-scale. That scale is 0.97, which on a
+              // 32px icon is about one pixel — real, and completely imperceptible at this size.
+              // Reported as the button having no feedback at all. Everything else on these screens
+              // is a row wide enough for the scale to read.
+              className="w-8 h-8 rounded-full flex items-center justify-center text-neutral-400 hover:text-app-strong hover:bg-neutral-800/60 active:bg-neutral-700 active:text-app-strong cursor-pointer relative transition-colors"
             >
-              <Plus className="w-5 h-5" />
+              {/* UserPlus, not Plus: a bare plus says "make something", and this one only ever adds
+                  a person — a connection in Home, a workspace member in Office. */}
+              <UserPlus className="w-[18px] h-[18px]" />
               {!inOfficeContext && connectionRequestsIncoming.length > 0 && (
                 <span className="absolute top-0 right-0 min-w-[15px] h-[15px] px-1 rounded-full bg-red-500 text-white text-[8px] font-bold flex items-center justify-center leading-none">
                   {connectionRequestsIncoming.length > 99 ? '99+' : connectionRequestsIncoming.length}
@@ -4353,7 +4379,7 @@ function PageContent() {
                 setSettingsOpen(true);
               }}
               title="Your settings"
-              className="shrink-0 cursor-pointer"
+              className="shrink-0 cursor-pointer rounded-full active:opacity-70 transition-opacity"
             >
               {(() => {
                 const me = users.find((u) => u.id === currentUserId);
@@ -4964,7 +4990,10 @@ function PageContent() {
                 visibly shifted left/right depending on which screen you were on. Reserving the
                 width unconditionally keeps the search bar's own position identical everywhere. */}
             <div className="relative z-10 md:hidden w-7 h-7 shrink-0 flex items-center justify-center">
-              {(activeView === 'board' || activeView === 'docs') && (
+              {/* Not on Home. Home IS the top of its context, so a Back button there resolved to
+                  itself — "den går ingen steder, den bare går i loop". Office and Planner never had
+                  one, which is why only Home was reported. */}
+              {(activeView === 'board' || activeView === 'docs') && !showingHomeContext && (
                 <button
                   onClick={() => {
                     // Pressing Back here is a deliberate "I want the overview now, not a specific
@@ -5751,17 +5780,14 @@ function PageContent() {
                   setNavigation(spaceId, []);
                   setActiveView('board');
                 }}
-                onSelectDm={(channelId) => {
-                  chatOriginRef.current = 'home';
-                  // View first, conversation on the next painted frame. Setting both at once mounts
-                  // the conversation already open, so there is nothing for it to slide over —
-                  // reported as "den klipper bare rett inn". Two frames, not one: the Chat screen
-                  // has to have actually painted its list before the push has anything to cover.
-                  setActiveView('chat');
-                  requestAnimationFrame(() =>
-                    requestAnimationFrame(() => setActiveChatChannelId(channelId))
-                  );
+                onSelectList={(spaceId, listId) => {
+                  startBoardPush('forward', 'personal');
+                  setModalTaskStack([]);
+                  setNavigation(spaceId, [listId]);
+                  setActiveView('board');
                 }}
+                onSpaceMenu={(x, y, space) => setSpaceMenu({ x, y, space })}
+                onSelectDm={(channelId) => openConversationFromContext(channelId, 'home')}
                 onStartDm={(userId) => void handleStartDMFromOffice(userId)}
                 onCreateSpace={(name) => {
                   if (personalWorkspace) createSpace(personalWorkspace.id, name);
@@ -5794,14 +5820,15 @@ function PageContent() {
                   setNavigation(spaceId, []);
                   setActiveView('board');
                 }}
-                onSelectRoom={setActiveOfficeRoomId}
-                onSelectChannel={(channelId) => {
-                  chatOriginRef.current = 'office';
-                  setActiveView('chat');
-                  requestAnimationFrame(() =>
-                    requestAnimationFrame(() => setActiveChatChannelId(channelId))
-                  );
+                onSelectList={(spaceId, listId) => {
+                  startBoardPush('forward');
+                  setModalTaskStack([]);
+                  setNavigation(spaceId, [listId]);
+                  setActiveView('board');
                 }}
+                onSpaceMenu={(x, y, space) => setSpaceMenu({ x, y, space })}
+                onSelectRoom={setActiveOfficeRoomId}
+                onSelectChannel={(channelId) => openConversationFromContext(channelId, 'office')}
                 onCreateSpace={(name) => {
                   if (currentWorkspace) createSpace(currentWorkspace.id, name);
                 }}

@@ -6768,3 +6768,58 @@ as a plain list of lines with no escaping at all.
 - Planner's personal/work filter (deferred by the user earlier)
 - **None of this round is verified on device.** Typecheck and production build are clean; nobody has
   tapped any of it yet.
+
+### Same session — second feedback round on the contexts layout
+
+Planner's hold-and-drag is confirmed fixed on device ("funker nå med å gå rett ned og på skrå" —
+the `touchmove`/`preventDefault` fix was the right diagnosis). The three tabs work. What follows is
+what the second pass turned up.
+
+**Home had a Back button that went to Home.** `activeView === 'board'` is true on Home, so the
+header's Back arrow rendered, and `backToContext` resolved to the screen it was already on. Office
+and Planner never render one, which is exactly why only Home was reported. Hidden on Home now.
+
+**Opening a conversation from a context — the third version.** Worth recording all three, because
+each fix exposed the next layer:
+
+1. View and channel set in one commit → the conversation mounts already open, nothing to slide over.
+   "Den klipper bare rett inn."
+2. View set a frame earlier → the slide works, but for that frame the Chat screen paints its own DM
+   list, so the *background* cut from Home to a different screen behind the incoming panel.
+   "Animasjonen er feil på bakgrunnsbildet... det klipper i hvert fall."
+3. The realisation the first two missed: the conversation is not arriving over the Chat list, it is
+   arriving over **the context you were looking at**. So it now uses the same forward push a Space
+   uses, with both values set in one commit. The whole main area slides and no intermediate screen
+   is ever painted.
+
+**The Spaces list is expandable again.** Flat rows meant reaching one List was a full page change,
+and coming back put you at the top with everything shut — "jeg får ikke åpne opp sånn som jeg fikk
+før". New `components/mobile/ContextSpaceList.tsx`, shared by both contexts: the chevron opens a
+Space in place, the name goes into it. Two levels (space → top-level folders → lists), no drag or
+reorder. It is deliberately **not** the old tree — it is the part of the tree that was being used
+for navigation, on a surface where four levels of indent do not fit.
+
+**A Space created from a context could not be deleted.** No long-press, so no menu, so no way to
+remove a test Space from the screen that created it. The list now long-presses into the same Space
+menu (Edit/Delete) that a right-click raises on desktop, including swallowing the trailing click.
+
+**The `+` had no perceptible press feedback, and read as "make something".** The global press rule
+is `scale(0.97)` — on a 32px icon button that is about one pixel. Real, and invisible. It now also
+takes an `active:` background, and the icon is `UserPlus` rather than `Plus`, since it only ever
+adds a person (a connection in Home, a member in Office).
+
+### Answered rather than changed
+
+**"Trykker Meny, den blir blå og åpner seg med en gang, mens Home fortsatt er blå."** That is the
+existing behaviour and it is intended: the launcher slot navigates on the first tap when it is not
+already where you are, and Home stays active because opening the launcher does not leave Home. Left
+alone — the user was unsure it was a bug, and it is not.
+
+### Still open
+
+- The Office `+` opens Settings on the invite tab rather than a workspace-invite sheet of its own.
+  Accepted for now; a proper one belongs with the workspace settings panel that is still not built.
+- The avatar still opens Settings → Account rather than the personal settings panel from the sketch.
+  The user has seen this and deferred it ("det fikser vi sikkert senere").
+- Whether Chat needs its own tab in this layout.
+- **Not verified on device.** Build and typecheck clean; none of this round has been tapped yet.
