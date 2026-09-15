@@ -6453,3 +6453,72 @@ Checked for `position: fixed` descendants before wrapping it; there are none.
 
 The drawer's fade can probably go now that nothing of it is left uncovered, but that is worth
 confirming on a device before removing.
+
+## Today's session (2026-09-16) — a new navigation model, decided but NOT built
+
+Two rounds of sketching with the user, no code written. Recording it because the decisions are made
+and the reasoning behind them is the expensive part to reconstruct.
+
+**Sketches:** https://claude.ai/code/artifact/b5d65dad-db68-4204-9eaf-faf25401f95d
+(superseded first attempt: https://claude.ai/code/artifact/d754f157-2e4d-44c3-a26c-f613ba6723da)
+
+### The model
+
+Discord's, not ClickUp's. **One shape repeated twice** — a private room and a work room, each
+containing places to talk and places to work:
+
+| | Home | Office |
+|---|---|---|
+| **Toggle** | `My Spaces` / `Messages` | `Spaces` / `Rooms` |
+| **Default** | My Spaces | Spaces |
+| **Header left** | your name | workspace + switcher |
+| **Header right** | your avatar → personal settings; `+` → connections | workspace mark → workspace settings; `+` → invite |
+
+Rationale: the app is sorted by *what things are* (Spaces, Planner, Chat, Office, My Tasks) and
+nothing explains anything else. Discord sorts by *where you are*, then *what you are looking at*.
+The user arrived at this himself after saying the ClickUp-shaped version was something he never
+opened.
+
+**Spaces is the default side of both toggles** — the user's call: "siden dette er en task
+manager/project manager." Messages and Rooms are the second half, not the first.
+
+### Settled by the user, against my recommendations where noted
+
+- **Nav: Home · Office · Planner · Menu.** Four tabs. I argued for three; he wants the existing
+  launcher kept as the fourth for things like Trash and Archive that need somewhere to live. He is
+  right that they currently have nowhere else.
+- **Planner is its own tab, and last.** Home and Office share a shape, and seeing them adjacent is
+  what teaches it; a third tab between them breaks that every time you look. Planner last reads as
+  "a different kind of thing", which it is.
+- **The workspace switcher stays at the top of Office. I had suggested moving it into the settings
+  panel and was wrong** — "å kunne bytte øverst mellom workspaces er alfa og omega for meg." The
+  workspace identity therefore appears twice in that header (a switcher on the left, settings on the
+  right). Accepted deliberately: switching is the frequent act, configuring is the rare one.
+- **"Rooms", not voice channels.** No voice exists yet, so the Discord parallel stops at the name.
+- **All UI copy in English**, as the app already is. The sketches were corrected from Norwegian.
+
+### Office absorbs Office
+
+The old Office tab becomes the `Rooms` half of the new Office tab, sitting in the same list as chat
+channels with the people inside shown inline — which is what Discord does with voice channels. This
+replaces my earlier suggestion of putting presence on Home. Rooms and channels answer the same
+question (*where is the conversation*), so they belong in one list.
+
+### Not built, to be specified later
+
+**Planner needs a filter for the personal/work split.** Tasks and events can already be attached to
+a personal space or a workspace one, but the Planner's dropdown does not distinguish them — so a
+task created in Home is not visibly "only mine". The user's words: "vi burde skille de to litt i den
+dropdownen, men det gjør vi siden." Deferred, not forgotten.
+
+### How it will be tried
+
+**Behind a switch in Settings, not a branch.** The Pterodactyl Startup page has no branch variable
+(confirmed from a screenshot — startup command, docker image and variables only), so a branch could
+not be deployed for testing without merging it anyway.
+
+A setting stores which layout is active, exactly as theme, haptic strength and hidden nav tabs
+already do. That gives three things a branch would not: the two layouts can be compared in one
+session on the same data, nobody else sees the new one until it is switched on for them, and undoing
+it is unticking a box rather than reverting code. When it is settled, the old path and the switch
+both come out.
