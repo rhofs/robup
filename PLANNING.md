@@ -5737,3 +5737,28 @@ where you are was quietly tidying up after you the moment you left.
 Now it returns early when there is no active List. **It exists to reveal, never to hide** — worth
 stating plainly in the effect, because its three previous rounds of fixes were all about *when* to
 expand and none of them noticed it could also collapse.
+
+### Same session — both halves of the push, on one track
+
+"Nå skyves lista fint inn, men jeg vil jo at den forrige viewen skal skyves til venstre og."
+Correct — half a push reads worse than none, because the eye sees a cut followed by an entrance and
+registers two events where there should be one movement.
+
+**Why the outgoing drawer has to leave completely**, rather than the ~30% an iOS push moves its
+outgoing page: that parallax works because the incoming page is drawn *on top*. This drawer **is**
+the top layer — `fixed z-30` over the board — so anything less than a full exit keeps it covering the
+list it is revealing. Sheet goes `0 → -100%`, board goes `100% → 0`, same curve and duration, so
+their adjacent edges travel together like two panes on one track.
+
+**Two things had to stop happening at the moment of the tap:**
+
+- The drawer closed instantly. It now stays mounted for the length of the push (`open={mobileSpacesOpen
+  || boardPushing}`), because a view cannot slide out if it has already been removed.
+- The board refused to render. The gate that blanks the task list while a sheet covers it — the
+  370ms stutter fix — also blanked the thing being pushed in. It now yields while `boardPushing`. The
+  gate's purpose is to stop pointless re-renders behind a *static* sheet; here the render is the
+  entire point, and it is bounded to one deliberate navigation rather than every workspace switch.
+
+The transition constants come from `lib/chatTransition.ts` rather than being redeclared: this is the
+same gesture as opening a DM wearing a different name, and two page transitions in one app that are
+almost but not quite alike are worse than either alone.

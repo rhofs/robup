@@ -2,11 +2,18 @@
 
 import { useEffect, useRef, useState } from 'react';
 import { ChevronRight, ChevronDown, Globe, Search, X, Plus, Folder as FolderIconLucide, List as ListIconLucide, FileText } from 'lucide-react';
+import { motion } from 'framer-motion';
 import { useTaskStore, type HierarchySpace } from '../../store/useTaskStore';
 import { FOLDER_ICON_MAP } from '../FolderTree';
 import FloatingPopover from '../FloatingPopover';
 import { hapticTap } from '../../lib/haptics';
 import { getChildFolders, getListsIn, getBoardDocsIn } from '../../lib/folderTree';
+import { CHAT_PUSH_MS, CHAT_PUSH_EASE } from '../../lib/chatTransition';
+
+// The same curve and duration the chat push uses, because this is the same gesture wearing a
+// different name: one full-screen surface replacing another. Two page transitions in one app that
+// are almost but not quite alike is worse than either of them alone.
+const CHAT_PUSH_TRANSITION = { duration: CHAT_PUSH_MS / 1000, ease: CHAT_PUSH_EASE };
 
 type Props = {
   open: boolean;
@@ -42,6 +49,16 @@ type Props = {
   onListMenu?: (spaceId: string, listId: string, x: number, y: number) => void;
   onSelectList: (spaceId: string, listId: string) => void;
   onSelectDoc: (spaceId: string, docId: string) => void;
+  // True while the board is pushing in from the right after a List or Doc was chosen. The sheet
+  // stays mounted and slides off to the left over the same duration, so the two move as one — the
+  // outgoing view leaving and the incoming one arriving are a single gesture, not a cut followed by
+  // an entrance. Asked for exactly that way: "jeg vil jo at den forrige viewen skal skyves til
+  // venstre og, likt som DMs".
+  //
+  // It has to leave completely, not the ~30% an iOS push moves its outgoing page by. That parallax
+  // works because the incoming page is drawn ON TOP; this sheet is the top layer, so anything less
+  // than a full exit would still be covering the list it is meant to reveal.
+  pushingOut?: boolean;
 };
 
 // Mobile Spaces landing — reachable from the bottom nav's "Spaces" tab (see MobileBottomNav.tsx)
@@ -163,6 +180,7 @@ export default function MobileSpacesSheet({
   onSpaceMenu,
   onFolderMenu,
   onListMenu,
+  pushingOut = false,
 }: Props) {
   // Called directly via the store, same as FolderTree.tsx's own create-Folder/List/Space
   // buttons already do — no need to thread these through app/page.tsx as props.
@@ -264,7 +282,9 @@ export default function MobileSpacesSheet({
   return (
     <>
       {open && (
-        <div
+        <motion.div
+          animate={{ x: pushingOut ? '-100%' : 0 }}
+          transition={pushingOut ? CHAT_PUSH_TRANSITION : { duration: 0 }}
           // pt-[env(safe-area-inset-top)]: this sheet is `top-0` and covers the global mobile
           // header, so it has to repeat that header's own status-bar clearance — otherwise its
           // title lands under the clock in the Android app, where the WebView is edge-to-edge.
@@ -499,7 +519,7 @@ export default function MobileSpacesSheet({
             })}
           </div>
           </div>
-        </div>
+        </motion.div>
       )}
     </>
   );

@@ -859,10 +859,21 @@ function PageContent() {
   // horizontal scroll behind either.
   const boardPushControls = useAnimationControls();
   const [boardPushSeq, setBoardPushSeq] = useState(0);
+  // True for the length of the push. Two things depend on it, and both are why the sheet cannot
+  // simply close the moment a List is tapped:
+  //   - the drawer stays *mounted* (see its `open` prop below) so it has something to slide with;
+  //   - and the board has to be rendered, which the gate around the task list normally refuses
+  //     while a sheet covers it. That gate exists to keep the board from re-rendering pointlessly
+  //     behind a static sheet; here the render is the entire point, and it is bounded to one
+  //     deliberate navigation rather than happening on every workspace switch.
+  const [boardPushing, setBoardPushing] = useState(false);
   useEffect(() => {
     if (boardPushSeq === 0) return;
+    setBoardPushing(true);
     boardPushControls.set({ x: '100%' });
     void boardPushControls.start({ x: 0, transition: CHAT_PUSH_TRANSITION });
+    const t = window.setTimeout(() => setBoardPushing(false), CHAT_PUSH_MS);
+    return () => window.clearTimeout(t);
   }, [boardPushSeq, boardPushControls]);
 
   const [chatClosing, setChatClosing] = useState(false);
@@ -7235,7 +7246,11 @@ function PageContent() {
       />
 
       <MobileSpacesSheet
-        open={mobileSpacesOpen}
+        // `|| boardPushing` keeps the drawer on screen while it slides away. Closing it on the tap
+        // is what made this a cut: the outgoing view vanished in one frame and the incoming one
+        // then animated in on its own, which reads as two events rather than one movement.
+        open={mobileSpacesOpen || boardPushing}
+        pushingOut={boardPushing}
         onClose={() => setMobileSpacesOpen(false)}
         title="Spaces"
         onOpenSearch={() => setCommandPaletteOpen(true)}
