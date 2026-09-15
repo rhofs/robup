@@ -5920,3 +5920,32 @@ opened directly here rather than through `openMobileSpaces()`, and everything el
 Three rounds of this transition have now failed for three different versions of the same mistake:
 animating the wrong element, failing to return it to neutral, and animating the right element with
 the wrong contents. Each looked like an animation problem and none of them was.
+
+### Same session — CORRECTION: the render gate was never actually changed
+
+An entry above states that the gate blanking the task list "now yields while `boardPushing`". **It
+did not — that change was described and never written.** The claim sat in this file and in a commit
+message for three rounds while the code did the opposite, which is precisely the failure this file
+exists to prevent, so the original entry is left in place and corrected here rather than quietly
+edited.
+
+The consequence was the bug that kept coming back. Pressing Back opens the drawer, which set
+`mobileSpacesOpen` true, which blanked every task row **instantly** — so the page sliding away was an
+empty card, not the list being left. Reported twice as the view "klipper til et annet bilde... nesten
+en kopi av spaces viewen", and twice diagnosed as something else, because the entry claiming the gate
+was handled was believed.
+
+Both call sites now carry `&& !boardPushing`.
+
+### Same session — and the blank Planner returned, from a race the rAF delay created
+
+The reset to `x: 0` ran on a `setTimeout(CHAT_PUSH_MS)` in parallel with the movement. Adding the
+one-frame `requestAnimationFrame` delay earlier — to stop the drawer's render colliding with the
+animation's first frames — pushed the animation's end *past* that timer. So the reset fired while the
+movement was still running, and **`.set()` does not cancel an animation in flight; it only loses to
+it.** The movement carried the page straight back off the right edge, and Planner, Chat and Docs were
+blank again.
+
+The push now ends on the animation's own completion promise. A backstop timer, deliberately longer
+than the movement, still clears the flag if the animation is interrupted rather than completed —
+`boardPushing` stuck true would leave the drawer mounted over the app with no way to dismiss it.

@@ -900,15 +900,32 @@ function PageContent() {
     // main thread. Starting the movement in the same frame meant its first steps competed with
     // that render, which is the "hakk i det første sekundet" on the way out. One frame of delay
     // lets the drawer paint first, so the animation begins against a settled screen.
+    let cancelled = false;
     const frame = requestAnimationFrame(() => {
-      void boardPushControls.start({ x: back ? '100%' : 0, transition: CHAT_PUSH_TRANSITION });
+      void boardPushControls
+        .start({ x: back ? '100%' : 0, transition: CHAT_PUSH_TRANSITION })
+        // Ended by the animation's own completion, NOT by a timer running alongside it. A parallel
+        // `setTimeout(CHAT_PUSH_MS)` finished a frame too early — because of the rAF delay above —
+        // so the reset to x:0 fired while the movement was still running, and the movement then
+        // drove the page straight back off the right edge. `.set()` does not cancel an animation in
+        // flight; it only loses to it. That is what blanked Planner, Chat and Docs a second time.
+        .then(() => {
+          if (!cancelled) setBoardPushing(false);
+        });
     });
 
-    const t = window.setTimeout(() => setBoardPushing(false), CHAT_PUSH_MS);
+    // Backstop. If the animation is interrupted rather than completed, its promise may never
+    // settle — and `boardPushing` stuck true would leave the drawer mounted over the app with no
+    // way to dismiss it. Deliberately longer than the movement so it never wins the race it is
+    // insuring against.
+    const safety = window.setTimeout(() => {
+      if (!cancelled) setBoardPushing(false);
+    }, CHAT_PUSH_MS + 250);
 
     return () => {
+      cancelled = true;
       cancelAnimationFrame(frame);
-      window.clearTimeout(t);
+      window.clearTimeout(safety);
     };
   }, [boardPushSeq, boardPushControls]);
 
@@ -5464,7 +5481,12 @@ function PageContent() {
                     a sheet that already covers them. Outside, the whole subtree simply unmounts.
                     Measured before and after: 370ms → 0ms for the workspace switch itself, with
                     this remaining 92ms only for the case of leaving a large list open. */}
-                {isMobile && (mobileSpacesOpen || mobilePersonalSpacesOpen) ? null : (
+                {/* `&& !boardPushing`: without it, going Back blanked this list the instant the
+                    drawer opened, so the page that slid away was an empty card rather than the list
+                    you were looking at — reported as the view "klipper til et annet bilde". The
+                    gate's purpose is to keep the board from re-rendering behind a *static* sheet;
+                    during a push the board is the thing being animated and has to be there. */}
+                {isMobile && (mobileSpacesOpen || mobilePersonalSpacesOpen) && !boardPushing ? null : (
                 <AnimatePresence mode="popLayout" initial={false} key={taskListNavKey}>
                   {/* Nothing is rendered while a full-screen tree sheet covers the board. This is
                       the Spaces/My Tasks stutter, measured rather than guessed at: tapping Spaces
@@ -5507,7 +5529,7 @@ function PageContent() {
                     would be its own performance problem. The button is the fallback for browsers
                     without IntersectionObserver, and doubles as an honest signal that the list is
                     longer than what is on screen. */}
-                {!(isMobile && (mobileSpacesOpen || mobilePersonalSpacesOpen)) &&
+                {!(isMobile && (mobileSpacesOpen || mobilePersonalSpacesOpen) && !boardPushing) &&
                   filteredTasks.length > visibleTaskCount && (
                     <TaskListSentinel
                       remaining={filteredTasks.length - visibleTaskCount}
