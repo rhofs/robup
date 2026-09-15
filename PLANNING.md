@@ -5869,3 +5869,33 @@ It now holds full opacity through 78% of the movement and releases at the end. T
 below it, so that band is the single place it is still visible when the board has landed. Letting go
 there hands the band back to the board's own identical header rather than leaving a displaced copy
 of it a third to the left.
+
+### Same session — a blank Planner, Chat and Docs, caused by the push that never came home
+
+"Planner, chat og docs er forøvrig helt blank nå."
+
+**The worst regression of the session, and entirely mine.** A back push ends with `<main>` parked at
+`x: 100%`, hidden behind the drawer — correct for that instant, and catastrophic a moment later,
+because `<main>` holds *every* view. Nothing reset it, so tapping Planner, Chat or Docs afterwards
+rendered the whole page past the right edge of the screen.
+
+It is worth naming the shape: **invisible on the screen it was built for, total on three others.**
+Every test of the animation looked right, because the animation was right. What was missing was the
+return to neutral, which only shows up somewhere the feature was never being watched.
+
+The reset is now keyed on the push *ending* rather than written into the timeout that ends it, so an
+interrupted push — a second tap mid-flight, a direction change, an unmount — cannot strand the page
+either. The drawer still covers it at that instant, so the correction is never seen, and it is a
+no-op in the forward direction, which already finishes at 0.
+
+### Same session — the hitch on the way out
+
+"Ut virker det som om det er et hakk i det første sekundet."
+
+Going back mounts the Spaces tree, which is the most expensive render on mobile in this app — the one
+measured at 370ms of blocked main thread and fixed once already by not rendering the board behind it.
+Starting the movement in the same frame meant its first steps competed with that render.
+
+The animation now starts on the next frame (`requestAnimationFrame`), so the drawer paints first and
+the movement begins against a settled screen. One frame of delay is imperceptible; the first frames
+of a transform landing in a blocked main thread are not.

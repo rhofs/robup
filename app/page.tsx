@@ -890,13 +890,43 @@ function PageContent() {
   useEffect(() => {
     if (boardPushSeq === 0) return;
     const back = boardPushDirRef.current === 'back';
+
     // Forward: the board arrives from the right. Back: it leaves to the right, uncovering the
     // drawer settling in behind it.
     boardPushControls.set({ x: back ? 0 : '100%' });
-    void boardPushControls.start({ x: back ? '100%' : 0, transition: CHAT_PUSH_TRANSITION });
+
+    // Started on the next frame rather than immediately. Going back mounts the Spaces tree, which
+    // is the most expensive render on mobile in this app — the one measured at 370ms of blocked
+    // main thread. Starting the movement in the same frame meant its first steps competed with
+    // that render, which is the "hakk i det første sekundet" on the way out. One frame of delay
+    // lets the drawer paint first, so the animation begins against a settled screen.
+    const frame = requestAnimationFrame(() => {
+      void boardPushControls.start({ x: back ? '100%' : 0, transition: CHAT_PUSH_TRANSITION });
+    });
+
     const t = window.setTimeout(() => setBoardPushing(false), CHAT_PUSH_MS);
-    return () => window.clearTimeout(t);
+
+    return () => {
+      cancelAnimationFrame(frame);
+      window.clearTimeout(t);
+    };
   }, [boardPushSeq, boardPushControls]);
+
+  // THE BOARD MUST NEVER BE LEFT OFF-SCREEN, and this is the guarantee of it.
+  //
+  // A back push ends with <main> parked at x:100%, hidden behind the drawer — correct for that
+  // moment, and catastrophic a moment later: <main> holds *every* view, so tapping Planner, Chat or
+  // Docs afterwards showed a blank screen with the whole page sitting past the right edge. Reported
+  // exactly that way, and it is the worst kind of regression: invisible on the screen it was built
+  // for and total on three others.
+  //
+  // Keyed on the push ending rather than written into the timeout that ends it, so an interrupted
+  // push — a second tap mid-flight, an unmount, a direction change — cannot leave the page stranded
+  // somewhere off the edge. The drawer still covers it at that instant, so the correction is never
+  // seen. Idempotent on the forward direction, which already finishes at 0.
+  useEffect(() => {
+    if (!boardPushing) boardPushControls.set({ x: 0 });
+  }, [boardPushing, boardPushControls]);
 
   // Going back to the Spaces drawer, as the reverse of picking a List.
   const pushBackToSpaces = (openSheet: () => void) => {
