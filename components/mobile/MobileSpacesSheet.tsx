@@ -297,29 +297,34 @@ export default function MobileSpacesSheet({
           // earlier full `-100%` exit was working around, and why it produced the vertical edge
           // sweeping across the screen.
           //
-          // A short fade stays, for one band only. This drawer is `top-0` and covers the app's own
-          // global header too, while <main> begins below it — so during the push that top strip is
-          // the one place this is still visible, shifted a third left. Fading it there lets the
-          // board's identical header underneath take over instead of leaving a displaced copy
-          // sliding about.
+          // It stays fully opaque for most of the travel and only goes at the very end.
+          //
+          // An earlier version faded it out over the first 60%, which emptied the left of the screen
+          // before the board had crossed it — the page behind disappeared and the list slid over
+          // nothing. The fade is not there to get this out of the way (the board covers it); it is
+          // there for one strip only. This drawer is `top-0` and covers the app's own global header,
+          // while <main> begins below it, so that top band is the single place it is still visible
+          // at the end. Letting go there hands the band back to the board's own identical header
+          // instead of leaving a displaced copy of it sitting a third to the left.
           // initial matters only for the arriving case: the drawer mounts the moment Back is
           // pressed, and without a starting offset it would simply appear and then have nothing
           // left to animate.
           initial={pushingIn ? { x: '-33%', opacity: 0 } : false}
-          animate={pushingOut ? { x: '-33%', opacity: 0 } : { x: 0, opacity: 1 }}
+          animate={pushingOut ? { x: '-33%', opacity: [1, 1, 0] } : { x: 0, opacity: 1 }}
           transition={
             pushingOut
               ? {
                   x: CHAT_PUSH_TRANSITION,
-                  opacity: { duration: (CHAT_PUSH_MS * 0.6) / 1000, ease: 'easeOut' },
+                  // Held at full opacity through 78% of the movement, then released — see above.
+                  opacity: { duration: CHAT_PUSH_MS / 1000, times: [0, 0.78, 1], ease: 'linear' },
                 }
               : pushingIn
                 ? {
                     x: CHAT_PUSH_TRANSITION,
-                    // Fading IN faster than it faded out, and deliberately so: on the way out the
-                    // drawer has to get out of the board's way early, while on the way back it is
-                    // the destination and should be solid well before it settles.
-                    opacity: { duration: (CHAT_PUSH_MS * 0.45) / 1000, ease: 'easeOut' },
+                    // Solid quickly on the way in: it is the destination, and arriving faintly
+                    // would read as the board having left something behind rather than as this
+                    // page returning.
+                    opacity: { duration: (CHAT_PUSH_MS * 0.35) / 1000, ease: 'easeOut' },
                   }
                 : { duration: 0 }
           }

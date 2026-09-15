@@ -871,10 +871,25 @@ function PageContent() {
   // directions read as two unrelated effects — asked for directly: "husk at den samme effekten skal
   // skje reversert når vi går tilbake".
   const boardPushDirRef = useRef<'forward' | 'back'>('forward');
+
+  // `boardPushing` is set HERE, in the same batch as the tap that closes the drawer — not in the
+  // effect below. That ordering is the whole difference between the drawer sliding and the drawer
+  // vanishing.
+  //
+  // Its `open` is `mobileSpacesOpen || boardPushing`. Choosing a List sets mobileSpacesOpen false
+  // in the tap's own batch, so if boardPushing only became true afterwards in an effect, there was
+  // one render in between where both were false: the drawer unmounted, then remounted an instant
+  // later already sitting at its animation target, invisible. Reported exactly — "hovedsida
+  // klipper bare rett ut, så den skyves over et tomt område."
+  const startBoardPush = (dir: 'forward' | 'back') => {
+    boardPushDirRef.current = dir;
+    setBoardPushing(true);
+    setBoardPushSeq((n) => n + 1);
+  };
+
   useEffect(() => {
     if (boardPushSeq === 0) return;
     const back = boardPushDirRef.current === 'back';
-    setBoardPushing(true);
     // Forward: the board arrives from the right. Back: it leaves to the right, uncovering the
     // drawer settling in behind it.
     boardPushControls.set({ x: back ? 0 : '100%' });
@@ -885,8 +900,7 @@ function PageContent() {
 
   // Going back to the Spaces drawer, as the reverse of picking a List.
   const pushBackToSpaces = (openSheet: () => void) => {
-    boardPushDirRef.current = 'back';
-    setBoardPushSeq((n) => n + 1);
+    startBoardPush('back');
     openSheet();
   };
 
@@ -7303,8 +7317,7 @@ function PageContent() {
           setActiveView('board');
         }}
         onSelectList={(spaceId, listId) => {
-          boardPushDirRef.current = 'forward';
-          setBoardPushSeq((n) => n + 1);
+          startBoardPush('forward');
           setModalTaskStack([]);
           setNavigation(spaceId, [listId]);
           setActiveView('board');

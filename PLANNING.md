@@ -5844,3 +5844,28 @@ Two things worth carrying forward:
 starts below it. So during the push that top strip is the only place the drawer is still visible,
 shifted a third left — it keeps a short fade there so the board's identical header underneath takes
 over rather than leaving a displaced copy sliding about.
+
+### Same session — the drawer vanished instead of sliding, twice over, for two different reasons
+
+"Hovedsida (spaces) klipper bare rett ut, så den skyves over et tomt område."
+
+**Cause one: a state update in the wrong place.** The drawer's `open` is `mobileSpacesOpen ||
+boardPushing`. Tapping a List sets `mobileSpacesOpen` false inside the tap's own batch, while
+`boardPushing` was being set in an *effect* — so there was one render where both were false. The
+drawer unmounted and remounted an instant later already sitting at its animation target, invisible.
+`startBoardPush()` now sets it in the same batch as the tap.
+
+Worth generalising: **anything that must stay mounted across a state change has to be told so in the
+same batch as the change**, not afterwards. An effect is one render too late, and the symptom is not
+a flicker but a total absence — which looks like the animation was never written.
+
+**Cause two: the fade was doing a job it no longer had.** It was inherited from when the drawer had
+to get out of the board's way, and ran over the first 60% of the travel. Now that `<main>` covers the
+drawer, that fade only emptied the left of the screen before the board had crossed it — the page
+behind disappeared and the list slid over nothing.
+
+It now holds full opacity through 78% of the movement and releases at the end. The fade exists for
+**one strip only**: the drawer is `top-0` and covers the app's global header while `<main>` begins
+below it, so that band is the single place it is still visible when the board has landed. Letting go
+there hands the band back to the board's own identical header rather than leaving a displaced copy
+of it a third to the left.
