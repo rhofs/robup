@@ -1103,6 +1103,9 @@ function PageContent() {
 
   const [createTaskOpen, setCreateTaskOpen] = useState(false);
   const [createTaskDefaultDate, setCreateTaskDefaultDate] = useState<string | null>(null);
+  // The other end of a range drawn by holding and dragging across the calendar. Null for every
+  // other entry point, where a single day means a single-day event.
+  const [createTaskDefaultEndDate, setCreateTaskDefaultEndDate] = useState<string | null>(null);
   const [eventDetailId, setEventDetailId] = useState<string | null>(null);
 
   const [calendarVisibleListIds, setCalendarVisibleListIds] = useState<Set<string>>(new Set());
@@ -5495,8 +5498,9 @@ function PageContent() {
                   showWeekNumbers={!hideWeekNumbers}
                   onOpenTask={(id) => setModalTaskStack([id])}
                   onOpenEvent={(id) => setEventDetailId(id)}
-                  onRequestCreateTask={(date) => {
+                  onRequestCreateTask={(date, endDate) => {
                     setCreateTaskDefaultDate(date.toISOString());
+                    setCreateTaskDefaultEndDate(endDate ? endDate.toISOString() : null);
                     setCreateTaskOpen(true);
                   }}
                   onOpenFilter={() => setMobileCalendarFilterOpen(true)}
@@ -7209,6 +7213,7 @@ function PageContent() {
         workspaces={workspaces}
         users={users}
         defaultStartDate={createTaskDefaultDate}
+        defaultEndDate={createTaskDefaultEndDate}
         activeWorkspaceId={activeWorkspaceId}
         onClose={() => setCreateTaskOpen(false)}
         onCreateTask={({ title, spaceId, listId, startDate, dueDate }) => {

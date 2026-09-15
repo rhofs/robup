@@ -6322,3 +6322,40 @@ Both carry an opt-out (`data-no-haptic`, `data-no-press`) that nothing uses yet.
 answer to "this one shouldn't" is an attribute rather than unpicking the mechanism.
 
 **No new APK** — all web-side.
+
+### Same session — the calendar answers a press, shows a hold, and draws a date range
+
+Three requests about the month grid, all about the same absence: pressing a day told you nothing.
+
+**1. A press state.** Day cells now tint on press. They carry `data-no-press` so the new global
+`:active` scale does **not** apply: a calendar cell is part of a ruled grid, and shrinking one leaves
+a visible gap in the lines around it. Colour is the right affordance here, scale is not — worth
+remembering the next time something opts out.
+
+**2. The hold is now visible.** The tint grows over the 500ms of the hold itself, so the cell is
+filling while the timer runs, then snaps to a stronger tint when it arms — landing with the haptic
+tick. Before, a long press was 500ms of nothing followed by a result, with no way to tell a hold that
+is working from a tap that missed.
+
+**3. Hold and drag across days opens the creator with that range.** The gesture:
+
+- `setPointerCapture` on the origin cell, which is what makes the drag possible at all — otherwise
+  the moves go to whatever is under the finger and the originating handler stops hearing.
+- Which day is under the finger comes from `document.elementFromPoint` against a `data-day-key`
+  attribute, not from geometry tracked in React. The grid already knows where every day is; asking
+  the DOM keeps working across week rows, and **a drag from the end of one week into the next is the
+  ordinary case here, not the edge one.**
+- The in-progress range lives in `CalendarView`, not `WeekRow`, for that same reason: each row knows
+  only its own seven days and the highlight has to span both.
+- Before the hold arms, moving still abandons it — a finger sliding off is scrolling. After it arms,
+  moving *is* the gesture.
+- A second haptic on release. Holding and dragging is a long gesture, and a single tick half a second
+  before the result leaves the release itself unacknowledged.
+
+`QuickCreatePopover` gained `defaultEndDate`, threaded through `CalendarView` and `page.tsx`. A
+single-day hold passes the same day twice and the callback drops the end, so every other caller is
+unchanged.
+
+**Unverified on a device** — pointer capture and `elementFromPoint` behave differently under a
+finger than under a mouse, and this is the kind of gesture that only really exists when tested by
+hand.

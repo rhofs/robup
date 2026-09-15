@@ -16,6 +16,10 @@ type QuickCreatePopoverProps = {
   workspaces: HierarchyWorkspace[];
   users: AppUser[];
   defaultStartDate: string | null;
+  // Set when the popover was opened by dragging across several days in the calendar, so the range
+  // you drew is the range it opens with. Null for every other way in, where it falls back to the
+  // start date — a one-day event, which is what picking a single day means.
+  defaultEndDate?: string | null;
   activeWorkspaceId: string | null;
   onClose: () => void;
   onCreateTask: (params: { title: string; spaceId: string; listId: string; startDate: string | null; dueDate: string | null }) => void;
@@ -48,6 +52,7 @@ export default function QuickCreatePopover({
   workspaces,
   users,
   defaultStartDate,
+  defaultEndDate = null,
   activeWorkspaceId,
   onClose,
   onCreateTask,
@@ -60,12 +65,12 @@ export default function QuickCreatePopover({
   const [spaceId, setSpaceId] = useState('');
   const [listId, setListId] = useState('');
   const [startDate, setStartDate] = useState<string | null>(defaultStartDate);
-  const [dueDate, setDueDate] = useState<string | null>(null);
+  const [dueDate, setDueDate] = useState<string | null>(defaultEndDate);
 
   // Event tab fields
   const [eventSpaceId, setEventSpaceId] = useState('');
   const [eventStart, setEventStart] = useState<string | null>(defaultStartDate);
-  const [eventEnd, setEventEnd] = useState<string | null>(defaultStartDate);
+  const [eventEnd, setEventEnd] = useState<string | null>(defaultEndDate ?? defaultStartDate);
   const [allDay, setAllDay] = useState(true);
   const [eventLocation, setEventLocation] = useState('');
   const [assigneeIds, setAssigneeIds] = useState<string[]>([]);
@@ -84,10 +89,10 @@ export default function QuickCreatePopover({
       setSpaceId('');
       setListId('');
       setStartDate(defaultStartDate);
-      setDueDate(null);
+      setDueDate(defaultEndDate);
       setEventSpaceId('');
       setEventStart(defaultStartDate);
-      setEventEnd(defaultStartDate);
+      setEventEnd(defaultEndDate ?? defaultStartDate);
       setAllDay(true);
       setEventLocation('');
       setAssigneeIds([]);

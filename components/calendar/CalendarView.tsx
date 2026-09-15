@@ -58,7 +58,9 @@ type CalendarViewProps = {
   showWeekNumbers: boolean;
   onOpenTask: (id: string) => void;
   onOpenEvent: (id: string) => void;
-  onRequestCreateTask: (date: Date) => void;
+  // `endDate` is set when the user held a day and dragged across others, drawing a range. Every
+  // other caller passes one date, meaning one day.
+  onRequestCreateTask: (date: Date, endDate?: Date) => void;
   // Opens the mobile-only Space/List calendar-visibility picker (MobileCalendarFilterSheet.tsx,
   // mounted in app/page.tsx) — lives in this component's own toolbar row (next to New task/
   // Month/Day) rather than a separate header bar above it, so it's grouped with the other
@@ -79,6 +81,10 @@ export default function CalendarView({ tasks, events, statuses, workspaces, show
     activeWorkspaceId,
   } = useTaskStore();
   const [weekDrag, setWeekDrag] = useState<DragState | null>(null);
+  // The day range currently being drawn by holding a cell and dragging across others. Lives here
+  // rather than in WeekRow because a drag that starts at the end of one week and finishes in the
+  // next has to highlight cells in both, and each WeekRow only knows its own seven days.
+  const [pendingRange, setPendingRange] = useState<{ start: Date; end: Date } | null>(null);
   const isMobile = useIsMobile();
 
   // The reference spec (a native Google Calendar widget) only ever has month + day — Week has no
@@ -709,7 +715,11 @@ export default function CalendarView({ tasks, events, statuses, workspaces, show
                 activeDrag={weekDrag}
                 onOpenTask={onOpenTask}
                 onDrillDay={drillToDay}
-                onQuickAddDay={onRequestCreateTask}
+                onQuickAddDay={(start, end) =>
+                  onRequestCreateTask(start, start.getTime() === end.getTime() ? undefined : end)
+                }
+                pendingRange={pendingRange}
+                onPendingRangeChange={setPendingRange}
                 onDragStart={handleDragStart}
                 onDragMove={handleDragMove}
                 onDragEnd={handleDragEnd}

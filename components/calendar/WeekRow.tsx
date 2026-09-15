@@ -9,6 +9,41 @@ import { hapticTap } from '../../lib/haptics';
 import type { ClippedSegment, DragMode, DragState } from '../../lib/ganttLayout';
 import type { Task, Event } from '../../store/useTaskStore';
 
+
+// A stable id for a calendar day, used both as the DOM marker a drag hit-tests against and as the
+// key for "which cell is being held".
+function dayKey(day: Date): string {
+  return `${day.getFullYear()}-${day.getMonth() + 1}-${day.getDate()}`;
+}
+
+function dayFromKey(key: string): Date | null {
+  const [y, m, d] = key.split('-').map(Number);
+  if (!y || !m || !d) return null;
+  return new Date(y, m - 1, d);
+}
+
+// Which day the finger is over right now.
+//
+// Hit-testing the DOM rather than tracking geometry in React: the pointer is captured by the cell
+// the gesture started in, so no other cell hears about the move, and the grid's own layout already
+// knows where every day is. `elementFromPoint` asks it directly, and it keeps working across week
+// rows — a drag from the end of one week into the next is the ordinary case here, not an edge one.
+function dayUnderPointer(x: number, y: number): Date | null {
+  const el = document.elementFromPoint(x, y);
+  const cell = el instanceof Element ? el.closest('[data-day-key]') : null;
+  const key = cell?.getAttribute('data-day-key');
+  return key ? dayFromKey(key) : null;
+}
+
+// Inclusive, and order-independent — a range drawn backwards is the same range.
+function isDayInRange(day: Date, range: { start: Date; end: Date } | null): boolean {
+  if (!range) return false;
+  const t = new Date(day.getFullYear(), day.getMonth(), day.getDate()).getTime();
+  const a = new Date(range.start.getFullYear(), range.start.getMonth(), range.start.getDate()).getTime();
+  const b = new Date(range.end.getFullYear(), range.end.getMonth(), range.end.getDate()).getTime();
+  return t >= Math.min(a, b) && t <= Math.max(a, b);
+}
+
 // WeekRow-local render shape — `isOverflowCut` is purely a display decision made here (see the
 // borrow logic below), never touched by assignLanes/CalendarView.tsx, so it doesn't belong on the
 // shared ClippedSegment type. A plain ClippedSegment (the already-visible, un-borrowed case) is
@@ -51,7 +86,13 @@ type WeekRowProps = {
   activeDrag: DragState | null;
   onOpenTask: (id: string) => void;
   onDrillDay: (day: Date) => void;
-  onQuickAddDay: (day: Date) => void;
+  // A range, not a day: holding a cell and dragging across others draws one. A single tap-and-hold
+  // reports the same day twice, which is what a one-day event is.
+  onQuickAddDay: (day: Date, endDay: Date) => void;
+  // The selection currently being drawn, owned by CalendarView so it can be highlighted across week
+  // rows — a drag that starts in one week and ends in the next is the normal case, not the edge one.
+  pendingRange: { start: Date; end: Date } | null;
+  onPendingRangeChange: (range: { start: Date; end: Date } | null) => void;
   onDragStart: (id: string, mode: DragMode, e: React.PointerEvent) => void;
   onDragMove: (e: React.PointerEvent) => void;
   // Takes the dragged id, not a whole Task — CalendarView.tsx looks up whether it's a Task or an
@@ -82,6 +123,8 @@ export default function WeekRow({
   onOpenTask,
   onDrillDay,
   onQuickAddDay,
+  pendingRange,
+  onPendingRangeChange,
   onDragStart,
   onDragMove,
   onDragEnd,
@@ -112,6 +155,15 @@ export default function WeekRow({
   const longPressReadyRef = useRef(false);
   const longPressStartRef = useRef({ x: 0, y: 0 });
   const LONG_PRESS_MS = 500;
+  // Which day the finger went down on, kept so a drag can be measured from it. The day currently
+  // under the finger comes from hit-testing on every move, not from React — the pointer is captured
+  // by the cell it started in, so its own move events are the only ones that arrive.
+  const dragOriginRef = useRef<Date | null>(null);
+  const draggingRangeRef = useRef(false);
+  // Which cell is being held right now, for the hold animation. State rather than a ref because it
+  // has to render.
+  const [pressedKey, setPressedKey] = useState<string | null>(null);
+  const [holdArmed, setHoldArmed] = useState(false);
   const LONG_PRESS_MOVE_TOLERANCE = 8;
 
   const clearLongPressTimer = () => {
@@ -126,6 +178,11 @@ export default function WeekRow({
   const abandonLongPress = () => {
     clearLongPressTimer();
     longPressReadyRef.current = false;
+    dragOriginRef.current = null;
+    draggingRangeRef.current = false;
+    setPressedKey(null);
+    setHoldArmed(false);
+    onPendingRangeChange(null);
   };
 
   // assignLanes (lib/ganttLayout.ts) gives every segment ONE lane for its whole clipped width in
@@ -282,6 +339,18 @@ export default function WeekRow({
                           longPressFiredRef.current = false;
                           longPressReadyRef.current = false;
                           longPressStartRef.current = { x: e.clientX, y: e.clientY };
+                          dragOriginRef.current = day;
+                          draggingRangeRef.current = false;
+                          // The hold animation starts the instant the finger lands, so the cell is
+                          // visibly filling while the 500ms runs. Without it a long press is 500ms
+                          // of nothing followed by a result, and there is no way to tell a hold
+                          // that is working from a tap that missed.
+                          setPressedKey(dayKey(day));
+                          setHoldArmed(false);
+                          // Keeps this cell receiving moves once the finger leaves it, which is
+                          // what makes dragging across days possible at all — without capture the
+                          // events go to whatever is underneath and this handler stops hearing.
+                          e.currentTarget.setPointerCapture(e.pointerId);
                           clearLongPressTimer();
                           longPressTimerRef.current = window.setTimeout(() => {
                             // Only ARMS the gesture — the popover itself opens on release (see
@@ -290,6 +359,9 @@ export default function WeekRow({
                             // threshold is crossed, which is what makes it feel responsive
                             // despite the actual action being deferred.
                             longPressReadyRef.current = true;
+                            draggingRangeRef.current = true;
+                            setHoldArmed(true);
+                            onPendingRangeChange({ start: day, end: day });
                             hapticTap();
                           }, LONG_PRESS_MS);
                         }
@@ -298,6 +370,19 @@ export default function WeekRow({
                   onPointerMove={
                     isMobile
                       ? (e) => {
+                          // Once the hold has armed, moving is no longer a reason to give up — it
+                          // is the gesture. Before that it still is: a finger that slides off is
+                          // scrolling, not holding.
+                          if (draggingRangeRef.current) {
+                            const origin = dragOriginRef.current;
+                            if (!origin) return;
+                            const over = dayUnderPointer(e.clientX, e.clientY);
+                            if (!over) return;
+                            onPendingRangeChange(
+                              over.getTime() < origin.getTime() ? { start: over, end: origin } : { start: origin, end: over }
+                            );
+                            return;
+                          }
                           if (longPressTimerRef.current === null) return;
                           const dx = e.clientX - longPressStartRef.current.x;
                           const dy = e.clientY - longPressStartRef.current.y;
@@ -309,12 +394,22 @@ export default function WeekRow({
                     isMobile
                       ? () => {
                           clearLongPressTimer();
+                          setPressedKey(null);
+                          setHoldArmed(false);
+                          const drawn = pendingRange;
+                          draggingRangeRef.current = false;
+                          dragOriginRef.current = null;
+                          onPendingRangeChange(null);
                           if (!longPressReadyRef.current) return;
                           longPressReadyRef.current = false;
                           // Marks the trailing click for swallowing (below) so releasing doesn't
                           // also drill into Day view behind the popover that's about to open.
                           longPressFiredRef.current = true;
-                          onQuickAddDay(day);
+                          // A second tick on release, so letting go is confirmed too. Holding and
+                          // dragging is a long gesture, and one tick half a second before the
+                          // result leaves the release itself unacknowledged.
+                          hapticTap();
+                          onQuickAddDay(drawn?.start ?? day, drawn?.end ?? day);
                         }
                       : undefined
                   }
@@ -324,9 +419,35 @@ export default function WeekRow({
                   // subconsciously, not read as a spreadsheet of boxed cells. The week-row
                   // boundary (this same border-b, once per row) stays clearly stronger so weeks
                   // are still easy to tell apart at a glance.
-                  className={`w-full h-full flex flex-col items-start text-left border-r border-r-neutral-800/[0.12] last:border-r-0 px-2 pt-1 cursor-pointer hover:bg-neutral-800/20 transition ${
+                  data-day-key={dayKey(day)}
+                  // The global :active scale is wrong here: a calendar cell is part of a grid, and
+                  // shrinking one leaves a visible gap in the ruling around it. Cells say "pressed"
+                  // with colour instead, below.
+                  data-no-press
+                  className={`relative w-full h-full flex flex-col items-start text-left border-r border-r-neutral-800/[0.12] last:border-r-0 px-2 pt-1 cursor-pointer hover:bg-neutral-800/20 ${
                     isLastRow ? '' : 'border-b border-b-neutral-800/50'
-                  } ${cellBg}`}
+                  } ${cellBg} ${
+                    // Three states, in the order they happen.
+                    //
+                    // Held: the tint grows over the length of the hold itself, so the cell is
+                    // visibly filling while the timer runs. A long press used to be 500ms of
+                    // nothing followed by a result, with no way to tell a hold that is working
+                    // from a tap that missed — "kan godt ha en animasjon for long press".
+                    //
+                    // Armed: the hold has fired. It snaps rather than eases, because this is the
+                    // moment the gesture changed meaning and the change should be felt, not
+                    // admired. It lands with the haptic tick.
+                    //
+                    // In range: every cell the drag currently covers, including the one it started
+                    // from.
+                    isDayInRange(day, pendingRange)
+                      ? 'bg-blue-500/25 transition-colors duration-100'
+                      : holdArmed && pressedKey === dayKey(day)
+                        ? 'bg-blue-500/25 transition-colors duration-100'
+                        : pressedKey === dayKey(day)
+                          ? 'bg-blue-500/15 transition-colors duration-500 ease-out'
+                          : 'transition-colors duration-150'
+                  }`}
                   style={isMobile ? { touchAction: 'pan-y' } : undefined}
                 >
                   <span
@@ -340,7 +461,8 @@ export default function WeekRow({
                 <button
                   onClick={(e) => {
                     e.stopPropagation();
-                    onQuickAddDay(day);
+                    // The "+" button is a single day by definition — same day both ends.
+                    onQuickAddDay(day, day);
                   }}
                   title="New task"
                   // Bottom-right, not top-right — the date number already owns the top of the
