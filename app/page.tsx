@@ -1063,17 +1063,22 @@ function PageContent() {
     // asked for, appearing for half a second between two others.
     if (origin) {
       chatOriginRef.current = null;
-      setChatFromContext(false);
       startContextPush('back', origin);
-      setActiveChatChannelId(null);
-      if (origin === 'home') {
-        setNavigation('everything');
-        setActiveView('board');
-      } else {
-        setActiveOfficeUserId(null);
-        setActiveOfficeRoomId(null);
-        setActiveView('office');
-      }
+      // Same deferral as backToContext, and for the same reason: the conversation has to stay
+      // mounted and visible while it slides out. Clearing the channel here instead unmounted it
+      // before it moved.
+      window.setTimeout(() => {
+        setChatFromContext(false);
+        setActiveChatChannelId(null);
+        if (origin === 'home') {
+          setNavigation('everything');
+          setActiveView('board');
+        } else {
+          setActiveOfficeUserId(null);
+          setActiveOfficeRoomId(null);
+          setActiveView('office');
+        }
+      }, CHAT_PUSH_MS);
       return;
     }
     setChatClosing(true);
@@ -2068,15 +2073,27 @@ function PageContent() {
   const backToContext = () => {
     const toOffice = !currentWorkspace?.isPersonal;
     startContextPush('back', toOffice ? 'office' : 'home');
-    if (toOffice) {
-      setActiveOfficeUserId(null);
-      setActiveOfficeRoomId(null);
-      setActiveView('office');
-    } else {
-      // 'everything' is what Home means — see showingHomeContext.
-      setNavigation('everything');
-      setActiveView('board');
-    }
+    // Deferred for the length of the push, and this is the part the first version got wrong.
+    //
+    // Going back, <main> is the screen being LEFT: it slides out to the right while the layer
+    // behind settles into place. Changing the view in the same batch as starting the push swapped
+    // main's contents before it had moved an inch, so what slid away was the destination, and at
+    // the end main snapped back showing what the layer already showed — two copies of the same
+    // screen, one of them cutting. Reported exactly: "vinduet som var yang meldingsvindu klipper og
+    // endrer seg til meldingsseksjonen som allerede ligger bak (en duplikat)".
+    //
+    // pushBackToSpaces has always done this with its own afterPush; the contexts path skipped it.
+    window.setTimeout(() => {
+      if (toOffice) {
+        setActiveOfficeUserId(null);
+        setActiveOfficeRoomId(null);
+        setActiveView('office');
+      } else {
+        // 'everything' is what Home means — see showingHomeContext.
+        setNavigation('everything');
+        setActiveView('board');
+      }
+    }, CHAT_PUSH_MS);
   };
 
   // Opening a conversation from Home or Office.
@@ -8064,7 +8081,16 @@ function PageContent() {
         {boardPushing && boardPushSheetRef.current === 'context' && (
           <motion.div
             key="context-push-layer"
-            initial={boardPushDirRef.current === 'back' ? { x: '-33%', opacity: 0 } : false}
+            // initial matters in BOTH directions here, and that is the difference from
+            // MobileSpacesSheet, which this was copied from. That sheet is already on screen when a
+            // forward push begins, so `initial={false}` is right for it — it simply starts from
+            // where it is. This layer MOUNTS with the push, so `initial={false}` meant framer put
+            // it straight at the animate target: x:-33% with the opacity keyframes already spent.
+            // It was never visible for a single frame, which is why forward still looked exactly
+            // like it had before the layer existed.
+            initial={
+              boardPushDirRef.current === 'back' ? { x: '-33%', opacity: 0 } : { x: 0, opacity: 1 }
+            }
             animate={
               boardPushDirRef.current === 'forward'
                 ? { x: '-33%', opacity: [1, 1, 0] }

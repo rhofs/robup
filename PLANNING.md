@@ -6914,3 +6914,27 @@ is stubborn.
 - The personal and workspace settings panels from the sketch
 - Whether Chat needs its own tab
 - **Not verified on device.** Build and typecheck clean.
+
+### Same session — the layer existed but did nothing forward, and duplicated itself back
+
+Two separate faults in the layer added an hour earlier, and they are worth keeping apart because
+they look like one bug from the outside.
+
+**Forward: the layer was never visible for a single frame.** `initial={false}` was copied from
+`MobileSpacesSheet` without carrying over *why* it is right there — that sheet is already on screen
+when a forward push begins, so starting "from where it is" is correct. This layer mounts *with* the
+push, so `initial={false}` told framer to put it straight at the animate target: `x: -33%` with the
+opacity keyframes already spent. Forward therefore looked exactly as it had before the layer
+existed, which is why the report came back word for word again.
+
+**Back: the destination was what slid away.** Going back, `<main>` is the screen being *left* — it
+travels out to the right while the layer settles in behind it. The contexts path changed the view in
+the same batch that started the push, so main's contents were swapped before it had moved, and at
+the end main snapped back showing what the layer already showed: "vinduet som var yang meldingsvindu
+klipper og endrer seg til meldingsseksjonen som allerede ligger bak (en duplikat)". `pushBackToSpaces`
+has always deferred exactly this with its own `afterPush`; the contexts path simply skipped it. Both
+`backToContext` and the chat close now defer the state change by `CHAT_PUSH_MS`.
+
+**Copying a working animation is not the same as understanding it.** Both faults came from lifting
+`MobileSpacesSheet`'s values while leaving behind the assumptions they depend on — that the sheet is
+already mounted, and that the state change is deferred. The values were right; the context was not.
