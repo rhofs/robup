@@ -68,6 +68,7 @@ import {
 import { useTaskStore, HierarchySpace, HierarchyFolder, HierarchyList, HierarchyDocFolder, HierarchyRoom, HierarchyWorkspace, StatusDef, CustomFieldDef, Task, TaskDoc, AppUser } from '../store/useTaskStore';
 import { useHistoryStore } from '../store/useHistoryStore';
 import { hapticTap } from '../lib/haptics';
+import { BOOT_MARK_SRC, BOOT_MARK_ASPECT, BOOT_MARK_WIDTH_SHARE, BOOT_RING_BOX_SHARE } from '../lib/bootMark';
 import { CHAT_PUSH_MS, CHAT_PUSH_EASE } from '../lib/chatTransition';
 import TaskListSentinel from '../components/TaskListSentinel';
 import { useSessionStore } from '../store/useSessionStore';
@@ -3656,21 +3657,19 @@ function PageContent() {
         role="status"
         aria-label="Loading Siqt"
       >
-        {/* Sized in vw so the mark matches the native splash at any screen width. The splash is a
-            bitmap scaled CENTER_CROP to fill the display, so its S is a fixed fraction of the
-            screen; a fixed pixel size here could only match one phone. Measured against a device
-            screenshot: the S spans roughly 23% of the width, which is a ~38vw font. Getting this
-            wrong is visible as the mark jumping size at the handover — reported as "den er først
-            stor, så mindre". */}
+        {/* The same artwork the splash uses, at the same share of screen width, inside the same
+            ring. Nothing here is drawn twice: lib/bootMark.ts is generated from the identical
+            source by scripts/generate-splash.mjs, and the shares below come from that same script.
+            The splash already carries this ring, stationary — so the only thing that changes when
+            this screen takes over is that the ring starts turning. */}
         <div
           className="relative flex items-center justify-center"
-          style={{ width: 'min(58vw, 300px)', height: 'min(58vw, 300px)' }}
+          style={{ width: `${BOOT_RING_BOX_SHARE * 100}vw`, height: `${BOOT_RING_BOX_SHARE * 100}vw` }}
         >
           {/* The rotation is on this wrapper, not on the <svg>. A transform on a plain element gets
               its own compositing layer and runs off the main thread; the same transform applied to
               an SVG element does not reliably, and this screen exists precisely while the main
-              thread is at its busiest — hydrating and fetching. That is the stutter that was
-              reported. */}
+              thread is at its busiest — hydrating and fetching. */}
           <div className="absolute inset-0 siqt-boot-ring">
             <svg width="100%" height="100%" viewBox="0 0 100 100">
               <circle cx="50" cy="50" r="47" fill="none" stroke="#60a5fa" strokeOpacity="0.14" strokeWidth="2" />
@@ -3682,24 +3681,20 @@ function PageContent() {
                 stroke="#60a5fa"
                 strokeWidth="2"
                 strokeLinecap="round"
-                // 2πr ≈ 295; about a quarter lit, the rest gap.
                 strokeDasharray="77 218"
               />
             </svg>
           </div>
-          {/* sans-serif, not the app's own font: lib/pwaIcon.tsx draws the icon with exactly this
-              family, so matching it is what keeps the two marks the same shape. */}
-          <span
+          {/* eslint-disable-next-line @next/next/no-img-element -- a data URI; next/image would add
+              a loader and a layout wrapper to something that is already inline and 4.6KB. */}
+          <img
+            src={BOOT_MARK_SRC}
+            alt=""
             style={{
-              fontSize: 'min(38vw, 190px)',
-              fontWeight: 700,
-              color: '#60a5fa',
-              lineHeight: 1,
-              fontFamily: 'sans-serif',
+              width: `${BOOT_MARK_WIDTH_SHARE * 100}vw`,
+              height: `${(BOOT_MARK_WIDTH_SHARE / BOOT_MARK_ASPECT) * 100}vw`,
             }}
-          >
-            S
-          </span>
+          />
         </div>
       </div>
     );

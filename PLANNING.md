@@ -6174,3 +6174,36 @@ plain wrapper `div` with `will-change: transform`, so the layer is promoted up f
 discovered mid-animation.
 
 **No new APK.** Both are web-side; 1.8 is still the current app.
+
+### Same session — one piece of artwork for both screens, and the ring on the splash from the start
+
+"Det er ikke en gang samme S? Og jeg tenker kanskje splash logoen bør ha den sirkelen fra start."
+
+Both correct, and the first one explains why the sizes kept refusing to line up.
+
+**The two screens were drawing the letter separately.** The splash comes from `next/og`, which
+renders with its own bundled font; the boot screen used the device's `sans-serif`. Different
+typefaces, so different letterforms and different widths — which is also why matching them by
+adjusting a font size was never going to work. **Drawing it twice could not be made to match;
+sharing one image cannot fail to.**
+
+`scripts/generate-splash.mjs` now produces both from
+`mipmap-xxxhdpi/ic_launcher_foreground.png`:
+
+- `drawable/splash.png` at 1080x2400, with the ring drawn on it **stationary**. That was the user's
+  suggestion and it is the right one: the boot screen used to appear to add a circle out of nowhere,
+  and now the only thing that changes at the handover is that the ring starts turning.
+- `lib/bootMark.ts`, the same mark as a 4.6KB data URI — inlined rather than fetched, because the
+  boot screen must not need a request on the one path where the network *is* the problem.
+  Palette-quantised to 16 colours: the mark is a single flat colour, so that is indistinguishable
+  from full colour at a twentieth of the bytes.
+
+The script also exports the proportions it drew at, and the boot screen consumes them as `vw`, so
+the two cannot drift apart the next time either is touched.
+
+**The 26 generated density and orientation splash variants are gone**, replaced by one drawable.
+They existed to avoid upscaling a small asset; this one is larger than any phone screen and is
+CENTER_CROPped regardless, so a single file is both simpler and sharper. APK 4.6MB, down from 5.0.
+
+APK 1.9 (versionCode 10). Needs both a redeploy and a reinstall — the mark is in the web bundle and
+the splash is in the app.
