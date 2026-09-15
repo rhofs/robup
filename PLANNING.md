@@ -6359,3 +6359,21 @@ unchanged.
 **Unverified on a device** — pointer capture and `elementFromPoint` behave differently under a
 finger than under a mouse, and this is the kind of gesture that only really exists when tested by
 hand.
+
+### Same session — the gesture worked on every day except today
+
+"Ikke på dagen vi er på! Alle andre dager funker!" — which is the kind of report that names the cause
+if you listen to it: today is the one day with a background of its own, `bg-blue-500/[0.035]`.
+
+The interaction tints were appended *after* `cellBg`, so today's cell carried two background
+utilities at once. **Two Tailwind classes of the same property do not resolve by the order they
+appear in the class attribute** — they resolve by the order Tailwind emitted them into the
+stylesheet, and there today's arbitrary-opacity value won. The press tint was applied and
+immediately overruled, on exactly one day out of thirty.
+
+The state now **replaces** the resting background instead of layering over it: one background class
+is emitted, never two. That also removes a question that had no good answer — what a press should
+look like on top of an existing tint.
+
+Worth generalising: **conditional Tailwind classes that set the same property are a coin toss.** The
+fix is not ordering them more carefully, it is making sure only one is ever produced.

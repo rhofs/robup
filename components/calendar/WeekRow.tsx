@@ -320,6 +320,30 @@ export default function WeekRow({
                 : isWeekend
                   ? 'bg-[var(--cell-tint-weekend)]'
                   : '';
+            // ONE background class, never two.
+            //
+            // The interaction tints used to be appended after cellBg, which worked on every day
+            // except today — the one day that already has a background of its own
+            // (`bg-blue-500/[0.035]`). Two background utilities on the same element do not resolve
+            // by the order they appear in the class attribute; they resolve by the order Tailwind
+            // happened to emit them in the stylesheet, and there today's won. Reported exactly:
+            // "funker på alle andre dager".
+            //
+            // So the state replaces the resting background rather than layering over it. That also
+            // removes the guesswork about what a press should look like on top of an existing tint.
+            const isPressed = pressedKey === dayKey(day);
+            const interaction = isDayInRange(day, pendingRange) || (holdArmed && isPressed)
+              ? // Armed, or inside the range being drawn. Snaps rather than eases: this is the
+                // moment the gesture changed meaning, and the change should be felt rather than
+                // admired. It lands with the haptic tick.
+                { className: 'bg-blue-500/25', transition: 'transition-colors duration-100' }
+              : isPressed
+                ? // Held. The tint grows over the length of the hold itself, so the cell is visibly
+                  // filling while the timer runs — a long press used to be 500ms of nothing followed
+                  // by a result, with no way to tell a hold that is working from a tap that missed.
+                  { className: 'bg-blue-500/15', transition: 'transition-colors duration-500 ease-out' }
+                : { className: '', transition: 'transition-colors duration-150' };
+
             return (
               <div key={i} className="relative group/day">
                 <button
@@ -426,28 +450,7 @@ export default function WeekRow({
                   data-no-press
                   className={`relative w-full h-full flex flex-col items-start text-left border-r border-r-neutral-800/[0.12] last:border-r-0 px-2 pt-1 cursor-pointer hover:bg-neutral-800/20 ${
                     isLastRow ? '' : 'border-b border-b-neutral-800/50'
-                  } ${cellBg} ${
-                    // Three states, in the order they happen.
-                    //
-                    // Held: the tint grows over the length of the hold itself, so the cell is
-                    // visibly filling while the timer runs. A long press used to be 500ms of
-                    // nothing followed by a result, with no way to tell a hold that is working
-                    // from a tap that missed — "kan godt ha en animasjon for long press".
-                    //
-                    // Armed: the hold has fired. It snaps rather than eases, because this is the
-                    // moment the gesture changed meaning and the change should be felt, not
-                    // admired. It lands with the haptic tick.
-                    //
-                    // In range: every cell the drag currently covers, including the one it started
-                    // from.
-                    isDayInRange(day, pendingRange)
-                      ? 'bg-blue-500/25 transition-colors duration-100'
-                      : holdArmed && pressedKey === dayKey(day)
-                        ? 'bg-blue-500/25 transition-colors duration-100'
-                        : pressedKey === dayKey(day)
-                          ? 'bg-blue-500/15 transition-colors duration-500 ease-out'
-                          : 'transition-colors duration-150'
-                  }`}
+                  } ${interaction.className || cellBg} ${interaction.transition}`}
                   style={isMobile ? { touchAction: 'pan-y' } : undefined}
                 >
                   <span
