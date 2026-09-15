@@ -6239,3 +6239,27 @@ an invitation feature, it is the absence of one.
 The recipient's address is fetched separately because `publicUserSelect` omits it, and that
 projection is right: the address is needed to send *to*, never to return. Names and workspace titles
 are escaped before going into the HTML.
+
+### Same session — Back now goes back, instead of closing the app
+
+"Når jeg trykker tilbake bør jeg gå tilbake til forrige sted i appen jeg var, mens nå lukker den
+bare appen uansett?" Agreed, and it was doing exactly that: with no listener registered, Capacitor's
+default for the Android Back gesture is to leave the app. Every Back, from anywhere, quit.
+
+**The fix is small because the groundwork was already there.** `app/page.tsx` pushes a URL for every
+navigation — a Space, a List, an open task, an open mobile sheet — through `window.history.pushState`,
+and reads it back to restore that state. So `history.back()` is not an approximation of in-app back;
+it **is** this app's own navigation run in reverse. `NativeBackButton` just wires the hardware
+gesture to it.
+
+`canGoBack` comes from the plugin and reflects the WebView's history, which includes those
+pushState entries even though they are same-document. When there is nothing left, it calls
+`exitApp()` rather than doing nothing — a Back button that silently ignores you on the first screen
+feels broken in a different way.
+
+Needed `@capacitor/app`, so **APK 2.0 (versionCode 11)**. Android's Back key is not reachable from
+JavaScript without it.
+
+Numbered 2.0 rather than 1.10 because this is the release where the app stops behaving like a web
+page in a frame: real notifications, a matching launch screen, and now the platform's own back
+navigation.
