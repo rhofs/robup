@@ -17,6 +17,7 @@ import { useChatStore } from '../store/useChatStore';
 import { getPushStatus, enablePush, disablePush } from '../lib/pushClient';
 import { useInstallPrompt } from '../hooks/useInstallPrompt';
 import { useIsMobile } from '../hooks/useIsMobile';
+import { readLayoutPreference, setLayoutPreference, type LayoutPreference } from '../lib/layoutPreference';
 import { Capacitor } from '@capacitor/core';
 import ColorSwatchPicker from './ColorSwatchPicker';
 import { copyToClipboard } from '../lib/copyToClipboard';
@@ -362,6 +363,8 @@ export default function SettingsPanel({
   // separate subscriptions) — see lib/pushClient.ts.
   const [pushStatus, setPushStatus] = useState<'unsupported' | 'subscribed' | 'not-subscribed' | 'loading'>('loading');
   const [pushTest, setPushTest] = useState<string | null>(null);
+  const [layout, setLayout] = useState<LayoutPreference>('classic');
+  useEffect(() => setLayout(readLayoutPreference()), []);
   const [pushError, setPushError] = useState<string | null>(null);
   useEffect(() => {
     getPushStatus().then(setPushStatus);
@@ -684,6 +687,39 @@ export default function SettingsPanel({
                 <HapticDiagnostics strength={haptics} />
               </>
             )}
+
+            {/* The new navigation, off by default. See lib/layoutPreference.ts for why this is a
+                setting rather than a branch. Deliberately worded as something to try rather than as
+                a feature: it replaces how every screen is reached, and someone switching it on
+                should expect the app to look different, not wonder whether they broke it. */}
+            <div className="text-[10px] uppercase tracking-wide text-neutral-500 px-1 pt-3 pb-1">Experimental</div>
+            <button
+              onClick={() => {
+                const next: LayoutPreference = layout === 'contexts' ? 'classic' : 'contexts';
+                setLayoutPreference(next);
+                setLayout(next);
+              }}
+              className="w-full flex items-start gap-2.5 px-2 py-2.5 rounded hover:bg-neutral-800/60 cursor-pointer text-left transition"
+            >
+              <span
+                className={`mt-0.5 w-8 h-4.5 rounded-full shrink-0 relative transition ${
+                  layout === 'contexts' ? 'bg-blue-600' : 'bg-neutral-700'
+                }`}
+              >
+                <span
+                  className={`absolute top-0.5 w-3.5 h-3.5 rounded-full bg-white transition-all ${
+                    layout === 'contexts' ? 'left-4' : 'left-0.5'
+                  }`}
+                />
+              </span>
+              <span className="text-xs text-neutral-300">
+                Try the new layout
+                <span className="block text-neutral-500 mt-0.5">
+                  Home and Office instead of separate tabs. Only on this device — switch back any
+                  time.
+                </span>
+              </span>
+            </button>
 
             <div className="text-[10px] uppercase tracking-wide text-neutral-500 px-1 pb-1">Visible tabs</div>
             {NAV_TABS.map((navTab) => {

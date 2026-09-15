@@ -6522,3 +6522,36 @@ already do. That gives three things a branch would not: the two layouts can be c
 session on the same data, nobody else sees the new one until it is switched on for them, and undoing
 it is unticking a box rather than reverting code. When it is settled, the old path and the switch
 both come out.
+
+### Same session — the new layout, first increment: Office
+
+Built behind the setting, nothing else changed. `lib/layoutPreference.ts` stores `classic` (default)
+or `contexts`; Settings → General → Experimental has the switch.
+
+**`components/mobile/OfficeContext.tsx`** — the Office half: a two-option toggle with **Spaces
+first** (the user's call: "siden dette er en task manager"), and `Rooms` holding the office rooms and
+the chat channels **in one list**, rooms above, with the people currently in each shown inline. That
+single list is the point of the whole change: a room and a channel answer the same question, and
+splitting them across two tabs was a statement about how the app is built rather than about what
+someone is looking for.
+
+**Nav, when the switch is on:** Home · Office · Planner, plus the launcher. It reuses the existing
+tab **ids** rather than inventing new ones, so the bottom nav, the launcher grid and the hidden-tabs
+setting all keep working untouched — `board` is Home, because that is already what My Tasks is: the
+board over the personal workspace.
+
+**One refactor was needed rather than a copy.** The My Tasks handler was an inline async arrow inside
+the launcher tile list, and Home has to do exactly the same thing. It is now `openMyTasks`, lifted
+above both. **Two entry points to one screen must not be two implementations of it** — that is how
+"works from the menu but not from the tab" is made, and this session has already paid twice for
+wiring one of several equivalent call sites.
+
+`showToast` is deliberately absent from its dependency list: it is declared further down the
+component, so naming it there is a use-before-declaration even though the callback only ever runs
+afterwards.
+
+**Only the top level of Office is replaced.** Picking a room or a person still opens `OfficePage`'s
+existing screens, so nothing that already worked had to be rebuilt to try this.
+
+**Not yet built:** Home's own `My Spaces / Messages` toggle, the two profile panels, and the Planner
+personal/work filter. Home currently behaves exactly as My Tasks does today.

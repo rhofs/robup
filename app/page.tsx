@@ -70,6 +70,8 @@ import { useHistoryStore } from '../store/useHistoryStore';
 import { hapticTap } from '../lib/haptics';
 import { BOOT_MARK_SRC, BOOT_MARK_ASPECT, BOOT_MARK_WIDTH_SHARE, BOOT_RING_BOX_SHARE } from '../lib/bootMark';
 import { setNativeBackHandler } from '../lib/nativeBack';
+import { readLayoutPreference, LAYOUT_STORAGE_KEY } from '../lib/layoutPreference';
+import OfficeContext from '../components/mobile/OfficeContext';
 import { CHAT_PUSH_MS, CHAT_PUSH_EASE } from '../lib/chatTransition';
 import TaskListSentinel from '../components/TaskListSentinel';
 import { useSessionStore } from '../store/useSessionStore';
@@ -976,6 +978,21 @@ function PageContent() {
     openSheet();
     if (afterPush) window.setTimeout(afterPush, CHAT_PUSH_MS);
   };
+
+  // Which navigation layout is in force. Read after mount rather than during render: it lives in
+  // localStorage, and reading it during render would make the server's HTML and the client's first
+  // pass disagree. `storage` is listened to as well so switching it in Settings takes effect in any
+  // other tab the same person has open, rather than leaving two tabs in different layouts.
+  const [layoutPref, setLayoutPref] = useState<'classic' | 'contexts'>('classic');
+  useEffect(() => {
+    setLayoutPref(readLayoutPreference());
+    const onStorage = (e: StorageEvent) => {
+      if (e.key === LAYOUT_STORAGE_KEY || e.key === null) setLayoutPref(readLayoutPreference());
+    };
+    window.addEventListener('storage', onStorage);
+    return () => window.removeEventListener('storage', onStorage);
+  }, []);
+  const useContexts = layoutPref === 'contexts';
 
   const [chatClosing, setChatClosing] = useState(false);
   const activeChatEntityRaw = useChatStore((s) => {
@@ -1938,8 +1955,100 @@ function PageContent() {
   // Single source of truth for which view-switching tabs are visible right now — read by both the
   // desktop icon rail and the mobile bottom nav / app-launcher grid, so hiddenNavTabs/
   // hasRealWorkspace are never re-derived (and never drift) between the two surfaces.
+  // Lifted out of the My Tasks launcher tile so the new layout's Home tab can run exactly the
+  // same thing. Two entry points to one screen must not be two implementations of it — that is
+  // how "works from the menu, not from the tab" bugs are made.
+  const openMyTasks = useCallback(async () => {
+        if (!currentUserId) {
+          showToast('Signed-out session — try reloading the page.');
+          return;
+        }
+        try {
+          // ensurePersonalWorkspace makes a real POST round-trip every time — harmless (the
+          // route is an idempotent upsert) but a real, noticeable delay on every tap once the
+          // workspace already exists. Skip it once `workspaces` already has one; only fall back
+          // to the async ensure-and-create path the very first time (or a stale local list).
+          const known = workspaces.find((w) => w.isPersonal)?.id;
+          const workspaceId = known ?? (await ensurePersonalWorkspace(currentUserId)).workspaceId;
+          // setActiveWorkspaceId itself now restores this workspace's own last-visited Space/List
+          // (store-level lastPositionByWorkspaceId, kept current by setNavigation) — replaces the
+          // separate React-local `lastPersonalNav` this used to read, which could drift out of
+          // sync with the store's own idea of "where was I" and made this "sometimes work,
+          // sometimes not" depending on exactly which of two near-duplicate mechanisms had the
+          // current answer. Same unified mechanism openMobileSpaces now uses for "Spaces."
+          setActiveWorkspaceId(workspaceId);
+          // Same fix as openMobileSpaces just above: opening the tree with nothing picked yet
+          // used to leave activeView pointed at whatever was active before (Chat, Planner, ...),
+          // which is what caused both the nav-tab highlight glitches (another tab reading as
+          // active underneath this one) and the popup menu's dimmed backdrop showing the wrong
+          // view's content through it. suppressOverlayCloseRef: same race as openMobileSpaces —
+          // only set when activeView is actually about to change (see that function's own
+          // comment for why bouncing between two 'board' screens — Spaces and My Tasks — must
+          // never set this, or the flag gets stuck and wrongly suppresses a later, unrelated tap).
+          if (useTaskStore.getState().activeView !== 'board') {
+            suppressOverlayCloseRef.current = true;
+          }
+          setActiveView('board');
+          // Only open the tree picker when there's genuinely nothing more specific to land on —
+          // same "skip the pointless middle screen" check openMobileSpaces uses for "Spaces."
+          if (useTaskStore.getState().activeListIds.size === 0) {
+            setMobilePersonalSpacesOpen(true);
+          }
+        } catch (err) {
+          // A failed ensurePersonalWorkspace() previously left this tap looking like it did
+          // absolutely nothing — the whole async body just stopped at the rejected await, with
+          // nothing surfacing it. Now it's at least visible instead of a silent dead tap.
+          showToast(`Couldn't open My Tasks: ${err instanceof Error ? err.message : 'unknown error'}`);
+        }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    // showToast is deliberately out of the dependency list: it is declared further down this
+    // component, so naming it here is a use-before-declaration at module evaluation even though the
+    // callback only runs long afterwards. The reference inside the body is fine for exactly that
+    // reason.
+  }, [currentUserId, workspaces, ensurePersonalWorkspace, setActiveWorkspaceId, setActiveView]);
+
   const visibleNavTabs: NavTab[] = useMemo(() => {
     const tabs: NavTab[] = [];
+
+    // THE NEW LAYOUT, behind the setting. Three named places plus the launcher, instead of five
+    // things at one level that do not explain each other.
+    //
+    // Home and Office deliberately sit next to each other: they are the same shape with different
+    // data, and seeing them adjacent is what teaches that. Planner goes last because it is honestly
+    // a different kind of thing — a view across both, not a place. The launcher keeps its slot for
+    // everything that must exist without deserving a tab (Trash, archive, Docs, settings).
+    //
+    // Reuses the existing tab ids rather than inventing new ones, so the bottom nav, the launcher
+    // grid and the hidden-tabs setting all keep working untouched. 'board' is Home because that is
+    // already what My Tasks is: the board over the personal workspace.
+    if (useContexts) {
+      const sheetOpen = mobileSpacesOpen || mobilePersonalSpacesOpen;
+      tabs.push({
+        id: 'board',
+        label: 'Home',
+        icon: ListIcon,
+        onClick: () => void openMyTasks(),
+        active: !!currentWorkspace?.isPersonal && (activeView === 'board' || mobilePersonalSpacesOpen),
+      });
+      if (hasRealWorkspace) {
+        tabs.push({
+          id: 'office',
+          label: 'Office',
+          icon: Building2,
+          onClick: handleOfficeNavClick,
+          active: (activeView === 'office' || (activeView === 'board' && !currentWorkspace?.isPersonal)) && !sheetOpen,
+        });
+        tabs.push({
+          id: 'calendar',
+          label: 'Planner',
+          icon: CalendarIcon,
+          onClick: () => setActiveView('calendar'),
+          active: activeView === 'calendar' && !sheetOpen,
+        });
+      }
+      return tabs;
+    }
+
     if (!hiddenNavTabs.has('board') && hasRealWorkspace) {
       tabs.push({
         id: 'board',
@@ -2001,7 +2110,8 @@ function PageContent() {
       });
     }
     return tabs;
-  }, [hiddenNavTabs, hasRealWorkspace, activeView, currentWorkspace, workspaces, chatUnreadCount, mobileSpacesOpen, mobilePersonalSpacesOpen]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [hiddenNavTabs, hasRealWorkspace, activeView, currentWorkspace, workspaces, chatUnreadCount, mobileSpacesOpen, mobilePersonalSpacesOpen, useContexts]);
 
   // The desktop sidebar's "Me zone" (My tasks/My assigned tasks/Network/Profile) has no mobile
   // equivalent — it's inside the same hidden-below-md <aside> as the Spaces/Lists tree, and unlike
@@ -2014,49 +2124,7 @@ function PageContent() {
         id: 'my-tasks',
         label: 'My Tasks',
         icon: ListChecks,
-        onClick: async () => {
-          if (!currentUserId) {
-            showToast('Signed-out session — try reloading the page.');
-            return;
-          }
-          try {
-            // ensurePersonalWorkspace makes a real POST round-trip every time — harmless (the
-            // route is an idempotent upsert) but a real, noticeable delay on every tap once the
-            // workspace already exists. Skip it once `workspaces` already has one; only fall back
-            // to the async ensure-and-create path the very first time (or a stale local list).
-            const known = workspaces.find((w) => w.isPersonal)?.id;
-            const workspaceId = known ?? (await ensurePersonalWorkspace(currentUserId)).workspaceId;
-            // setActiveWorkspaceId itself now restores this workspace's own last-visited Space/List
-            // (store-level lastPositionByWorkspaceId, kept current by setNavigation) — replaces the
-            // separate React-local `lastPersonalNav` this used to read, which could drift out of
-            // sync with the store's own idea of "where was I" and made this "sometimes work,
-            // sometimes not" depending on exactly which of two near-duplicate mechanisms had the
-            // current answer. Same unified mechanism openMobileSpaces now uses for "Spaces."
-            setActiveWorkspaceId(workspaceId);
-            // Same fix as openMobileSpaces just above: opening the tree with nothing picked yet
-            // used to leave activeView pointed at whatever was active before (Chat, Planner, ...),
-            // which is what caused both the nav-tab highlight glitches (another tab reading as
-            // active underneath this one) and the popup menu's dimmed backdrop showing the wrong
-            // view's content through it. suppressOverlayCloseRef: same race as openMobileSpaces —
-            // only set when activeView is actually about to change (see that function's own
-            // comment for why bouncing between two 'board' screens — Spaces and My Tasks — must
-            // never set this, or the flag gets stuck and wrongly suppresses a later, unrelated tap).
-            if (useTaskStore.getState().activeView !== 'board') {
-              suppressOverlayCloseRef.current = true;
-            }
-            setActiveView('board');
-            // Only open the tree picker when there's genuinely nothing more specific to land on —
-            // same "skip the pointless middle screen" check openMobileSpaces uses for "Spaces."
-            if (useTaskStore.getState().activeListIds.size === 0) {
-              setMobilePersonalSpacesOpen(true);
-            }
-          } catch (err) {
-            // A failed ensurePersonalWorkspace() previously left this tap looking like it did
-            // absolutely nothing — the whole async body just stopped at the rejected await, with
-            // nothing surfacing it. Now it's at least visible instead of a silent dead tap.
-            showToast(`Couldn't open My Tasks: ${err instanceof Error ? err.message : 'unknown error'}`);
-          }
-        },
+        onClick: openMyTasks,
         // Deliberately 'board' only, not 'docs' too — 'docs' can't be attributed to My Tasks
         // specifically, since the standalone Docs tab shares that same activeView value regardless
         // of which workspace happens to be active.
@@ -5368,6 +5436,43 @@ function PageContent() {
                 onSetUsername={(username) =>
                   currentUserId ? setUsername(currentUserId, username) : Promise.resolve({ ok: false, error: 'Not signed in' })
                 }
+              />
+            ) : activeView === 'office' && useContexts && isMobile && !activeOfficeUserId && !activeOfficeRoomId ? (
+              // The new Office: one workspace, seen as either the work in it or the conversations
+              // in it. Only at the top level — picking a room or a person still opens OfficePage's
+              // own screens below, so nothing that already worked had to be rebuilt to try this.
+              <OfficeContext
+                spaces={currentWorkspace?.spaces ?? []}
+                rooms={currentWorkspace?.rooms ?? []}
+                channels={(activeWorkspaceId ? chatChannelsByWorkspace[activeWorkspaceId] ?? [] : []).map((c) => ({
+                  id: c.id,
+                  name: c.name ?? '',
+                  unreadCount: c.unreadCount,
+                }))}
+                occupantsByRoom={(currentWorkspace?.rooms ?? []).reduce<Record<string, { id: string; initials: string; color: string }[]>>(
+                  (acc, room) => {
+                    acc[room.id] = users
+                      .filter((u) => u.roomId === room.id)
+                      .map((u) => ({ id: u.id, initials: u.initials, color: u.color }));
+                    return acc;
+                  },
+                  {}
+                )}
+                onSelectSpace={(spaceId) => {
+                  startBoardPush('forward');
+                  setModalTaskStack([]);
+                  setNavigation(spaceId, []);
+                  setActiveView('board');
+                }}
+                onSelectRoom={setActiveOfficeRoomId}
+                onSelectChannel={(channelId) => {
+                  setActiveChatChannelId(channelId);
+                  setActiveView('chat');
+                }}
+                // No new create-space flow of its own: the Spaces tree already has one, complete
+                // with naming, colour and icon. Opening it is both less code and one consistent
+                // place to create a Space from.
+                onCreateSpace={openMobileSpaces}
               />
             ) : activeView === 'office' ? (
               <OfficePage
