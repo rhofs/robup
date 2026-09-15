@@ -58,8 +58,13 @@ const config: CapacitorConfig = {
       // launchAutoHide:false, anything that stops that JS from running — no network, siqt.no down,
       // a redeploy mid-launch — would strand the user on a splash screen with no way forward.
       // Failing into the app's own error handling beats failing into a picture.
+      // Hidden by NativeSplashGate the moment the app is genuinely usable, so this is a ceiling
+      // rather than a duration. Raised from 3s because 3s was short enough to expire mid-load on a
+      // slow connection — which produced the exact seam this is meant to remove: the splash giving
+      // way to the app's own "Loading Siqt..." screen. Still an auto-hide, so a load that never
+      // finishes ends at the app's own error handling instead of on a logo forever.
       launchAutoHide: true,
-      launchShowDuration: 3000,
+      launchShowDuration: 8000,
     },
   },
   server: {

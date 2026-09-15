@@ -11,10 +11,15 @@
   - AnimatedVectorDrawable is the modern answer, but it can only animate vector paths, and the logo
     is a raster PNG. Tracing it to vectors to win a rotation would be a lot of risk for no gain.
 
-  So: 36 frames, 10 degrees apart, generated from mipmap-xxxhdpi/ic_launcher_foreground.png with
-  sharp (already present as a dependency of @capacitor/assets). Each frame is padded to 612px before
-  rotating and then centre-cropped back, so the S keeps a constant size instead of pulsing as its
-  diagonal swings through the frame. 276KB for the set at 216px.
+  What moves is a LIGHT TRAVELLING AROUND THE LOGO, not the logo itself. Spinning the S read as a
+  spinning logo; an arc orbiting a stationary mark reads as loading, which is what this screen is
+  actually saying. Asked for in those words: "lys som går rundt logoen for å indikere loading".
+
+  36 frames, 10 degrees apart, generated with sharp (already a dependency of @capacitor/assets): a
+  faint full ring for the track, a gradient arc covering about a quarter of it rotated per frame,
+  and the trimmed icon composited in the centre. Composited at 512px and resized in a *second* sharp
+  pass, because sharp applies resize before composite inside one pipeline whatever order the calls
+  are written in.
 
   In drawable-nodpi on purpose: these are pre-sized artwork, and letting Android density-scale them
   would resize the logo differently on every phone.

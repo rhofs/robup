@@ -6062,3 +6062,32 @@ those steps is a round trip; the distance and the volume are the cost, not the s
 **Stated to the user plainly:** a WebView app will never match a native cold start, because the
 native app skips the download entirely. The reachable goal is "see something immediately", not
 parity.
+
+### Same session — one waiting screen instead of two, and a loading ring
+
+"Splashbildet er greit, men så bytter den til loadingen, og den føles veldig out of place."
+
+Two separate faults behind one impression.
+
+**1. The splash hid too early.** `NativeSplashGate` hid it on React *mount*, so it gave way to the
+app's own "Loading Siqt..." screen — a second waiting screen, in a different style, immediately
+after the first. Two waits in a row read as the launch having gone wrong. It now hides when
+`isLoading` in the task store turns false, i.e. when the app is genuinely usable. The gate reads the
+store directly rather than taking a prop, since it sits in the root layout above the page that knows
+about loading and Zustand needs no provider.
+
+`launchShowDuration` raised from 3s to 8s for the same reason: it was short enough to expire
+mid-load on a slow connection and produce the very seam being removed. Still an *auto*-hide, so a
+load that never finishes ends at the app's own error handling rather than on a logo forever.
+
+**2. The splash now shows a light travelling around the logo**, rather than the logo spinning.
+Spinning the S read as a spinning logo; an arc orbiting a stationary mark reads as *loading*, which
+is what the screen is actually saying. 36 frames: a faint full ring as the track, a gradient arc over
+about a quarter of it rotated per frame, the trimmed icon composited in the centre.
+
+Note for regenerating these: **sharp applies resize before composite within a single pipeline**,
+whatever order the calls are written in, so compositing a 230px logo onto a 512px canvas and
+resizing to 228 in one chain fails with "Image to composite must have same dimensions or smaller".
+Composite at full size, resize in a second pass.
+
+APK 1.6 (versionCode 7). Both halves need it — the hide timing is web-side but the frames are not.
