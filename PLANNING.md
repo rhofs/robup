@@ -7037,3 +7037,28 @@ Still open, all of it deliberately deferred rather than forgotten:
 - Planner's personal/work filter
 - Whether Chat needs its own tab
 - The layout is still behind the settings switch, and `classic` is still the default
+
+### Same session — the bottom nav joins the movement
+
+The nav was hidden with a bare `opacity-0` class while a conversation is open, which is an instant
+flip — "når vi går inn i en samtale med noen, så klipper menyen vekk, og klipper tilbake når vi går
+tilbake". Now animated, on the push's own duration and curve, so it leaves and returns as part of
+that movement.
+
+**Opacity only, and that is a constraint rather than a preference.** Every child of that wrapper is
+`position: fixed`, so a transform on it would make them resolve against the wrapper instead of the
+viewport and relocate the nav entirely. The wrapper's own comment already said so, which is the
+second time this session that reading the comment above the code saved a wrong turn.
+
+The hide condition is now one shared expression, `chatCoversScreen`, read by both the nav and the
+search pill. They hide behind the same thing and have to come back together; two copies of one
+condition are two things that agree until someone edits one. It carries the same `!chatBackPushing`
+term the pill needed, so the nav also returns at the START of the back push rather than after it.
+
+### Open question, asked and not yet answered
+
+The user also said the nav "bør også animeres ut når vi går inn i list, docs etc." Today it does not
+hide there at all — only inside a conversation — so that is a behaviour change rather than an
+animation one, and a significant one: it would make Back the only way out of a List. Asked rather
+than assumed. If the answer is yes, the change is small: `chatCoversScreen` becomes a broader
+"a deep view is covering the screen" condition, and both consumers follow it unchanged.

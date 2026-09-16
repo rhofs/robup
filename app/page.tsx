@@ -1077,6 +1077,12 @@ function PageContent() {
   // ~460ms so the conversation can finish sliding out with its content intact.
   const activeChatEntity = chatClosing ? null : activeChatEntityRaw;
 
+  // "A conversation is filling the screen right now." Two things hide behind it — the search pill
+  // and the bottom nav — and they have to agree, so they read one expression rather than two copies
+  // of it. `!chatBackPushing` is what makes both of them come back at the START of the back push
+  // instead of after it; see that flag's own comment.
+  const chatCoversScreen = activeView === 'chat' && isMobile && !!activeChatEntity && !chatBackPushing;
+
   const closeChatConversation = () => {
     hapticTap();
     const origin = chatOriginRef.current;
@@ -5278,7 +5284,7 @@ function PageContent() {
                 impression that the whole page is moving as one. Same curve and the same 1/3
                 distance as the outgoing pane, so it moves in step with it. */}
             <AnimatePresence initial={false}>
-            {!(activeView === 'chat' && isMobile && activeChatEntity && !chatBackPushing) && (
+            {!chatCoversScreen && (
             <motion.div
               key="search-pill"
               // x is a percentage of the pill's OWN width, and -50% is what centres it against
@@ -6330,13 +6336,19 @@ function PageContent() {
           the viewport, which would break the nav's placement the moment the wrapper ever gained
           height. `display:none` is out for the opposite reason: it would zero the measurements this
           component reads back. */}
-      <div
-        className={
-          activeView === 'chat' && isMobile && activeChatEntity
-            ? 'pointer-events-none opacity-0'
-            : undefined
-        }
-        aria-hidden={activeView === 'chat' && isMobile && !!activeChatEntity}
+      <motion.div
+        // Animated rather than switched. `opacity-0` as a class is an instant flip, which is exactly
+        // what a cut is — "når vi går inn i en samtale med noen, så klipper menyen vekk". Same
+        // duration and curve as the push, so the nav leaves and returns as part of that movement
+        // rather than as an event of its own.
+        //
+        // Opacity ONLY, and the reason is in the comment above rather than a matter of taste: every
+        // child in here is `position: fixed`, so a transform on this wrapper would reparent them and
+        // move the nav somewhere it does not belong. That constraint is why this cannot be a slide.
+        animate={{ opacity: chatCoversScreen ? 0 : 1 }}
+        transition={{ duration: CHAT_PUSH_MS / 1000, ease: CHAT_PUSH_EASE }}
+        style={{ pointerEvents: chatCoversScreen ? 'none' : undefined }}
+        aria-hidden={chatCoversScreen}
       >
       <MobileBottomNav
         navTabs={visibleNavTabs}
@@ -6360,7 +6372,7 @@ function PageContent() {
         onSelectWorkspace={setActiveWorkspaceId}
         onCreateWorkspace={() => setCreatingWorkspace(true)}
       />
-      </div>
+      </motion.div>
 
       {/* Standalone "zero real workspace" fallback — a fixed floating pill, always visible and
           always tappable regardless of which mobile-only overlay (Spaces sheet, popup menu,
