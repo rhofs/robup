@@ -7397,3 +7397,26 @@ not a destination inside one.
 
 The pair is kept in one constant (`DEEP_LAUNCHER_VIEWS`) precisely because the visible button and the
 hardware gesture disagreeing is its own bug, and they have drifted apart once already this session.
+
+### Same session — the workspace dropdown animates, and the launcher's copy of it is gone
+
+**The dropdown opened as a hard cut.** Every `FloatingPopover` now fades and slides 6px down as it
+opens — one change, so every popover in the app moves the same way.
+
+**`translateY` and opacity only, never `scale`,** and that is a constraint rather than taste: the
+popover's positioning effect measures the panel with `getBoundingClientRect` to decide whether to
+flip it above the anchor or clamp it to the viewport, and a scale changes the width and height it
+reads. A translate leaves the box its size, so the clamping stays correct while the panel is still
+moving. Anyone reaching for a nicer entrance here should stop at translate.
+
+The switcher panel itself moved to the app's card language — a real radius, padding, and rows big
+enough to hit with a thumb. It is a menu opened with a thumb on a phone, not a desktop dropdown.
+
+**The launcher's own workspace switcher is now classic-only.** With a real switcher in the contexts
+header — mark, name, chevron, right where the workspace is named — the one in the popup menu is the
+same control a second time, two taps deeper, inside a menu that is otherwise about going somewhere.
+The user asked for it to go once the header view existed.
+
+It is gated rather than deleted, and that matters: **classic has no mobile workspace switcher
+anywhere else** — its header is a plain view title — so deleting it outright would leave anyone who
+switched back unable to change workspace on a phone at all. It goes when classic does.

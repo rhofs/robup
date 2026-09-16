@@ -4494,7 +4494,10 @@ function PageContent() {
               setWorkspaceSwitcherOpen(false);
               setCreatingWorkspace(false);
             }}
-            panelClassName="w-64 bg-neutral-900 border border-neutral-800 rounded shadow-xl py-1 max-h-[70vh] overflow-y-auto"
+            // Card language, matching the sheets and the context screens rather than the flat
+            // bordered box this used to be: a real radius, room to breathe, and rows big enough to
+            // hit. It is a menu you open with a thumb on a phone, not a desktop dropdown.
+            panelClassName="w-[17rem] max-w-[calc(100vw-24px)] bg-neutral-900 border border-neutral-800 rounded-2xl shadow-2xl p-1.5 max-h-[70vh] overflow-y-auto"
             anchor={
               <button
                 onClick={() => setWorkspaceSwitcherOpen((o) => !o)}
@@ -4551,10 +4554,10 @@ function PageContent() {
                     </div>
                   </div>
                 ))}
-                <div className="border-t border-neutral-800 my-1" />
+                <div className="border-t border-neutral-800 my-1.5 -mx-1.5" />
               </>
             )}
-            <div className="text-[10px] uppercase tracking-wide text-neutral-500 px-3 py-1">Workspaces</div>
+            <div className="text-[10px] uppercase tracking-wide text-neutral-500 px-3 pt-1.5 pb-1">Workspaces</div>
             {workspaces.filter((ws) => !ws.isPersonal).map((ws) => (
               <button
                 key={ws.id}
@@ -4562,8 +4565,8 @@ function PageContent() {
                   setActiveWorkspaceId(ws.id);
                   setWorkspaceSwitcherOpen(false);
                 }}
-                className={`w-full text-left px-3 py-1.5 text-xs hover:bg-neutral-800/60 cursor-pointer flex items-center justify-between gap-2 ${
-                  ws.id === currentWorkspace?.id ? 'text-blue-400' : 'text-neutral-300'
+                className={`w-full text-left px-3 py-2.5 rounded-lg text-xs hover:bg-neutral-800/60 active:bg-neutral-800 cursor-pointer flex items-center justify-between gap-2 transition ${
+                  ws.id === currentWorkspace?.id ? 'text-blue-400 font-semibold' : 'text-neutral-300'
                 }`}
               >
                 <span className="truncate">{ws.name}</span>
@@ -4633,9 +4636,9 @@ function PageContent() {
                 onClick={() =>
                   currentUserId ? setCreatingWorkspace(true) : showToast('Sign in first to create a workspace.')
                 }
-                className="w-full text-left px-3 py-1.5 text-xs text-blue-400 hover:bg-neutral-800/60 cursor-pointer flex items-center gap-1.5"
+                className="w-full text-left px-3 py-2.5 rounded-lg text-xs text-blue-400 hover:bg-neutral-800/60 active:bg-neutral-800 cursor-pointer flex items-center gap-2 transition"
               >
-                <Plus className="w-3 h-3" /> New workspace
+                <Plus className="w-3.5 h-3.5 shrink-0" /> New workspace
               </button>
             )}
             {/* Member view/add/remove moved to Office (per explicit feedback — Office is the
@@ -4649,9 +4652,9 @@ function PageContent() {
                   setActiveView('office');
                   setWorkspaceSwitcherOpen(false);
                 }}
-                className="w-full text-left px-3 py-1.5 text-xs text-neutral-400 hover:bg-neutral-800/60 cursor-pointer flex items-center gap-1.5 border-t border-neutral-800 mt-1"
+                className="w-full text-left px-3 py-2.5 rounded-lg text-xs text-neutral-400 hover:bg-neutral-800/60 active:bg-neutral-800 cursor-pointer flex items-center gap-2 transition mt-1"
               >
-                <Building2 className="w-3 h-3" /> Manage team in Office
+                <Building2 className="w-3.5 h-3.5 shrink-0" /> Manage team in Office
               </button>
             )}
           </FloatingPopover>

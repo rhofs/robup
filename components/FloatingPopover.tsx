@@ -26,6 +26,18 @@ export default function FloatingPopover({
   const panelRef = useRef<HTMLDivElement>(null);
   const [coords, setCoords] = useState<{ top: number; left: number; right: number } | null>(null);
 
+  // One frame of "not yet arrived", so the panel has something to animate from. Without it the
+  // element mounts already at its final values and the transition has nothing to run.
+  const [entered, setEntered] = useState(false);
+  useEffect(() => {
+    if (!open) {
+      setEntered(false);
+      return;
+    }
+    const raf = requestAnimationFrame(() => setEntered(true));
+    return () => cancelAnimationFrame(raf);
+  }, [open]);
+
   useLayoutEffect(() => {
     if (!open || !anchorRef.current) return;
 
@@ -105,6 +117,14 @@ export default function FloatingPopover({
               position: 'fixed',
               top: coords.top,
               ...(align === 'right' ? { right: coords.right } : { left: coords.left }),
+              // translateY and opacity only — deliberately NOT scale. The positioning effect above
+              // measures this element with getBoundingClientRect to decide whether to flip it above
+              // the anchor or clamp it to the viewport, and a scale changes the width and height it
+              // reads. A translate does not: the box keeps its size, so the clamping stays correct
+              // while the panel is still moving.
+              opacity: entered ? 1 : 0,
+              transform: entered ? 'translateY(0)' : 'translateY(-6px)',
+              transition: 'opacity 140ms ease-out, transform 160ms cubic-bezier(0.2, 0.9, 0.3, 1)',
             }}
             className={`z-50 ${panelClassName}`}
           >

@@ -498,6 +498,7 @@ export default function MobileBottomNav({
                 onToggleArchive={onToggleArchive}
                 onNavigate={onNavigate}
                 realWorkspaces={realWorkspaces}
+                showWorkspaceSwitcher={layout === 'classic'}
                 activeWorkspaceId={activeWorkspaceId}
                 onSelectWorkspace={onSelectWorkspace}
                 onCreateWorkspace={onCreateWorkspace}

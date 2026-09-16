@@ -40,6 +40,8 @@ type Props = {
   // not square icon tiles like the rest of this grid — workspace names vary too much in length to
   // read well as a tile label, same reasoning MobileSpacesSheet.tsx's own Space rows already use.
   realWorkspaces: HierarchyWorkspace[];
+  // Whether to render the workspace switcher at all — see its own comment below.
+  showWorkspaceSwitcher: boolean;
   activeWorkspaceId: string | null;
   onSelectWorkspace: (workspaceId: string) => void;
   // There was previously no way at all to *create* a real workspace from mobile — the desktop
@@ -135,6 +137,7 @@ export default function AppLauncherGridContent({
   onToggleArchive,
   onNavigate,
   realWorkspaces,
+  showWorkspaceSwitcher,
   activeWorkspaceId,
   onSelectWorkspace,
   onCreateWorkspace,
@@ -161,92 +164,107 @@ export default function AppLauncherGridContent({
 
   return (
     <div>
-      {/* The header row names the *current* real workspace whenever one is active — tapping it
-          expands an accordion listing every other real workspace, with "+ New workspace" always
-          the last row in that list so creating another is never more than one tap further than
-          switching. Gated on `realWorkspaces.length`, NOT on there being an active real
-          workspace: the personal workspace ("My Tasks") is legitimately active a lot of the
-          time and is deliberately excluded from realWorkspaces, which used to collapse this
-          whole switcher to a bare "+ New workspace" row and hide every real workspace the user
-          had. In that case the header shows a neutral "Workspaces" label instead of naming one
-          — claiming a real workspace is current while My Tasks is actually on screen would just
-          be wrong. Only the true zero-real-workspace case falls back to the plain create row. */}
-      {realWorkspaces.length > 0 ? (
+      {/* The workspace switcher is CLASSIC-ONLY now.
+
+          In the contexts layout the header carries a real switcher — workspace mark, name and a
+          chevron, right where the workspace is named — so this one is the same control a second
+          time, two taps deeper, in a menu that is otherwise about going somewhere. The user asked
+          for it to go once the header view existed.
+
+          It cannot simply be deleted: classic has no mobile workspace switcher anywhere else (the
+          header there is a plain view title), so removing it outright would leave anyone who
+          switched back with no way to change workspace on a phone at all. It goes when classic
+          does. */}
+      {showWorkspaceSwitcher && (
         <>
+        {/* The header row names the *current* real workspace whenever one is active — tapping it
+            expands an accordion listing every other real workspace, with "+ New workspace" always
+            the last row in that list so creating another is never more than one tap further than
+            switching. Gated on `realWorkspaces.length`, NOT on there being an active real
+            workspace: the personal workspace ("My Tasks") is legitimately active a lot of the
+            time and is deliberately excluded from realWorkspaces, which used to collapse this
+            whole switcher to a bare "+ New workspace" row and hide every real workspace the user
+            had. In that case the header shows a neutral "Workspaces" label instead of naming one
+            — claiming a real workspace is current while My Tasks is actually on screen would just
+            be wrong. Only the true zero-real-workspace case falls back to the plain create row. */}
+        {realWorkspaces.length > 0 ? (
+          <>
+            <button
+              onClick={() => {
+                hapticTapStrong();
+                setWorkspacePickerOpen((v) => !v);
+              }}
+              className="w-full flex items-center gap-3 px-2 py-1.5 rounded-lg text-left transition cursor-pointer hover:bg-neutral-800/60"
+            >
+              <span
+                className={`w-7 h-7 rounded-lg flex items-center justify-center shrink-0 text-white text-[11px] font-bold ${
+                  activeWorkspace ? 'bg-blue-600' : 'bg-neutral-700'
+                }`}
+              >
+                {activeWorkspace ? activeWorkspace.name.slice(0, 1).toUpperCase() : <LayoutGrid className="w-3.5 h-3.5" />}
+              </span>
+              <span className="min-w-0 flex-1 text-sm text-neutral-200 truncate">{activeWorkspace?.name ?? 'Workspaces'}</span>
+              <ChevronDown
+                className={`w-4 h-4 text-neutral-500 shrink-0 transition-transform ${workspacePickerOpen ? 'rotate-180' : ''}`}
+              />
+            </button>
+            {workspacePickerOpen && (
+              <div className="space-y-0.5 pt-0.5 pb-1.5 pl-3">
+                {realWorkspaces
+                  .filter((ws) => ws.id !== activeWorkspaceId)
+                  .map((ws) => (
+                    <button
+                      key={ws.id}
+                      onClick={() => {
+                        hapticTapStrong();
+                        onNavigate();
+                        onSelectWorkspace(ws.id);
+                        onClose();
+                      }}
+                      className="w-full flex items-center gap-3 px-2 py-1.5 rounded-lg text-left transition cursor-pointer hover:bg-neutral-800/60"
+                    >
+                      <span className="w-6 h-6 rounded-md bg-neutral-700 flex items-center justify-center shrink-0 text-app-strong text-[10px] font-bold">
+                        {ws.name.slice(0, 1).toUpperCase()}
+                      </span>
+                      <span className="min-w-0 flex-1 text-sm text-neutral-300 truncate">{ws.name}</span>
+                    </button>
+                  ))}
+                <button
+                  onClick={() => {
+                    hapticTapStrong();
+                    onNavigate();
+                    onClose();
+                    onCreateWorkspace();
+                  }}
+                  className="w-full flex items-center gap-3 px-2 py-1.5 rounded-lg text-left transition cursor-pointer hover:bg-neutral-800/60 text-blue-400"
+                >
+                  <span className="w-6 h-6 rounded-md bg-neutral-800/60 flex items-center justify-center shrink-0">
+                    <Plus className="w-3.5 h-3.5" />
+                  </span>
+                  <span className="text-sm font-medium">New workspace</span>
+                </button>
+              </div>
+            )}
+          </>
+        ) : (
           <button
             onClick={() => {
               hapticTapStrong();
-              setWorkspacePickerOpen((v) => !v);
+              onNavigate();
+              onClose();
+              onCreateWorkspace();
             }}
-            className="w-full flex items-center gap-3 px-2 py-1.5 rounded-lg text-left transition cursor-pointer hover:bg-neutral-800/60"
+            className="w-full flex items-center gap-3 px-2 py-1.5 rounded-lg text-left transition cursor-pointer hover:bg-neutral-800/60 text-blue-400"
           >
-            <span
-              className={`w-7 h-7 rounded-lg flex items-center justify-center shrink-0 text-white text-[11px] font-bold ${
-                activeWorkspace ? 'bg-blue-600' : 'bg-neutral-700'
-              }`}
-            >
-              {activeWorkspace ? activeWorkspace.name.slice(0, 1).toUpperCase() : <LayoutGrid className="w-3.5 h-3.5" />}
+            <span className="w-7 h-7 rounded-lg bg-neutral-800/60 flex items-center justify-center shrink-0">
+              <Plus className="w-4 h-4" />
             </span>
-            <span className="min-w-0 flex-1 text-sm text-neutral-200 truncate">{activeWorkspace?.name ?? 'Workspaces'}</span>
-            <ChevronDown
-              className={`w-4 h-4 text-neutral-500 shrink-0 transition-transform ${workspacePickerOpen ? 'rotate-180' : ''}`}
-            />
+            <span className="text-sm font-medium">New workspace</span>
           </button>
-          {workspacePickerOpen && (
-            <div className="space-y-0.5 pt-0.5 pb-1.5 pl-3">
-              {realWorkspaces
-                .filter((ws) => ws.id !== activeWorkspaceId)
-                .map((ws) => (
-                  <button
-                    key={ws.id}
-                    onClick={() => {
-                      hapticTapStrong();
-                      onNavigate();
-                      onSelectWorkspace(ws.id);
-                      onClose();
-                    }}
-                    className="w-full flex items-center gap-3 px-2 py-1.5 rounded-lg text-left transition cursor-pointer hover:bg-neutral-800/60"
-                  >
-                    <span className="w-6 h-6 rounded-md bg-neutral-700 flex items-center justify-center shrink-0 text-app-strong text-[10px] font-bold">
-                      {ws.name.slice(0, 1).toUpperCase()}
-                    </span>
-                    <span className="min-w-0 flex-1 text-sm text-neutral-300 truncate">{ws.name}</span>
-                  </button>
-                ))}
-              <button
-                onClick={() => {
-                  hapticTapStrong();
-                  onNavigate();
-                  onClose();
-                  onCreateWorkspace();
-                }}
-                className="w-full flex items-center gap-3 px-2 py-1.5 rounded-lg text-left transition cursor-pointer hover:bg-neutral-800/60 text-blue-400"
-              >
-                <span className="w-6 h-6 rounded-md bg-neutral-800/60 flex items-center justify-center shrink-0">
-                  <Plus className="w-3.5 h-3.5" />
-                </span>
-                <span className="text-sm font-medium">New workspace</span>
-              </button>
-            </div>
-          )}
+        )}
+        <div className="h-px bg-neutral-800/70 my-2" />
         </>
-      ) : (
-        <button
-          onClick={() => {
-            hapticTapStrong();
-            onNavigate();
-            onClose();
-            onCreateWorkspace();
-          }}
-          className="w-full flex items-center gap-3 px-2 py-1.5 rounded-lg text-left transition cursor-pointer hover:bg-neutral-800/60 text-blue-400"
-        >
-          <span className="w-7 h-7 rounded-lg bg-neutral-800/60 flex items-center justify-center shrink-0">
-            <Plus className="w-4 h-4" />
-          </span>
-          <span className="text-sm font-medium">New workspace</span>
-        </button>
       )}
-      <div className="h-px bg-neutral-800/70 my-2" />
 
       {/* No `selected` ring on the pinned tile here any more — whichever tile is pinned
           already gets its own highlighted state down in the nav pill's 4th slot
