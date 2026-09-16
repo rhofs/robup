@@ -31,6 +31,18 @@ type Props = {
   // makes those resolve against the ancestor instead of the viewport, which relocates the nav
   // entirely. This element IS the fixed one, so transforming it is safe and moves what you see.
   hidden: boolean;
+  // True while a push is running in either direction, or while the nav is away.
+  //
+  // The nav normally floats ABOVE everything (z-50) — that is the point of it. During a push it has
+  // to stop doing that: the arriving page comes in over the screen it is leaving, and the nav
+  // belongs to the screen being left, so it has to pass UNDER the new one. Without this the nav
+  // slid correctly and still sat on top of the incoming list or conversation, reported with a
+  // screenshot: "den havner foran den nye siden som kommer fra høyre... Den må være bak."
+  //
+  // 35 is chosen between two known values rather than picked: <main> rises to 40 while it moves, and
+  // the context push layer sits at 30. The nav is part of the outgoing screen, so it belongs above
+  // that layer and below the arriving page.
+  behind: boolean;
   menuOpen: boolean;
   onOpenMenu: () => void;
   onCloseMenu: () => void;
@@ -237,6 +249,7 @@ export default function MobileBottomNav({
   onToggleArchive,
   layout,
   hidden,
+  behind,
   realWorkspaces,
   activeWorkspaceId,
   onSelectWorkspace,
@@ -382,7 +395,7 @@ export default function MobileBottomNav({
 
 
       <motion.div
-        className="fixed inset-x-0 bottom-0 z-50 md:hidden"
+        className="fixed inset-x-0 bottom-0 md:hidden"
         animate={hidden ? { x: '-33%', opacity: [1, 1, 0] } : { x: 0, opacity: 1 }}
         transition={
           hidden
@@ -397,7 +410,11 @@ export default function MobileBottomNav({
                 opacity: { duration: (CHAT_PUSH_MS * 0.35) / 1000, ease: 'easeOut' },
               }
         }
-        style={{ pointerEvents: hidden ? 'none' : undefined, willChange: 'transform' }}
+        style={{
+          pointerEvents: hidden ? 'none' : undefined,
+          willChange: 'transform',
+          zIndex: behind ? 35 : 50,
+        }}
       >
         <motion.div
           // Only `height` is ever animated here — a plain number, not a shape/string — and the

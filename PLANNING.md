@@ -7107,3 +7107,32 @@ the Spaces sheet — the nav belongs to the page that is leaving, so it leaves w
 **Worth stating plainly, because it cost two rounds:** "a transform here would break the fixed
 children" is a reason to move the animation, not a reason to settle for a weaker one. The constraint
 was about *that element*, and it was read as being about the effect.
+
+### Same session — cold launch landed on the old layout's screen
+
+Reported with a screenshot that made it unmistakable: the new bottom nav (Home · Office · Planner ·
+Docs) sitting underneath the *old* Spaces sheet, on app start.
+
+The cause is an effect-ordering trap worth remembering, because nothing about the code looks wrong.
+The URL-hydration effect opens the Spaces sheet when the URL carries no state at all — which is
+every Capacitor cold launch, since the app always opens `https://siqt.no` bare. It guards that with
+`useContexts`... except `layoutPref` is filled in by *its own mount effect*, and although that effect
+is declared earlier and therefore runs first, its `setState` only lands on the next render. So on the
+very first pass `useContexts` is still `false`, and the contexts layout opened the classic layout's
+landing screen every single time.
+
+Fixed by reading `readLayoutPreference()` directly in that effect rather than the state derived from
+it. **A state value derived from storage in an effect cannot be read by another effect in the same
+commit** — the second one has to go back to the source.
+
+Landing on Home could not happen in that effect either: it needs the personal workspace, and on a
+cold launch neither the user nor the workspace list has arrived. So the effect sets
+`coldLaunchHomeRef` and a small effect consumes it once `currentUserId` and `workspaces` exist.
+
+**Home's icon is a house now** (`House`), not the list glyph it borrowed from the tab it replaced.
+
+**The nav passes under the arriving page.** It floats above everything at `z-50`, which is the point
+of it — but during a push it belongs to the screen being *left*, so it has to go under the one
+arriving. It was sliding correctly and still sitting on top. `zIndex: behind ? 35 : 50`, with 35
+chosen between two known values rather than picked: `<main>` rises to 40 while it moves, and the
+context push layer sits at 30.

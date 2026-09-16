@@ -25,6 +25,7 @@ import {
   Folder as FolderIconLucide,
   Calendar as CalendarIcon,
   UserPlus,
+  House as HouseIcon,
   UserCircle,
   LogOut,
   Archive,
@@ -887,6 +888,10 @@ function PageContent() {
   // time it renders, the state that would have told us (showingHomeContext) is already false — the
   // navigation that started the push is what made it false.
   const pushContextRef = useRef<'home' | 'office'>('home');
+  // Set on a cold launch into the contexts layout, consumed once the data it needs exists.
+  // Landing on Home cannot happen in the URL effect itself: it needs the personal workspace, and on
+  // a genuine cold launch neither the user nor the workspace list has arrived yet.
+  const coldLaunchHomeRef = useRef(false);
 
 
   // `boardPushing` is set HERE, in the same batch as the tap that closes the drawer — not in the
@@ -1871,7 +1876,15 @@ function PageContent() {
     // first pass only — this effect re-runs whenever searchParams or the workspace list changes,
     // and without that guard the sheet would spring open again mid-session.
     if (!hasHydratedFromUrlRef.current && isMobile && searchParams.toString() === '') {
-      setMobileSpacesOpen(true);
+      // readLayoutPreference() rather than `useContexts`, and that is not a style choice.
+      // `layoutPref` is filled in by its own mount effect, which is declared above this one and
+      // therefore runs first — but its setState only lands on the NEXT render, so `useContexts` is
+      // still false right here on the very first pass. Reading localStorage directly is the only
+      // way this effect can know the truth at the moment it has to decide. Without it, every cold
+      // launch of the contexts layout opened the old Spaces sheet, which is exactly what was
+      // reported with a screenshot: the new nav underneath the old landing screen.
+      if (readLayoutPreference() === 'contexts') coldLaunchHomeRef.current = true;
+      else setMobileSpacesOpen(true);
     }
 
     hasHydratedFromUrlRef.current = true;
@@ -2268,6 +2281,14 @@ function PageContent() {
     // showToast: declared below this point — see openMyTasks' own note.
   }, [currentUserId, workspaces, ensurePersonalWorkspace, setActiveWorkspaceId, setNavigation, setActiveView]);
 
+  useEffect(() => {
+    if (!coldLaunchHomeRef.current || !useContexts || !isMobile) return;
+    if (!currentUserId || workspaces.length === 0) return;
+    coldLaunchHomeRef.current = false;
+    void openHome();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [useContexts, isMobile, currentUserId, workspaces.length]);
+
   const visibleNavTabs: NavTab[] = useMemo(() => {
     const tabs: NavTab[] = [];
 
@@ -2287,7 +2308,7 @@ function PageContent() {
       tabs.push({
         id: 'board',
         label: 'Home',
-        icon: ListIcon,
+        icon: HouseIcon,
         onClick: () => void openHome(),
         active: !!currentWorkspace?.isPersonal && (activeView === 'board' || mobilePersonalSpacesOpen),
       });
@@ -6370,6 +6391,7 @@ function PageContent() {
         navTabs={visibleNavTabs}
         layout={layoutPref}
         hidden={navHidden}
+        behind={navHidden || boardPushing}
         menuOpen={mobileMenuOpen}
         onOpenMenu={() => setMobileMenuOpen(true)}
         onCloseMenu={() => setMobileMenuOpen(false)}
