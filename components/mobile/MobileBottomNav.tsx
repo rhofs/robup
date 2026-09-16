@@ -6,6 +6,7 @@ import { AnimatePresence, motion } from 'framer-motion';
 import type { NavTab, MenuTile } from './navTypes';
 import { primaryNavTabIds } from './navTypes';
 import type { LayoutPreference } from '../../lib/layoutPreference';
+import { CHAT_PUSH_MS, CHAT_PUSH_EASE } from '../../lib/chatTransition';
 import { hapticTap } from '../../lib/haptics';
 import AppLauncherGridContent from './AppLauncherGrid';
 import type { HierarchyWorkspace } from '../../store/useTaskStore';
@@ -20,6 +21,16 @@ type Props = {
   // whether `board` keeps its mobile-only Spaces behaviour below. In the contexts layout `board` is
   // Home, a real destination with its own onClick, so that override has to be off.
   layout: LayoutPreference;
+  // True while something deeper than a context fills the screen. The nav travels away with the
+  // screen it belongs to rather than switching off — it is part of that page leaving, not a
+  // separate event. Same -33% and the same late opacity release as the push layer and the Spaces
+  // sheet, because they are all the same movement.
+  //
+  // Animated HERE, on the fixed island itself, rather than on the wrapper in page.tsx. The wrapper
+  // cannot carry a transform: every child of it is position:fixed, and a transform on an ancestor
+  // makes those resolve against the ancestor instead of the viewport, which relocates the nav
+  // entirely. This element IS the fixed one, so transforming it is safe and moves what you see.
+  hidden: boolean;
   menuOpen: boolean;
   onOpenMenu: () => void;
   onCloseMenu: () => void;
@@ -225,6 +236,7 @@ export default function MobileBottomNav({
   showArchived,
   onToggleArchive,
   layout,
+  hidden,
   realWorkspaces,
   activeWorkspaceId,
   onSelectWorkspace,
@@ -369,7 +381,24 @@ export default function MobileBottomNav({
       </AnimatePresence>
 
 
-      <div className="fixed inset-x-0 bottom-0 z-50 md:hidden">
+      <motion.div
+        className="fixed inset-x-0 bottom-0 z-50 md:hidden"
+        animate={hidden ? { x: '-33%', opacity: [1, 1, 0] } : { x: 0, opacity: 1 }}
+        transition={
+          hidden
+            ? {
+                x: { duration: CHAT_PUSH_MS / 1000, ease: CHAT_PUSH_EASE },
+                // Held opaque through most of the travel, then released — the nav should read as
+                // leaving with the page, not as dimming in place.
+                opacity: { duration: CHAT_PUSH_MS / 1000, times: [0, 0.78, 1], ease: 'linear' },
+              }
+            : {
+                x: { duration: CHAT_PUSH_MS / 1000, ease: CHAT_PUSH_EASE },
+                opacity: { duration: (CHAT_PUSH_MS * 0.35) / 1000, ease: 'easeOut' },
+              }
+        }
+        style={{ pointerEvents: hidden ? 'none' : undefined, willChange: 'transform' }}
+      >
         <motion.div
           // Only `height` is ever animated here — a plain number, not a shape/string — and the
           // rounding/clipping (`rounded-[32px] overflow-hidden`) below is completely static, so
@@ -543,7 +572,7 @@ export default function MobileBottomNav({
           </nav>
           </div>
         </motion.div>
-      </div>
+      </motion.div>
     </>
   );
 }

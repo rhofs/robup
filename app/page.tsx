@@ -6360,23 +6360,16 @@ function PageContent() {
           the viewport, which would break the nav's placement the moment the wrapper ever gained
           height. `display:none` is out for the opposite reason: it would zero the measurements this
           component reads back. */}
-      <motion.div
-        // Animated rather than switched. `opacity-0` as a class is an instant flip, which is exactly
-        // what a cut is — "når vi går inn i en samtale med noen, så klipper menyen vekk". Same
-        // duration and curve as the push, so the nav leaves and returns as part of that movement
-        // rather than as an event of its own.
-        //
-        // Opacity ONLY, and the reason is in the comment above rather than a matter of taste: every
-        // child in here is `position: fixed`, so a transform on this wrapper would reparent them and
-        // move the nav somewhere it does not belong. That constraint is why this cannot be a slide.
-        animate={{ opacity: navHidden ? 0 : 1 }}
-        transition={{ duration: CHAT_PUSH_MS / 1000, ease: CHAT_PUSH_EASE }}
-        style={{ pointerEvents: navHidden ? 'none' : undefined }}
-        aria-hidden={navHidden}
-      >
+      {/* The movement itself lives on the nav's own fixed island (MobileBottomNav.tsx) — see the
+          `hidden` prop's comment there for why it cannot live on this wrapper. A fade applied here
+          was the previous attempt and it was both the wrong effect and, reported twice, no effect
+          at all: "menyen forsvinner nå, men med hard cut". This element now only carries the
+          accessibility flag. */}
+      <div aria-hidden={navHidden}>
       <MobileBottomNav
         navTabs={visibleNavTabs}
         layout={layoutPref}
+        hidden={navHidden}
         menuOpen={mobileMenuOpen}
         onOpenMenu={() => setMobileMenuOpen(true)}
         onCloseMenu={() => setMobileMenuOpen(false)}
@@ -6396,7 +6389,7 @@ function PageContent() {
         onSelectWorkspace={setActiveWorkspaceId}
         onCreateWorkspace={() => setCreatingWorkspace(true)}
       />
-      </motion.div>
+      </div>
 
       {/* Standalone "zero real workspace" fallback — a fixed floating pill, always visible and
           always tappable regardless of which mobile-only overlay (Spaces sheet, popup menu,

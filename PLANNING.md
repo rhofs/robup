@@ -7089,3 +7089,21 @@ production already on the commit that added the fade. The most likely explanatio
 app had not been force-closed — in remote-URL mode the WebView keeps the previous bundle until it
 actually reloads — but that is a guess, and if it survives a force-close the fade needs a real
 diagnosis rather than another theory. Recorded so the next session does not assume it is fixed.
+
+### Same session — the nav slides with the page instead of switching off
+
+The previous attempt animated `opacity` on the nav's *wrapper* in `page.tsx`, reasoning that a
+transform there would reparent the fixed children. That reasoning was correct and the conclusion
+drawn from it was wrong: rather than accept "so it cannot slide", the animation should have moved to
+an element that *can* carry a transform. It also did not work at all — reported twice, the second
+time unambiguously: "menyen forsvinner nå, men med hard cut".
+
+The movement now lives on the nav's own `fixed inset-x-0 bottom-0 z-50` island inside
+`MobileBottomNav`, via a new `hidden` prop. That element IS the fixed one, so transforming it is safe
+and moves what you actually see. Same `-33%` and the same late opacity release as the push layer and
+the Spaces sheet — the nav belongs to the page that is leaving, so it leaves with it. The wrapper in
+`page.tsx` now carries nothing but `aria-hidden`.
+
+**Worth stating plainly, because it cost two rounds:** "a transform here would break the fixed
+children" is a reason to move the animation, not a reason to settle for a weaker one. The constraint
+was about *that element*, and it was read as being about the effect.
