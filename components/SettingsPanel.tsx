@@ -355,7 +355,7 @@ export default function SettingsPanel({
   // initialTab is kept as the caller-facing shape so no call site had to change when this panel was
   // split in two — the old tab names still say enough to land in the right place.
   const [section, setSection] = useState<'you' | 'workspace'>(initialTab === 'account' ? 'you' : 'workspace');
-  const [sub, setSub] = useState<null | 'roles' | 'invite' | 'import'>(
+  const [sub, setSub] = useState<null | 'roles' | 'invite' | 'import' | 'profile'>(
     initialTab === 'roles' || initialTab === 'invite' || initialTab === 'import' ? initialTab : null
   );
   const [weekNumbersHidden, setWeekNumbersHidden] = useState(() => readHideWeekNumbers());
@@ -369,6 +369,7 @@ export default function SettingsPanel({
   // --- Workspace identity (backlog #2) --- org type + work email, set at creation, editable
   // here by Owner/Admin only (server-enforced too, see PATCH /api/workspaces/[id]/route.ts).
   const [emailDraft, setEmailDraft] = useState(workspace.workEmail ?? '');
+  const [logoDraft, setLogoDraft] = useState(workspace.avatarUrl ?? '');
   const [editingEmail, setEditingEmail] = useState(false);
 
   // --- Push notifications --- per-browser, not per-account (a phone and a laptop are two
@@ -527,7 +528,18 @@ export default function SettingsPanel({
             </button>
           )}
           <h3 className="font-bold text-sm text-app-strong flex-1 min-w-0 truncate">
-            {sub === 'roles' ? 'Roles' : sub === 'invite' ? 'Invite people' : sub === 'import' ? 'Import' : 'Settings'}
+            {/* Named with the workspace, not generically. "Invite people" does not say who they are
+                being invited to, and this panel is reachable from two contexts — the one thing a
+                title here can usefully add is which door it is opening. */}
+            {sub === 'roles'
+              ? `Roles in ${workspace.name}`
+              : sub === 'invite'
+                ? `Invite to ${workspace.name}`
+                : sub === 'import'
+                  ? `Import into ${workspace.name}`
+                  : sub === 'profile'
+                    ? 'Work profile'
+                    : 'Settings'}
           </h3>
           <button
             onClick={onClose}
@@ -558,7 +570,127 @@ export default function SettingsPanel({
           </div>
         )}
 
-        {sub === 'roles' ? (
+        {sub === 'profile' ? (
+          // Everything that IS the workspace — its mark, its name, its type, its work email. Moved
+          // off the Workspace list and behind "Edit work profile", so that list opens on who this
+          // workspace is rather than on a form.
+          <div className="px-4 pb-4 space-y-1 h-[26rem] overflow-y-auto">
+            {!workspace.isPersonal && (
+              <>
+                {/* The mark, first — it is how everyone else recognises this workspace in their own
+                    header now that it sits where a profile picture would. A workspace with no colour
+                    falls back to the app accent, which means every such workspace looks identical;
+                    that was tolerable while the mark was a small square next to the name and is not
+                    once it is the thing you navigate by. */}
+                <div className="text-[10px] uppercase tracking-wide text-neutral-500 px-1 pb-1">Mark</div>
+                <div className="flex items-center gap-3 px-1 pb-3">
+                  {workspace.avatarUrl ? (
+                    // eslint-disable-next-line @next/next/no-img-element
+                    <img src={workspace.avatarUrl} alt={workspace.name} className="w-12 h-12 rounded-2xl object-cover shrink-0" />
+                  ) : (
+                    <span
+                      className="w-12 h-12 rounded-2xl shrink-0 flex items-center justify-center text-lg font-bold text-white"
+                      style={{ backgroundColor: workspace.color ?? '#2563eb' }}
+                    >
+                      {workspace.name.slice(0, 1).toUpperCase()}
+                    </span>
+                  )}
+                  <div className="min-w-0 flex-1">
+                    {canManage ? (
+                      <>
+                        <ColorSwatchPicker
+                          value={workspace.color}
+                          onChange={(color) => updateWorkspaceDetails(workspace.id, { color })}
+                          choices={ROLE_COLOR_CHOICES}
+                          size="sm"
+                        />
+                        {/* A URL rather than a file picker, because that is how this app already does
+                            avatars (ProfilePage's own AvatarEditor). One way of doing a thing, even
+                            when it is not the fanciest way — two upload flows for the same kind of
+                            image would be worse than this being plain. */}
+                        <input
+                          value={logoDraft}
+                          onChange={(e) => setLogoDraft(e.target.value)}
+                          onBlur={() => updateWorkspaceDetails(workspace.id, { avatarUrl: logoDraft.trim() || null })}
+                          onKeyDown={(e) => {
+                            if (e.key === 'Enter') (e.target as HTMLInputElement).blur();
+                            if (e.key === 'Escape') setLogoDraft(workspace.avatarUrl ?? '');
+                          }}
+                          placeholder="Logo image URL (optional)"
+                          className="mt-2 w-full bg-neutral-950 border border-neutral-800 rounded px-2 py-1.5 text-[11px] text-app-strong placeholder:text-neutral-600 focus:outline-none focus:border-blue-500"
+                        />
+                      </>
+                    ) : (
+                      <p className="text-[11px] text-neutral-500">Only admins can change this.</p>
+                    )}
+                  </div>
+                </div>
+
+                <div className="text-[10px] uppercase tracking-wide text-neutral-500 px-1 pb-1">Workspace</div>
+                <div className="px-1 pb-3 space-y-2">
+                  <div className="flex items-center gap-2">
+                    <span className="text-[10px] text-neutral-500 w-16 shrink-0">Type</span>
+                    {canManage ? (
+                      <div className="flex items-center gap-1 bg-neutral-950 border border-neutral-800 rounded p-0.5 flex-1">
+                        <button
+                          onClick={() => updateWorkspaceDetails(workspace.id, { orgType: 'company' })}
+                          className={`flex-1 text-[10px] py-1 rounded cursor-pointer transition ${
+                            workspace.orgType === 'company' ? 'bg-neutral-800 text-app-strong' : 'text-neutral-500 hover:text-neutral-300'
+                          }`}
+                        >
+                          Company
+                        </button>
+                        <button
+                          onClick={() => updateWorkspaceDetails(workspace.id, { orgType: 'personal_project' })}
+                          className={`flex-1 text-[10px] py-1 rounded cursor-pointer transition ${
+                            workspace.orgType === 'personal_project' ? 'bg-neutral-800 text-app-strong' : 'text-neutral-500 hover:text-neutral-300'
+                          }`}
+                        >
+                          Personal project
+                        </button>
+                      </div>
+                    ) : (
+                      <span className="text-xs text-neutral-300">
+                        {workspace.orgType === 'company' ? 'Company' : workspace.orgType === 'personal_project' ? 'Personal project' : 'Not set'}
+                      </span>
+                    )}
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <span className="text-[10px] text-neutral-500 w-16 shrink-0">Work email</span>
+                    {canManage && editingEmail ? (
+                      <input
+                        autoFocus
+                        type="email"
+                        value={emailDraft}
+                        onChange={(e) => setEmailDraft(e.target.value)}
+                        onBlur={() => {
+                          setEditingEmail(false);
+                          updateWorkspaceDetails(workspace.id, { workEmail: emailDraft.trim() || null });
+                        }}
+                        onKeyDown={(e) => {
+                          if (e.key === 'Enter') (e.target as HTMLInputElement).blur();
+                          if (e.key === 'Escape') {
+                            setEmailDraft(workspace.workEmail ?? '');
+                            setEditingEmail(false);
+                          }
+                        }}
+                        className="flex-1 bg-neutral-950 border border-blue-500 rounded px-2 py-1 text-xs text-app-strong focus:outline-none"
+                      />
+                    ) : (
+                      <button
+                        onClick={() => canManage && setEditingEmail(true)}
+                        disabled={!canManage}
+                        className={`flex-1 text-left text-xs px-1 ${canManage ? 'text-neutral-300 hover:text-app-strong cursor-pointer' : 'text-neutral-500 cursor-default'}`}
+                      >
+                        {workspace.workEmail || (canManage ? 'Not set — click to add' : 'Not set')}
+                      </button>
+                    )}
+                  </div>
+                </div>
+              </>
+            )}
+          </div>
+        ) : sub === 'roles' ? (
           <div className="p-5 space-y-2 h-96 overflow-y-auto">
             {workspace.roles.length === 0 && !creatingRole && <p className="text-xs text-neutral-500">No roles yet — roles let you grant specific people access to private Spaces, Folders, Lists, and Tasks.</p>}
             {workspace.roles.map((r) => {
@@ -1106,97 +1238,36 @@ export default function SettingsPanel({
           </div>
         ) : (
           <div className="px-4 pb-4 space-y-1 h-[26rem] overflow-y-auto">
+            {/* The work profile, given the same treatment as yours on the other side: the mark
+                large, the name under it, and one button into the details. The user asked for the
+                symmetry directly — a workspace is a thing with an identity too, and the panel
+                should say so before it starts listing switches. */}
             {!workspace.isPersonal && (
-              <>
-                {/* The mark, first — it is how everyone else recognises this workspace in their own
-                    header now that it sits where a profile picture would. A workspace with no colour
-                    falls back to the app accent, which means every such workspace looks identical;
-                    that was tolerable while the mark was a small square next to the name and is not
-                    once it is the thing you navigate by. */}
-                <div className="text-[10px] uppercase tracking-wide text-neutral-500 px-1 pb-1">Mark</div>
-                <div className="flex items-center gap-3 px-1 pb-3">
+              <div className="flex flex-col items-center text-center pt-1 pb-4">
+                {workspace.avatarUrl ? (
+                  // eslint-disable-next-line @next/next/no-img-element
+                  <img src={workspace.avatarUrl} alt={workspace.name} className="w-20 h-20 rounded-2xl object-cover" />
+                ) : (
                   <span
-                    className="w-12 h-12 rounded-full shrink-0 flex items-center justify-center text-lg font-bold text-white"
+                    className="w-20 h-20 rounded-2xl flex items-center justify-center text-2xl font-bold text-white"
                     style={{ backgroundColor: workspace.color ?? '#2563eb' }}
                   >
                     {workspace.name.slice(0, 1).toUpperCase()}
                   </span>
-                  <div className="min-w-0 flex-1">
-                    {canManage ? (
-                      <ColorSwatchPicker
-                        value={workspace.color}
-                        onChange={(color) => updateWorkspaceDetails(workspace.id, { color })}
-                        choices={ROLE_COLOR_CHOICES}
-                        size="sm"
-                      />
-                    ) : (
-                      <p className="text-[11px] text-neutral-500">Only admins can change this.</p>
-                    )}
-                  </div>
-                </div>
-
-                <div className="text-[10px] uppercase tracking-wide text-neutral-500 px-1 pb-1">Workspace</div>
-                <div className="px-1 pb-3 space-y-2">
-                  <div className="flex items-center gap-2">
-                    <span className="text-[10px] text-neutral-500 w-16 shrink-0">Type</span>
-                    {canManage ? (
-                      <div className="flex items-center gap-1 bg-neutral-950 border border-neutral-800 rounded p-0.5 flex-1">
-                        <button
-                          onClick={() => updateWorkspaceDetails(workspace.id, { orgType: 'company' })}
-                          className={`flex-1 text-[10px] py-1 rounded cursor-pointer transition ${
-                            workspace.orgType === 'company' ? 'bg-neutral-800 text-app-strong' : 'text-neutral-500 hover:text-neutral-300'
-                          }`}
-                        >
-                          Company
-                        </button>
-                        <button
-                          onClick={() => updateWorkspaceDetails(workspace.id, { orgType: 'personal_project' })}
-                          className={`flex-1 text-[10px] py-1 rounded cursor-pointer transition ${
-                            workspace.orgType === 'personal_project' ? 'bg-neutral-800 text-app-strong' : 'text-neutral-500 hover:text-neutral-300'
-                          }`}
-                        >
-                          Personal project
-                        </button>
-                      </div>
-                    ) : (
-                      <span className="text-xs text-neutral-300">
-                        {workspace.orgType === 'company' ? 'Company' : workspace.orgType === 'personal_project' ? 'Personal project' : 'Not set'}
-                      </span>
-                    )}
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <span className="text-[10px] text-neutral-500 w-16 shrink-0">Work email</span>
-                    {canManage && editingEmail ? (
-                      <input
-                        autoFocus
-                        type="email"
-                        value={emailDraft}
-                        onChange={(e) => setEmailDraft(e.target.value)}
-                        onBlur={() => {
-                          setEditingEmail(false);
-                          updateWorkspaceDetails(workspace.id, { workEmail: emailDraft.trim() || null });
-                        }}
-                        onKeyDown={(e) => {
-                          if (e.key === 'Enter') (e.target as HTMLInputElement).blur();
-                          if (e.key === 'Escape') {
-                            setEmailDraft(workspace.workEmail ?? '');
-                            setEditingEmail(false);
-                          }
-                        }}
-                        className="flex-1 bg-neutral-950 border border-blue-500 rounded px-2 py-1 text-xs text-app-strong focus:outline-none"
-                      />
-                    ) : (
-                      <button
-                        onClick={() => canManage && setEditingEmail(true)}
-                        disabled={!canManage}
-                        className={`flex-1 text-left text-xs px-1 ${canManage ? 'text-neutral-300 hover:text-app-strong cursor-pointer' : 'text-neutral-500 cursor-default'}`}
-                      >
-                        {workspace.workEmail || (canManage ? 'Not set — click to add' : 'Not set')}
-                      </button>
-                    )}
-                  </div>
-                </div>
-              </>
+                )}
+                <p className="mt-2.5 text-base font-bold text-app-strong">{workspace.name}</p>
+                <p className="text-[11px] text-neutral-500">
+                  {workspace.members.length} {workspace.members.length === 1 ? 'member' : 'members'}
+                </p>
+                {canManage && (
+                  <button
+                    onClick={() => setSub('profile')}
+                    className="mt-3 flex items-center gap-1.5 px-4 py-2 rounded-full border border-neutral-700 text-xs text-neutral-200 hover:bg-neutral-800/60 active:scale-95 transition duration-100 cursor-pointer"
+                  >
+                    <Pencil className="w-3.5 h-3.5" /> Edit work profile
+                  </button>
+                )}
+              </div>
             )}
             {/* Sub-screens, not tabs. Each of these is something you go and do once and come
                 back from; a tab implies a place you might sit in. Hidden for a personal workspace,

@@ -2053,7 +2053,13 @@ function PageContent() {
   // workspace; everything else that is not Planner or a launcher screen is Office. Derived rather
   // than stored, because storing it would be a second source of truth for something activeView and
   // the workspace already answer between them — and those two can change from a dozen places.
-  const inOfficeContext = !currentWorkspace?.isPersonal && activeView !== 'calendar';
+  //
+  // DEEP_LAUNCHER_VIEWS is excluded, which the comment above has claimed since it was written while
+  // the code did not do it. Your own Profile is yours no matter which workspace happens to be
+  // active, so opening it from a team workspace was showing the workspace's name and its mark above
+  // a screen titled "My Profile". Reported with a screenshot of exactly that.
+  const inOfficeContext =
+    !currentWorkspace?.isPersonal && activeView !== 'calendar' && !DEEP_LAUNCHER_VIEWS.includes(activeView);
   // Gates the Tasks/Planner/Docs/Office nav tabs — before creating/joining a real workspace,
   // those tabs have nothing to show (every Space/List lives under a real workspace, never the
   // personal one), so showing them just to render empty is more confusing than hiding them until
@@ -4464,7 +4470,9 @@ function PageContent() {
       <motion.header
         animate={boardPushControls}
         style={{ zIndex: boardPushing ? 40 : undefined }}
-        className="relative h-[calc(3.5rem+env(safe-area-inset-top))] pt-[env(safe-area-inset-top)] shrink-0 border-b-0 md:border-b border-neutral-800/80 bg-neutral-950 flex items-center px-3 gap-4"
+        // px-5 on mobile, px-3 from md up: the title sat noticeably closer to the edge than anything
+        // below it, which reads as the page starting before its own margin does.
+        className="relative h-[calc(3.5rem+env(safe-area-inset-top))] pt-[env(safe-area-inset-top)] shrink-0 border-b-0 md:border-b border-neutral-800/80 bg-neutral-950 flex items-center px-5 md:px-3 gap-4"
       >
         {/* Workspace name/switcher is desktop-only now — mobile switches workspace from the
             popup menu's own "Workspace" section (AppLauncherGrid.tsx) instead, per explicit
@@ -4489,7 +4497,11 @@ function PageContent() {
               itself up with nothing, halfway across the screen. Reported as it looking crooked. */}
           {useContexts && isMobile ? (
             inOfficeContext ? null : (
-              <span className="md:hidden text-lg font-semibold text-app-strong shrink-0">Home</span>
+              <span className="md:hidden text-lg font-semibold text-app-strong shrink-0">
+                {/* "Home" only when you are actually on Home. A launcher screen gets its own name —
+                    it is a place you navigated to, and labelling it Home says the opposite. */}
+                {DEEP_LAUNCHER_VIEWS.includes(activeView) ? mobileHeaderTitle : 'Home'}
+              </span>
             )
           ) : (
             <span className="md:hidden text-lg font-semibold text-app-strong shrink-0">{mobileHeaderTitle}</span>
@@ -4674,22 +4686,9 @@ function PageContent() {
                 <Plus className="w-3.5 h-3.5 shrink-0" /> New workspace
               </button>
             )}
-            {/* Member view/add/remove moved to Office (per explicit feedback — Office is the
-                team-roster surface, this popover is for switching *which* workspace, not managing
-                who's in it). Office's own avatar tiles already cover view+remove via
-                ManageableAvatar's right-click menu; a "+ Add / Invite" entry point lives in
-                OfficeRooms.tsx's own header now. */}
-            {currentWorkspace && !currentWorkspace.isPersonal && (
-              <button
-                onClick={() => {
-                  setActiveView('office');
-                  setWorkspaceSwitcherOpen(false);
-                }}
-                className="w-full text-left px-3 py-2.5 rounded-lg text-xs text-neutral-400 hover:bg-neutral-800/60 active:bg-neutral-800 cursor-pointer flex items-center gap-2 transition mt-1"
-              >
-                <Building2 className="w-3.5 h-3.5 shrink-0" /> Manage team in Office
-              </button>
-            )}
+            {/* "Manage team in Office" used to sit here. Removed: in the contexts layout Office is
+                a tab one thumb away, so a menu row that only switches to it is a second way to do
+                something already in reach — and it did nothing else. */}
           </FloatingPopover>
         </div>
         {/* Mobile's own search pill moved down into the per-view header row below (same row as

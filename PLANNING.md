@@ -7465,3 +7465,37 @@ most visible property a workspace has.
 Uploading a logo. The column and the render path exist; the upload UI does not. It belongs beside the
 colour picker, and should reuse whatever the user-avatar upload already does rather than inventing a
 second path.
+
+### Same session — five follow-ups on the workspace mark
+
+**The header title sat closer to the edge than anything below it**, which reads as the page starting
+before its own margin does. `px-5` on mobile, `px-3` from md up.
+
+**"Manage team in Office" is gone from the workspace dropdown.** In the contexts layout Office is a
+tab one thumb away, so a menu row that only switches to it was a second way to do something already
+in reach — and it did nothing else.
+
+**The settings sub-screens name the workspace**: "Invite to CRRM Media" rather than "Invite people".
+The panel is reachable from two contexts, and the one thing a title there can usefully add is which
+door it is opening.
+
+**A work profile, given the same treatment as yours.** The Workspace half now opens on the mark, the
+name, the member count and an "Edit work profile" button, with the identity fields moved behind it —
+so it opens on *who this workspace is* rather than on a form. The user asked for the symmetry
+directly, and it is right: a workspace is a thing with an identity too.
+
+The logo is a URL field, not a file picker, because that is how this app already does avatars
+(`ProfilePage`'s own `AvatarEditor`). One way of doing a thing, even when it is not the fanciest way
+— two upload flows for the same kind of image would be worse than this being plain.
+
+**The Office chrome followed you onto your own Profile.** `inOfficeContext` was
+`!isPersonal && activeView !== 'calendar'`, so opening your Profile from a team workspace showed that
+workspace's name and mark above a screen titled "My Profile". The comment directly above that line
+had claimed launcher screens were excluded since the day it was written; the code never did it. Now
+it does, and those screens show their own name rather than "Home".
+
+**Worth noting as a near-miss:** a scripted edit removed the workspace identity block and then
+silently failed to re-insert it, because the anchor it was looking for did not exist in the rebuilt
+file. Caught by reading the result rather than by the typecheck, which was perfectly happy with a
+settings panel that had quietly lost its workspace fields. Recovered from `git show HEAD:`. Scripted
+moves need an assert on *both* halves, not just the cut.
