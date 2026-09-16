@@ -1050,6 +1050,22 @@ function PageContent() {
   // openConversationFromContext.
   const [chatFromContext, setChatFromContext] = useState(false);
 
+  // True for the length of a back push out of a conversation into its context.
+  //
+  // It exists for one element: the search pill, which is deliberately hidden while a conversation is
+  // open and comes back when the channel clears — and the channel clear is deferred to the END of
+  // the push, so the pill mounted after everything else had finished and animated in on its own.
+  // Reported precisely: "helt på slutten så kommer det enda en animering, men bare av søkefeltet."
+  //
+  // Bringing it back when the push STARTS instead means it travels with the shell, which is what its
+  // own -83% enter offset was built for ("going back the pill returns from the left alongside the
+  // list"). By the time <main> resets, the pill is already there and has nothing left to do.
+  //
+  // Its own state rather than `boardPushing && sheet === 'context'`: that flips when the animation's
+  // promise settles, which is not the same moment the channel clears, and the gap between them is a
+  // frame where the pill would unmount and remount — a flash instead of a late slide.
+  const [chatBackPushing, setChatBackPushing] = useState(false);
+
   const [chatClosing, setChatClosing] = useState(false);
   const activeChatEntityRaw = useChatStore((s) => {
     const id = s.activeChannelId;
@@ -1070,12 +1086,14 @@ function PageContent() {
     // asked for, appearing for half a second between two others.
     if (origin) {
       chatOriginRef.current = null;
+      setChatBackPushing(true);
       startContextPush('back', origin);
       // Same deferral as backToContext, and for the same reason: the conversation has to stay
       // mounted and visible while it slides out. Clearing the channel here instead unmounted it
       // before it moved.
       window.setTimeout(() => {
         setChatFromContext(false);
+        setChatBackPushing(false);
         setActiveChatChannelId(null);
         if (origin === 'home') {
           setNavigation('everything');
@@ -5260,7 +5278,7 @@ function PageContent() {
                 impression that the whole page is moving as one. Same curve and the same 1/3
                 distance as the outgoing pane, so it moves in step with it. */}
             <AnimatePresence initial={false}>
-            {!(activeView === 'chat' && isMobile && activeChatEntity) && (
+            {!(activeView === 'chat' && isMobile && activeChatEntity && !chatBackPushing) && (
             <motion.div
               key="search-pill"
               // x is a percentage of the pill's OWN width, and -50% is what centres it against

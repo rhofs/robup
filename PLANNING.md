@@ -7000,3 +7000,40 @@ re-deriving a conclusion this file already held, in a section written days earli
 band of pixels. Before changing how a push behaves, grep PLANNING for the surface being changed.
 "Is this a decision we already made and paid for?" is cheaper than any amount of reasoning from the
 code, and the code cannot tell you that a user asked for the opposite last week.
+
+### Same session — the contexts push is confirmed working, and the last straggler
+
+"Nå funker det!" — the push, in both directions, in both contexts, after the title-row correction
+above. What remained was one element arriving late: coming back from a DM, everything moved together
+and then the search pill animated in by itself at the very end.
+
+Cause, and it was predictable from the previous round's own note: the pill is deliberately hidden
+while a conversation is open, and the state that un-hides it — the channel clearing — is deferred to
+the END of the push on purpose (that deferral is what stopped the destination sliding away two
+rounds ago). So the pill could not mount until everything else had finished.
+
+Fixed by bringing it back when the push *starts* rather than when it ends, via `chatBackPushing`.
+The pill then travels with the shell, which is what its own `-83%` enter offset was designed for —
+"going back the pill returns from the left alongside the list rather than arriving from the opposite
+side", its own comment, written long before this layout existed. By the time `<main>` resets it is
+already in place with nothing left to animate.
+
+It carries its own state rather than reading `boardPushing && sheet === 'context'`: that flag flips
+when the animation's promise settles, which is not the same moment the channel clears, and the gap
+between the two is a frame where the pill would unmount and remount — trading a late slide for a
+flash.
+
+### Where the contexts layout stands
+
+Working and confirmed on device: the three tabs, Home and Office with their toggles, expandable
+Spaces with long-press Edit/Delete, inline space creation, the push in both directions, Planner's
+hold-and-drag, the header avatar and `+`.
+
+Still open, all of it deliberately deferred rather than forgotten:
+- Messages scrolling behind a translucent composer/header (asked for, not attempted)
+- The personal and workspace settings panels from the sketch; the avatar and the Office `+`
+  currently land on the existing Settings panel
+- A colour per workspace (the Office header mark falls back to the accent)
+- Planner's personal/work filter
+- Whether Chat needs its own tab
+- The layout is still behind the settings switch, and `classic` is still the default
