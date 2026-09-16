@@ -7376,3 +7376,24 @@ preferences to solve a hypothetical is worse than the hypothetical.
 The workspace half still shows the existing fields rather than anything new — no colour per
 workspace yet, and no "personal settings" content beyond what already existed. This was a
 restructure and a visual pass, not a feature round.
+
+### Same session — two follow-ups on the new Settings panel
+
+**The Workspace half showed the personal workspace when opened from Home.** It was handed
+`currentWorkspace`, which in Home *is* the personal one — so it correctly reported "this is your
+personal workspace, there is nothing to manage here", which is a useless answer to "show me my
+workspace settings". It worked from Office only because the current workspace happened to be the
+right one there. Now it takes `settingsWorkspace`, the same "current if real, else the last real one"
+fallback that Spaces and Office already use, with its own `canManage` derived from *that* workspace
+rather than the active one. All three surfaces now agree on what "the workspace" means when you are
+standing somewhere personal.
+
+**Edit profile had no way back.** It opens the full Profile screen, and the header's Back button only
+rendered for board and docs — so the only way out was the bottom nav, which reads as being stranded
+rather than as having navigated. The contexts layout now treats the launcher's own full-screen
+destinations (`profile`, `mytasks`, `directMessages`) as a level below a context: they get the Back
+button, and the hardware Back agrees with it. Planner is deliberately not in that list — it is a tab,
+not a destination inside one.
+
+The pair is kept in one constant (`DEEP_LAUNCHER_VIEWS`) precisely because the visible button and the
+hardware gesture disagreeing is its own bug, and they have drifted apart once already this session.

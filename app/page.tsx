@@ -495,6 +495,11 @@ const NAV_TOTAL_HEIGHT_PB_CLASS = 'pb-[calc(4.75rem+env(safe-area-inset-bottom)+
 // on exactly the same curve and duration — see that file.
 const CHAT_PUSH_TRANSITION = { duration: CHAT_PUSH_MS / 1000, ease: CHAT_PUSH_EASE };
 
+// Views reached only from the launcher, which in the contexts layout are a level below a context
+// rather than a place of their own — so Back has somewhere to go from each of them. Planner is
+// deliberately absent: it is a tab, not a destination inside one.
+const DEEP_LAUNCHER_VIEWS: string[] = ['profile', 'mytasks', 'directMessages'];
+
 const searchPillLabel = (view: string) =>
   view === 'docs' ? 'Search docs...' : view === 'chat' ? 'Search chats and channels...' : 'Search...';
 
@@ -1183,7 +1188,11 @@ function PageContent() {
       // means we are *at* the overview, so there is nothing to go back to from here.
       // The contexts layout owns its own Back: everything below assumes the Spaces sheet is the
       // level above a board, which stopped being true the moment Home and Office existed.
-      if (useContexts && activeView === 'board' && activeSpaceId !== 'everything') {
+      if (
+        useContexts &&
+        ((activeView === 'board' && activeSpaceId !== 'everything') ||
+          DEEP_LAUNCHER_VIEWS.includes(activeView))
+      ) {
         backToContext();
         return true;
       }
@@ -2522,6 +2531,20 @@ function PageContent() {
     const myRole = currentWorkspace?.members.find((m) => m.id === currentUserId)?.workspaceRole;
     return myRole === 'owner' || myRole === 'admin';
   }, [currentWorkspace, currentUserId]);
+
+  // Which workspace the Settings panel's Workspace half configures.
+  //
+  // NOT currentWorkspace: opening Settings from Home means the personal workspace is active, and the
+  // Workspace half then said "this is your personal workspace, there is nothing to manage here" —
+  // correct about the workspace it was handed, and useless as an answer to "show me my workspace
+  // settings". Reported as the toggle working from Office and not from Home. Same fallback to the
+  // last real workspace that Spaces and Office already use, so all three agree on what "the
+  // workspace" means when you are standing somewhere personal.
+  const settingsWorkspace = realSheetWorkspace ?? currentWorkspace;
+  const canManageSettingsWorkspace = useMemo(() => {
+    const myRole = settingsWorkspace?.members.find((m) => m.id === currentUserId)?.workspaceRole;
+    return myRole === 'owner' || myRole === 'admin';
+  }, [settingsWorkspace, currentUserId]);
 
   const currentSpace = useMemo(() => {
     if (activeSpaceId === 'everything') return null;
@@ -5328,7 +5351,12 @@ function PageContent() {
               {/* Not on Home. Home IS the top of its context, so a Back button there resolved to
                   itself — "den går ingen steder, den bare går i loop". Office and Planner never had
                   one, which is why only Home was reported. */}
-              {(activeView === 'board' || activeView === 'docs') && !showingHomeContext && (
+              {/* The contexts layout adds the launcher's own full-screen destinations here.
+                  Profile is the one that was reported — Edit profile opens it and there was no way
+                  out but the bottom nav, which reads as being stranded rather than as having
+                  navigated. */}
+              {((activeView === 'board' || activeView === 'docs') && !showingHomeContext) ||
+              (useContexts && DEEP_LAUNCHER_VIEWS.includes(activeView)) ? (
                 <button
                   onClick={() => {
                     // Pressing Back here is a deliberate "I want the overview now, not a specific
@@ -5372,7 +5400,7 @@ function PageContent() {
                 >
                   <ArrowLeft className="w-4 h-4" />
                 </button>
-              )}
+              ) : null}
               {/* Same slot, same affordance, for Chat once a channel/DM is actually open — mobile
                   now shows the Channels/DMs picker (ChatSidebar) inline as the main view instead
                   of behind the removed header "Chat" button, so this is the only way back to it
@@ -8586,10 +8614,14 @@ function PageContent() {
       />
 
       {trashOpen && <TrashPanel onClose={() => setTrashOpen(false)} />}
-      {settingsOpen && currentWorkspace && (
+      {/* Gated on settingsWorkspace, not currentWorkspace: that is the one the panel actually
+          configures, and it falls back to the last real workspace when you open Settings from Home
+          (see its own comment). Gating on the other one would let the panel render with nothing to
+          show on its Workspace half. */}
+      {settingsOpen && settingsWorkspace && (
         <SettingsPanel
-          workspace={currentWorkspace}
-          canManage={canManageCurrentWorkspace}
+          workspace={settingsWorkspace}
+          canManage={canManageSettingsWorkspace}
           user={users.find((u) => u.id === currentUserId) ?? null}
           onCopyCalendarLink={handleCopyCalendarLink}
           onEditProfile={() => setActiveView('profile')}
