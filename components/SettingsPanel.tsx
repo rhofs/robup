@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState } from 'react';
 import Papa from 'papaparse';
-import { X, Settings, Check, Trash2, Plus, Link2, Upload, Share2, Download, Monitor, Sun, Moon, Smartphone } from 'lucide-react';
+import { X, Settings, Check, Trash2, Plus, Link2, Upload, Share2, Download, Monitor, Sun, Moon, Smartphone, ArrowLeft, ChevronRight, Pencil, Shield, UserPlus, UserCircle, Building2 } from 'lucide-react';
 import { readThemePreference, setThemePreference, type ThemePreference } from '../lib/theme';
 import {
   readHapticStrength,
@@ -182,6 +182,10 @@ const HIDDEN_NAV_TABS_STORAGE_KEY = 'siqt.hiddenNavTabs';
 
 export type NavTabId = 'board' | 'calendar' | 'docs' | 'office' | 'chat';
 
+// Kept, unreferenced by this panel's own UI, because readHiddenNavTabs/setNavTabHidden below are
+// still the storage contract the classic layout reads. The "Visible tabs" control that used them was
+// removed with the five-tab nav it belonged to — see this session's PLANNING entry, including what
+// happens to anyone who had hidden a tab before it went.
 const NAV_TABS: { id: NavTabId; label: string }[] = [
   { id: 'board', label: 'Spaces' },
   { id: 'calendar', label: 'Planner' },
@@ -318,6 +322,7 @@ export default function SettingsPanel({
   canManage,
   user,
   onCopyCalendarLink,
+  onEditProfile,
   onClose,
   onChange,
   initialTab = 'general',
@@ -327,6 +332,9 @@ export default function SettingsPanel({
   // Account tab's own data — personal, not workspace-scoped (see that tab's own comment below).
   user: AppUser | null;
   onCopyCalendarLink: () => void;
+  // Opens the full profile screen. Optional so a caller that has nowhere to send someone simply does
+  // not render the button, rather than rendering one that goes nowhere.
+  onEditProfile?: () => void;
   onClose: () => void;
   onChange: () => void;
   // Lets a caller land directly on a specific tab — e.g. Office's own "Invite" entry point opens
@@ -344,8 +352,12 @@ export default function SettingsPanel({
     sendWorkspaceMemberInviteByEmail,
   } = useTaskStore();
   const { connections, fetchConnections } = useChatStore();
-  const [tab, setTab] = useState<'general' | 'roles' | 'invite' | 'import' | 'account'>(initialTab);
-  const [hidden, setHidden] = useState(() => readHiddenNavTabs());
+  // initialTab is kept as the caller-facing shape so no call site had to change when this panel was
+  // split in two — the old tab names still say enough to land in the right place.
+  const [section, setSection] = useState<'you' | 'workspace'>(initialTab === 'account' ? 'you' : 'workspace');
+  const [sub, setSub] = useState<null | 'roles' | 'invite' | 'import'>(
+    initialTab === 'roles' || initialTab === 'invite' || initialTab === 'import' ? initialTab : null
+  );
   const [weekNumbersHidden, setWeekNumbersHidden] = useState(() => readHideWeekNumbers());
   // Lazy initializer, not a useState(default) + useEffect correction — this panel is mounted
   // fresh each time it opens, and a one-tick-late correction would visibly flip the selected
@@ -369,13 +381,6 @@ export default function SettingsPanel({
   useEffect(() => {
     getPushStatus().then(setPushStatus);
   }, []);
-
-  const toggle = (tabId: NavTabId) => {
-    const next = !hidden.has(tabId);
-    setNavTabHidden(tabId, next);
-    setHidden(readHiddenNavTabs());
-    onChange();
-  };
 
   const toggleWeekNumbers = () => {
     const next = !weekNumbersHidden;
@@ -418,7 +423,7 @@ export default function SettingsPanel({
   };
 
   useEffect(() => {
-    if (tab !== 'invite' || !canManage) return;
+    if (sub !== 'invite' || !canManage) return;
     fetch(`/api/workspaces/${workspace.id}/invites`)
       .then((r) => r.json())
       .then(setInvites)
@@ -426,7 +431,7 @@ export default function SettingsPanel({
     refetchDirectPending();
     fetchConnections();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [tab, canManage, workspace.id]);
+  }, [sub, canManage, workspace.id]);
 
   const createInvite = async () => {
     const res = await fetch(`/api/workspaces/${workspace.id}/invites`, {
@@ -494,335 +499,66 @@ export default function SettingsPanel({
     }
   };
 
+  // Two halves, mirroring the app itself: you on the left, the workspace on the right — the same
+  // order as Home and Office in the nav, which is what the user asked for and the reason it reads
+  // as one idea rather than two screens that happen to share a panel.
+  //
+  // The old five-tab bar (General / Roles / Invite / Import / Account) was from the layout this app
+  // no longer has, and it mixed the two halves: "General" held the workspace's name AND your theme
+  // AND your haptics. The split is the whole point — everything that only affects you on one side,
+  // everything that affects the people you work with on the other.
+  //
+  // Roles, Invite and Import are sub-screens rather than siblings: each is a task you go and do and
+  // come back from, not a place you switch between.
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-scrim/70 backdrop-blur-xs" onClick={onClose}>
-      {/* max-w-[calc(100vw-24px)]: 440px is wider than a phone, so the panel used to be clipped by
-          the screen edge on mobile. */}
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-scrim/70 backdrop-blur-xs p-3" onClick={onClose}>
       <div
         onClick={(e) => e.stopPropagation()}
-        className="w-[440px] max-w-[calc(100vw-24px)] bg-neutral-900 border border-neutral-800 rounded shadow-2xl overflow-hidden flex flex-col"
+        className="w-[440px] max-w-full bg-neutral-900 border border-neutral-800 rounded-2xl shadow-2xl overflow-hidden flex flex-col"
       >
-        <div className="px-5 py-4 border-b border-neutral-800 flex items-center justify-between">
-          <h3 className="font-bold text-sm text-app-strong flex items-center gap-1.5">
-            <Settings className="w-4 h-4" /> Settings
+        <div className="px-4 pt-4 pb-3 flex items-center gap-2">
+          {sub && (
+            <button
+              onClick={() => setSub(null)}
+              title="Back"
+              className="shrink-0 w-8 h-8 rounded-full flex items-center justify-center text-neutral-400 hover:text-app-strong hover:bg-neutral-800/60 active:scale-90 transition duration-100 cursor-pointer"
+            >
+              <ArrowLeft className="w-4 h-4" />
+            </button>
+          )}
+          <h3 className="font-bold text-sm text-app-strong flex-1 min-w-0 truncate">
+            {sub === 'roles' ? 'Roles' : sub === 'invite' ? 'Invite people' : sub === 'import' ? 'Import' : 'Settings'}
           </h3>
-          <button onClick={onClose} className="text-neutral-400 hover:text-app-strong cursor-pointer">
-            <X className="w-3.5 h-3.5" />
+          <button
+            onClick={onClose}
+            className="shrink-0 w-8 h-8 rounded-full flex items-center justify-center text-neutral-400 hover:text-app-strong hover:bg-neutral-800/60 active:scale-90 transition duration-100 cursor-pointer"
+          >
+            <X className="w-4 h-4" />
           </button>
         </div>
 
-        <div className="flex border-b border-neutral-800">
-          <button
-            onClick={() => setTab('general')}
-            className={`flex-1 text-xs py-2 cursor-pointer transition ${tab === 'general' ? 'text-app-strong border-b-2 border-blue-500' : 'text-neutral-500 hover:text-neutral-300'}`}
-          >
-            General
-          </button>
-          {/* Roles/Invite/Import are all workspace-governance surfaces, and a personal workspace
-              has nobody else in it to govern — roles to assign, people to invite, or a shared
-              board to import into. Hidden there rather than shown as three dead tabs, which is
-              what an account with only a personal workspace (every brand-new one) would now see
-              otherwise, since Settings became reachable without a real workspace. */}
-          {canManage && !workspace.isPersonal && (
-            <button
-              onClick={() => setTab('roles')}
-              className={`flex-1 text-xs py-2 cursor-pointer transition ${tab === 'roles' ? 'text-app-strong border-b-2 border-blue-500' : 'text-neutral-500 hover:text-neutral-300'}`}
-            >
-              Roles
-            </button>
-          )}
-          {/* A personal workspace has no invite concept — it's inherently single-member/private
-              (the "My tasks" auto-created Workspace), so a shareable join link here would be a
-              real leak, not just clutter. */}
-          {canManage && !workspace.isPersonal && (
-            <button
-              onClick={() => setTab('invite')}
-              className={`flex-1 text-xs py-2 cursor-pointer transition ${tab === 'invite' ? 'text-app-strong border-b-2 border-blue-500' : 'text-neutral-500 hover:text-neutral-300'}`}
-            >
-              Invite
-            </button>
-          )}
-          {canManage && !workspace.isPersonal && (
-            <button
-              onClick={() => setTab('import')}
-              className={`flex-1 text-xs py-2 cursor-pointer transition ${tab === 'import' ? 'text-app-strong border-b-2 border-blue-500' : 'text-neutral-500 hover:text-neutral-300'}`}
-            >
-              Import
-            </button>
-          )}
-          {/* Personal/account-level, so open to everyone regardless of canManage — unlike every
-              other tab here, it has nothing to do with *this* workspace specifically. */}
-          <button
-            onClick={() => setTab('account')}
-            className={`flex-1 text-xs py-2 cursor-pointer transition ${tab === 'account' ? 'text-app-strong border-b-2 border-blue-500' : 'text-neutral-500 hover:text-neutral-300'}`}
-          >
-            Account
-          </button>
-        </div>
-
-        {tab === 'general' ? (
-          // h-96, same as every other tab. General and Account were the only two without a fixed
-          // height, so the whole panel resized when switching between them — the two tabs the user
-          // moves between most, which is why it read as the panel jumping rather than as one tab
-          // simply being longer.
-          <div className="p-4 space-y-1 h-96 overflow-y-auto">
-            {!workspace.isPersonal && (
-              <>
-                <div className="text-[10px] uppercase tracking-wide text-neutral-500 px-1 pb-1">Workspace</div>
-                <div className="px-1 pb-3 space-y-2">
-                  <div className="flex items-center gap-2">
-                    <span className="text-[10px] text-neutral-500 w-16 shrink-0">Type</span>
-                    {canManage ? (
-                      <div className="flex items-center gap-1 bg-neutral-950 border border-neutral-800 rounded p-0.5 flex-1">
-                        <button
-                          onClick={() => updateWorkspaceDetails(workspace.id, { orgType: 'company' })}
-                          className={`flex-1 text-[10px] py-1 rounded cursor-pointer transition ${
-                            workspace.orgType === 'company' ? 'bg-neutral-800 text-app-strong' : 'text-neutral-500 hover:text-neutral-300'
-                          }`}
-                        >
-                          Company
-                        </button>
-                        <button
-                          onClick={() => updateWorkspaceDetails(workspace.id, { orgType: 'personal_project' })}
-                          className={`flex-1 text-[10px] py-1 rounded cursor-pointer transition ${
-                            workspace.orgType === 'personal_project' ? 'bg-neutral-800 text-app-strong' : 'text-neutral-500 hover:text-neutral-300'
-                          }`}
-                        >
-                          Personal project
-                        </button>
-                      </div>
-                    ) : (
-                      <span className="text-xs text-neutral-300">
-                        {workspace.orgType === 'company' ? 'Company' : workspace.orgType === 'personal_project' ? 'Personal project' : 'Not set'}
-                      </span>
-                    )}
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <span className="text-[10px] text-neutral-500 w-16 shrink-0">Work email</span>
-                    {canManage && editingEmail ? (
-                      <input
-                        autoFocus
-                        type="email"
-                        value={emailDraft}
-                        onChange={(e) => setEmailDraft(e.target.value)}
-                        onBlur={() => {
-                          setEditingEmail(false);
-                          updateWorkspaceDetails(workspace.id, { workEmail: emailDraft.trim() || null });
-                        }}
-                        onKeyDown={(e) => {
-                          if (e.key === 'Enter') (e.target as HTMLInputElement).blur();
-                          if (e.key === 'Escape') {
-                            setEmailDraft(workspace.workEmail ?? '');
-                            setEditingEmail(false);
-                          }
-                        }}
-                        className="flex-1 bg-neutral-950 border border-blue-500 rounded px-2 py-1 text-xs text-app-strong focus:outline-none"
-                      />
-                    ) : (
-                      <button
-                        onClick={() => canManage && setEditingEmail(true)}
-                        disabled={!canManage}
-                        className={`flex-1 text-left text-xs px-1 ${canManage ? 'text-neutral-300 hover:text-app-strong cursor-pointer' : 'text-neutral-500 cursor-default'}`}
-                      >
-                        {workspace.workEmail || (canManage ? 'Not set — click to add' : 'Not set')}
-                      </button>
-                    )}
-                  </div>
-                </div>
-              </>
-            )}
-
-            <div className="text-[10px] uppercase tracking-wide text-neutral-500 px-1 pb-1">Appearance</div>
-            <div className="flex items-center gap-1 bg-neutral-950 border border-neutral-800 rounded p-0.5 mb-3">
-              {THEME_OPTIONS.map(({ value, label, icon: Icon }) => (
-                <button
-                  key={value}
-                  onClick={() => setThemePref(setThemePreference(value))}
-                  className={`flex-1 flex items-center justify-center gap-1.5 text-[11px] py-1.5 rounded cursor-pointer transition ${
-                    themePref === value ? 'bg-neutral-800 text-app-strong' : 'text-neutral-500 hover:text-neutral-300'
-                  }`}
-                >
-                  <Icon className="w-3.5 h-3.5" />
-                  {label}
-                </button>
-              ))}
-            </div>
-
-            {/* Vibration on tap. Gated on the app's own useIsMobile() rather than a navigator
-                probe: desktop Chrome exposes navigator.vibrate (so checking the API alone left the
-                control visible on desktop), and maxTouchPoints — the second attempt — is no better,
-                since plenty of Windows desktops report a nonzero value with no touchscreen
-                attached. Reported twice: "haptics settings trenger ikke være på desktop."
-                useIsMobile matches viewport width OR a coarse pointer, which is the same signal
-                every other mobile/desktop split in this app already uses, so this can't drift from
-                them. Still ANDed with the API check because iOS is touch but has no
-                navigator.vibrate at all.
-                Picking an option fires a pulse at that strength immediately (see
-                setHapticStrength), so the difference is felt while choosing rather than only on
-                some later unrelated tap. */}
-            {/* Inside the native app the platform's own haptics are used instead of
-                navigator.vibrate (see lib/haptics.ts), and iOS has never implemented that API at
-                all — so gating purely on it would have hidden this setting on exactly the device
-                where the app finally makes haptics possible. */}
-            {(Capacitor.isNativePlatform() ||
-              (isMobile && typeof navigator !== 'undefined' && 'vibrate' in navigator)) && (
-              <>
-                <div className="text-[10px] uppercase tracking-wide text-neutral-500 px-1 pb-1">Haptics</div>
-                <div className="flex items-center gap-1 bg-neutral-950 border border-neutral-800 rounded p-0.5 mb-3">
-                  {HAPTIC_OPTIONS.map(({ value, label }) => (
-                    <button
-                      key={value}
-                      onClick={() => {
-                        setHapticStrength(value);
-                        setHaptics(value);
-                      }}
-                      className={`flex-1 text-[11px] py-1.5 rounded cursor-pointer transition ${
-                        haptics === value ? 'bg-neutral-800 text-app-strong' : 'text-neutral-500 hover:text-neutral-300'
-                      }`}
-                    >
-                      {label}
-                    </button>
-                  ))}
-                </div>
-                <HapticDiagnostics strength={haptics} />
-              </>
-            )}
-
-            {/* Now ON by default, so this reads as a way back rather than as something to try. The
-                wording matters: someone who reaches for this is looking for the app they had, and
-                the control should say that plainly instead of naming the thing they do not want. */}
-            <div className="text-[10px] uppercase tracking-wide text-neutral-500 px-1 pt-3 pb-1">Navigation</div>
-            <button
-              onClick={() => {
-                const next: LayoutPreference = layout === 'contexts' ? 'classic' : 'contexts';
-                setLayoutPreference(next);
-                setLayout(next);
-              }}
-              className="w-full flex items-start gap-2.5 px-2 py-2.5 rounded hover:bg-neutral-800/60 cursor-pointer text-left transition"
-            >
-              <span
-                className={`mt-0.5 w-8 h-4.5 rounded-full shrink-0 relative transition ${
-                  layout === 'contexts' ? 'bg-blue-600' : 'bg-neutral-700'
+        {/* The same two-option pill Home and Office use. Learning the control once should be
+            enough — it is the app's one way of saying "the same shape, seen two ways". */}
+        {!sub && (
+          <div className="mx-4 mb-3 flex gap-0.5 rounded-full bg-neutral-800/60 p-0.5 shrink-0">
+            {([
+              ['you', 'You'],
+              ['workspace', 'Workspace'],
+            ] as const).map(([id, label]) => (
+              <button
+                key={id}
+                onClick={() => setSection(id)}
+                className={`flex-1 rounded-full py-1.5 text-[13px] font-semibold transition cursor-pointer ${
+                  section === id ? 'bg-neutral-900 text-app-strong shadow-sm' : 'text-neutral-400'
                 }`}
               >
-                <span
-                  className={`absolute top-0.5 w-3.5 h-3.5 rounded-full bg-white transition-all ${
-                    layout === 'contexts' ? 'left-4' : 'left-0.5'
-                  }`}
-                />
-              </span>
-              <span className="text-xs text-neutral-300">
-                Home and Office
-                <span className="block text-neutral-500 mt-0.5">
-                  Two places instead of separate tabs for everything. Turn this off for the older
-                  layout. Only on this device.
-                </span>
-              </span>
-            </button>
-
-            <div className="text-[10px] uppercase tracking-wide text-neutral-500 px-1 pb-1">Visible tabs</div>
-            {NAV_TABS.map((navTab) => {
-              const visible = !hidden.has(navTab.id);
-              return (
-                <button
-                  key={navTab.id}
-                  onClick={() => toggle(navTab.id)}
-                  className="w-full flex items-center justify-between px-2 py-1.5 rounded hover:bg-neutral-800/60 cursor-pointer"
-                >
-                  <span className="text-xs text-neutral-300">{navTab.label}</span>
-                  <span
-                    className={`w-4 h-4 rounded border flex items-center justify-center ${
-                      visible ? 'bg-blue-600 border-blue-600' : 'border-neutral-700'
-                    }`}
-                  >
-                    {visible && <Check className="w-3 h-3 text-app-strong" />}
-                  </span>
-                </button>
-              );
-            })}
-
-            <div className="text-[10px] uppercase tracking-wide text-neutral-500 px-1 pt-3 pb-1">Planner</div>
-            <button
-              onClick={toggleWeekNumbers}
-              className="w-full flex items-center justify-between px-2 py-1.5 rounded hover:bg-neutral-800/60 cursor-pointer"
-            >
-              <span className="text-xs text-neutral-300">Show week numbers</span>
-              <span
-                className={`w-4 h-4 rounded border flex items-center justify-center ${
-                  !weekNumbersHidden ? 'bg-blue-600 border-blue-600' : 'border-neutral-700'
-                }`}
-              >
-                {!weekNumbersHidden && <Check className="w-3 h-3 text-app-strong" />}
-              </span>
-            </button>
-
-            <div className="text-[10px] uppercase tracking-wide text-neutral-500 px-1 pt-3 pb-1">Notifications</div>
-            <div className="px-2 py-1.5">
-              {pushStatus === 'loading' ? (
-                <p className="text-xs text-neutral-500">Checking…</p>
-              ) : pushStatus === 'unsupported' ? (
-                /* On an iPhone "not supported in this browser" is both untrue and a dead end. iOS
-                   does support web push — but only for a site added to the Home Screen, never for a
-                   Safari tab, so what someone needs here is the way forward, not a verdict.
-                   Reported from a colleague's iPhone; every iPhone user would have hit the same
-                   wall with nothing telling them what to do about it. */
-                <PushUnsupportedNote />
-              ) : (
-                <button
-                  onClick={async () => {
-                    setPushError(null);
-                    if (pushStatus === 'subscribed') {
-                      await disablePush();
-                      setPushStatus('not-subscribed');
-                    } else {
-                      const result = await enablePush();
-                      if (result.ok) setPushStatus('subscribed');
-                      else setPushError(result.error || 'Could not enable notifications');
-                    }
-                  }}
-                  className={`w-full flex items-center justify-center gap-1.5 text-xs py-1.5 rounded font-medium cursor-pointer ${
-                    pushStatus === 'subscribed'
-                      ? 'border border-neutral-700 text-neutral-300 hover:border-neutral-600'
-                      : 'bg-blue-600 hover:bg-blue-500 text-white'
-                  }`}
-                >
-                  {pushStatus === 'subscribed' ? 'Disable push notifications' : 'Enable push notifications'}
-                </button>
-              )}
-              {/* Only once something is registered — offering a test before there is anywhere to
-                  send it would just produce a confusing failure. */}
-              {pushStatus === 'subscribed' && (
-                <button
-                  onClick={async () => {
-                    setPushTest('Sending…');
-                    try {
-                      const res = await fetch('/api/push/test', { method: 'POST' });
-                      const data = await res.json().catch(() => null);
-                      if (!res.ok) {
-                        setPushTest(data?.error || 'Could not send a test notification');
-                        return;
-                      }
-                      // Naming what it was sent to is the useful part. If this says "1 phone" and
-                      // nothing arrives, the problem is delivery; if it says "0 phones", this
-                      // device was never registered and that is the thing to fix.
-                      const parts: string[] = [];
-                      if (data?.devices) parts.push(`${data.devices} phone${data.devices === 1 ? '' : 's'}`);
-                      if (data?.browsers) parts.push(`${data.browsers} browser${data.browsers === 1 ? '' : 's'}`);
-                      setPushTest(`Sent to ${parts.join(' and ')}. Background the app to see it.`);
-                    } catch {
-                      setPushTest('Could not reach the server');
-                    }
-                  }}
-                  className="w-full mt-1.5 text-xs py-1.5 rounded border border-neutral-700 text-neutral-300 hover:border-neutral-600 cursor-pointer"
-                >
-                  Send a test notification
-                </button>
-              )}
-              {pushTest && <p className="text-[11px] text-neutral-400 mt-1">{pushTest}</p>}
-              {pushError && <p className="text-[11px] text-red-400 mt-1">{pushError}</p>}
-            </div>
+                {label}
+              </button>
+            ))}
           </div>
-        ) : tab === 'roles' ? (
+        )}
+
+        {sub === 'roles' ? (
           <div className="p-5 space-y-2 h-96 overflow-y-auto">
             {workspace.roles.length === 0 && !creatingRole && <p className="text-xs text-neutral-500">No roles yet — roles let you grant specific people access to private Spaces, Folders, Lists, and Tasks.</p>}
             {workspace.roles.map((r) => {
@@ -915,7 +651,7 @@ export default function SettingsPanel({
               </button>
             )}
           </div>
-        ) : tab === 'invite' ? (
+        ) : sub === 'invite' ? (
           <div className="p-5 space-y-2 h-96 overflow-y-auto">
             {/* Invite by email — for someone whose address you know but who isn't in your
                 Network, which the picker below can't reach. No email is sent (this app has no
@@ -1075,7 +811,7 @@ export default function SettingsPanel({
               )}
             </div>
           </div>
-        ) : tab === 'import' ? (
+        ) : sub === 'import' ? (
           <div className="p-5 space-y-3 h-96 overflow-y-auto">
             <p className="text-[11px] text-neutral-500">
               Import a ClickUp CSV export (Everything view → Export). Spaces, Folders, Lists, and Statuses referenced in the file are matched by name or created; existing ones are reused, never duplicated.
@@ -1122,15 +858,210 @@ export default function SettingsPanel({
               </div>
             )}
           </div>
-        ) : (
-          // Account tab — personal/account-level settings, not workspace-scoped like every tab
-          // above it (still lives in this same panel per explicit request: one Settings surface,
-          // not two separate ones). Absorbed from the now-deleted standalone
-          // AccountSettingsPanel.tsx, which had its own real problem: its only trigger lived in
-          // the desktop-only sidebar user-menu dropdown, so mobile had no way to reach Connect
-          // Google at all. This tab is reachable from the exact same "Settings" entry point every
-          // other tab already is, on both desktop and mobile.
-          <div className="p-3 space-y-1 h-96 overflow-y-auto">
+        ) : section === 'you' ? (
+          <div className="px-4 pb-4 space-y-1 h-[26rem] overflow-y-auto">
+            {/* Who you are, first and large — the same thing ClickUp puts at the top of this
+                panel, and for the same reason: a settings screen that opens on a list of switches
+                never says whose settings they are. Edit profile is its own button rather than a row
+                in the list below, because it is the one action here that opens a whole screen. */}
+            {user && (
+              <div className="flex flex-col items-center text-center pt-1 pb-4">
+                {user.avatarUrl ? (
+                  // eslint-disable-next-line @next/next/no-img-element
+                  <img src={user.avatarUrl} alt={user.name} className="w-20 h-20 rounded-full object-cover" />
+                ) : (
+                  <span
+                    className="w-20 h-20 rounded-full flex items-center justify-center text-2xl font-bold text-white"
+                    style={{ backgroundColor: user.color }}
+                  >
+                    {user.initials}
+                  </span>
+                )}
+                <p className="mt-2.5 text-base font-bold text-app-strong">{user.name}</p>
+                {(user.username || user.googleEmail) && (
+                  <p className="text-[11px] text-neutral-500">
+                    {user.username ? `@${user.username}` : user.googleEmail}
+                  </p>
+                )}
+                {onEditProfile && (
+                  <button
+                    onClick={() => {
+                      onEditProfile();
+                      onClose();
+                    }}
+                    className="mt-3 flex items-center gap-1.5 px-4 py-2 rounded-full border border-neutral-700 text-xs text-neutral-200 hover:bg-neutral-800/60 active:scale-95 transition duration-100 cursor-pointer"
+                  >
+                    <Pencil className="w-3.5 h-3.5" /> Edit profile
+                  </button>
+                )}
+              </div>
+            )}
+            <div className="text-[10px] uppercase tracking-wide text-neutral-500 px-1 pb-1">Appearance</div>
+            <div className="flex items-center gap-1 bg-neutral-950 border border-neutral-800 rounded p-0.5 mb-3">
+              {THEME_OPTIONS.map(({ value, label, icon: Icon }) => (
+                <button
+                  key={value}
+                  onClick={() => setThemePref(setThemePreference(value))}
+                  className={`flex-1 flex items-center justify-center gap-1.5 text-[11px] py-1.5 rounded cursor-pointer transition ${
+                    themePref === value ? 'bg-neutral-800 text-app-strong' : 'text-neutral-500 hover:text-neutral-300'
+                  }`}
+                >
+                  <Icon className="w-3.5 h-3.5" />
+                  {label}
+                </button>
+              ))}
+            </div>
+
+            {/* Vibration on tap. Gated on the app's own useIsMobile() rather than a navigator
+                probe: desktop Chrome exposes navigator.vibrate (so checking the API alone left the
+                control visible on desktop), and maxTouchPoints — the second attempt — is no better,
+                since plenty of Windows desktops report a nonzero value with no touchscreen
+                attached. Reported twice: "haptics settings trenger ikke være på desktop."
+                useIsMobile matches viewport width OR a coarse pointer, which is the same signal
+                every other mobile/desktop split in this app already uses, so this can't drift from
+                them. Still ANDed with the API check because iOS is touch but has no
+                navigator.vibrate at all.
+                Picking an option fires a pulse at that strength immediately (see
+                setHapticStrength), so the difference is felt while choosing rather than only on
+                some later unrelated tap. */}
+            {/* Inside the native app the platform's own haptics are used instead of
+                navigator.vibrate (see lib/haptics.ts), and iOS has never implemented that API at
+                all — so gating purely on it would have hidden this setting on exactly the device
+                where the app finally makes haptics possible. */}
+            {(Capacitor.isNativePlatform() ||
+              (isMobile && typeof navigator !== 'undefined' && 'vibrate' in navigator)) && (
+              <>
+                <div className="text-[10px] uppercase tracking-wide text-neutral-500 px-1 pb-1">Haptics</div>
+                <div className="flex items-center gap-1 bg-neutral-950 border border-neutral-800 rounded p-0.5 mb-3">
+                  {HAPTIC_OPTIONS.map(({ value, label }) => (
+                    <button
+                      key={value}
+                      onClick={() => {
+                        setHapticStrength(value);
+                        setHaptics(value);
+                      }}
+                      className={`flex-1 text-[11px] py-1.5 rounded cursor-pointer transition ${
+                        haptics === value ? 'bg-neutral-800 text-app-strong' : 'text-neutral-500 hover:text-neutral-300'
+                      }`}
+                    >
+                      {label}
+                    </button>
+                  ))}
+                </div>
+                <HapticDiagnostics strength={haptics} />
+              </>
+            )}
+            {/* Now ON by default, so this reads as a way back rather than as something to try. The
+                wording matters: someone who reaches for this is looking for the app they had, and
+                the control should say that plainly instead of naming the thing they do not want. */}
+            <div className="text-[10px] uppercase tracking-wide text-neutral-500 px-1 pt-3 pb-1">Navigation</div>
+            <button
+              onClick={() => {
+                const next: LayoutPreference = layout === 'contexts' ? 'classic' : 'contexts';
+                setLayoutPreference(next);
+                setLayout(next);
+              }}
+              className="w-full flex items-start gap-2.5 px-2 py-2.5 rounded hover:bg-neutral-800/60 cursor-pointer text-left transition"
+            >
+              <span
+                className={`mt-0.5 w-8 h-4.5 rounded-full shrink-0 relative transition ${
+                  layout === 'contexts' ? 'bg-blue-600' : 'bg-neutral-700'
+                }`}
+              >
+                <span
+                  className={`absolute top-0.5 w-3.5 h-3.5 rounded-full bg-white transition-all ${
+                    layout === 'contexts' ? 'left-4' : 'left-0.5'
+                  }`}
+                />
+              </span>
+              <span className="text-xs text-neutral-300">
+                Home and Office
+                <span className="block text-neutral-500 mt-0.5">
+                  Two places instead of separate tabs for everything. Turn this off for the older
+                  layout. Only on this device.
+                </span>
+              </span>
+            </button>
+            <div className="text-[10px] uppercase tracking-wide text-neutral-500 px-1 pt-3 pb-1">Planner</div>
+            <button
+              onClick={toggleWeekNumbers}
+              className="w-full flex items-center justify-between px-2 py-1.5 rounded hover:bg-neutral-800/60 cursor-pointer"
+            >
+              <span className="text-xs text-neutral-300">Show week numbers</span>
+              <span
+                className={`w-4 h-4 rounded border flex items-center justify-center ${
+                  !weekNumbersHidden ? 'bg-blue-600 border-blue-600' : 'border-neutral-700'
+                }`}
+              >
+                {!weekNumbersHidden && <Check className="w-3 h-3 text-app-strong" />}
+              </span>
+            </button>
+            <div className="text-[10px] uppercase tracking-wide text-neutral-500 px-1 pt-3 pb-1">Notifications</div>
+            <div className="px-2 py-1.5">
+              {pushStatus === 'loading' ? (
+                <p className="text-xs text-neutral-500">Checking…</p>
+              ) : pushStatus === 'unsupported' ? (
+                /* On an iPhone "not supported in this browser" is both untrue and a dead end. iOS
+                   does support web push — but only for a site added to the Home Screen, never for a
+                   Safari tab, so what someone needs here is the way forward, not a verdict.
+                   Reported from a colleague's iPhone; every iPhone user would have hit the same
+                   wall with nothing telling them what to do about it. */
+                <PushUnsupportedNote />
+              ) : (
+                <button
+                  onClick={async () => {
+                    setPushError(null);
+                    if (pushStatus === 'subscribed') {
+                      await disablePush();
+                      setPushStatus('not-subscribed');
+                    } else {
+                      const result = await enablePush();
+                      if (result.ok) setPushStatus('subscribed');
+                      else setPushError(result.error || 'Could not enable notifications');
+                    }
+                  }}
+                  className={`w-full flex items-center justify-center gap-1.5 text-xs py-1.5 rounded font-medium cursor-pointer ${
+                    pushStatus === 'subscribed'
+                      ? 'border border-neutral-700 text-neutral-300 hover:border-neutral-600'
+                      : 'bg-blue-600 hover:bg-blue-500 text-white'
+                  }`}
+                >
+                  {pushStatus === 'subscribed' ? 'Disable push notifications' : 'Enable push notifications'}
+                </button>
+              )}
+              {/* Only once something is registered — offering a test before there is anywhere to
+                  send it would just produce a confusing failure. */}
+              {pushStatus === 'subscribed' && (
+                <button
+                  onClick={async () => {
+                    setPushTest('Sending…');
+                    try {
+                      const res = await fetch('/api/push/test', { method: 'POST' });
+                      const data = await res.json().catch(() => null);
+                      if (!res.ok) {
+                        setPushTest(data?.error || 'Could not send a test notification');
+                        return;
+                      }
+                      // Naming what it was sent to is the useful part. If this says "1 phone" and
+                      // nothing arrives, the problem is delivery; if it says "0 phones", this
+                      // device was never registered and that is the thing to fix.
+                      const parts: string[] = [];
+                      if (data?.devices) parts.push(`${data.devices} phone${data.devices === 1 ? '' : 's'}`);
+                      if (data?.browsers) parts.push(`${data.browsers} browser${data.browsers === 1 ? '' : 's'}`);
+                      setPushTest(`Sent to ${parts.join(' and ')}. Background the app to see it.`);
+                    } catch {
+                      setPushTest('Could not reach the server');
+                    }
+                  }}
+                  className="w-full mt-1.5 text-xs py-1.5 rounded border border-neutral-700 text-neutral-300 hover:border-neutral-600 cursor-pointer"
+                >
+                  Send a test notification
+                </button>
+              )}
+              {pushTest && <p className="text-[11px] text-neutral-400 mt-1">{pushTest}</p>}
+              {pushError && <p className="text-[11px] text-red-400 mt-1">{pushError}</p>}
+            </div>
+            <div className="text-[10px] uppercase tracking-wide text-neutral-500 px-1 pt-3 pb-1">Account</div>
             {user ? (
               <>
                 <button
@@ -1159,6 +1090,152 @@ export default function SettingsPanel({
             ) : (
               <p className="text-xs text-neutral-500 px-1 py-1">Signed-out session — try reloading the page.</p>
             )}
+            <button
+              onClick={() => {
+                setSection('workspace');
+                setSub(null);
+              }}
+              className="w-full mt-2 flex items-center gap-2.5 px-3 py-3 rounded-xl border border-neutral-800 bg-neutral-950/40 hover:bg-neutral-800/50 active:bg-neutral-800 cursor-pointer text-left transition"
+            >
+              <Building2 className="w-4 h-4 text-neutral-500 shrink-0" />
+              <span className="min-w-0 flex-1">
+                <span className="block text-xs text-neutral-300">Workspace settings — roles, invites, import</span>
+              </span>
+              <ChevronRight className="w-4 h-4 text-neutral-600 shrink-0" />
+            </button>
+          </div>
+        ) : (
+          <div className="px-4 pb-4 space-y-1 h-[26rem] overflow-y-auto">
+            {!workspace.isPersonal && (
+              <>
+                <div className="text-[10px] uppercase tracking-wide text-neutral-500 px-1 pb-1">Workspace</div>
+                <div className="px-1 pb-3 space-y-2">
+                  <div className="flex items-center gap-2">
+                    <span className="text-[10px] text-neutral-500 w-16 shrink-0">Type</span>
+                    {canManage ? (
+                      <div className="flex items-center gap-1 bg-neutral-950 border border-neutral-800 rounded p-0.5 flex-1">
+                        <button
+                          onClick={() => updateWorkspaceDetails(workspace.id, { orgType: 'company' })}
+                          className={`flex-1 text-[10px] py-1 rounded cursor-pointer transition ${
+                            workspace.orgType === 'company' ? 'bg-neutral-800 text-app-strong' : 'text-neutral-500 hover:text-neutral-300'
+                          }`}
+                        >
+                          Company
+                        </button>
+                        <button
+                          onClick={() => updateWorkspaceDetails(workspace.id, { orgType: 'personal_project' })}
+                          className={`flex-1 text-[10px] py-1 rounded cursor-pointer transition ${
+                            workspace.orgType === 'personal_project' ? 'bg-neutral-800 text-app-strong' : 'text-neutral-500 hover:text-neutral-300'
+                          }`}
+                        >
+                          Personal project
+                        </button>
+                      </div>
+                    ) : (
+                      <span className="text-xs text-neutral-300">
+                        {workspace.orgType === 'company' ? 'Company' : workspace.orgType === 'personal_project' ? 'Personal project' : 'Not set'}
+                      </span>
+                    )}
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <span className="text-[10px] text-neutral-500 w-16 shrink-0">Work email</span>
+                    {canManage && editingEmail ? (
+                      <input
+                        autoFocus
+                        type="email"
+                        value={emailDraft}
+                        onChange={(e) => setEmailDraft(e.target.value)}
+                        onBlur={() => {
+                          setEditingEmail(false);
+                          updateWorkspaceDetails(workspace.id, { workEmail: emailDraft.trim() || null });
+                        }}
+                        onKeyDown={(e) => {
+                          if (e.key === 'Enter') (e.target as HTMLInputElement).blur();
+                          if (e.key === 'Escape') {
+                            setEmailDraft(workspace.workEmail ?? '');
+                            setEditingEmail(false);
+                          }
+                        }}
+                        className="flex-1 bg-neutral-950 border border-blue-500 rounded px-2 py-1 text-xs text-app-strong focus:outline-none"
+                      />
+                    ) : (
+                      <button
+                        onClick={() => canManage && setEditingEmail(true)}
+                        disabled={!canManage}
+                        className={`flex-1 text-left text-xs px-1 ${canManage ? 'text-neutral-300 hover:text-app-strong cursor-pointer' : 'text-neutral-500 cursor-default'}`}
+                      >
+                        {workspace.workEmail || (canManage ? 'Not set — click to add' : 'Not set')}
+                      </button>
+                    )}
+                  </div>
+                </div>
+              </>
+            )}
+            {/* Sub-screens, not tabs. Each of these is something you go and do once and come
+                back from; a tab implies a place you might sit in. Hidden for a personal workspace,
+                which has nobody to govern: no roles to assign, no one to invite, no shared board to
+                import into. */}
+            {canManage && !workspace.isPersonal && (
+              <div className="space-y-0.5">
+              <button
+                onClick={() => setSub('roles')}
+                className="w-full flex items-center gap-2.5 px-3 py-3 rounded-xl hover:bg-neutral-800/50 active:bg-neutral-800 cursor-pointer text-left transition"
+              >
+                <Shield className="w-4 h-4 text-neutral-500 shrink-0" />
+                <span className="min-w-0 flex-1">
+                  <span className="block text-xs text-neutral-200">Roles</span>
+                  <span className="block text-[11px] text-neutral-500">Who can do what in this workspace</span>
+                </span>
+                <ChevronRight className="w-4 h-4 text-neutral-600 shrink-0" />
+              </button>
+              <button
+                onClick={() => setSub('invite')}
+                className="w-full flex items-center gap-2.5 px-3 py-3 rounded-xl hover:bg-neutral-800/50 active:bg-neutral-800 cursor-pointer text-left transition"
+              >
+                <UserPlus className="w-4 h-4 text-neutral-500 shrink-0" />
+                <span className="min-w-0 flex-1">
+                  <span className="block text-xs text-neutral-200">Invite people</span>
+                  <span className="block text-[11px] text-neutral-500">By email, from your network, or a link</span>
+                </span>
+                <ChevronRight className="w-4 h-4 text-neutral-600 shrink-0" />
+              </button>
+              <button
+                onClick={() => setSub('import')}
+                className="w-full flex items-center gap-2.5 px-3 py-3 rounded-xl hover:bg-neutral-800/50 active:bg-neutral-800 cursor-pointer text-left transition"
+              >
+                <Upload className="w-4 h-4 text-neutral-500 shrink-0" />
+                <span className="min-w-0 flex-1">
+                  <span className="block text-xs text-neutral-200">Import</span>
+                  <span className="block text-[11px] text-neutral-500">Bring tasks in from a CSV export</span>
+                </span>
+                <ChevronRight className="w-4 h-4 text-neutral-600 shrink-0" />
+              </button>
+              </div>
+            )}
+            {!canManage && !workspace.isPersonal && (
+              <p className="px-1 py-2 text-[11px] text-neutral-500">
+                Only workspace admins can change roles, invite people or import.
+              </p>
+            )}
+            {workspace.isPersonal && (
+              <p className="px-1 py-2 text-[11px] text-neutral-500">
+                This is your personal workspace — it has no members, so there is nothing to manage
+                here. Switch to a team workspace to see its settings.
+              </p>
+            )}
+            <button
+              onClick={() => {
+                setSection('you');
+                setSub(null);
+              }}
+              className="w-full mt-2 flex items-center gap-2.5 px-3 py-3 rounded-xl border border-neutral-800 bg-neutral-950/40 hover:bg-neutral-800/50 active:bg-neutral-800 cursor-pointer text-left transition"
+            >
+              <UserCircle className="w-4 h-4 text-neutral-500 shrink-0" />
+              <span className="min-w-0 flex-1">
+                <span className="block text-xs text-neutral-300">Your settings — profile, appearance, notifications</span>
+              </span>
+              <ChevronRight className="w-4 h-4 text-neutral-600 shrink-0" />
+            </button>
           </div>
         )}
       </div>

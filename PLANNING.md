@@ -7330,3 +7330,49 @@ outgoing screen would show an avatar sliding away from a gear.
 
 **Still the existing Settings panel, not the panels from the sketch.** This routes to the right tab
 of what exists today; the dedicated personal and workspace panels are the next piece of work.
+
+## 2026-09-16 (continued) — Settings rebuilt as two halves
+
+The panel was the last thing still shaped by the old five-tab layout, and it mixed the two things the
+whole app now separates. "General" held the workspace's name **and** your theme **and** your haptics.
+The user named the rule himself: everything that affects only you on one side, everything that
+affects the people you work with on the other.
+
+**The structure now:** a two-option pill — `You` | `Workspace` — the same control Home and Office
+use, in the same order as the nav, which is what he asked for ("siden home er til venstre i
+hovedmenyen"). Learning the control once should be enough; it is this app's one way of saying "the
+same shape, seen two ways".
+
+- **You**: a profile block at the top — large avatar, name, handle, and an **Edit profile** button,
+  which is the ClickUp treatment he pointed at. A settings screen that opens on a list of switches
+  never says whose settings they are. Then Appearance, Haptics, Navigation, Planner, Notifications,
+  Account.
+- **Workspace**: the workspace's own identity fields, then Roles, Invite and Import.
+
+**Roles / Invite / Import are sub-screens now, not siblings.** Each is something you go and do once
+and come back from; a tab implies a place you might sit in. They get a back arrow and the panel title
+changes to name them.
+
+**Each half ends with a link to the other**, as requested — the one thing that keeps a split from
+becoming a maze when you guessed wrong about which side a setting lives on.
+
+`initialTab` is unchanged as the caller-facing shape, so no call site had to move: `account` lands on
+You, `general` on Workspace, `invite`/`roles`/`import` open their sub-screen directly.
+
+### The "Visible tabs" control is gone, and one consequence to know about
+
+It let you hide individual tabs from the five-tab nav. That nav no longer exists by default, and the
+contexts layout ignores `hiddenNavTabs` entirely, so the control was configuring something invisible.
+
+**But the stored value is still read by the classic layout.** Anyone who hid a tab before today and
+then switches back to classic will find it still hidden with no way to restore it. The storage
+helpers (`readHiddenNavTabs`/`setNavTabHidden`) are deliberately kept rather than deleted, so this is
+a one-line fix if it ever bites — clear the key, or bring the control back under Workspace. Recorded
+rather than fixed, because classic is on its way out and a migration that rewrites someone's stored
+preferences to solve a hypothetical is worse than the hypothetical.
+
+### Deliberately not done here
+
+The workspace half still shows the existing fields rather than anything new — no colour per
+workspace yet, and no "personal settings" content beyond what already existed. This was a
+restructure and a visual pass, not a feature round.

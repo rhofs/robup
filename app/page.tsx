@@ -8592,6 +8592,7 @@ function PageContent() {
           canManage={canManageCurrentWorkspace}
           user={users.find((u) => u.id === currentUserId) ?? null}
           onCopyCalendarLink={handleCopyCalendarLink}
+          onEditProfile={() => setActiveView('profile')}
           initialTab={settingsInitialTab}
           onClose={() => {
             setSettingsOpen(false);
