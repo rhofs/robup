@@ -30,6 +30,15 @@ model Workspace {
   // infrastructure exists in this app) — plain metadata, not a real ownership/domain check.
   orgType         String?  @map("org_type") // 'company' | 'personal_project'
   workEmail       String?  @map("work_email")
+  // The workspace's own identity, shown as its mark in the mobile header and anywhere two
+  // workspaces have to be told apart at a glance. Null means "no colour chosen" and falls back to
+  // the app accent — which is what every workspace looked like before this existed, and the reason
+  // the mark was useless as identification once it moved somewhere prominent.
+  color           String?
+  // Uploaded logo, stored the same way user avatars are (a path under /uploads). Null falls back to
+  // the first letter of the name on `color`, which is the whole identity for a workspace that has
+  // not uploaded anything — and for most of them that is enough.
+  avatarUrl       String?  @map("avatar_url")
   spaces          Space[]
   rooms           Room[]
   events          Event[]

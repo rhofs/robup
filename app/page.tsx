@@ -500,6 +500,34 @@ const CHAT_PUSH_TRANSITION = { duration: CHAT_PUSH_MS / 1000, ease: CHAT_PUSH_EA
 // deliberately absent: it is a tab, not a destination inside one.
 const DEEP_LAUNCHER_VIEWS: string[] = ['profile', 'mytasks', 'directMessages'];
 
+// A workspace's own mark: its logo if it has one, otherwise the first letter of its name on its own
+// colour. The fallback is the normal case, not a degraded one — most workspaces will never upload
+// anything, and a letter on a chosen colour is a perfectly good identity.
+//
+// The accent blue is the last resort, for workspaces that predate the colour field. It is also why
+// picking a colour matters more than it looks: without one, every workspace's mark is the same blue
+// square, which is no identification at all once the mark is the thing you navigate by.
+function WorkspaceMark({
+  workspace,
+  className = 'w-6 h-6 rounded-md text-[11px]',
+}: {
+  workspace: { name: string; color: string | null; avatarUrl: string | null } | null | undefined;
+  className?: string;
+}) {
+  if (workspace?.avatarUrl) {
+    // eslint-disable-next-line @next/next/no-img-element
+    return <img src={workspace.avatarUrl} alt={workspace.name} className={`${className} object-cover shrink-0`} />;
+  }
+  return (
+    <span
+      className={`${className} shrink-0 flex items-center justify-center font-bold text-white`}
+      style={{ backgroundColor: workspace?.color ?? '#2563eb' }}
+    >
+      {(workspace?.name ?? '?').slice(0, 1).toUpperCase()}
+    </span>
+  );
+}
+
 const searchPillLabel = (view: string) =>
   view === 'docs' ? 'Search docs...' : view === 'chat' ? 'Search chats and channels...' : 'Search...';
 
@@ -4453,36 +4481,14 @@ function PageContent() {
               Office it is the workspace switcher itself — the single most-used control in the app
               by the user's own account ("alfa og omega"), so it is one tap from anywhere rather
               than folded into a settings panel, which is where I first proposed putting it. */}
+          {/* Home's title and the classic layout's view title. Office's own title is NOT here — it
+              is the popover's anchor below, which is the whole point: the dropdown has to be
+              attached to the button you actually press. It used to anchor to the desktop-only
+              button further along this row, which is `hidden md:flex` — invisible on a phone but
+              still occupying a zero-width spot in the middle of the header, so the menu lined
+              itself up with nothing, halfway across the screen. Reported as it looking crooked. */}
           {useContexts && isMobile ? (
-            inOfficeContext ? (
-              <button
-                onClick={() => {
-                  hapticTap();
-                  setWorkspaceSwitcherOpen((o) => !o);
-                }}
-                className="md:hidden flex items-center gap-1.5 min-w-0 shrink cursor-pointer rounded-lg -mx-1 px-1 py-0.5 transition duration-100 active:bg-neutral-800/70"
-                title="Switch workspace"
-              >
-                <span
-                  className="w-6 h-6 rounded-md shrink-0 flex items-center justify-center text-[11px] font-bold text-white"
-                  // Workspaces have no colour of their own, so the accent stands in. Giving them
-                  // one is a real feature (several workspaces should be told apart at a glance) and
-                  // belongs with the workspace settings panel, not smuggled in here.
-                  style={{ backgroundColor: '#2563eb' }}
-                >
-                  {(currentWorkspace?.name ?? '?').slice(0, 1).toUpperCase()}
-                </span>
-                <span className="text-lg font-semibold text-app-strong truncate">
-                  {currentWorkspace?.name ?? 'No workspace'}
-                </span>
-                <ChevronDown className="w-4 h-4 text-neutral-500 shrink-0" />
-                {memberInvitesIncoming.length > 0 && (
-                  <span className="shrink-0 min-w-[16px] h-4 px-1 rounded-full bg-red-500 text-white text-[9px] font-bold flex items-center justify-center leading-none">
-                    {memberInvitesIncoming.length}
-                  </span>
-                )}
-              </button>
-            ) : (
+            inOfficeContext ? null : (
               <span className="md:hidden text-lg font-semibold text-app-strong shrink-0">Home</span>
             )
           ) : (
@@ -4499,6 +4505,32 @@ function PageContent() {
             // hit. It is a menu you open with a thumb on a phone, not a desktop dropdown.
             panelClassName="w-[17rem] max-w-[calc(100vw-24px)] bg-neutral-900 border border-neutral-800 rounded-2xl shadow-2xl p-1.5 max-h-[70vh] overflow-y-auto"
             anchor={
+              <>
+              {/* The mobile switcher: the workspace's NAME and a chevron, and nothing else — the
+                  mark has moved to the right of this bar, where Home keeps your avatar. That gives
+                  both contexts the same shape: the left says where you are, the right is the
+                  identity of the place. Keeping the mark here as well made Office's left side
+                  visibly heavier than Home's, for no information Home does not also carry. */}
+              {useContexts && isMobile && inOfficeContext && (
+                <button
+                  onClick={() => {
+                    hapticTap();
+                    setWorkspaceSwitcherOpen((o) => !o);
+                  }}
+                  className="md:hidden flex items-center gap-1 min-w-0 shrink cursor-pointer rounded-lg -mx-1 px-1 py-0.5 transition duration-100 active:bg-neutral-800/70"
+                  title="Switch workspace"
+                >
+                  <span className="text-lg font-semibold text-app-strong truncate">
+                    {currentWorkspace?.name ?? 'No workspace'}
+                  </span>
+                  <ChevronDown className="w-4 h-4 text-neutral-500 shrink-0" />
+                  {memberInvitesIncoming.length > 0 && (
+                    <span className="shrink-0 min-w-[16px] h-4 px-1 rounded-full bg-red-500 text-white text-[9px] font-bold flex items-center justify-center leading-none">
+                      {memberInvitesIncoming.length}
+                    </span>
+                  )}
+                </button>
+              )}
               <button
                 onClick={() => setWorkspaceSwitcherOpen((o) => !o)}
                 className="hidden md:flex min-w-0 flex-1 items-center justify-between gap-1 cursor-pointer group"
@@ -4522,6 +4554,7 @@ function PageContent() {
                 )}
                 <ChevronDown className="w-3.5 h-3.5 text-neutral-500 group-hover:text-neutral-300 shrink-0" />
               </button>
+              </>
             }
           >
             {/* Incoming, targeted workspace invites via Network (backlog #8) — shown first since
@@ -4728,14 +4761,12 @@ function PageContent() {
               // An avatar cannot take a background on press — it already has one, and it is the
               // person's own colour or photograph. So the response is a shrink plus a ring, which
               // works over both. Same 100ms as everything else that is pressed.
-              className={`shrink-0 cursor-pointer rounded-full transition duration-100 active:scale-90 active:ring-2 active:ring-neutral-500 active:brightness-90 ${
-                inOfficeContext
-                  ? 'w-9 h-9 flex items-center justify-center text-neutral-400 hover:text-app-strong hover:bg-neutral-800/60 active:bg-neutral-700'
-                  : ''
-              }`}
+              // Same treatment in both contexts now that both hold a mark rather than an icon —
+              // the shrink and the ring read over a photo, a letter tile and a logo alike.
+              className="shrink-0 cursor-pointer rounded-full transition duration-100 active:scale-90 active:ring-2 active:ring-neutral-500 active:brightness-90"
             >
               {inOfficeContext ? (
-                <Settings className="w-[19px] h-[19px]" />
+                <WorkspaceMark workspace={currentWorkspace} className="w-8 h-8 rounded-full text-[13px]" />
               ) : (
                 (() => {
                   const me = users.find((u) => u.id === currentUserId);
@@ -6521,7 +6552,12 @@ function PageContent() {
         contentTiles={mobileGridTabs}
         meItems={meNavItems}
         onSelectTile={pinMobileMenuTile}
-        onOpenSettings={() => setSettingsOpen(true)}
+        onOpenSettings={() => {
+          // Same rule as the header control: settings for the place you are in. Without this the
+          // menu's gear always opened the Workspace half, including from Home.
+          setSettingsInitialTab(inOfficeContext ? 'general' : 'account');
+          setSettingsOpen(true);
+        }}
         onOpenTrash={() => setTrashOpen(true)}
         showArchived={showArchived}
         onToggleArchive={() => setShowArchived(!showArchived)}
@@ -8326,13 +8362,7 @@ function PageContent() {
             {/* The title row, matching the real header's h-14 and padding exactly. */}
             <div className="h-14 shrink-0 flex items-center px-3 gap-4">
               {pushContextRef.current === 'office' ? (
-                <span className="flex items-center gap-1.5 min-w-0 shrink">
-                  <span
-                    className="w-6 h-6 rounded-md shrink-0 flex items-center justify-center text-[11px] font-bold text-white"
-                    style={{ backgroundColor: '#2563eb' }}
-                  >
-                    {(currentWorkspace?.name ?? '?').slice(0, 1).toUpperCase()}
-                  </span>
+                <span className="flex items-center gap-1 min-w-0 shrink">
                   <span className="text-lg font-semibold text-app-strong truncate">
                     {currentWorkspace?.name ?? 'No workspace'}
                   </span>
@@ -8346,9 +8376,7 @@ function PageContent() {
                   <UserPlus className="w-[18px] h-[18px]" />
                 </span>
                 {pushContextRef.current === 'office' ? (
-                  <span className="w-9 h-9 rounded-full flex items-center justify-center text-neutral-400">
-                    <Settings className="w-[19px] h-[19px]" />
-                  </span>
+                  <WorkspaceMark workspace={currentWorkspace} className="w-8 h-8 rounded-full text-[13px]" />
                 ) : (
                   (() => {
                     const me = users.find((u) => u.id === currentUserId);

@@ -223,6 +223,11 @@ export type HierarchyWorkspace = {
   // email-sending infrastructure in this app). Null on every workspace created before this.
   orgType: 'company' | 'personal_project' | null;
   workEmail: string | null;
+  // The workspace's own mark — a colour, and optionally an uploaded logo. Null on every workspace
+  // created before these existed, which is why both have a fallback rather than a default written
+  // into the row.
+  color: string | null;
+  avatarUrl: string | null;
   spaces: HierarchySpace[];
   rooms: HierarchyRoom[];
   // Each member's own tier (owner/admin/member) is attached directly onto their entry rather
@@ -439,7 +444,7 @@ interface TaskStore {
   ) => Promise<{ ok: true } | { ok: false; error: string }>;
   updateWorkspaceDetails: (
     workspaceId: string,
-    patch: { name?: string; orgType?: 'company' | 'personal_project'; workEmail?: string | null }
+    patch: { name?: string; orgType?: 'company' | 'personal_project'; workEmail?: string | null; color?: string | null; avatarUrl?: string | null }
   ) => Promise<void>;
   addWorkspaceMember: (workspaceId: string, userId: string) => Promise<void>;
   removeWorkspaceMember: (workspaceId: string, userId: string) => Promise<void>;

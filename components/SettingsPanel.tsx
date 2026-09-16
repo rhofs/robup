@@ -1108,6 +1108,33 @@ export default function SettingsPanel({
           <div className="px-4 pb-4 space-y-1 h-[26rem] overflow-y-auto">
             {!workspace.isPersonal && (
               <>
+                {/* The mark, first — it is how everyone else recognises this workspace in their own
+                    header now that it sits where a profile picture would. A workspace with no colour
+                    falls back to the app accent, which means every such workspace looks identical;
+                    that was tolerable while the mark was a small square next to the name and is not
+                    once it is the thing you navigate by. */}
+                <div className="text-[10px] uppercase tracking-wide text-neutral-500 px-1 pb-1">Mark</div>
+                <div className="flex items-center gap-3 px-1 pb-3">
+                  <span
+                    className="w-12 h-12 rounded-full shrink-0 flex items-center justify-center text-lg font-bold text-white"
+                    style={{ backgroundColor: workspace.color ?? '#2563eb' }}
+                  >
+                    {workspace.name.slice(0, 1).toUpperCase()}
+                  </span>
+                  <div className="min-w-0 flex-1">
+                    {canManage ? (
+                      <ColorSwatchPicker
+                        value={workspace.color}
+                        onChange={(color) => updateWorkspaceDetails(workspace.id, { color })}
+                        choices={ROLE_COLOR_CHOICES}
+                        size="sm"
+                      />
+                    ) : (
+                      <p className="text-[11px] text-neutral-500">Only admins can change this.</p>
+                    )}
+                  </div>
+                </div>
+
                 <div className="text-[10px] uppercase tracking-wide text-neutral-500 px-1 pb-1">Workspace</div>
                 <div className="px-1 pb-3 space-y-2">
                   <div className="flex items-center gap-2">

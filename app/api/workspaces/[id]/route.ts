@@ -19,13 +19,28 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
   const data: any = {};
   if (body.messageOfTheDay !== undefined) data.messageOfTheDay = body.messageOfTheDay;
 
-  if (body.name !== undefined || body.orgType !== undefined || body.workEmail !== undefined) {
+  if (
+    body.name !== undefined ||
+    body.orgType !== undefined ||
+    body.workEmail !== undefined ||
+    body.color !== undefined ||
+    body.avatarUrl !== undefined
+  ) {
     if (!canManageWorkspace(role)) {
       return NextResponse.json({ error: 'Only the workspace owner/admins can change this' }, { status: 403 });
     }
     if (body.name !== undefined) data.name = body.name;
     if (body.orgType !== undefined) data.orgType = body.orgType === 'personal_project' ? 'personal_project' : body.orgType === 'company' ? 'company' : null;
     if (body.workEmail !== undefined) data.workEmail = typeof body.workEmail === 'string' && body.workEmail.trim() ? body.workEmail.trim() : null;
+    // Same tier as name/orgType: the mark is how everyone else recognises this workspace in their
+    // own header, so it is workspace identity, not a personal preference. Validated as a hex colour
+    // rather than stored as given — this value goes straight into a style attribute.
+    if (body.color !== undefined) {
+      data.color = typeof body.color === 'string' && /^#[0-9a-fA-F]{6}$/.test(body.color) ? body.color : null;
+    }
+    if (body.avatarUrl !== undefined) {
+      data.avatarUrl = typeof body.avatarUrl === 'string' && body.avatarUrl.trim() ? body.avatarUrl.trim() : null;
+    }
   }
 
   const workspace = await prisma.workspace.update({ where: { id }, data });

@@ -7420,3 +7420,48 @@ The user asked for it to go once the header view existed.
 It is gated rather than deleted, and that matters: **classic has no mobile workspace switcher
 anywhere else** — its header is a plain view title — so deleting it outright would leave anyone who
 switched back unable to change workspace on a phone at all. It goes when classic does.
+
+## 2026-09-16 (continued) — the workspace gets its own mark, and the dropdown is anchored to the right button
+
+Sketched with the user before building, at his request. Five things, and the first is a plain bug the
+others were sitting on top of.
+
+**The dropdown looked crooked because it was anchored to the wrong button.** The header has two
+workspace controls: the one you press on a phone (`md:hidden`, far left) and the desktop one
+(`hidden md:flex`). `FloatingPopover`'s anchor was the *desktop* button — invisible on a phone, but
+still occupying a zero-width spot partway along the header flow. So the menu positioned itself
+against a point that has nothing to do with the button you pressed. The mobile button now lives
+inside the popover's own anchor, alongside the desktop one; only ever one of them is visible, so the
+anchor measures whichever is real.
+
+**The user's redesign, and it is better than what it replaced.** Office's header now reads exactly
+like Home's: the left says where you are (the workspace's name plus a chevron, where "Home" sits),
+and the right is the identity of that place (the workspace's mark, where your avatar sits). One rule
+twice, and the mark is the way into that place's settings — the same thing the avatar already does.
+
+Keeping the mark on the left *as well* made Office's left side visibly heavier than Home's, carrying
+no information Home does not also carry.
+
+**A gear is a better signal than a logo, and that cost is real** — a gear says "settings" without
+being learned. The user raised it himself and answered it himself: keep a duplicate gear in the
+launcher menu so anyone who looks finds it. It turned out that duplicate **already existed** (the
+menu's Settings tile), so the safety net was in place before the question was asked. Its one flaw is
+fixed here too: it always opened the Workspace half, including from Home, and now follows the same
+"settings for where you are" rule as the header control.
+
+**Two new columns on Workspace: `color` and `avatar_url`**, both nullable, generated with
+`prisma migrate diff` against the committed history rather than hand-written. No existing row is
+touched and no data-loss acknowledgement is needed. `avatar_url` is written now and not yet
+uploadable — the field exists so the fallback chain in `WorkspaceMark` is the real one from day one
+rather than something to retrofit.
+
+**Colour matters more than it looks.** Without one, every workspace's mark is the same accent blue —
+tolerable when the mark was a small square beside the name, useless once the mark is the thing you
+navigate by. The picker sits at the top of the Workspace half, above the name, because it is now the
+most visible property a workspace has.
+
+### Still open here
+
+Uploading a logo. The column and the render path exist; the upload UI does not. It belongs beside the
+colour picker, and should reuse whatever the user-avatar upload already does rather than inventing a
+second path.
