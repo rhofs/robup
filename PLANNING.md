@@ -7218,3 +7218,32 @@ dropped while it is open.
 cannot be mistaken for a keyboard. **Not verifiable here:** neither the iOS behaviour nor the
 threshold can be checked on this machine; both are reasoned from how iOS reports viewport changes and
 need confirming on the device that reported it.
+
+### Same session — the drag grip swallowed scrolling, and Undo was offered before it existed
+
+**The grip carried `touch-action: none`.** That tells the browser the gesture is entirely ours — so a
+finger that landed on the grip could never scroll the list, even though dnd-kit's own
+`delay: 180, tolerance: 8` constraint had already decided the gesture was a swipe and refused to
+start a drag. The grip is a small target in the corner of every card, so on a long list it is easy to
+hit by accident, and the page simply stopped moving.
+
+Now `pan-y`, with scrolling blocked outright only once a drag actually starts, via a non-passive
+`touchmove` listener added in `onDragStart` and released in `onDragEnd`/`onDragCancel`/unmount.
+**This is the third place in the app with the same two-part shape** — Planner's hold-and-drag, and
+now this: `touch-action` is latched when a gesture begins and cannot be changed once it is under way,
+so "let the browser have it until we are sure, then take it outright" is the only arrangement that
+scrolls *and* drags. If a fourth surface needs it, extract the pair.
+
+**Undo after moving a task did nothing, and the cause is a race the code already half-knew about.**
+`reorderTaskRelativeTo` is asynchronous all the way down: each `reorderTask` pushes its history entry
+only after its own PATCH resolves, and the transaction groups them only once all of those are done.
+The drop handler called it fire-and-forget and showed the undoable toast in the same breath — so the
+Undo button existed before anything was on the stack. Press it quickly, or on a slow connection at
+all, and it either did nothing or undid whatever happened to be there from before. **The reporter is
+behind a VPN in China**, which is very likely why this showed up for him and not in local testing.
+
+It now returns `Promise<boolean>` — resolved when the change is recorded, false when it did nothing —
+and the toast waits for it. Several of its early returns are genuine no-ops (different list,
+different parent, target gone) that were still producing a "Task moved" toast offering to undo a move
+that never happened; those now show nothing. The same waiting applies to the move-to-list and
+make-subtask paths.

@@ -376,7 +376,19 @@ function TaskRowImpl({
               }}
               onClick={(e) => e.stopPropagation()}
               title="Drag to move"
-              style={{ touchAction: 'none' }}
+              // pan-y, not none. `none` told the browser this gesture is entirely ours — so a
+              // finger that landed on the grip could never scroll the list, even though dnd-kit's
+              // own delay+tolerance constraint had already decided the gesture was a swipe and
+              // refused to start a drag. The grip is a small target in the corner of every card, so
+              // on a long list it is easy to land on by accident, and the page simply stopped
+              // moving. Reported as exactly that.
+              //
+              // With pan-y the browser keeps vertical swipes and scrolls normally; once a drag
+              // actually starts, app/page.tsx blocks scrolling outright for its duration (see
+              // blockDragScroll there). Same two-part fix as the Planner's hold-and-drag, and for
+              // the same reason: touch-action is latched when the gesture begins, so it cannot be
+              // changed once a drag is under way.
+              style={{ touchAction: 'pan-y' }}
               className="shrink-0 text-neutral-600 cursor-grab active:cursor-grabbing p-2"
             >
               <GripVertical className="w-4 h-4" />

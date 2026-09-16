@@ -3323,7 +3323,7 @@ function PageContent() {
       const siblings = combinedSidebarSiblings(sourceSpace, targetFolderId).sort((a, b) => a.order - b.order);
       const withoutDragged = siblings.filter((s) => !(s.type === dragged.type && s.id === dragged.id));
       const targetIndex = withoutDragged.findIndex((s) => s.type === target.type && s.id === target.id);
-      if (targetIndex === -1) return;
+      if (targetIndex === -1) return false;
       const insertAt = position === 'below' ? targetIndex + 1 : targetIndex;
       const draggedEntry = siblings.find((s) => s.type === dragged.type && s.id === dragged.id);
       if (!draggedEntry) return;
@@ -3449,33 +3449,70 @@ function PageContent() {
   // the mobile Undo toast) puts every affected task back — the same shape reorderSpaceRelativeTo
   // uses. Only top-level tasks in the same List are considered siblings: a subtask reorders among
   // its own parent's children, and dragging across Lists is still the "move" path, not this one.
-  const reorderTaskRelativeTo = (draggedId: string, targetId: string, position: 'above' | 'below') => {
+  // Returns whether it actually reordered anything, and resolves only once the change is recorded.
+  //
+  // Both halves are why Undo did not work after moving a task. The caller showed an undoable toast
+  // the instant this was called, but this is asynchronous: each reorderTask pushes its history entry
+  // only after its own PATCH resolves, and the transaction groups them only once all of those are
+  // done. So the Undo button existed before there was anything on the stack — press it quickly, or
+  // on a slow connection at all, and it either did nothing or undid whatever happened to be there
+  // from before. And several of the early returns below do nothing at all, while the toast still
+  // said "Task moved" and offered to undo it.
+  const reorderTaskRelativeTo = async (
+    draggedId: string,
+    targetId: string,
+    position: 'above' | 'below'
+  ): Promise<boolean> => {
     const dragged = tasks.find((t) => t.id === draggedId);
     const target = tasks.find((t) => t.id === targetId);
-    if (!dragged || !target) return;
+    if (!dragged || !target) return false;
     // Reordering only means anything among true siblings. Anything else (a different List, a
     // different parent) is a move, and is left to the existing move/nest paths rather than
     // silently doing something the drop did not look like.
-    if (dragged.listId !== target.listId || (dragged.parentId ?? null) !== (target.parentId ?? null)) return;
+    if (dragged.listId !== target.listId || (dragged.parentId ?? null) !== (target.parentId ?? null)) return false;
 
     const siblings = tasks
       .filter((t) => t.listId === dragged.listId && (t.parentId ?? null) === (dragged.parentId ?? null) && !t.archived)
       .sort((a, b) => a.order - b.order || new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime());
     const withoutDragged = siblings.filter((t) => t.id !== draggedId);
     const targetIndex = withoutDragged.findIndex((t) => t.id === targetId);
-    if (targetIndex === -1) return;
+    if (targetIndex === -1) return false;
     const insertAt = position === 'below' ? targetIndex + 1 : targetIndex;
     const next = [...withoutDragged.slice(0, insertAt), dragged, ...withoutDragged.slice(insertAt)];
-    useHistoryStore.getState().transaction('Reorder tasks', async () => {
+    await useHistoryStore.getState().transaction('Reorder tasks', async () => {
       // Awaited together inside the transaction, never fire-and-forget: transaction() closes the
       // moment its callback returns, and each reorderTask only pushes its history entry after its
       // own fetch resolves — un-awaited, they would land outside the group and Ctrl+Z would undo
       // one task at a time. This exact trap is documented in Known bugs.
       await Promise.all(next.map((t, index) => (t.order !== index ? reorderTask(t.id, index) : null)));
     });
+    return true;
   };
 
+  // Stops the browser scrolling while a task is actually being dragged.
+  //
+  // The grip carries `touch-action: pan-y` so an accidental touch can still scroll the list — but
+  // once a drag has genuinely started, a scroll underneath it would fight the drag. touch-action is
+  // latched when the gesture begins and cannot be changed mid-gesture, so this does it the one way
+  // that always works: a non-passive touchmove listener. Same mechanism as the Planner's
+  // hold-and-drag, and released on every exit path, because a forgotten one silently disables
+  // scrolling for the whole page.
+  const dragScrollBlockRef = useRef<((e: TouchEvent) => void) | null>(null);
+  const blockDragScroll = () => {
+    if (dragScrollBlockRef.current) return;
+    const handler = (e: TouchEvent) => e.preventDefault();
+    dragScrollBlockRef.current = handler;
+    window.addEventListener('touchmove', handler, { passive: false });
+  };
+  const releaseDragScroll = () => {
+    if (!dragScrollBlockRef.current) return;
+    window.removeEventListener('touchmove', dragScrollBlockRef.current);
+    dragScrollBlockRef.current = null;
+  };
+  useEffect(() => releaseDragScroll, []);
+
   const handleTaskDragStart = (event: DragStartEvent) => {
+    blockDragScroll();
     const draggedId = event.active.id as string;
 
     if (draggedId.startsWith('space-drag:')) {
@@ -3738,6 +3775,7 @@ function PageContent() {
   }, [activeDragEntity?.kind]);
 
   const handleTaskDragEnd = (event: DragEndEvent) => {
+    releaseDragScroll();
     const droppedSpaceIndicator = spaceDropIndicator;
     const droppedDocIndicator = docDropIndicator;
     const droppedListIndicator = listDropIndicator;
@@ -3951,21 +3989,28 @@ function PageContent() {
       // A visible insertion line means the finger was near an edge: reorder. No line means the
       // middle of the row: nest, exactly as before.
       if (droppedTaskIndicator && droppedTaskIndicator.targetId !== draggedId) {
-        reorderTaskRelativeTo(draggedId, droppedTaskIndicator.targetId, droppedTaskIndicator.position);
-        showUndoableToast('Task moved');
+        void reorderTaskRelativeTo(draggedId, droppedTaskIndicator.targetId, droppedTaskIndicator.position).then(
+          (moved) => {
+            // Only once the move is on the undo stack, and only if there was one.
+            if (moved) showUndoableToast('Task moved');
+          }
+        );
         return;
       }
       if (targetId !== draggedId) {
         const target = tasks.find((t) => t.id === targetId);
-        optimisticSetParent(draggedId, targetId);
+        const nestDone = Promise.resolve(optimisticSetParent(draggedId, targetId));
         // Named, not a generic "Moved": dropping a task onto another one turns it into a subtask,
         // which is a bigger change than the gesture suggests and is the single most common thing
         // to do by accident here.
-        showUndoableToast(target ? `Made a subtask of "${target.title}"` : 'Made a subtask');
+        void nestDone.then(() =>
+          showUndoableToast(target ? `Made a subtask of "${target.title}"` : 'Made a subtask')
+        );
       }
     } else if (overId.startsWith('list:')) {
-      moveTaskToList(draggedId, overId.slice('list:'.length));
-      showUndoableToast('Task moved');
+      void Promise.resolve(moveTaskToList(draggedId, overId.slice('list:'.length))).then(() =>
+        showUndoableToast('Task moved')
+      );
     } else if (overId.startsWith('folder-drop:') || overId.startsWith('space:')) {
       // Dropping a task onto a Folder/Space (rather than a specific List) has no single obvious
       // destination when there's more than one List recursively inside — rather than silently
@@ -4320,7 +4365,14 @@ function PageContent() {
   );
 
   return (
-    <DndContext sensors={taskSensors} collisionDetection={closestCenter} onDragStart={handleTaskDragStart} onDragOver={handleTaskDragOver} onDragEnd={handleTaskDragEnd}>
+    <DndContext
+      sensors={taskSensors}
+      collisionDetection={closestCenter}
+      onDragStart={handleTaskDragStart}
+      onDragOver={handleTaskDragOver}
+      onDragEnd={handleTaskDragEnd}
+      onDragCancel={releaseDragScroll}
+    >
     {/* select-none here is app-wide (mostly buttons/rows/drag targets, not prose) — CSS
         user-select is inherited, so any real copyable text content (chat messages, task
         descriptions, comments, etc.) needs its own explicit `select-text` to opt back in, or it
