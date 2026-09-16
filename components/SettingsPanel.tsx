@@ -323,6 +323,7 @@ export default function SettingsPanel({
   user,
   onCopyCalendarLink,
   onEditProfile,
+  registerBack,
   onClose,
   onChange,
   initialTab = 'general',
@@ -335,6 +336,14 @@ export default function SettingsPanel({
   // Opens the full profile screen. Optional so a caller that has nowhere to send someone simply does
   // not render the button, rather than rendering one that goes nowhere.
   onEditProfile?: () => void;
+  // Lets the page's hardware-Back handler step back through this panel before it starts unwinding
+  // the app behind it. The callback returns true when it consumed the press (there was a sub-screen
+  // to leave), false when the panel is already at its top level and Back should close it.
+  //
+  // A callback rather than this panel registering with lib/nativeBack itself: that handler is a
+  // single global slot the page re-registers on almost every state change, so a second writer would
+  // win or lose depending on render order — which is a coin toss, not a design.
+  registerBack?: (fn: (() => boolean) | null) => void;
   onClose: () => void;
   onChange: () => void;
   // Lets a caller land directly on a specific tab — e.g. Office's own "Invite" entry point opens
@@ -422,6 +431,18 @@ export default function SettingsPanel({
       .then(setDirectPending)
       .catch(() => setDirectPending([]));
   };
+
+  useEffect(() => {
+    if (!registerBack) return;
+    registerBack(() => {
+      if (sub) {
+        setSub(null);
+        return true;
+      }
+      return false;
+    });
+    return () => registerBack(null);
+  }, [registerBack, sub]);
 
   useEffect(() => {
     if (sub !== 'invite' || !canManage) return;

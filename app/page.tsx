@@ -925,6 +925,12 @@ function PageContent() {
   // Landing on Home cannot happen in the URL effect itself: it needs the personal workspace, and on
   // a genuine cold launch neither the user nor the workspace list has arrived yet.
   const coldLaunchHomeRef = useRef(false);
+  // Set when Settings sends you to the full Profile screen. Back then reopens Settings rather than
+  // dropping you into the context — "trykker tilbake burde jeg havne tilbake til settings, men jeg
+  // havner helt ut". Edit profile is a detour from a panel, not a destination you navigated to.
+  const returnToSettingsRef = useRef(false);
+  // Set by SettingsPanel while it is open — see its registerBack prop.
+  const settingsBackRef = useRef<(() => boolean) | null>(null);
 
 
   // `boardPushing` is set HERE, in the same batch as the tap that closes the drawer — not in the
@@ -1208,6 +1214,13 @@ function PageContent() {
       return;
     }
     setNativeBackHandler(() => {
+      // The panel first: it is on top of everything, so Back belongs to it before it belongs to the
+      // app underneath. One level at a time — a sub-screen returns to the list, the list closes.
+      if (settingsOpen) {
+        if (settingsBackRef.current?.()) return true;
+        setSettingsOpen(false);
+        return true;
+      }
       if (activeView === 'chat' && activeChatEntity) {
         closeChatConversation();
         return true;
@@ -2193,6 +2206,15 @@ function PageContent() {
   // kommer jeg på den gamle spaces-seksjonen"). The way out of a Space is the context it was
   // picked from.
   const backToContext = () => {
+    // Came here from Settings, so that is where Back belongs. Checked before anything else, because
+    // every other answer here is about contexts and this one is not.
+    if (returnToSettingsRef.current) {
+      returnToSettingsRef.current = false;
+      setSettingsInitialTab('account');
+      setSettingsOpen(true);
+      setActiveView('board');
+      return;
+    }
     const toOffice = !currentWorkspace?.isPersonal;
     setReturningToContext(true);
     startContextPush('back', toOffice ? 'office' : 'home');
@@ -2396,16 +2418,10 @@ function PageContent() {
           active: activeView === 'docs' && !sheetOpen,
         });
       }
-      // Outside the hasRealWorkspace guard, matching the classic branch: DMs exist without a
-      // workspace, so Chat has to as well.
-      tabs.push({
-        id: 'chat',
-        label: 'Chat',
-        icon: MessageSquare,
-        onClick: () => setActiveView('chat'),
-        active: activeView === 'chat' && !sheetOpen,
-        badge: chatUnreadCount,
-      });
+      // No Chat tile. Conversations are not a place of their own in this layout — they live inside
+      // the context they belong to: your DMs under Home's Messages, the team's channels and rooms
+      // under Office's Rooms. A launcher entry called "Chat" is a third door to the same two rooms,
+      // and it was the one that had no context attached to it.
       return tabs;
     }
 
@@ -2527,7 +2543,10 @@ function PageContent() {
       // condition is word for word the Home tab's. Keeping both meant Home and My Tasks lit up
       // together every time, which is what was reported. Home wins: it is the one with a slot in
       // the bar. My Tasks stays in the classic layout untouched.
-      .filter((tile) => !(useContexts && tile.id === 'my-tasks')),
+      // Profile goes too, for the same reason: your avatar in the header opens Settings on You, and
+      // Edit profile is right there. A tile that is a slower way to the same screen is clutter in a
+      // menu whose whole job is to be short.
+      .filter((tile) => !(useContexts && (tile.id === 'my-tasks' || tile.id === 'profile'))),
     [currentUserId, currentWorkspace, activeView, workspaces, mobilePersonalSpacesOpen, connectionRequestsIncoming, ensurePersonalWorkspace, setActiveWorkspaceId, setActiveView, useContexts]
   );
 
@@ -8654,7 +8673,13 @@ function PageContent() {
           canManage={canManageSettingsWorkspace}
           user={users.find((u) => u.id === currentUserId) ?? null}
           onCopyCalendarLink={handleCopyCalendarLink}
-          onEditProfile={() => setActiveView('profile')}
+          registerBack={(fn) => {
+            settingsBackRef.current = fn;
+          }}
+          onEditProfile={() => {
+            returnToSettingsRef.current = true;
+            setActiveView('profile');
+          }}
           initialTab={settingsInitialTab}
           onClose={() => {
             setSettingsOpen(false);
