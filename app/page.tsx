@@ -1064,7 +1064,7 @@ function PageContent() {
   // Its own state rather than `boardPushing && sheet === 'context'`: that flips when the animation's
   // promise settles, which is not the same moment the channel clears, and the gap between them is a
   // frame where the pill would unmount and remount — a flash instead of a late slide.
-  const [chatBackPushing, setChatBackPushing] = useState(false);
+  const [returningToContext, setReturningToContext] = useState(false);
 
   const [chatClosing, setChatClosing] = useState(false);
   const activeChatEntityRaw = useChatStore((s) => {
@@ -1079,9 +1079,31 @@ function PageContent() {
 
   // "A conversation is filling the screen right now." Two things hide behind it — the search pill
   // and the bottom nav — and they have to agree, so they read one expression rather than two copies
-  // of it. `!chatBackPushing` is what makes both of them come back at the START of the back push
+  // of it. `!returningToContext` is what makes both of them come back at the START of the back push
   // instead of after it; see that flag's own comment.
-  const chatCoversScreen = activeView === 'chat' && isMobile && !!activeChatEntity && !chatBackPushing;
+  const chatCoversScreen = activeView === 'chat' && isMobile && !!activeChatEntity && !returningToContext;
+
+  // "Something deeper than a context is filling the screen." The bottom nav hides behind this, on
+  // the same reasoning ClickUp uses and the user's own: at that point the thing on screen is what
+  // you are focused on, and three tabs to somewhere else are just taking up room.
+  //
+  // Scoped to the contexts layout on purpose. In the classic layout the nav is the only way between
+  // views on every one of these screens, so hiding it there would not be a refinement, it would be
+  // a trap. When classic goes, this reads as plain `isMobile`.
+  //
+  // `returningToContext` appears here for the same reason it does above: coming back defers its
+  // state change to the end of the push, so without it the nav would fade in only once everything
+  // else had already settled — the same late arrival the search pill had.
+  const deepViewCoversScreen =
+    useContexts &&
+    isMobile &&
+    !returningToContext &&
+    (chatCoversScreen ||
+      (activeView === 'board' && activeSpaceId !== 'everything') ||
+      (activeView === 'docs' && !!activeStandaloneDocId) ||
+      (activeView === 'office' && (!!activeOfficeUserId || !!activeOfficeRoomId)));
+
+  const navHidden = chatCoversScreen || deepViewCoversScreen;
 
   const closeChatConversation = () => {
     hapticTap();
@@ -1092,14 +1114,14 @@ function PageContent() {
     // asked for, appearing for half a second between two others.
     if (origin) {
       chatOriginRef.current = null;
-      setChatBackPushing(true);
+      setReturningToContext(true);
       startContextPush('back', origin);
       // Same deferral as backToContext, and for the same reason: the conversation has to stay
       // mounted and visible while it slides out. Clearing the channel here instead unmounted it
       // before it moved.
       window.setTimeout(() => {
         setChatFromContext(false);
-        setChatBackPushing(false);
+        setReturningToContext(false);
         setActiveChatChannelId(null);
         if (origin === 'home') {
           setNavigation('everything');
@@ -2103,6 +2125,7 @@ function PageContent() {
   // picked from.
   const backToContext = () => {
     const toOffice = !currentWorkspace?.isPersonal;
+    setReturningToContext(true);
     startContextPush('back', toOffice ? 'office' : 'home');
     // Deferred for the length of the push, and this is the part the first version got wrong.
     //
@@ -2115,6 +2138,7 @@ function PageContent() {
     //
     // pushBackToSpaces has always done this with its own afterPush; the contexts path skipped it.
     window.setTimeout(() => {
+      setReturningToContext(false);
       if (toOffice) {
         setActiveOfficeUserId(null);
         setActiveOfficeRoomId(null);
@@ -6345,10 +6369,10 @@ function PageContent() {
         // Opacity ONLY, and the reason is in the comment above rather than a matter of taste: every
         // child in here is `position: fixed`, so a transform on this wrapper would reparent them and
         // move the nav somewhere it does not belong. That constraint is why this cannot be a slide.
-        animate={{ opacity: chatCoversScreen ? 0 : 1 }}
+        animate={{ opacity: navHidden ? 0 : 1 }}
         transition={{ duration: CHAT_PUSH_MS / 1000, ease: CHAT_PUSH_EASE }}
-        style={{ pointerEvents: chatCoversScreen ? 'none' : undefined }}
-        aria-hidden={chatCoversScreen}
+        style={{ pointerEvents: navHidden ? 'none' : undefined }}
+        aria-hidden={navHidden}
       >
       <MobileBottomNav
         navTabs={visibleNavTabs}

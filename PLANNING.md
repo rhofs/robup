@@ -7062,3 +7062,30 @@ hide there at all — only inside a conversation — so that is a behaviour chan
 animation one, and a significant one: it would make Back the only way out of a List. Asked rather
 than assumed. If the answer is yes, the change is small: `chatCoversScreen` becomes a broader
 "a deep view is covering the screen" condition, and both consumers follow it unchanged.
+
+### Same session — the nav hides on deep views
+
+Confirmed by the user, with his own reasoning and a precedent: "Jeg ønsker at den forsvinner ved dyp
+visning, for da er det 'det som er i fokus'. Jeg ser clickup gjør det samme." So the bottom nav now
+hides whenever something deeper than a context fills the screen — a List, a Doc, a conversation, a
+room or a person in Office — not only inside a conversation.
+
+**Scoped to the contexts layout on purpose.** In the classic layout the bottom nav is the only way
+between views on every one of those screens, so hiding it there would not be a refinement, it would
+be a trap. When classic goes, the condition reads as plain `isMobile`.
+
+`chatBackPushing` was renamed `returningToContext`, because it stopped being about chat: every
+return to a context defers its state change to the end of the push, so anything that un-hides on
+arrival has to be told at the *start* or it appears once everything else has settled. Three things
+now read that flag — the search pill, the nav, and the deep-view condition itself.
+
+**Known and not addressed:** the content container still reserves `pb-28` for a nav that is no
+longer there in these views, so there is dead space at the bottom of a fully scrolled List. Worth a
+look, but it is only visible at the end of a scroll and the padding is shared with the views that
+still show the nav.
+
+**Also unresolved:** the user reports the nav still not fading softly on the chat transition, with
+production already on the commit that added the fade. The most likely explanation is simply that the
+app had not been force-closed — in remote-URL mode the WebView keeps the previous bundle until it
+actually reloads — but that is a guess, and if it survives a force-close the fade needs a real
+diagnosis rather than another theory. Recorded so the next session does not assume it is fixed.
