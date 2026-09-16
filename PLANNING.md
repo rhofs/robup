@@ -7136,3 +7136,36 @@ of it — but during a push it belongs to the screen being *left*, so it has to 
 arriving. It was sliding correctly and still sitting on top. `zIndex: behind ? 35 : 50`, with 35
 chosen between two known values rather than picked: `<main>` rises to 40 while it moves, and the
 context push layer sits at 30.
+
+### Same session — the chat finally uses its own screen
+
+Two reports, and the first one is the request that had been deferred twice ("at meldingen går bak,
+liksom") now with enough detail to act on: "de flatene på topp og bunn kropper vekk teksten... ser ut
+som så mye areal som ikke er brukt", and the composer running off the screen's lower corners.
+
+**Bottom.** The panel was a plain column of [messages | composer], so the list ended exactly where
+the composer began and the last line was cropped against it. On mobile the list is now full height
+(`absolute inset-0`) with the composer floating over it, and the *content* carries the bottom
+padding that clears it — not the viewport, because the ResizeObserver measures the content and a
+scroll container whose content stops short of its own bottom cannot scroll the last message clear of
+the bar.
+
+The gradient above the blur matters as much as the blur: text sliding under a hard edge looks
+clipped however transparent the bar is, while text fading into one reads as continuing. Desktop
+keeps the plain column — it has the room, and a floating bar over a wide panel is just a bar with a
+gap behind it.
+
+**Composer shape.** `rounded-[26px]` and real side padding on mobile, matched to the phone's own
+corner radius rather than to the app's smaller controls. It is the last element before the screen
+edge, and a tighter corner there reads as a box sitting on the screen instead of part of it. The
+root's `pb-[env(safe-area-inset-bottom)]` moved onto the floating footer, or the two would stack.
+
+**Top.** The band above the messages was the search pill's room — `pb-9`, tuned around a pill that
+is hidden while a conversation is open. So it was holding open an empty strip containing nothing but
+the Back arrow. Collapsed to `pb-2` in that state.
+
+**Said plainly:** the top is now *reclaimed*, not *passed behind*. Messages run under the composer
+but stop below the Back row, because that row lives in `page.tsx`'s per-view header, outside
+ChatPanel, and genuinely running the list under it means moving the Back control into the panel as a
+floating overlay. That is a real change and worth doing deliberately if the reclaimed space is not
+enough on its own.

@@ -438,7 +438,7 @@ export default function ChatPanel() {
       // leading suspect behind "må scrolle til siden på ios for å trykke send" — the Send button
       // isn't mispositioned, the entire panel is simply wider than the screen. Same class of bug
       // as the desktop sidebar's missing min-h-0, one axis over.
-      className="relative flex flex-col h-full min-w-0 pb-[env(safe-area-inset-bottom)]"
+      className={`relative flex flex-col h-full min-w-0 ${isMobile ? '' : 'pb-[env(safe-area-inset-bottom)]'}`}
       onDragEnter={handleDragEnter}
       onDragLeave={handleDragLeave}
       onDragOver={handleDragOver}
@@ -470,10 +470,18 @@ export default function ChatPanel() {
       <div
         ref={scrollRef}
         onScroll={handleMessagesScroll}
-        className="flex-1 overflow-y-auto overflow-x-hidden"
+        className={`${isMobile ? 'absolute inset-0' : 'flex-1'} overflow-y-auto overflow-x-hidden`}
         onClick={() => setHeldMessageId(null)}
       >
-      <div ref={contentRef} className="px-1 py-3 space-y-4">
+      <div
+        ref={contentRef}
+        className={`px-1 pt-3 space-y-4 ${
+          // Clears the floating composer. Padding on the CONTENT, not the viewport: the
+          // ResizeObserver above measures this element, and a scroll container whose content stops
+          // short of its own bottom cannot scroll the last message out from under the bar.
+          isMobile ? 'pb-[calc(env(safe-area-inset-bottom)+92px)]' : 'pb-3'
+        }`}
+      >
         {/* Only once we actually know. Previously this rendered during the first load of every
             conversation, telling the user it was empty before the messages had arrived — which is
             most of what "det tar litt tid før chatten vises" was describing: not the wait itself,
@@ -590,6 +598,25 @@ export default function ChatPanel() {
       </div>
       </div>
 
+      {/* The composer, and on mobile it FLOATS over the conversation rather than sitting below it.
+          
+          Two complaints, one cause: the panel was a column of [messages | composer], so the message
+          list ended exactly where the composer began and the last line was cropped against it —
+          "de flatene på topp og bunn kropper vekk teksten... ser ut som så mye areal som ikke er
+          brukt". Making the list full height and letting it run underneath gives that area back,
+          and text passing behind a translucent bar reads as depth rather than as a missing strip.
+          
+          The gradient above the blur matters as much as the blur: text sliding under a hard edge
+          looks clipped no matter how transparent the bar is, while text fading into one reads as
+          continuing. Desktop keeps the plain column — it has the room, and a floating bar over a
+          wide panel is just a bar with a gap behind it. */}
+      <div
+        className={
+          isMobile
+            ? 'absolute inset-x-0 bottom-0 z-10 px-3 pt-6 pb-[calc(env(safe-area-inset-bottom)+10px)] bg-gradient-to-t from-neutral-950 via-neutral-950/95 to-transparent'
+            : undefined
+        }
+      >
       {typingUsers.length > 0 && (
         <div className="px-1 pt-1 text-[11px] text-neutral-500 italic truncate">
           {typingUsers.length === 1
@@ -634,8 +661,19 @@ export default function ChatPanel() {
       )}
       {attachmentError && <p className="text-[11px] text-red-400 mt-2 px-1">{attachmentError}</p>}
       <div
-        className={`flex items-end gap-2 px-2.5 py-2 border border-neutral-800 bg-neutral-900/60 focus-within:border-blue-500/60 transition ${
-          replyTarget || pendingAttachment ? 'rounded-b-xl' : 'rounded-xl mt-2'
+        className={`flex items-end gap-2 border border-neutral-800 bg-neutral-900/80 focus-within:border-blue-500/60 transition ${
+          isMobile ? 'px-3 py-2.5 backdrop-blur-sm' : 'px-2.5 py-2'
+        } ${
+          replyTarget || pendingAttachment
+            ? isMobile
+              ? 'rounded-b-[26px]'
+              : 'rounded-b-xl'
+            : isMobile
+              // Matched to the phone's own corner radius rather than to the app's smaller controls —
+              // it is the last element before the screen edge, and a tighter corner there reads as a
+              // box sitting on the screen instead of part of it.
+              ? 'rounded-[26px]'
+              : 'rounded-xl mt-2'
         }`}
       >
         <input ref={fileInputRef} type="file" onChange={handleFileInputChange} className="hidden" />
@@ -671,6 +709,7 @@ export default function ChatPanel() {
         </button>
       </div>
     </div>
+      </div>
   );
 }
 

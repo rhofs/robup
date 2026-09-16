@@ -5221,7 +5221,15 @@ function PageContent() {
               what makes the extra air apply identically everywhere in one change, without touching
               Calendar/Chat's own tighter p-2 content-wrapper budget (they were the two specifically
               flagged as feeling cramped, since every other view already used a roomier p-6). */}
-          <div className="relative md:h-11 pt-2 pb-9 md:py-0 px-3 md:px-6 flex items-center gap-2 justify-between border-b-0 md:border-b border-neutral-800/40">
+          <div
+            className={`relative md:h-11 pt-2 md:py-0 px-3 md:px-6 flex items-center gap-2 justify-between border-b-0 md:border-b border-neutral-800/40 ${
+              // pb-9 is the search pill's room — the pill is taller than this row's other contents
+              // and the padding was tuned around it. In an open conversation the pill is hidden, so
+              // that padding is holding open a band containing nothing but the Back arrow, which is
+              // most of the "så mye areal som ikke er brukt" at the top of a chat.
+              chatCoversScreen ? 'pb-2' : 'pb-9'
+            }`}
+          >
             {/* Mobile-only — the Spaces/Personal-Spaces tree sheets are the *only* way to reach a
                 specific List or Doc on mobile (the desktop sidebar is hidden below md), and neither
                 sheet stays mounted once you've navigated in, so there was previously no way back at
