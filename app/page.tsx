@@ -4683,36 +4683,49 @@ function PageContent() {
                 </span>
               )}
             </button>
+            {/* Settings for wherever you are: yourself in Home, the workspace in Office.
+                
+                The sketch had the workspace MARK here, which cannot work on this bar — the switcher
+                on the left already shows that mark, so the two would sit a thumb apart, identical,
+                one switching and one configuring. The user spotted it before it was built. A gear
+                says "settings" without borrowing an identity that is already on screen, and the slot
+                keeps one meaning across both contexts even though its icon and destination change:
+                configure this place. Which is the same trick the whole layout runs on — one shape,
+                different contents. */}
             <button
               onClick={() => {
                 hapticTap();
-                setSettingsInitialTab('account');
+                setSettingsInitialTab(inOfficeContext ? 'general' : 'account');
                 setSettingsOpen(true);
               }}
-              title="Your settings"
+              title={inOfficeContext ? 'Workspace settings' : 'Your settings'}
               // An avatar cannot take a background on press — it already has one, and it is the
               // person's own colour or photograph. So the response is a shrink plus a ring, which
               // works over both. Same 100ms as everything else that is pressed.
-              className="shrink-0 cursor-pointer rounded-full transition duration-100 active:scale-90 active:ring-2 active:ring-neutral-500 active:brightness-90"
+              className={`shrink-0 cursor-pointer rounded-full transition duration-100 active:scale-90 active:ring-2 active:ring-neutral-500 active:brightness-90 ${
+                inOfficeContext
+                  ? 'w-9 h-9 flex items-center justify-center text-neutral-400 hover:text-app-strong hover:bg-neutral-800/60 active:bg-neutral-700'
+                  : ''
+              }`}
             >
-              {(() => {
-                const me = users.find((u) => u.id === currentUserId);
-                return me?.avatarUrl ? (
-                  // eslint-disable-next-line @next/next/no-img-element
-                  <img
-                    src={me.avatarUrl}
-                    alt={me.name}
-                    className="w-8 h-8 rounded-full object-cover"
-                  />
-                ) : (
-                  <span
-                    className="w-8 h-8 rounded-full flex items-center justify-center text-[11px] font-bold text-white"
-                    style={{ backgroundColor: me?.color ?? '#6366f1' }}
-                  >
-                    {me?.initials ?? '?'}
-                  </span>
-                );
-              })()}
+              {inOfficeContext ? (
+                <Settings className="w-[19px] h-[19px]" />
+              ) : (
+                (() => {
+                  const me = users.find((u) => u.id === currentUserId);
+                  return me?.avatarUrl ? (
+                    // eslint-disable-next-line @next/next/no-img-element
+                    <img src={me.avatarUrl} alt={me.name} className="w-8 h-8 rounded-full object-cover" />
+                  ) : (
+                    <span
+                      className="w-8 h-8 rounded-full flex items-center justify-center text-[11px] font-bold text-white"
+                      style={{ backgroundColor: me?.color ?? '#6366f1' }}
+                    >
+                      {me?.initials ?? '?'}
+                    </span>
+                  );
+                })()
+              )}
             </button>
           </div>
         )}
@@ -8301,20 +8314,26 @@ function PageContent() {
                 <span className="w-8 h-8 rounded-full flex items-center justify-center text-neutral-400">
                   <UserPlus className="w-[18px] h-[18px]" />
                 </span>
-                {(() => {
-                  const me = users.find((u) => u.id === currentUserId);
-                  return me?.avatarUrl ? (
-                    // eslint-disable-next-line @next/next/no-img-element
-                    <img src={me.avatarUrl} alt="" className="w-8 h-8 rounded-full object-cover" />
-                  ) : (
-                    <span
-                      className="w-8 h-8 rounded-full flex items-center justify-center text-[11px] font-bold text-white"
-                      style={{ backgroundColor: me?.color ?? '#6366f1' }}
-                    >
-                      {me?.initials ?? '?'}
-                    </span>
-                  );
-                })()}
+                {pushContextRef.current === 'office' ? (
+                  <span className="w-9 h-9 rounded-full flex items-center justify-center text-neutral-400">
+                    <Settings className="w-[19px] h-[19px]" />
+                  </span>
+                ) : (
+                  (() => {
+                    const me = users.find((u) => u.id === currentUserId);
+                    return me?.avatarUrl ? (
+                      // eslint-disable-next-line @next/next/no-img-element
+                      <img src={me.avatarUrl} alt="" className="w-8 h-8 rounded-full object-cover" />
+                    ) : (
+                      <span
+                        className="w-8 h-8 rounded-full flex items-center justify-center text-[11px] font-bold text-white"
+                        style={{ backgroundColor: me?.color ?? '#6366f1' }}
+                      >
+                        {me?.initials ?? '?'}
+                      </span>
+                    );
+                  })()
+                )}
               </span>
             </div>
             {/* The search row below it, same height and same pill geometry. */}

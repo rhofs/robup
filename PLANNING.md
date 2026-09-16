@@ -7307,3 +7307,26 @@ the same thing — this is you, and your settings. Move workspace settings to th
 switcher popover that already holds "Manage team in Office". Then the bar reads as one rule: left is
 this workspace, right is you. Nothing about the Office profile button changes; what changes is where
 workspace settings live, and that belongs with the settings panels themselves.
+
+### Same session — the header's right-hand slot configures wherever you are
+
+The user's proposal, and it is better than the recommendation it replaced: the top-right control
+opens settings for the *place you are in* — yourself in Home, the workspace in Office. One rule,
+applied twice.
+
+That also settles the icon question he raised in the same breath. It cannot be the workspace mark:
+the switcher on the left already shows that mark, so the two would sit a thumb apart, identical, one
+switching and one configuring. He spotted that before it was built. It should not be the avatar
+either, because in Office the destination is not personal. A **gear** says "settings" without
+borrowing an identity that is already on screen.
+
+So the slot keeps one meaning across both contexts while its icon and destination change — which is
+the same trick the whole layout runs on: one shape, different contents. Home shows your avatar and
+opens Settings on `account`; Office shows a gear and opens it on `general`. Personal settings stay
+one tap away from Office, via Home or the launcher.
+
+The push layer draws a static copy of this bar, so it had to learn the same rule — otherwise the
+outgoing screen would show an avatar sliding away from a gear.
+
+**Still the existing Settings panel, not the panels from the sketch.** This routes to the right tab
+of what exists today; the dedicated personal and workspace panels are the next piece of work.
