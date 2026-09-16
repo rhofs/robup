@@ -74,13 +74,17 @@ export default function DirectMessagesPage() {
 
   return (
     <div className="h-[75vh] overflow-y-auto">
-      <div className="max-w-xl mx-auto space-y-6 py-2">
-        <div>
+      {/* Card sections, matching the Invite screen in Settings. The two do the same job — bring
+          someone in — and they were reading as two different parts of the app purely because one sat
+          inside a panel and the other bare on the page background. Same sections, same label style,
+          same roomy rows. */}
+      <div className="max-w-xl mx-auto space-y-3 py-2">
+        <div className="rounded-2xl bg-neutral-900 elevated p-3.5">
           <p className="text-[10px] font-bold text-neutral-500 uppercase tracking-wider mb-1.5">Add by username or email</p>
           <UsernameLookup onLookup={lookupUser} onSendRequest={sendConnectionRequestTo} />
         </div>
 
-        <div>
+        <div className="rounded-2xl bg-neutral-900 elevated p-3.5">
           <p className="text-[10px] font-bold text-neutral-500 uppercase tracking-wider mb-1.5">Your connect link</p>
           <p className="text-[11px] text-neutral-500 mb-2">
             Anyone who opens this link while signed in sends you a connection request — you decide whether to accept it below.
@@ -89,7 +93,7 @@ export default function DirectMessagesPage() {
             <button
               onClick={copyLink}
               disabled={!connectionInvite}
-              className="flex-1 text-[11px] bg-neutral-800 hover:bg-neutral-700 disabled:opacity-40 rounded px-2 py-1.5 text-neutral-200 flex items-center justify-center gap-1 cursor-pointer"
+              className="flex-1 text-[11px] bg-neutral-800 hover:bg-neutral-700 disabled:opacity-40 rounded-lg px-2 py-2.5 text-neutral-200 flex items-center justify-center gap-1 cursor-pointer"
             >
               {copied ? <Check className="w-3 h-3 text-green-400" /> : <Link2 className="w-3 h-3" />}
               {copied ? 'Copied' : 'Copy link'}
@@ -97,7 +101,7 @@ export default function DirectMessagesPage() {
             <button
               onClick={regenerateConnectionInvite}
               title="Get a new link (old one stops working)"
-              className="text-[11px] text-neutral-500 hover:text-blue-400 px-3 rounded border border-neutral-800 hover:border-neutral-700 cursor-pointer"
+              className="text-[11px] text-neutral-500 hover:text-blue-400 px-3 py-2.5 rounded-lg border border-neutral-800 hover:border-neutral-700 cursor-pointer"
             >
               Get new link
             </button>
@@ -105,7 +109,7 @@ export default function DirectMessagesPage() {
         </div>
 
         {connectionRequestsIncoming.length > 0 && (
-          <div>
+          <div className="rounded-2xl bg-neutral-900 elevated p-3.5">
             <p className="text-[10px] font-bold text-neutral-500 uppercase tracking-wider mb-1.5">Requests ({connectionRequestsIncoming.length})</p>
             <div className="space-y-0.5">
               {connectionRequestsIncoming.map((r) => (
@@ -116,11 +120,11 @@ export default function DirectMessagesPage() {
         )}
 
         {connectionRequestsOutgoing.length > 0 && (
-          <div>
+          <div className="rounded-2xl bg-neutral-900 elevated p-3.5">
             <p className="text-[10px] font-bold text-neutral-500 uppercase tracking-wider mb-1.5">Sent, waiting on them</p>
             <div className="space-y-0.5">
               {connectionRequestsOutgoing.map((r) => (
-                <div key={r.id} className="flex items-center gap-2.5 px-2 py-1.5 rounded hover:bg-neutral-900/40">
+                <div key={r.id} className="flex items-center gap-2.5 px-2 py-2.5 rounded-lg hover:bg-neutral-800/50">
                   <span
                     className="w-7 h-7 rounded-full text-[10px] font-bold flex items-center justify-center text-white shrink-0"
                     style={{ backgroundColor: r.user.color }}
@@ -146,7 +150,7 @@ export default function DirectMessagesPage() {
           </div>
         )}
 
-        <div>
+        <div className="rounded-2xl bg-neutral-900 elevated p-3.5">
           <p className="text-[10px] font-bold text-neutral-500 uppercase tracking-wider mb-1.5">Connections ({connections.length})</p>
           {connections.length === 0 && (
             <p className="text-[11px] text-neutral-500">
@@ -155,7 +159,7 @@ export default function DirectMessagesPage() {
           )}
           <div className="space-y-0.5">
             {connections.map((c) => (
-              <div key={c.id} className="group flex items-center gap-2.5 px-2 py-1.5 rounded hover:bg-neutral-900/40">
+              <div key={c.id} className="group flex items-center gap-2.5 px-2 py-2.5 rounded-lg hover:bg-neutral-800/50">
                 <ConnectionAvatarMenu user={c} onViewProfile={() => setViewingProfileId(c.id)} onStartDM={() => handleStartDM(c.id)} />
                 <div className="min-w-0 flex-1 cursor-pointer" onClick={() => setViewingProfileId(c.id)}>
                   <div className="text-xs text-neutral-200 truncate">{c.name}</div>
@@ -231,7 +235,7 @@ function UsernameLookup({
             if (e.key === 'Enter') submit();
           }}
           placeholder="Their exact username or email..."
-          className="w-full bg-neutral-950 border border-neutral-800 rounded pl-8 pr-16 py-1.5 text-xs text-app-strong placeholder:text-neutral-600 focus:outline-none focus:border-blue-500"
+          className="w-full bg-neutral-950 border border-neutral-800 rounded-lg pl-8 pr-16 py-2.5 text-xs text-app-strong placeholder:text-neutral-600 focus:outline-none focus:border-blue-500"
         />
         <button
           onClick={submit}
@@ -250,7 +254,7 @@ function UsernameLookup({
         {results.map((u) => {
           const justSent = sentIds.has(u.id) && u.status === 'none';
           return (
-            <div key={u.id} className="flex items-center gap-2.5 px-2 py-1.5 rounded hover:bg-neutral-900/40">
+            <div key={u.id} className="flex items-center gap-2.5 px-2 py-2.5 rounded-lg hover:bg-neutral-800/50">
               <span
                 className="w-7 h-7 rounded-full text-[10px] font-bold flex items-center justify-center text-white shrink-0"
                 style={{ backgroundColor: u.color }}
@@ -288,7 +292,7 @@ function UsernameLookup({
 // this creates a real, persistent Connection row, not a low-stakes reversible action.
 function RequestRow({ request, onAccept, onDecline }: { request: ConnectionRequest; onAccept: () => void; onDecline: () => void }) {
   return (
-    <div className="flex items-center gap-2.5 px-2 py-1.5 rounded hover:bg-neutral-900/40">
+    <div className="flex items-center gap-2.5 px-2 py-2.5 rounded-lg hover:bg-neutral-800/50">
       <span
         className="w-7 h-7 rounded-full text-[10px] font-bold flex items-center justify-center text-white shrink-0"
         style={{ backgroundColor: request.user.color }}

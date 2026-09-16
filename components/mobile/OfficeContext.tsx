@@ -74,6 +74,10 @@ export default function OfficeContext({
   // time you open something from it, and a local default meant coming back always landed on the
   // first half regardless of which one you left from.
 
+  // A dot rather than a number: the count is already on every row in the list below, and the only
+  // thing this has to say from out here is "there is something in the other half".
+  const unreadInOther = channels.reduce((sum, x) => sum + (x.unreadCount || 0), 0);
+
   return (
     <div className="flex-1 overflow-y-auto pb-28">
       {/* The switch itself. Two options only — a third would make it a menu, and a menu is what
@@ -91,6 +95,9 @@ export default function OfficeContext({
             }`}
           >
             {id}
+            {id === 'rooms' && unreadInOther > 0 && tab !== 'rooms' && (
+              <span className="ml-1.5 inline-block w-1.5 h-1.5 rounded-full bg-red-500 align-middle" />
+            )}
           </button>
         ))}
       </div>

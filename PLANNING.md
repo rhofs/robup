@@ -7499,3 +7499,38 @@ silently failed to re-insert it, because the anchor it was looking for did not e
 file. Caught by reading the result rather than by the typecheck, which was perfectly happy with a
 settings panel that had quietly lost its workspace fields. Recovered from `git show HEAD:`. Scripted
 moves need an assert on *both* halves, not just the cut.
+
+## 2026-09-17 — Connections restyled, and the unread badge that had nowhere to go
+
+**Connections now matches the Invite screen.** The two do the same job — bring someone in — and read
+as different parts of the app purely because one sits inside a panel and the other bare on the page
+background. Same card sections, same label style, same roomy rows.
+
+**Leaving a launcher screen cuts instead of pushing.** Entering one is not animated at all (the tile
+just switches the view), so leaving with a full push was the two halves of one journey disagreeing —
+"vi ikke har en slide out effekt, men ikke slide inn". The user's call was that a plain cut is right
+for these, which is also the cheaper of the two ways to make them agree.
+
+### The real find: removing the Chat tile took the unread badge with it
+
+The user asked how messages and notifications work now that DMs and rooms are split, and whether the
+menu buttons carry anything. The honest answer was: **nothing did.** `chatUnreadCount` was only ever
+read by the classic layout's Chat tab. Per-DM and per-channel counts still existed, but only inside
+the lists — which you see once you have already gone looking. Push notifications were unaffected and
+still arrived; it was the app itself that had gone quiet, which is the half nobody notices until a
+message is missed.
+
+Split rather than restored, because the two kinds of conversation now live in two different places
+and one combined number could not say which:
+
+- **Home** carries DM unread. DMs are yours, so they belong to Home no matter which workspace is
+  active.
+- **Office** carries channel unread. Rooms carry presence, not messages — there is nothing unread
+  about them.
+- Inside each context, the toggle segment for the other half shows a **dot**, not a number: the count
+  is already on every row in the list, and all this has to say from the outside is "there is
+  something in the other half".
+
+**Worth keeping as a rule:** removing a surface removes whatever was attached to it. The Chat tile
+looked like a duplicate route and was one — but it was also the only thing carrying that number, and
+nothing in the code says so. When a nav entry goes, check its badge before checking anything else.

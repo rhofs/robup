@@ -794,6 +794,22 @@ function PageContent() {
     return channelsUnread + dmsUnread;
   }, [chatChannelsByWorkspace, activeWorkspaceId, chatDms]);
 
+  // The same two numbers, kept apart — because in the contexts layout the two kinds of conversation
+  // live in two different places, and one combined badge could not say which.
+  //
+  // This exists because removing the Chat tile left nowhere for unread to show at all: the per-DM
+  // and per-channel counts are inside their lists, which you only see once you have already gone
+  // looking. Push notifications were unaffected and still arrive, but the app itself had gone quiet,
+  // which is the half nobody notices until a message is missed.
+  const dmUnreadCount = useMemo(() => chatDms.reduce((sum, d) => sum + (d.unreadCount || 0), 0), [chatDms]);
+  const channelUnreadCount = useMemo(
+    () =>
+      activeWorkspaceId
+        ? (chatChannelsByWorkspace[activeWorkspaceId] || []).reduce((sum, c) => sum + (c.unreadCount || 0), 0)
+        : 0,
+    [chatChannelsByWorkspace, activeWorkspaceId]
+  );
+
   // Same "fetch eagerly + 30s poll" shape as the chat unread badges just above — a workspace
   // invite (backlog #8) should be noticeable in the switcher without having to already be
   // looking at it, and there's no push mechanism for this yet either.
@@ -2216,8 +2232,15 @@ function PageContent() {
       return;
     }
     const toOffice = !currentWorkspace?.isPersonal;
-    setReturningToContext(true);
-    startContextPush('back', toOffice ? 'office' : 'home');
+    // A launcher screen is entered with no animation at all — the tile just switches the view — so
+    // leaving it with a full push is the two halves of one journey disagreeing. Reported on
+    // Connections: "vi ikke har en slide out effekt, men ikke slide inn". The user's call is that a
+    // plain cut is right for these, which is the cheaper of the two ways to make them agree.
+    const cutBack = DEEP_LAUNCHER_VIEWS.includes(activeView);
+    if (!cutBack) {
+      setReturningToContext(true);
+      startContextPush('back', toOffice ? 'office' : 'home');
+    }
     // Deferred for the length of the push, and this is the part the first version got wrong.
     //
     // Going back, <main> is the screen being LEFT: it slides out to the right while the layer
@@ -2228,7 +2251,7 @@ function PageContent() {
     // endrer seg til meldingsseksjonen som allerede ligger bak (en duplikat)".
     //
     // pushBackToSpaces has always done this with its own afterPush; the contexts path skipped it.
-    window.setTimeout(() => {
+    const applyBack = () => {
       setReturningToContext(false);
       if (toOffice) {
         setActiveOfficeUserId(null);
@@ -2239,7 +2262,9 @@ function PageContent() {
         setNavigation('everything');
         setActiveView('board');
       }
-    }, CHAT_PUSH_MS);
+    };
+    if (cutBack) applyBack();
+    else window.setTimeout(applyBack, CHAT_PUSH_MS);
   };
 
   // Opening a conversation from Home or Office.
@@ -2389,6 +2414,8 @@ function PageContent() {
         icon: HouseIcon,
         onClick: () => void openHome(),
         active: !!currentWorkspace?.isPersonal && (activeView === 'board' || mobilePersonalSpacesOpen),
+        // DMs are yours, so they belong to Home no matter which workspace is active.
+        badge: dmUnreadCount,
       });
       if (hasRealWorkspace) {
         tabs.push({
@@ -2397,6 +2424,8 @@ function PageContent() {
           icon: Building2,
           onClick: openOfficeContext,
           active: (activeView === 'office' || (activeView === 'board' && !currentWorkspace?.isPersonal)) && !sheetOpen,
+          // Channels only. Rooms carry presence, not messages — there is nothing unread about them.
+          badge: channelUnreadCount,
         });
         tabs.push({
           id: 'calendar',
@@ -2487,7 +2516,7 @@ function PageContent() {
     }
     return tabs;
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [hiddenNavTabs, hasRealWorkspace, activeView, currentWorkspace, workspaces, chatUnreadCount, mobileSpacesOpen, mobilePersonalSpacesOpen, useContexts, openHome]);
+  }, [hiddenNavTabs, hasRealWorkspace, activeView, currentWorkspace, workspaces, chatUnreadCount, dmUnreadCount, channelUnreadCount, mobileSpacesOpen, mobilePersonalSpacesOpen, useContexts, openHome]);
 
   // The desktop sidebar's "Me zone" (My tasks/My assigned tasks/Network/Profile) has no mobile
   // equivalent — it's inside the same hidden-below-md <aside> as the Spaces/Lists tree, and unlike

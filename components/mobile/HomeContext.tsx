@@ -80,6 +80,10 @@ export default function HomeContext({
   // time you open something from it, and a local default meant coming back always landed on the
   // first half regardless of which one you left from.
 
+  // A dot rather than a number: the count is already on every row in the list below, and the only
+  // thing this has to say from out here is "there is something in the other half".
+  const unreadInOther = dms.reduce((sum, x) => sum + (x.unreadCount || 0), 0);
+
   return (
     <div className="flex-1 overflow-y-auto pb-28">
       <div className="mx-2 mb-2 flex gap-0.5 rounded-full bg-neutral-800/60 p-0.5">
@@ -98,6 +102,9 @@ export default function HomeContext({
             }`}
           >
             {label}
+            {id === 'messages' && unreadInOther > 0 && tab !== 'messages' && (
+              <span className="ml-1.5 inline-block w-1.5 h-1.5 rounded-full bg-red-500 align-middle" />
+            )}
           </button>
         ))}
       </div>
