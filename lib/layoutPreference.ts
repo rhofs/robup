@@ -18,14 +18,24 @@ export const LAYOUT_STORAGE_KEY = 'siqt.newLayout';
 
 export type LayoutPreference = 'classic' | 'contexts';
 
-// Classic stays the default until the new one has been lived with. A structural change that
-// arrives unasked is a worse first impression than the same change chosen.
-const DEFAULT_LAYOUT: LayoutPreference = 'classic';
+// Contexts is the default as of 2026-09-16, after it was lived with through nine rounds of feedback
+// on a real device and the user asked for it to become the standard. Classic remains reachable from
+// Settings and is not removed yet — it is the way back if the new one turns out to have a problem
+// nobody hit while it was opt-in.
+const DEFAULT_LAYOUT: LayoutPreference = 'contexts';
 
 export function readLayoutPreference(): LayoutPreference {
   if (typeof window === 'undefined') return DEFAULT_LAYOUT;
   try {
-    return localStorage.getItem(LAYOUT_STORAGE_KEY) === 'contexts' ? 'contexts' : DEFAULT_LAYOUT;
+    const stored = localStorage.getItem(LAYOUT_STORAGE_KEY);
+    // Both values are stored explicitly now. While classic was the default, choosing it was written
+    // as *absence* — the key was removed — which was fine only for as long as absence and "classic"
+    // meant the same thing. The moment the default flips they stop meaning the same thing, and
+    // anyone who had deliberately switched the new layout OFF would have been given it back on their
+    // next load with no way to tell that from never having chosen at all. A preference that can be
+    // silently overridden by a later default is not a preference.
+    if (stored === 'contexts' || stored === 'classic') return stored;
+    return DEFAULT_LAYOUT;
   } catch {
     return DEFAULT_LAYOUT;
   }
@@ -42,8 +52,7 @@ export const LAYOUT_CHANGE_EVENT = 'siqt:layout-change';
 
 export function setLayoutPreference(value: LayoutPreference): void {
   try {
-    if (value === 'contexts') localStorage.setItem(LAYOUT_STORAGE_KEY, 'contexts');
-    else localStorage.removeItem(LAYOUT_STORAGE_KEY);
+    localStorage.setItem(LAYOUT_STORAGE_KEY, value);
   } catch {}
   // Outside the try: a browser that refuses to store still changed the preference for this
   // session, and the app should follow it rather than ignore the tap.

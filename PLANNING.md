@@ -7247,3 +7247,38 @@ and the toast waits for it. Several of its early returns are genuine no-ops (dif
 different parent, target gone) that were still producing a "Task moved" toast offering to undo a move
 that never happened; those now show nothing. The same waiting applies to the move-to-list and
 make-subtask paths.
+
+## 2026-09-16 — the contexts layout is now the default
+
+The user's call, after living with it through nine rounds of feedback on a real device: "Sett den nye
+som standard." Classic is **not** removed — it stays reachable from Settings as the way back if the
+new one turns out to have a problem nobody hit while it was opt-in.
+
+**One thing had to change with the default, and it is the kind of bug that would have been very hard
+to trace.** While classic was the default, choosing it was stored as *absence* — `setLayoutPreference`
+removed the key. That was fine only for as long as absence and "classic" meant the same thing. The
+moment the default flips they stop meaning the same thing: anyone who had deliberately switched the
+new layout **off** would have been handed it back on their next load, indistinguishable from someone
+who never chose at all. Both values are written explicitly now.
+
+The general rule, worth carrying: **a preference stored as the absence of a value cannot survive a
+change of default.** If a setting is ever going to flip, store both sides from the start.
+
+The Settings entry is reworded to match its new meaning. It was "Try the new layout" under an
+"Experimental" heading; it is now "Home and Office" under "Navigation", described as something to
+turn *off* for the older layout. Someone reaching for this control is looking for the app they had,
+and it should say so rather than naming the thing they do not want.
+
+**Note that this affects every user, not just the person who asked** — that was stated before the
+decision, not after.
+
+### Deliberately deferred at the same time
+
+The user was given the open list and chose to wait on all of it: the dead `pb-28` at the bottom of
+lists now that the nav hides ("har ikke lagt merke til det enda"), messages passing behind the Back
+row, a colour per workspace, Planner's personal/work filter, and whether Chat needs its own tab. The
+iPhone changes from the last two rounds are still unverified, and the email invite has still never
+been tested.
+
+Next up by the user's own choice: the avatar and the personal/workspace settings panels from the
+original sketch — the last place the new layout still points back at the old screens.

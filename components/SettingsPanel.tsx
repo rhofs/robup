@@ -363,7 +363,7 @@ export default function SettingsPanel({
   // separate subscriptions) — see lib/pushClient.ts.
   const [pushStatus, setPushStatus] = useState<'unsupported' | 'subscribed' | 'not-subscribed' | 'loading'>('loading');
   const [pushTest, setPushTest] = useState<string | null>(null);
-  const [layout, setLayout] = useState<LayoutPreference>('classic');
+  const [layout, setLayout] = useState<LayoutPreference>('contexts');
   useEffect(() => setLayout(readLayoutPreference()), []);
   const [pushError, setPushError] = useState<string | null>(null);
   useEffect(() => {
@@ -688,11 +688,10 @@ export default function SettingsPanel({
               </>
             )}
 
-            {/* The new navigation, off by default. See lib/layoutPreference.ts for why this is a
-                setting rather than a branch. Deliberately worded as something to try rather than as
-                a feature: it replaces how every screen is reached, and someone switching it on
-                should expect the app to look different, not wonder whether they broke it. */}
-            <div className="text-[10px] uppercase tracking-wide text-neutral-500 px-1 pt-3 pb-1">Experimental</div>
+            {/* Now ON by default, so this reads as a way back rather than as something to try. The
+                wording matters: someone who reaches for this is looking for the app they had, and
+                the control should say that plainly instead of naming the thing they do not want. */}
+            <div className="text-[10px] uppercase tracking-wide text-neutral-500 px-1 pt-3 pb-1">Navigation</div>
             <button
               onClick={() => {
                 const next: LayoutPreference = layout === 'contexts' ? 'classic' : 'contexts';
@@ -713,10 +712,10 @@ export default function SettingsPanel({
                 />
               </span>
               <span className="text-xs text-neutral-300">
-                Try the new layout
+                Home and Office
                 <span className="block text-neutral-500 mt-0.5">
-                  Home and Office instead of separate tabs. Only on this device — switch back any
-                  time.
+                  Two places instead of separate tabs for everything. Turn this off for the older
+                  layout. Only on this device.
                 </span>
               </span>
             </button>
