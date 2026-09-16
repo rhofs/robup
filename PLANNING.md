@@ -7282,3 +7282,28 @@ been tested.
 
 Next up by the user's own choice: the avatar and the personal/workspace settings panels from the
 original sketch — the last place the new layout still points back at the old screens.
+
+### Same session — press response on the header controls, and a question about the Office profile icon
+
+**Press feedback.** The global press rule is `scale(0.97)` — about one pixel on a 32px control, which
+is to say nothing. The header's `+`, the avatar and the workspace switcher now carry their own,
+larger response: a 10% shrink plus a filled background, and for the avatar a ring and a slight
+darkening instead of a background, since it already has one (the person's own colour or photo).
+**Small controls cannot inherit a subtle press effect** — the smaller the target, the larger the
+response has to be to read at all. This is the second time that has come up; the global rule is
+right for rows and wrong for icons.
+
+**The user's question, and the answer given.** He asked whether Office should use a different icon
+for the profile button, while noting he does not want the workspace mark there either — because the
+workspace mark on the *left* is already the switcher.
+
+His instinct is right and the original sketch was wrong about this. The sketch had Home's header-right
+be your avatar and Office's be the workspace mark opening workspace settings. Put that on the same
+bar as the switcher and you have two identical workspace marks a thumb apart, one to switch and one
+to configure — a genuinely confusing pairing, and the kind that only shows up once it is built.
+
+**Recommended and not yet built:** keep the personal avatar in both contexts, because it always means
+the same thing — this is you, and your settings. Move workspace settings to the *left*, into the
+switcher popover that already holds "Manage team in Office". Then the bar reads as one rule: left is
+this workspace, right is you. Nothing about the Office profile button changes; what changes is where
+workspace settings live, and that belongs with the settings panels themselves.

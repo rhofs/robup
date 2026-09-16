@@ -4437,7 +4437,7 @@ function PageContent() {
                   hapticTap();
                   setWorkspaceSwitcherOpen((o) => !o);
                 }}
-                className="md:hidden flex items-center gap-1.5 min-w-0 shrink cursor-pointer"
+                className="md:hidden flex items-center gap-1.5 min-w-0 shrink cursor-pointer rounded-lg -mx-1 px-1 py-0.5 transition duration-100 active:bg-neutral-800/70"
                 title="Switch workspace"
               >
                 <span
@@ -4669,11 +4669,10 @@ function PageContent() {
                 }
               }}
               title={inOfficeContext ? 'Invite to workspace' : 'Add a connection'}
-              // active: styles, not just the global press-scale. That scale is 0.97, which on a
-              // 32px icon is about one pixel — real, and completely imperceptible at this size.
-              // Reported as the button having no feedback at all. Everything else on these screens
-              // is a row wide enough for the scale to read.
-              className="w-8 h-8 rounded-full flex items-center justify-center text-neutral-400 hover:text-app-strong hover:bg-neutral-800/60 active:bg-neutral-700 active:text-app-strong cursor-pointer relative transition-colors"
+              // The global press-scale is 0.97 — about one pixel at this size, which is to say
+              // nothing. Small controls need their own, larger response: a real shrink plus a
+              // filled background, so the press is felt on a button too small for a subtle one.
+              className="w-9 h-9 rounded-full flex items-center justify-center text-neutral-400 hover:text-app-strong hover:bg-neutral-800/60 active:bg-neutral-700 active:text-app-strong active:scale-90 cursor-pointer relative transition duration-100"
             >
               {/* UserPlus, not Plus: a bare plus says "make something", and this one only ever adds
                   a person — a connection in Home, a workspace member in Office. */}
@@ -4691,7 +4690,10 @@ function PageContent() {
                 setSettingsOpen(true);
               }}
               title="Your settings"
-              className="shrink-0 cursor-pointer rounded-full active:opacity-70 transition-opacity"
+              // An avatar cannot take a background on press — it already has one, and it is the
+              // person's own colour or photograph. So the response is a shrink plus a ring, which
+              // works over both. Same 100ms as everything else that is pressed.
+              className="shrink-0 cursor-pointer rounded-full transition duration-100 active:scale-90 active:ring-2 active:ring-neutral-500 active:brightness-90"
             >
               {(() => {
                 const me = users.find((u) => u.id === currentUserId);
