@@ -7169,3 +7169,29 @@ but stop below the Back row, because that row lives in `page.tsx`'s per-view hea
 ChatPanel, and genuinely running the list under it means moving the Back control into the panel as a
 floating overlay. That is a real change and worth doing deliberately if the reclaimed space is not
 enough on its own.
+
+### Same session — the DM dropped on the way out, and it was the fix from the round before
+
+"Når DM animeres ut (tilbake), faller den ned litt."
+
+The collapsed header band added last round was keyed on `chatCoversScreen`, which carries
+`!returningToContext` so that the search pill and the nav can come back at the *start* of the back
+push. That term flips the instant Back is pressed — so the header grew from `pb-2` to `pb-9` at the
+exact moment the conversation began sliding away, and the conversation, which sits below it, dropped
+~28px as it went.
+
+Now keyed on `activeChatEntityRaw`, which stays set until the channel is actually cleared — the end
+of the slide in both flows, since the contexts path defers the clear and the classic path holds it
+through `chatClosing`. The row keeps its height for the whole movement and changes only when there
+is no longer a conversation to shift.
+
+**The general shape of this mistake, which has now happened twice:** one condition was serving two
+purposes that want opposite timing. Things that must *return early* (the pill, the nav) and things
+that must *hold until the end* (anything that changes layout under a moving element) cannot read the
+same flag. The tell is a value whose name describes a state but whose definition contains a term
+about an animation.
+
+**Known trade-off, not yet seen on device:** the pill still returns at the start of the back push,
+so for ~520ms it sits in a row that is still collapsed, and being absolutely centred it may extend
+slightly past that row. It is on a band that is sliding off screen at the time. If it reads badly,
+the fix is to give the pill its own collapsed-row variant rather than to re-merge the conditions.

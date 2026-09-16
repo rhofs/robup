@@ -1088,6 +1088,19 @@ function PageContent() {
   // instead of after it; see that flag's own comment.
   const chatCoversScreen = activeView === 'chat' && isMobile && !!activeChatEntity && !returningToContext;
 
+  // Deliberately NOT chatCoversScreen, and the difference is one frame that is very easy to see.
+  //
+  // This drives the per-view header's height. chatCoversScreen carries `!returningToContext`, which
+  // flips the instant Back is pressed — so the header grew back to its full height at the exact
+  // moment the conversation started sliding away, and the conversation, which lives below it,
+  // dropped ~28px as it went. Reported as "når DM animeres ut (tilbake), faller den ned litt".
+  //
+  // The raw entity is the right thing to read here: it stays set until the channel is actually
+  // cleared, which is the end of the slide in both flows — the contexts path defers it, and the
+  // classic path holds it through `chatClosing`. So the row keeps its height for the whole
+  // movement and changes only once there is no longer a conversation to shift.
+  const chatRowCollapsed = activeView === 'chat' && isMobile && !!activeChatEntityRaw;
+
   // "Something deeper than a context is filling the screen." The bottom nav hides behind this, on
   // the same reasoning ClickUp uses and the user's own: at that point the thing on screen is what
   // you are focused on, and three tabs to somewhere else are just taking up room.
@@ -5227,7 +5240,7 @@ function PageContent() {
               // and the padding was tuned around it. In an open conversation the pill is hidden, so
               // that padding is holding open a band containing nothing but the Back arrow, which is
               // most of the "så mye areal som ikke er brukt" at the top of a chat.
-              chatCoversScreen ? 'pb-2' : 'pb-9'
+              chatRowCollapsed ? 'pb-2' : 'pb-9'
             }`}
           >
             {/* Mobile-only — the Spaces/Personal-Spaces tree sheets are the *only* way to reach a
