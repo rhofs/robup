@@ -118,6 +118,24 @@ export default function ChatPanel() {
   // group-hover:flex) is unreachable there without this: press-and-hold a message reveals it for
   // that one message, tapping the message list anywhere else hides it again.
   const [heldMessageId, setHeldMessageId] = useState<string | null>(null);
+
+  // iOS keeps reporting the home-indicator inset while the keyboard is up, so the composer's
+  // safe-area clearance becomes a strip of dead space between the keyboard and the field — "litt
+  // for mye mellom tastatur og skrivefeltet (på iphone altså)". There is nothing to clear once the
+  // keyboard is covering that area, so the inset is dropped while it is open.
+  //
+  // visualViewport is the only thing that reports this: the keyboard does not change innerHeight in
+  // a WebView, it just covers part of it. 120px rather than any positive difference, so that the
+  // iOS URL bar collapsing cannot be mistaken for a keyboard.
+  const [keyboardOpen, setKeyboardOpen] = useState(false);
+  useEffect(() => {
+    const vv = typeof window !== 'undefined' ? window.visualViewport : null;
+    if (!vv) return;
+    const onResize = () => setKeyboardOpen(window.innerHeight - vv.height > 120);
+    onResize();
+    vv.addEventListener('resize', onResize);
+    return () => vv.removeEventListener('resize', onResize);
+  }, []);
   // One shared timer (not a hook-per-row, since the number of rows changes) — same long-press
   // pattern as components/calendar/WeekRow.tsx's day-cell long-press: hold still for 500ms,
   // cancelled if the finger moves enough to read as a scroll instead.
@@ -475,7 +493,12 @@ export default function ChatPanel() {
       >
       <div
         ref={contentRef}
-        className={`px-1 pt-3 space-y-4 ${
+        className={`pt-3 space-y-4 ${
+          // px-1 left the avatars almost against the screen edge — 4px here plus each row's own
+          // px-2. Reported on iPhone, where the rounded display makes the last few pixels of the
+          // left edge unusable in a way a flat screenshot does not show.
+          isMobile ? 'px-3' : 'px-1'
+        } ${
           // Clears the floating composer. Padding on the CONTENT, not the viewport: the
           // ResizeObserver above measures this element, and a scroll container whose content stops
           // short of its own bottom cannot scroll the last message out from under the bar.
@@ -613,7 +636,9 @@ export default function ChatPanel() {
       <div
         className={
           isMobile
-            ? 'absolute inset-x-0 bottom-0 z-10 px-3 pt-6 pb-[calc(env(safe-area-inset-bottom)+10px)] bg-gradient-to-t from-neutral-950 via-neutral-950/95 to-transparent'
+            ? `absolute inset-x-0 bottom-0 z-10 px-3 pt-6 bg-gradient-to-t from-neutral-950 via-neutral-950/95 to-transparent ${
+                keyboardOpen ? 'pb-2' : 'pb-[calc(env(safe-area-inset-bottom)+10px)]'
+              }`
             : undefined
         }
       >
@@ -836,12 +861,21 @@ export function MessageActions({
   forceVisible?: boolean;
 }) {
   const [pickerOpen, setPickerOpen] = useState(false);
+  const isMobile = useIsMobile();
+  // ~20px targets (p-1 around a 12px icon) are fine under a mouse and far below any touch
+  // guideline — and this row only ever appears on touch after a deliberate long press, so the one
+  // moment it is on screen is the moment it is hardest to hit. 40px targets with 18px icons on
+  // mobile; the desktop hover row is untouched.
+  const btn = isMobile
+    ? 'w-10 h-10 rounded-xl flex items-center justify-center text-neutral-400 active:bg-neutral-800 cursor-pointer'
+    : 'p-1 rounded text-neutral-500 hover:text-blue-400 hover:bg-neutral-800 cursor-pointer';
+  const icon = isMobile ? 'w-[18px] h-[18px]' : 'w-3 h-3';
   return (
     <div
       onClick={(e) => e.stopPropagation()}
-      className={`absolute right-1 top-1 items-center gap-0.5 bg-neutral-900 border border-neutral-800 rounded shadow-sm px-0.5 py-0.5 ${
-        forceVisible ? 'flex' : 'hidden group-hover:flex'
-      }`}
+      className={`absolute items-center bg-neutral-900 border border-neutral-800 shadow-sm ${
+        isMobile ? 'right-2 top-1 gap-1 rounded-2xl px-1 py-1' : 'right-1 top-1 gap-0.5 rounded px-0.5 py-0.5'
+      } ${forceVisible ? 'flex' : 'hidden group-hover:flex'}`}
     >
       {onReact && (
         <FloatingPopover
@@ -850,8 +884,8 @@ export function MessageActions({
           align="right"
           panelClassName="bg-neutral-900 border border-neutral-800 rounded shadow-xl p-1 flex gap-0.5"
           anchor={
-            <button onClick={() => setPickerOpen((o) => !o)} title="Add reaction" className="p-1 rounded text-neutral-500 hover:text-blue-400 hover:bg-neutral-800 cursor-pointer">
-              <SmilePlus className="w-3 h-3" />
+            <button onClick={() => setPickerOpen((o) => !o)} title="Add reaction" className={btn}>
+              <SmilePlus className={icon} />
             </button>
           }
         >
@@ -862,7 +896,9 @@ export function MessageActions({
                 onReact(emoji);
                 setPickerOpen(false);
               }}
-              className="w-7 h-7 rounded flex items-center justify-center text-base hover:bg-neutral-800 cursor-pointer"
+              className={`rounded flex items-center justify-center hover:bg-neutral-800 cursor-pointer ${
+                isMobile ? 'w-11 h-11 text-2xl' : 'w-7 h-7 text-base'
+              }`}
             >
               {emoji}
             </button>
@@ -870,16 +906,16 @@ export function MessageActions({
         </FloatingPopover>
       )}
       {onOpenThread && (
-        <button onClick={onOpenThread} title="Reply in thread" className="p-1 rounded text-neutral-500 hover:text-blue-400 hover:bg-neutral-800 cursor-pointer">
-          <MessagesSquare className="w-3 h-3" />
+        <button onClick={onOpenThread} title="Reply in thread" className={btn}>
+          <MessagesSquare className={icon} />
         </button>
       )}
-      <button onClick={onReply} title="Quote reply" className="p-1 rounded text-neutral-500 hover:text-blue-400 hover:bg-neutral-800 cursor-pointer">
-        <Reply className="w-3 h-3" />
+      <button onClick={onReply} title="Quote reply" className={btn}>
+        <Reply className={icon} />
       </button>
       {isOwn && (
-        <button onClick={onDelete} title="Delete" className="p-1 rounded text-neutral-500 hover:text-red-400 hover:bg-neutral-800 cursor-pointer">
-          <Trash2 className="w-3 h-3" />
+        <button onClick={onDelete} title="Delete" className={`${btn} ${isMobile ? 'text-red-400' : 'hover:text-red-400'}`}>
+          <Trash2 className={icon} />
         </button>
       )}
     </div>

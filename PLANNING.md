@@ -7195,3 +7195,26 @@ about an animation.
 so for ~520ms it sits in a row that is still collapsed, and being absolutely centred it may extend
 slightly past that row. It is on a band that is sliding off screen at the time. If it reads badly,
 the fix is to give the pill its own collapsed-row variant rather than to re-merge the conditions.
+
+### Same session — the long-press actions were mouse-sized, and two iPhone spacing reports
+
+**The message action row was built for a mouse and only ever appears on touch.** `p-1` around a 12px
+icon is a ~20px target, less than half any touch guideline — and on mobile that row only shows after
+a deliberate long press, so the single moment it is on screen is the moment it is hardest to hit.
+40px targets with 18px icons on mobile, 44px quick-reaction emoji, a rounder container with real
+padding. Desktop's hover row is untouched. `ChatThreadPanel` shares the component and gets it too.
+
+**The conversation was pinned to the left edge.** `px-1` plus each row's own `px-2` is 12px total.
+Reported on iPhone, where a rounded display makes the outermost pixels genuinely unusable in a way a
+flat screenshot does not show. `px-3` on mobile.
+
+**The dead strip between the keyboard and the composer on iOS.** iOS keeps reporting the
+home-indicator safe-area inset while the keyboard is up, so the composer's clearance becomes a gap
+above the keyboard. There is nothing to clear once the keyboard covers that area, so the inset is
+dropped while it is open.
+
+`visualViewport` is the only thing that reports this — in a WebView the keyboard does not change
+`innerHeight`, it just covers part of it. The 120px threshold is there so the iOS URL bar collapsing
+cannot be mistaken for a keyboard. **Not verifiable here:** neither the iOS behaviour nor the
+threshold can be checked on this machine; both are reasoned from how iOS reports viewport changes and
+need confirming on the device that reported it.
