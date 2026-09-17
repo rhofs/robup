@@ -7627,3 +7627,23 @@ now an order. The rule written down last time was "if a third thing drifts, extr
 component rendered twice". It has, so that is now the next piece of work on this header rather than a
 suggestion: everything else here is guesswork about whether two blocks of JSX in different parts of
 one file still agree, and they demonstrably do not stay agreed.
+
+### Same session — the search palette looked nothing like the bar that opens it
+
+"Den er jo så stygg når vi trykker på den." Correct: the resting control is a rounded pill inset from
+both edges, and tapping it produced a full-bleed white band with a 4px radius jammed against the top
+of the screen. Three separate causes, all small:
+
+- **`w-full` with no horizontal padding on the backdrop**, so on a phone the panel spanned edge to
+  edge. That alone is most of why it read as a bare band rather than a card.
+- **`rounded`** — 4px — against an app whose every other surface is `rounded-2xl`.
+- **`pt-[15vh]`**, measured against a viewport the keyboard has just shrunk. On a phone with the
+  keyboard up, 15vh is almost nothing, which is why it sat at the very top.
+
+It now opens roughly where the pill already is, just under the title bar, and the field keeps the
+pill's own shape and tinted fill so tapping reads as that bar *growing* rather than as a different
+control appearing in its place. The hard rule under the input went with it — the panel's own edge is
+the only line needed.
+
+The results list is `max-h-[50vh]` rather than a fixed `max-h-96`, for the same reason the top offset
+changed: a fixed height on a keyboard-shrunk viewport is a panel taller than the space it has.

@@ -231,7 +231,12 @@ export default function CommandPalette({ open, onClose, onOpenTask, scopeKind }:
           animate={{ opacity: 1 }}
           exit={{ opacity: 0 }}
           transition={{ duration: 0.15 }}
-          className="fixed inset-0 z-[80] flex items-start justify-center bg-scrim/70 backdrop-blur-xs pt-[15vh]"
+          // On a phone it opens roughly where the search pill already sits — just under the title
+          // bar — rather than 15vh down. 15vh is measured against a viewport the keyboard has just
+          // shrunk, so it collapsed to almost nothing and the panel slammed against the top edge.
+          // px-3 keeps it off the screen edges, which is most of why it read as a bare white band
+          // rather than as a card.
+          className="fixed inset-0 z-[80] flex items-start justify-center bg-scrim/70 backdrop-blur-xs px-3 pt-[calc(3.5rem+env(safe-area-inset-top)+0.5rem)] md:px-0 md:pt-[15vh]"
           onClick={onClose}
         >
           <motion.div
@@ -240,9 +245,13 @@ export default function CommandPalette({ open, onClose, onOpenTask, scopeKind }:
             exit={{ opacity: 0, scale: 0.97, y: -8 }}
             transition={{ duration: 0.15, ease: 'easeOut' }}
             onClick={(e) => e.stopPropagation()}
-            className="w-full max-w-lg bg-neutral-900 border border-neutral-800 rounded shadow-2xl overflow-hidden"
+            className="w-full max-w-lg bg-neutral-900 border border-neutral-800 rounded-2xl shadow-2xl overflow-hidden p-1.5"
           >
-            <div className="flex items-center gap-2 px-4 py-3 border-b border-neutral-800">
+            {/* The field keeps the shape of the pill that opened it — same radius, same tinted
+                fill — so tapping the search bar reads as that bar growing rather than as a different
+                control appearing in its place. The hard bottom rule is gone with it; the panel's own
+                edge is the only line needed. */}
+            <div className="flex items-center gap-2 px-3.5 py-3 rounded-full bg-neutral-950/60 border border-neutral-800/80">
               <Search className="w-4 h-4 text-neutral-500 shrink-0" />
               <input
                 ref={inputRef}
@@ -263,7 +272,7 @@ export default function CommandPalette({ open, onClose, onOpenTask, scopeKind }:
               />
             </div>
 
-            <div className="max-h-96 overflow-y-auto py-1">
+            <div className="max-h-[50vh] overflow-y-auto py-1">
               {query.trim() && results.length === 0 && (
                 <p className="text-xs text-neutral-500 px-4 py-6 text-center">No results for "{query.trim()}".</p>
               )}
