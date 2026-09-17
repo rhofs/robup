@@ -7656,11 +7656,14 @@ function PageContent() {
                         if (e.key === 'Enter') (e.target as HTMLInputElement).blur();
                         if (e.key === 'Escape') setEditingModalTitle(false);
                       }}
-                      className="w-full text-2xl font-extrabold text-app-strong tracking-tight bg-neutral-950/60 border border-blue-500 rounded px-2 py-1 focus:outline-none"
+                      // text-xl/font-bold on mobile: at text-2xl extrabold a three-word title took
+                      // three lines and read as a headline rather than as the name of a task. Same
+                      // size in both states so starting to edit does not reflow the page.
+                      className="w-full text-xl font-bold md:text-2xl md:font-extrabold text-app-strong tracking-tight bg-neutral-950/60 border border-blue-500 rounded px-2 py-1 focus:outline-none"
                     />
                   ) : (
                     <h2
-                      className="text-2xl font-extrabold text-app-strong tracking-tight cursor-text hover:opacity-90"
+                      className="text-xl font-bold md:text-2xl md:font-extrabold text-app-strong tracking-tight cursor-text hover:opacity-90"
                       title="Click to rename"
                       onClick={() => {
                         setModalTitleDraft(activeModalTask.title);
