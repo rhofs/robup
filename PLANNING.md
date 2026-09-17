@@ -7756,3 +7756,50 @@ Two real options, recorded so the next session does not rediscover them:
 Recommended: (1), as its own piece of work, not folded into a fix round. Chat is the surface where
 people type most, and it is the one place the token being visible is a constant irritation rather
 than an occasional one.
+
+## 2026-09-17 (continued) — the chat composer is a real editor now
+
+Option A from the write-up above, chosen by the user. A `<textarea>` holds a string and draws that
+string, so a picked mention could only ever appear as its raw `@[Label](task:uuid)` token while
+typing. Tolerable in a comment box, written once and forgotten; not in the surface people type in all
+day.
+
+**What did NOT change is the storage format**, and that is the part worth defending. Chat messages
+are still the same plain-text `@[Label](kind:id)` string every other surface uses. That string is
+what the server reads to find who was mentioned, what the push notification quotes, and what every
+already-sent message in the database is. Changing the wire format to suit a new editor would mean
+migrating history and rewriting three unrelated readers. **The editor is a way of typing; it is not
+the truth.** `lib/collab/chatDoc.ts` is the whole bridge: text in, document out, document back to
+text.
+
+**Deliberately not a document editor.** Document, Paragraph, Text, HardBreak, Placeholder and the
+mention node — nothing else. No bold, no lists, no headings. Chat messages are plain text with
+mentions in them, and every extension added here is a key binding that has to be reasoned about
+against Enter-to-send.
+
+**`ChatMentionNode` is separate from the doc editor's `ClientMentionNode`** for two reasons that are
+not cosmetic: it needs *two* suggestion plugins, `@` and `#`, and it needs to be workspace-scoped,
+which a doc never is because a doc is already inside one.
+
+**The workspace is passed as a getter, not a value.** The editor is created once and the conversation
+changes underneath it every time you open a different DM — a captured id would scope every later
+mention to whichever conversation happened to be open when the editor was built. That is the kind of
+bug that works perfectly in testing, because you test by opening one conversation.
+
+**Two smaller things that came with it:**
+
+- The manual autosize is gone. A contenteditable grows with its own content, so the cap is a
+  max-height on its scroll box and nothing measures `scrollHeight` on every keystroke.
+- The placeholder needed its own CSS rule. The existing one is scoped to `.collab-doc-editor`, and
+  without a match the placeholder element renders with no content — which does not look like a bug,
+  it looks like an empty box. Not italic, unlike the doc editor's: a document's placeholder is an
+  instruction about what to write, a chat placeholder is the name of who you are writing to.
+
+**`lib/mentionOptions.ts` was extracted first**, before any of this, because there are now two
+pickers over the same data and this session has already paid twice for two copies of one rule
+drifting apart. Scoring, ordering, scoping and sub-labels are decisions about the product, not about
+which editor happens to be on screen.
+
+**Not verified on device.** Typecheck and build are clean. The paths that need a real run: typing,
+picking with `@` and with `#`, Enter to send, Shift+Enter, switching conversation mid-draft,
+attachments, and the reply bar.

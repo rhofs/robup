@@ -424,3 +424,21 @@ body {
     transform: none;
   }
 }
+
+/* The chat composer's placeholder.
+   
+   The rule above is scoped to .collab-doc-editor, and this editor is not one — it deliberately has
+   almost none of that editor's extensions. Without its own rule the placeholder element renders with
+   no content at all and the field simply looks empty, which is not obviously a bug: an empty box
+   that should say "Message Yang B" looks like an empty box.
+   
+   Not italic, unlike the doc editor's. A document's placeholder is an instruction about what to
+   write; a chat placeholder is the name of who you are writing to, and italicising that reads as
+   emphasis on the wrong thing. */
+.chat-composer .is-editor-empty:first-child::before {
+  content: attr(data-placeholder);
+  float: left;
+  height: 0;
+  pointer-events: none;
+  color: var(--color-neutral-500);
+}

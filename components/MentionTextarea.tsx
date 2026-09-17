@@ -4,7 +4,7 @@ import { forwardRef, useEffect, useImperativeHandle, useRef, useState } from 're
 import { createPortal } from 'react-dom';
 import { ListChecks, FileText, UserCircle } from 'lucide-react';
 import { useTaskStore } from '../store/useTaskStore';
-import { scoreMatch } from '../lib/search';
+import { buildMentionOptions, type MentionOption } from '../lib/mentionOptions';
 import { buildMentionToken, type MentionKind } from '../lib/mentions';
 import { getCaretCoordinates, type CaretCoordinates } from '../lib/caretCoordinates';
 
@@ -13,8 +13,6 @@ const KIND_ICON: Record<MentionKind, typeof ListChecks> = {
   doc: FileText,
   user: UserCircle,
 };
-
-const MAX_RESULTS = 8;
 
 // Where the dropdown goes, given where the caret is.
 //
@@ -52,8 +50,6 @@ function placement(coords: CaretCoordinates): React.CSSProperties {
     zIndex: 90,
   };
 }
-
-type MentionOption = { kind: MentionKind; id: string; label: string; sub?: string; score: number };
 
 // `sigil` is what opened the dropdown, and it decides what the dropdown is allowed to contain.
 // '@' searches everything — people, tasks and docs together — because most of the time you remember
@@ -115,71 +111,16 @@ function MentionTextareaInner(
     }
   };
 
-  const options: MentionOption[] = (() => {
-    if (!trigger) return [];
-    const q = trigger.query.toLowerCase();
-    const results: MentionOption[] = [];
-    // Scoped when the caller says which workspace this text belongs to. Chat does; a task comment
-    // does not need to, since it is already inside one. Without a scope everything is offered, which
-    // is right for a comment and wrong for a message: mentioning a task from a workspace the other
-    // person cannot open produces a chip that does nothing for them.
-    const spaceIds = workspaceId
-      ? new Set((workspaces.find((w) => w.id === workspaceId)?.spaces ?? []).flatMap((sp) => sp.lists.map((l) => l.id)))
-      : null;
-    const memberIds = workspaceId
-      ? new Set((workspaces.find((w) => w.id === workspaceId)?.members ?? []).map((m) => m.id))
-      : null;
-    // Every task carries where it lives. Half the tasks in a real workspace are subtasks with names
-    // like "Påsyn" repeated across a dozen videos — reported as a list of identical rows with no way
-    // to tell which is which. The parent task, or failing that the List, is what distinguishes them,
-    // and it is the same thing a person would say out loud to make the difference clear.
-    const listNameById = new Map(
-      workspaces.flatMap((w) => w.spaces).flatMap((sp) => sp.lists.map((l) => [l.id, l.name] as const))
-    );
-    for (const t of tasks) {
-      if (spaceIds && !spaceIds.has(t.listId)) continue;
-      if (t.archived) continue;
-      const score = q ? scoreMatch(t.title, q) : 1;
-      if (score === null) continue;
-      const parent = t.parentId ? tasks.find((p) => p.id === t.parentId) : null;
-      results.push({
-        kind: 'task',
-        id: t.id,
-        label: t.title,
-        sub: parent ? parent.title : listNameById.get(t.listId),
-        score,
-      });
-    }
-    if (trigger.sigil === '@') {
-      for (const u of users) {
-        if (memberIds && !memberIds.has(u.id)) continue;
-        const score = q ? scoreMatch(u.name, q) : 1;
-        if (score !== null) results.push({ kind: 'user', id: u.id, label: u.name, score });
-      }
-    }
-    for (const ws of workspaces) {
-      if (trigger.sigil === '#') break;
-      if (workspaceId && ws.id !== workspaceId) continue;
-      for (const space of ws.spaces) {
-        for (const doc of space.spaceDocs) {
-          const label = doc.title || 'Untitled';
-          const score = q ? scoreMatch(label, q) : 1;
-          if (score !== null) results.push({ kind: 'doc', id: doc.id, label, sub: space.name, score });
-        }
-      }
-    }
-    // People first under '@', always. The user's call, and the right one: '@' reads as addressing a
-    // person in every app that has ever had it, and a task list crowding out the one name you were
-    // reaching for is the failure that gets noticed. '#' is the way to lead with tasks, which is
-    // exactly what it is for.
-    const kindRank: Record<MentionKind, number> = { user: 0, task: 1, doc: 2 };
-    return results
-      .sort(
-        (a, b) =>
-          kindRank[a.kind] - kindRank[b.kind] || a.score - b.score || a.label.length - b.label.length
-      )
-      .slice(0, MAX_RESULTS);
-  })();
+  const options: MentionOption[] = trigger
+    ? buildMentionOptions({
+        query: trigger.query,
+        sigil: trigger.sigil,
+        workspaceId,
+        tasks,
+        users,
+        workspaces,
+      })
+    : [];
 
   const selectOption = (opt: MentionOption) => {
     if (!trigger) return;

@@ -7,7 +7,7 @@ import { useSessionStore } from '../store/useSessionStore';
 import { dateKey } from '../lib/navUrl';
 import { useTaskStore } from '../store/useTaskStore';
 import { renderChatMessageBody } from '../lib/chatFormat';
-import MentionTextarea from './MentionTextarea';
+import ChatComposerInput from './ChatComposerInput';
 import { useChatChannelConnection } from '../lib/collab/useChatChannelConnection';
 import { uploadChatFile } from '../lib/uploadChatFile';
 import { formatBytes } from '../lib/formatBytes';
@@ -170,7 +170,6 @@ export default function ChatPanel() {
   const [replyTarget, setReplyTarget] = useState<{ id: string; authorName: string; body: string } | null>(null);
   const [draft, setDraft] = useState('');
   const [sending, setSending] = useState(false);
-  const textareaRef = useRef<HTMLTextAreaElement>(null);
   // Media (Phase 6) + generic files (this pass). Picked but not-yet-sent attachment — shows a
   // local blob-URL preview immediately for images (before any network call), uploaded only once
   // the user actually hits Send, same "don't touch the network until the user commits" convention
@@ -187,15 +186,9 @@ export default function ChatPanel() {
   const [dragActive, setDragActive] = useState(false);
   const dragCounterRef = useRef(0);
 
-  // Grows with content up to a cap — genuinely needed once multi-line ``` code blocks ``` are a
-  // real use case, not just a cosmetic touch (a fixed single row hid everything past the first
-  // line while typing).
-  useEffect(() => {
-    const el = textareaRef.current;
-    if (!el) return;
-    el.style.height = 'auto';
-    el.style.height = `${Math.min(el.scrollHeight, COMPOSER_MAX_HEIGHT_PX)}px`;
-  }, [draft]);
+  // The manual autosize that used to live here is gone with the textarea: a contenteditable grows
+  // with its own content, so the cap is a max-height on the scroll box (ChatComposerInput) and
+  // nothing has to measure scrollHeight on every keystroke.
 
   const workspaces = useTaskStore((s) => s.workspaces);
   const activeChannel =
@@ -737,21 +730,18 @@ export default function ChatPanel() {
             keys while its own dropdown is open, so Enter-to-send below is untouched the rest of the
             time. workspaceId scopes what can be mentioned — in a channel that is its workspace; in a
             DM it is the workspace the two people share, resolved by the caller. */}
-        <MentionTextarea
-          ref={textareaRef}
-          workspaceId={mentionWorkspaceId}
+        {/* A real editor, so a picked mention is a chip while you type rather than its raw
+            `@[Label](task:uuid)` token. What it stores is unchanged — see lib/collab/chatDoc.ts for
+            why the wire format stayed plain text. */}
+        <ChatComposerInput
           value={draft}
-          onChange={(e) => handleDraftChange(e.target.value)}
-          onKeyDown={(e) => {
-            if (e.key === 'Enter' && !e.shiftKey) {
-              e.preventDefault();
-              handleSend();
-            }
-          }}
+          onChange={handleDraftChange}
+          onSubmit={handleSend}
           placeholder={activeChannel ? `Message ${isDM ? activeChannelLabel : `#${activeChannel.name}`}` : 'Message...'}
-          rows={1}
-          style={{ maxHeight: COMPOSER_MAX_HEIGHT_PX }}
-          className="flex-1 bg-transparent text-[15px] md:text-[13px] text-app-strong placeholder:text-neutral-500 resize-none focus:outline-none py-1 overflow-y-auto"
+          // A getter, not the value: this editor is created once and the conversation changes under
+          // it, so a captured id would scope every later mention to the first DM you opened.
+          getWorkspaceId={() => mentionWorkspaceId}
+          maxHeight={COMPOSER_MAX_HEIGHT_PX}
         />
         <button
           onClick={handleSend}
