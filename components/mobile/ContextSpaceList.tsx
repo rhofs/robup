@@ -2,7 +2,7 @@
 
 import { useRef } from 'react';
 import { ChevronRight, ChevronDown, Folder as FolderIcon, List as ListIcon } from 'lucide-react';
-import type { HierarchySpace } from '../../store/useTaskStore';
+import type { HierarchySpace, HierarchyFolder, HierarchyList } from '../../store/useTaskStore';
 import { FOLDER_ICON_MAP } from '../FolderTree';
 import { hapticTap } from '../../lib/haptics';
 
@@ -43,6 +43,11 @@ type Props = {
   onSelectSpace: (spaceId: string) => void;
   onSelectList: (spaceId: string, listId: string) => void;
   onSpaceMenu: (x: number, y: number, space: HierarchySpace) => void;
+  // Folders and Lists get the same long-press menu Spaces already had. Without them this list could
+  // create things it could not rename or delete — reported as "kan endre navn på spaces i home, men
+  // ikke lists".
+  onFolderMenu: (x: number, y: number, folder: HierarchyFolder) => void;
+  onListMenu: (x: number, y: number, list: HierarchyList, spaceId: string) => void;
 };
 
 export default function ContextSpaceList({
@@ -55,6 +60,8 @@ export default function ContextSpaceList({
   onSelectSpace,
   onSelectList,
   onSpaceMenu,
+  onFolderMenu,
+  onListMenu,
 }: Props) {
 
   // One timer for the whole list: only one finger is ever held at a time, and keeping it here
@@ -69,7 +76,7 @@ export default function ContextSpaceList({
     }
   };
 
-  const holdHandlers = (space: HierarchySpace) => ({
+  const holdHandlers = (open: (x: number, y: number) => void) => ({
     onPointerDown: (e: React.PointerEvent) => {
       firedRef.current = false;
       startRef.current = { x: e.clientX, y: e.clientY };
@@ -78,7 +85,7 @@ export default function ContextSpaceList({
       timerRef.current = window.setTimeout(() => {
         firedRef.current = true;
         hapticTap();
-        onSpaceMenu(clientX, clientY, space);
+        open(clientX, clientY);
       }, LONG_PRESS_MS);
     },
     onPointerMove: (e: React.PointerEvent) => {
@@ -123,7 +130,7 @@ export default function ContextSpaceList({
                   hapticTap();
                   onToggleSpace(space.id);
                 }}
-                {...holdHandlers(space)}
+                {...holdHandlers((x, y) => onSpaceMenu(x, y, space))}
                 className="min-w-0 flex-1 flex items-center gap-3 px-2 py-2.5 rounded-lg text-left cursor-pointer"
               >
                 {/* text-white, not text-app-strong — the tile is filled with the Space's own colour,
@@ -167,9 +174,14 @@ export default function ContextSpaceList({
                     <div key={folder.id}>
                       <button
                         onClick={() => {
+                          if (firedRef.current) {
+                            firedRef.current = false;
+                            return;
+                          }
                           hapticTap();
                           onToggleFolder(folder.id);
                         }}
+                        {...holdHandlers((x, y) => onFolderMenu(x, y, folder))}
                         className="w-full flex items-center gap-2 px-2 py-2 rounded-lg text-left cursor-pointer hover:bg-neutral-800/60"
                       >
                         {folderOpen ? (
@@ -188,7 +200,14 @@ export default function ContextSpaceList({
                           {space.lists.filter((l) => l.folderId === folder.id && !l.archived).map((list) => (
                             <button
                               key={list.id}
-                              onClick={() => onSelectList(space.id, list.id)}
+                              onClick={() => {
+                                if (firedRef.current) {
+                                  firedRef.current = false;
+                                  return;
+                                }
+                                onSelectList(space.id, list.id);
+                              }}
+                              {...holdHandlers((x, y) => onListMenu(x, y, list, space.id))}
                               className="w-full flex items-center gap-2 px-2 py-2 rounded-lg text-left cursor-pointer hover:bg-neutral-800/60"
                             >
                               <ListIcon className="w-3.5 h-3.5 shrink-0 text-neutral-500" />
@@ -203,7 +222,14 @@ export default function ContextSpaceList({
                 {space.lists.filter((l) => l.folderId === null && !l.archived).map((list) => (
                   <button
                     key={list.id}
-                    onClick={() => onSelectList(space.id, list.id)}
+                    onClick={() => {
+                      if (firedRef.current) {
+                        firedRef.current = false;
+                        return;
+                      }
+                      onSelectList(space.id, list.id);
+                    }}
+                    {...holdHandlers((x, y) => onListMenu(x, y, list, space.id))}
                     className="w-full flex items-center gap-2 px-2 py-2 rounded-lg text-left cursor-pointer hover:bg-neutral-800/60"
                   >
                     <ListIcon className="w-3.5 h-3.5 shrink-0 text-neutral-500" />

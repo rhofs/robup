@@ -73,6 +73,7 @@ import { useHistoryStore } from '../store/useHistoryStore';
 import { hapticTap } from '../lib/haptics';
 import { BOOT_MARK_SRC, BOOT_MARK_ASPECT, BOOT_MARK_WIDTH_SHARE, BOOT_RING_BOX_SHARE } from '../lib/bootMark';
 import { setNativeBackHandler } from '../lib/nativeBack';
+import { setMentionJumpHandler } from '../lib/mentionJump';
 import { readLayoutPreference, LAYOUT_STORAGE_KEY, LAYOUT_CHANGE_EVENT } from '../lib/layoutPreference';
 import OfficeContext from '../components/mobile/OfficeContext';
 import HomeContext from '../components/mobile/HomeContext';
@@ -2671,6 +2672,14 @@ function PageContent() {
     return myRole === 'owner' || myRole === 'admin';
   }, [settingsWorkspace, currentUserId]);
 
+  useEffect(() => {
+    setMentionJumpHandler(jumpToMention);
+    return () => setMentionJumpHandler(null);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    // Re-registered every render on purpose, same reasoning as the native Back handler: the closure
+    // reads a dozen pieces of state and a stale one would navigate to the wrong place.
+  });
+
   const currentSpace = useMemo(() => {
     if (activeSpaceId === 'everything') return null;
     for (const ws of workspaces) {
@@ -4195,6 +4204,8 @@ function PageContent() {
   // Jumping from a clicked @-mention chip — mirrors CommandPalette's activate() exactly (same
   // setter calls, same order for the 'doc' case) so a mention lands wherever the search palette
   // would've taken you for the same entity.
+  // Registered below so a mention chip anywhere — including inside a chat message, which this page
+  // does not pass props to — can reach it. See lib/mentionJump.ts.
   const jumpToMention = (kind: MentionKind, id: string) => {
     if (kind === 'task') {
       setModalTaskStack([id]);
@@ -4459,6 +4470,8 @@ function PageContent() {
                   setActiveView('board');
                 }}
                 onSpaceMenu={(x, y, space) => setSpaceMenu({ x, y, space })}
+                onFolderMenu={(x, y, folder) => setFolderMenu({ x, y, folder })}
+                onListMenu={(x, y, list, spaceId) => setListMenu({ x, y, list, spaceId })}
                 onSelectDm={(channelId) => openConversationFromContext(channelId, 'home')}
                 onStartDm={(userId) => void handleStartDMFromOffice(userId)}
                 onCreateSpace={(name) => {
@@ -4504,6 +4517,8 @@ function PageContent() {
                   setActiveView('board');
                 }}
                 onSpaceMenu={(x, y, space) => setSpaceMenu({ x, y, space })}
+                onFolderMenu={(x, y, folder) => setFolderMenu({ x, y, folder })}
+                onListMenu={(x, y, list, spaceId) => setListMenu({ x, y, list, spaceId })}
                 onSelectRoom={setActiveOfficeRoomId}
                 onSelectChannel={(channelId) => openConversationFromContext(channelId, 'office')}
                 onCreateSpace={(name) => {

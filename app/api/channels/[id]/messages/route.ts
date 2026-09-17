@@ -5,6 +5,8 @@ import { ensureChannelAccess } from '@/lib/auth/chatAccess';
 import { broadcastChatSignal } from '@/lib/collab/broadcastChatSignal';
 import { validateChatAttachment } from '@/lib/chatAttachment';
 import { sendPushToUser } from '@/lib/push';
+import { notify } from '@/lib/notifications';
+import { MENTION_RE } from '@/lib/mentions';
 
 export async function GET(req: Request, { params }: { params: Promise<{ id: string }> }) {
   const { id: channelId } = await params;
@@ -125,6 +127,30 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
       }
     })
     .catch(() => {});
+
+  // Being named is not the same as being in the room, so it gets its own record rather than riding
+  // the unread badge: a mention is addressed to you personally, survives being marked read, and is
+  // still findable in the bell tomorrow. Muted members are deliberately still notified here — muting
+  // a channel says "stop telling me about the conversation", not "stop telling me when I am asked a
+  // direct question".
+  const mentionedUserIds = [...new Set(
+    [...(message.body ?? '').matchAll(MENTION_RE)].filter((m) => m[2] === 'user').map((m) => m[3])
+  )];
+  if (mentionedUserIds.length > 0) {
+    const members = await prisma.chatChannelMember.findMany({
+      where: { channelId, userId: { in: mentionedUserIds } },
+      select: { userId: true },
+    });
+    // Only people actually on the channel. A token can name anyone — it is text someone typed — and
+    // notifying a person about a conversation they cannot open would be worse than silence.
+    notify({
+      userIds: members.map((m) => m.userId),
+      actorId: userId,
+      type: 'chat_mention',
+      title: `${message.author?.name ?? 'Someone'} mentioned you`,
+      body: message.body?.trim().slice(0, 140) || null,
+    }).catch(() => {});
+  }
 
   return NextResponse.json(message);
 }

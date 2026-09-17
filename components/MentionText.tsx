@@ -24,6 +24,47 @@ type MentionTextProps = {
   className?: string;
 };
 
+// One mention, rendered inline. Extracted so chat messages can put a chip between two runs of
+// formatted text — they need it interleaved with code/bold/italic rather than as its own block,
+// which is what MentionText below renders.
+export function MentionChip({ kind, id, label, onJump }: { kind: MentionKind; id: string; label: string; onJump: (kind: MentionKind, id: string) => void }) {
+  const tasks = useTaskStore((s) => s.tasks);
+  const users = useTaskStore((s) => s.users);
+  const workspaces = useTaskStore((s) => s.workspaces);
+  const resolved = resolveMentionEntity(kind, id, label, { tasks, users, workspaces });
+  const Icon = KIND_ICON[kind];
+  const color =
+    kind === 'user'
+      ? users.find((u) => u.id === id)?.color ?? KIND_COLOR.user
+      : kind === 'doc'
+        ? resolved.color ?? KIND_COLOR.doc
+        : KIND_COLOR[kind];
+  if (!resolved.found) {
+    return (
+      <span
+        title="No longer exists"
+        className="inline-flex items-center gap-1 px-1.5 py-0.5 mx-0.5 rounded text-[10px] font-medium text-neutral-500 bg-neutral-800/60 line-through align-middle"
+      >
+        <Icon className="w-3 h-3 shrink-0" />
+        {resolved.label}
+      </span>
+    );
+  }
+  return (
+    <button
+      onClick={(e) => {
+        e.stopPropagation();
+        onJump(kind, id);
+      }}
+      className="inline-flex items-center gap-1 px-1.5 py-0.5 mx-0.5 rounded text-[10px] font-semibold text-white cursor-pointer hover:brightness-110 transition align-middle"
+      style={{ backgroundColor: color }}
+    >
+      <Icon className="w-3 h-3 shrink-0" />
+      {resolved.label}
+    </button>
+  );
+}
+
 // Read-only renderer for text containing @-mention tokens (`@[Label](kind:id)`) — used for posted
 // comment bodies and the Doc editor's view-mode. Renders a <div>, not <p>, so it works in both spots.
 export default function MentionText({ text, onJump, className }: MentionTextProps) {

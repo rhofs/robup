@@ -5,7 +5,9 @@ import { Send, Reply, Trash2, X, MessagesSquare, Paperclip, SmilePlus, FileText,
 import { useChatStore, type ChatMessage, type ChatAttachment, type ChatReaction, type ChatDMMember } from '../store/useChatStore';
 import { useSessionStore } from '../store/useSessionStore';
 import { dateKey } from '../lib/navUrl';
+import { useTaskStore } from '../store/useTaskStore';
 import { renderChatMessageBody } from '../lib/chatFormat';
+import MentionTextarea from './MentionTextarea';
 import { useChatChannelConnection } from '../lib/collab/useChatChannelConnection';
 import { uploadChatFile } from '../lib/uploadChatFile';
 import { formatBytes } from '../lib/formatBytes';
@@ -195,6 +197,7 @@ export default function ChatPanel() {
     el.style.height = `${Math.min(el.scrollHeight, COMPOSER_MAX_HEIGHT_PX)}px`;
   }, [draft]);
 
+  const workspaces = useTaskStore((s) => s.workspaces);
   const activeChannel =
     Object.values(channelsByWorkspace).flat().find((c) => c.id === activeChannelId) ?? dms.find((c) => c.id === activeChannelId);
   // Both channel types now carry `.members` (real channels via GET/POST
@@ -202,6 +205,27 @@ export default function ChatPanel() {
   // quoted-author display names, no more per-workspace lookup.
   const membersById = new Map((activeChannel?.members ?? []).map((m) => [m.userId, m.user]));
   const isDM = activeChannel?.type === 'dm' || activeChannel?.type === 'group_dm';
+
+  // Which workspace's people, tasks and docs this conversation can mention.
+  //
+  // A channel belongs to a workspace, so that is the answer. A DM belongs to none — it exists
+  // between people, not inside a company — so mentioning anything would either be unscoped (offering
+  // work the other person cannot open) or impossible. The rule the user set: only where you share a
+  // workspace, and only from the shared one. Resolved as the first workspace whose membership
+  // contains every participant; with more than one shared workspace the first is picked, which is
+  // the same arbitrary-but-stable choice the rest of the app makes for "a workspace we both have".
+  const mentionWorkspaceId = (() => {
+    if (!activeChannel) return null;
+    if (!isDM) {
+      return Object.entries(channelsByWorkspace).find(([, list]) => list.some((c) => c.id === activeChannel.id))?.[0] ?? null;
+    }
+    const participantIds = (activeChannel.members ?? []).map((m) => m.user.id);
+    if (participantIds.length === 0) return null;
+    const shared = workspaces.find(
+      (w) => !w.isPersonal && participantIds.every((uid) => w.members.some((m) => m.id === uid))
+    );
+    return shared?.id ?? null;
+  })();
   // A DM has no stored name (name: null, always) — rendered here from whichever *other* members
   // are on it, same "relative to the viewer" convention Slack/Discord use for DM titles.
   const dmLabel = isDM
@@ -709,8 +733,13 @@ export default function ChatPanel() {
         >
           <Paperclip className="w-4 h-4" />
         </button>
-        <textarea
+        {/* MentionTextarea, not a bare textarea: it forwards every prop through and only intercepts
+            keys while its own dropdown is open, so Enter-to-send below is untouched the rest of the
+            time. workspaceId scopes what can be mentioned — in a channel that is its workspace; in a
+            DM it is the workspace the two people share, resolved by the caller. */}
+        <MentionTextarea
           ref={textareaRef}
+          workspaceId={mentionWorkspaceId}
           value={draft}
           onChange={(e) => handleDraftChange(e.target.value)}
           onKeyDown={(e) => {

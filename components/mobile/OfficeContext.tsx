@@ -2,7 +2,7 @@
 
 import { useState } from 'react';
 import { ChevronRight, Hash, Users } from 'lucide-react';
-import type { HierarchySpace, HierarchyRoom } from '../../store/useTaskStore';
+import type { HierarchySpace, HierarchyRoom, HierarchyFolder, HierarchyList } from '../../store/useTaskStore';
 import ContextSpaceList from './ContextSpaceList';
 import { hapticTap } from '../../lib/haptics';
 
@@ -36,6 +36,9 @@ type Props = {
   onSelectSpace: (spaceId: string) => void;
   onSelectList: (spaceId: string, listId: string) => void;
   onSpaceMenu: (x: number, y: number, space: HierarchySpace) => void;
+  onFolderMenu: (x: number, y: number, folder: HierarchyFolder) => void;
+  onListMenu: (x: number, y: number, list: HierarchyList, spaceId: string) => void;
+
 
   onSelectRoom: (roomId: string) => void;
   onSelectChannel: (channelId: string) => void;
@@ -56,6 +59,8 @@ export default function OfficeContext({
   onSelectSpace,
   onSelectList,
   onSpaceMenu,
+  onFolderMenu,
+  onListMenu,
   onSelectRoom,
   onSelectChannel,
   onCreateSpace,
@@ -114,6 +119,8 @@ export default function OfficeContext({
             onSelectSpace={onSelectSpace}
             onSelectList={onSelectList}
             onSpaceMenu={onSpaceMenu}
+            onFolderMenu={onFolderMenu}
+            onListMenu={onListMenu}
           />
           {creatingSpace ? (
             // Creates the Space right here instead of opening the Spaces tree to do it. Routing this to

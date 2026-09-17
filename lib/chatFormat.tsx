@@ -1,5 +1,8 @@
 import type { ReactNode } from 'react';
 
+import { parseMentions } from './mentions';
+import { MentionChip } from '../components/MentionText';
+import { runMentionJump } from './mentionJump';
 // Deliberately minimal — not a CommonMark parser, just the four token types actually asked for:
 // fenced code blocks, inline code, bold, italic. Consistent with this codebase's existing
 // preference for small hand-rolled utilities (see ChatPanel.tsx's own dayLabel/groupIntoDays)
@@ -49,6 +52,23 @@ function renderInline(text: string, keyPrefix: string): ReactNode[] {
   return nodes;
 }
 
+// Mentions are resolved BEFORE the inline formatter runs, not after.
+//
+// The token is `@[Some Title](task:id)`, and a title containing an underscore or an asterisk would
+// otherwise be read as italics or bold by the formatter below and half the token would disappear
+// into markup. Splitting first means the formatter only ever sees text that is genuinely text.
+function renderWithMentions(text: string, keyPrefix: string): ReactNode[] {
+  const segments = parseMentions(text);
+  if (segments.length === 1 && segments[0].type === 'text') return renderInline(text, keyPrefix);
+  return segments.map((seg, i) =>
+    seg.type === 'text' ? (
+      <span key={`${keyPrefix}-t${i}`}>{renderInline(seg.value, `${keyPrefix}-${i}`)}</span>
+    ) : (
+      <MentionChip key={`${keyPrefix}-m${i}`} kind={seg.kind} id={seg.id} label={seg.label} onJump={runMentionJump} />
+    )
+  );
+}
+
 export function renderChatMessageBody(body: string): ReactNode {
   return splitCodeBlocks(body).map((b, idx) =>
     b.code ? (
@@ -57,7 +77,7 @@ export function renderChatMessageBody(body: string): ReactNode {
       </pre>
     ) : (
       <span key={idx} className="whitespace-pre-wrap">
-        {renderInline(b.content, `t${idx}`)}
+        {renderWithMentions(b.content, `t${idx}`)}
       </span>
     )
   );

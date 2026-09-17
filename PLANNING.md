@@ -7647,3 +7647,49 @@ the only line needed.
 
 The results list is `max-h-[50vh]` rather than a fixed `max-h-96`, for the same reason the top offset
 changed: a fixed height on a keyboard-shrunk viewport is a panel taller than the space it has.
+
+## 2026-09-17 (continued) — mentions in chat, and long-press on lists and folders
+
+### Mentions: most of it already existed
+
+The recommendation argued for — one `@` searching people, tasks and docs together, with `#` as a
+task-only shortcut — turned out to be **what `MentionTextarea` already does**, minus the `#`. The
+token format (`@[Label](kind:id)`), the parser, the resolver and a renderer were all in place for
+task comments and docs. Chat simply never used any of it.
+
+Against ClickUp's `@` / `@@` / `@@@`: to type `@@` you must first type `@`, which opens the people
+picker, so the second `@` has to cancel and reopen a different one. It works and nobody discovers it.
+One picker is one thing to learn, and you do not have to know what *kind* of thing you are looking
+for before you start typing — which is usually the situation.
+
+What was added:
+
+- **`#` as a task-only trigger.** A shortcut for people who have the GitHub habit, never the only
+  way in.
+- **Workspace scoping** (`workspaceId` prop). Without it everything is offered, which is right for a
+  task comment (already inside a workspace) and wrong for a message: mentioning a task from a
+  workspace the other person cannot open produces a chip that does nothing for them.
+- **The DM rule the user set**: only where you share a workspace, and only from the shared one. A DM
+  belongs to no workspace — it exists between people, not inside a company — so the workspace is
+  resolved as the first non-personal one whose membership contains every participant.
+- **`lib/mentionJump.ts`**, a registered handler in the same shape as `lib/nativeBack.ts`. The thing
+  that knows how to navigate is `page.tsx`; the thing rendering a chip is a chat message several
+  components down, reached through no prop chain. One slot, set by the page.
+- **Chips render inside message bodies**, and mentions are resolved **before** the inline formatter
+  runs — a title containing `_` or `*` would otherwise be eaten as italics and half the token would
+  vanish into markup.
+- **A mention notifies.** `chat_mention` through the same `notify()` as assignment, so the bell and
+  the push stay one mechanism. Only people actually on the channel: a token can name anyone, since
+  it is text somebody typed, and notifying a person about a conversation they cannot open is worse
+  than silence. **Muted members are still notified for a mention** — muting says "stop telling me
+  about the conversation", not "stop telling me when I am asked a direct question".
+
+### Long-press reached Spaces but not what is inside them
+
+"Kan endre navn på spaces i home, men ikke lists." The context list could create Lists and Folders it
+could then neither rename nor delete. The hold handler is now parameterised by what it opens rather
+than hard-wired to a Space, and Folders and Lists get the same menus the desktop tree raises on
+right-click.
+
+**Not verified on device** — the user is travelling. Mentions in particular have had no end-to-end
+run: composing, sending, rendering, tapping a chip, and the notification are five separate paths.

@@ -18,11 +18,18 @@ const MAX_RESULTS = 8;
 
 type MentionOption = { kind: MentionKind; id: string; label: string; sub?: string; score: number };
 
-type Trigger = { start: number; end: number; query: string };
+// `sigil` is what opened the dropdown, and it decides what the dropdown is allowed to contain.
+// '@' searches everything — people, tasks and docs together — because most of the time you remember
+// the name and not which kind of thing it is. '#' narrows to tasks only, for anyone who already has
+// that habit from GitHub. A shortcut, never the only way in: nobody has to learn it.
+type Trigger = { start: number; end: number; query: string; sigil: '@' | '#' };
 
 type MentionTextareaProps = Omit<React.TextareaHTMLAttributes<HTMLTextAreaElement>, 'onChange' | 'value'> & {
   value: string;
   onChange: (e: React.ChangeEvent<HTMLTextAreaElement>) => void;
+  // Limits what can be mentioned to one workspace's people, tasks and docs. Omitted where the text
+  // is already inside a workspace and cannot be read from outside it.
+  workspaceId?: string | null;
 };
 
 // Drop-in <textarea> replacement: forwards every prop transparently, and on top of that watches
@@ -33,7 +40,7 @@ type MentionTextareaProps = Omit<React.TextareaHTMLAttributes<HTMLTextAreaElemen
 // so callers' existing behavior (comment-box Enter-to-submit, doc-editor activity logging on blur)
 // keeps working exactly as before when the user isn't mid-mention.
 function MentionTextareaInner(
-  { value, onChange, onKeyDown, onBlur, ...rest }: MentionTextareaProps,
+  { value, onChange, workspaceId, onKeyDown, onBlur, ...rest }: MentionTextareaProps,
   forwardedRef: React.ForwardedRef<HTMLTextAreaElement>
 ) {
   const { tasks, users, workspaces } = useTaskStore();
@@ -61,9 +68,9 @@ function MentionTextareaInner(
 
   const detectTrigger = (text: string, caret: number) => {
     let i = caret - 1;
-    while (i >= 0 && text[i] !== '@' && !/\s/.test(text[i])) i--;
-    if (i >= 0 && text[i] === '@' && (i === 0 || /\s/.test(text[i - 1]))) {
-      setTrigger({ start: i, end: caret, query: text.slice(i + 1, caret) });
+    while (i >= 0 && text[i] !== '@' && text[i] !== '#' && !/\s/.test(text[i])) i--;
+    if (i >= 0 && (text[i] === '@' || text[i] === '#') && (i === 0 || /\s/.test(text[i - 1]))) {
+      setTrigger({ start: i, end: caret, query: text.slice(i + 1, caret), sigil: text[i] as '@' | '#' });
       setSelectedIndex(0);
       if (textareaRef.current) setCoords(getCaretCoordinates(textareaRef.current, caret));
     } else {
@@ -75,16 +82,32 @@ function MentionTextareaInner(
     if (!trigger) return [];
     const q = trigger.query.toLowerCase();
     const results: MentionOption[] = [];
+    // Scoped when the caller says which workspace this text belongs to. Chat does; a task comment
+    // does not need to, since it is already inside one. Without a scope everything is offered, which
+    // is right for a comment and wrong for a message: mentioning a task from a workspace the other
+    // person cannot open produces a chip that does nothing for them.
+    const spaceIds = workspaceId
+      ? new Set((workspaces.find((w) => w.id === workspaceId)?.spaces ?? []).flatMap((sp) => sp.lists.map((l) => l.id)))
+      : null;
+    const memberIds = workspaceId
+      ? new Set((workspaces.find((w) => w.id === workspaceId)?.members ?? []).map((m) => m.id))
+      : null;
     for (const t of tasks) {
+      if (spaceIds && !spaceIds.has(t.listId)) continue;
       if (t.archived) continue;
       const score = q ? scoreMatch(t.title, q) : 1;
       if (score !== null) results.push({ kind: 'task', id: t.id, label: t.title, score });
     }
-    for (const u of users) {
-      const score = q ? scoreMatch(u.name, q) : 1;
-      if (score !== null) results.push({ kind: 'user', id: u.id, label: u.name, score });
+    if (trigger.sigil === '@') {
+      for (const u of users) {
+        if (memberIds && !memberIds.has(u.id)) continue;
+        const score = q ? scoreMatch(u.name, q) : 1;
+        if (score !== null) results.push({ kind: 'user', id: u.id, label: u.name, score });
+      }
     }
     for (const ws of workspaces) {
+      if (trigger.sigil === '#') break;
+      if (workspaceId && ws.id !== workspaceId) continue;
       for (const space of ws.spaces) {
         for (const doc of space.spaceDocs) {
           const label = doc.title || 'Untitled';
