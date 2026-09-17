@@ -129,11 +129,26 @@ function MentionTextareaInner(
     const memberIds = workspaceId
       ? new Set((workspaces.find((w) => w.id === workspaceId)?.members ?? []).map((m) => m.id))
       : null;
+    // Every task carries where it lives. Half the tasks in a real workspace are subtasks with names
+    // like "Påsyn" repeated across a dozen videos — reported as a list of identical rows with no way
+    // to tell which is which. The parent task, or failing that the List, is what distinguishes them,
+    // and it is the same thing a person would say out loud to make the difference clear.
+    const listNameById = new Map(
+      workspaces.flatMap((w) => w.spaces).flatMap((sp) => sp.lists.map((l) => [l.id, l.name] as const))
+    );
     for (const t of tasks) {
       if (spaceIds && !spaceIds.has(t.listId)) continue;
       if (t.archived) continue;
       const score = q ? scoreMatch(t.title, q) : 1;
-      if (score !== null) results.push({ kind: 'task', id: t.id, label: t.title, score });
+      if (score === null) continue;
+      const parent = t.parentId ? tasks.find((p) => p.id === t.parentId) : null;
+      results.push({
+        kind: 'task',
+        id: t.id,
+        label: t.title,
+        sub: parent ? parent.title : listNameById.get(t.listId),
+        score,
+      });
     }
     if (trigger.sigil === '@') {
       for (const u of users) {
@@ -153,7 +168,17 @@ function MentionTextareaInner(
         }
       }
     }
-    return results.sort((a, b) => a.score - b.score || a.label.length - b.label.length).slice(0, MAX_RESULTS);
+    // People first under '@', always. The user's call, and the right one: '@' reads as addressing a
+    // person in every app that has ever had it, and a task list crowding out the one name you were
+    // reaching for is the failure that gets noticed. '#' is the way to lead with tasks, which is
+    // exactly what it is for.
+    const kindRank: Record<MentionKind, number> = { user: 0, task: 1, doc: 2 };
+    return results
+      .sort(
+        (a, b) =>
+          kindRank[a.kind] - kindRank[b.kind] || a.score - b.score || a.label.length - b.label.length
+      )
+      .slice(0, MAX_RESULTS);
   })();
 
   const selectOption = (opt: MentionOption) => {
@@ -245,8 +270,14 @@ function MentionTextareaInner(
                     }`}
                   >
                     <Icon className="w-3.5 h-3.5 shrink-0" />
-                    <span className="truncate text-xs flex-1">{opt.label}</span>
-                    {opt.sub && <span className="text-[10px] text-neutral-500 shrink-0">{opt.sub}</span>}
+                    {/* Two lines, not one row with a trailing label. Where a task lives is often
+                        longer than its own name ("Innholdsskapelse / Ukens video"), and as a
+                        shrink-0 sibling it pushed the name into an ellipsis — the one part that has
+                        to stay readable. */}
+                    <span className="min-w-0 flex-1">
+                      <span className="block truncate text-xs">{opt.label}</span>
+                      {opt.sub && <span className="block truncate text-[10px] text-neutral-500">{opt.sub}</span>}
+                    </span>
                   </button>
                 );
               })

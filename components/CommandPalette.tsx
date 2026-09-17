@@ -245,13 +245,14 @@ export default function CommandPalette({ open, onClose, onOpenTask, scopeKind }:
             exit={{ opacity: 0, scale: 0.97, y: -8 }}
             transition={{ duration: 0.15, ease: 'easeOut' }}
             onClick={(e) => e.stopPropagation()}
-            className="w-full max-w-lg bg-neutral-900 border border-neutral-800 rounded-2xl shadow-2xl overflow-hidden p-1.5"
+            className="w-full max-w-lg bg-neutral-900 border border-neutral-800 rounded-2xl shadow-2xl overflow-hidden"
           >
-            {/* The field keeps the shape of the pill that opened it — same radius, same tinted
-                fill — so tapping the search bar reads as that bar growing rather than as a different
-                control appearing in its place. The hard bottom rule is gone with it; the panel's own
-                edge is the only line needed. */}
-            <div className="flex items-center gap-2 px-3.5 py-3 rounded-full bg-neutral-950/60 border border-neutral-800/80">
+            {/* The panel IS the field — no pill inside a card. The previous version nested one
+                rounded box in another, which is what still read as "ikke så bra": two borders, two
+                radii and a ring of dead padding between them. The sheet's own edge is the field's
+                edge until there are results to show, at which point the divider below appears and it
+                becomes a list with a search row on top. */}
+            <div className="flex items-center gap-2.5 px-4 py-4">
               <Search className="w-4 h-4 text-neutral-500 shrink-0" />
               <input
                 ref={inputRef}
@@ -272,7 +273,13 @@ export default function CommandPalette({ open, onClose, onOpenTask, scopeKind }:
               />
             </div>
 
-            <div className="max-h-[50vh] overflow-y-auto py-1">
+            {/* The divider only exists once there is a list under it. Rendered unconditionally it
+                is a stray rule under an empty field. */}
+            <div
+              className={`max-h-[50vh] overflow-y-auto ${
+                query.trim() || results.length > 0 ? 'py-1 border-t border-neutral-800/80' : ''
+              }`}
+            >
               {query.trim() && results.length === 0 && (
                 <p className="text-xs text-neutral-500 px-4 py-6 text-center">No results for "{query.trim()}".</p>
               )}

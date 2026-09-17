@@ -7714,3 +7714,45 @@ reach for `visualViewport` first.**
 
 It flips only when below is genuinely cramped *and* above is better — a list that changes sides over
 a few pixels is more disorienting than a slightly short one.
+
+### Same session — mention results, and the palette's box-in-a-box
+
+**People come first under `@`.** The user's call and the right one: `@` reads as addressing a person
+in every app that has ever had it, and a task list crowding out the one name you were reaching for is
+the failure that gets noticed. `#` is the way to lead with tasks, which is exactly what it is for.
+
+**Every task result now carries where it lives** — its parent task, or failing that its List. Half
+the tasks in a real workspace are subtasks with the same name repeated across a dozen videos
+("Påsyn"), which produced a list of identical rows with no way to tell which was which. The parent is
+what distinguishes them, and it is the same thing a person would say out loud to make the difference
+clear. Rendered on its own line, because where a task lives is often longer than its own name and as
+a trailing label it pushed the name into an ellipsis — the one part that has to stay readable.
+
+**The search palette was a box inside a box.** The previous pass put a rounded pill inside a rounded
+card: two borders, two radii and a ring of dead padding between them, which is what still read as
+"ikke så bra". The panel *is* the field now, and the divider under it only exists once there is a
+list below it.
+
+### The one that cannot be fixed cheaply: the raw token in the chat composer
+
+Picking a task inserts `@[Påsyn](task:e0950d21-…)` as literal text, and the user is right that it
+should read as a link with a path and a name.
+
+**A `<textarea>` cannot render a chip.** It holds a string and draws that string; there is no markup
+inside it. This is not a styling problem and no amount of CSS reaches it. The token convention was
+designed for comments and docs, where the same rawness appears while composing and resolves to a chip
+once posted — which nobody complained about there, because a comment is written and forgotten, while
+a chat message is written constantly.
+
+Two real options, recorded so the next session does not rediscover them:
+
+1. **Move the chat composer to the same TipTap editor the docs use.** `components/collab/`
+   already has `mentionSuggestion.ts`, `MentionSuggestionList.tsx` and `mentionNodeView.tsx` — a
+   working chip-while-typing implementation. The cost is that the composer is not just a text box:
+   autosize, Enter-to-send, Shift+Enter, the draft store, attachments and the reply bar all hang off
+   it, and every one of those has to keep working.
+2. **Leave it raw while composing.** Honest, ugly, and already how comments behave.
+
+Recommended: (1), as its own piece of work, not folded into a fix round. Chat is the surface where
+people type most, and it is the one place the token being visible is a constant irritation rather
+than an occasional one.
