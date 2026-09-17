@@ -7597,3 +7597,20 @@ event happens; no schema change and no UI change.
 
 **Not verified on device.** Build and typecheck clean; nobody has been assigned a task through it
 yet. Requires a migration on production (a new table only — nothing existing is read or reshaped).
+
+### Same session — the push layer's header copy had gone out of sync
+
+Reported the moment the bell shipped: starting a push into a list or a conversation made the title
+shift, the `+` and the avatar move, and the bell disappear outright.
+
+The push layer draws a **static copy** of the header bands, because it is what the outgoing screen's
+top band *is* while it travels. The bell was added to the real header and not to the copy — three
+icons on one, two on the other — so the instant the layer took over, the right-hand cluster
+re-laid-out and the bell had nothing to be. The `px-5` title padding added the same day had drifted
+the same way.
+
+**This is a standing trap, not a one-off.** Anything added to the contexts header has to be added to
+that copy, and nothing in the code enforces it — the two are ordinary JSX in different parts of one
+file. The comment above the copy now says so in as many words. If a third thing ever drifts, the
+answer is to extract the row into one component rendered twice, the way the context screens already
+are.

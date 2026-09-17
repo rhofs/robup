@@ -8467,8 +8467,15 @@ function PageContent() {
             // exist so the top of the outgoing screen has something to be, not so it can be used.
             className="fixed inset-0 z-30 md:hidden bg-neutral-950 flex flex-col pt-[env(safe-area-inset-top)] pointer-events-none"
           >
-            {/* The title row, matching the real header's h-14 and padding exactly. */}
-            <div className="h-14 shrink-0 flex items-center px-3 gap-4">
+            {/* The title row, matching the real header's height, padding and contents EXACTLY.
+                
+                Exactly is the whole requirement, and it is easy to break by adding something to one
+                and not the other: this copy is what the outgoing screen's top band *is* while it
+                travels, so any difference shows up as that band rearranging itself the moment the
+                animation starts. It shipped once with the bell missing here — three icons on the
+                real header, two on this one — and the result was the title shifting and the bell
+                vanishing as the push began. Add a control to the header above, add it here. */}
+            <div className="h-14 shrink-0 flex items-center px-5 gap-4">
               {pushContextRef.current === 'office' ? (
                 <span className="flex items-center gap-1 min-w-0 shrink">
                   <span className="text-lg font-semibold text-app-strong truncate">
@@ -8480,8 +8487,16 @@ function PageContent() {
                 <span className="text-lg font-semibold text-app-strong shrink-0">Home</span>
               )}
               <span className="flex items-center gap-1.5 ml-auto shrink-0">
-                <span className="w-8 h-8 rounded-full flex items-center justify-center text-neutral-400">
+                <span className="w-9 h-9 rounded-full flex items-center justify-center text-neutral-400">
                   <UserPlus className="w-[18px] h-[18px]" />
+                </span>
+                <span className="w-9 h-9 rounded-full flex items-center justify-center text-neutral-400 relative">
+                  <Bell className="w-[18px] h-[18px]" />
+                  {notificationUnread > 0 && (
+                    <span className="absolute top-0 right-0 min-w-[15px] h-[15px] px-1 rounded-full bg-red-500 text-white text-[8px] font-bold flex items-center justify-center leading-none">
+                      {notificationUnread > 99 ? '99+' : notificationUnread}
+                    </span>
+                  )}
                 </span>
                 {pushContextRef.current === 'office' ? (
                   <WorkspaceMark workspace={currentWorkspace} className="w-8 h-8 rounded-full text-[13px]" />
