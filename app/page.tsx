@@ -24,6 +24,7 @@ import {
   List as ListIcon,
   Folder as FolderIconLucide,
   Calendar as CalendarIcon,
+  Bell,
   UserPlus,
   House as HouseIcon,
   UserCircle,
@@ -110,6 +111,7 @@ import ChatSidebar from '../components/ChatSidebar';
 import MyTasksPage from '../components/MyTasksPage';
 import DirectMessagesPage from '../components/DirectMessagesPage';
 import ProfilePage from '../components/ProfilePage';
+import NotificationsPanel, { type AppNotification } from '../components/NotificationsPanel';
 import CommandPalette from '../components/CommandPalette';
 import TrashPanel from '../components/TrashPanel';
 import OnboardingFlow from '../components/OnboardingFlow';
@@ -948,6 +950,43 @@ function PageContent() {
   // Set by SettingsPanel while it is open — see its registerBack prop.
   const settingsBackRef = useRef<(() => boolean) | null>(null);
 
+  // Notifications. Polled on the same 30s cadence as the chat unread counts and workspace invites —
+  // there is no realtime channel for these, and inventing one for a bell would be a lot of machinery
+  // for something a person checks a few times a day. The push notification is what arrives
+  // immediately; this is what the app knows when you open it.
+  const [notifications, setNotifications] = useState<AppNotification[]>([]);
+  const [notificationsOpen, setNotificationsOpen] = useState(false);
+  const notificationUnread = notifications.filter((n) => !n.readAt).length;
+  const fetchNotifications = useCallback(async () => {
+    if (!currentUserId) return;
+    try {
+      const res = await fetch('/api/notifications');
+      if (res.ok) setNotifications(await res.json());
+    } catch {
+      // Silent: a failed poll is not worth a toast, and the next one is thirty seconds away.
+    }
+  }, [currentUserId]);
+  useEffect(() => {
+    if (!currentUserId) return;
+    void fetchNotifications();
+    const interval = setInterval(() => void fetchNotifications(), 30000);
+    return () => clearInterval(interval);
+  }, [currentUserId, fetchNotifications]);
+  const markNotificationsRead = async (id?: string) => {
+    // Optimistic, because the only visible effect is a badge going away and nobody should watch a
+    // round trip for that. A failed write simply reappears on the next poll.
+    setNotifications((prev) =>
+      prev.map((n) => (id ? (n.id === id ? { ...n, readAt: new Date().toISOString() } : n) : { ...n, readAt: n.readAt ?? new Date().toISOString() }))
+    );
+    try {
+      await fetch('/api/notifications/read', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(id ? { id } : {}),
+      });
+    } catch {}
+  };
+
 
   // `boardPushing` is set HERE, in the same batch as the tap that closes the drawer — not in the
   // effect below. That ordering is the whole difference between the drawer sliding and the drawer
@@ -1232,6 +1271,10 @@ function PageContent() {
     setNativeBackHandler(() => {
       // The panel first: it is on top of everything, so Back belongs to it before it belongs to the
       // app underneath. One level at a time — a sub-screen returns to the list, the list closes.
+      if (notificationsOpen) {
+        setNotificationsOpen(false);
+        return true;
+      }
       if (settingsOpen) {
         if (settingsBackRef.current?.()) return true;
         setSettingsOpen(false);
@@ -4764,6 +4807,24 @@ function PageContent() {
             destination that exists today. */}
         {useContexts && isMobile && (
           <div className="md:hidden flex items-center gap-1.5 ml-auto shrink-0">
+            {/* The bell sits between the + and the identity, which is where YouTube, Slack and
+                Discord all put it — left of "you", right of the actions. Personal, so it is the same
+                control in both contexts: notifications are yours, not the workspace's. */}
+            <button
+              onClick={() => {
+                hapticTap();
+                setNotificationsOpen(true);
+              }}
+              title="Notifications"
+              className="w-9 h-9 rounded-full flex items-center justify-center text-neutral-400 hover:text-app-strong hover:bg-neutral-800/60 active:bg-neutral-700 active:text-app-strong active:scale-90 cursor-pointer relative transition duration-100"
+            >
+              <Bell className="w-[18px] h-[18px]" />
+              {notificationUnread > 0 && (
+                <span className="absolute top-0 right-0 min-w-[15px] h-[15px] px-1 rounded-full bg-red-500 text-white text-[8px] font-bold flex items-center justify-center leading-none">
+                  {notificationUnread > 99 ? '99+' : notificationUnread}
+                </span>
+              )}
+            </button>
             <button
               onClick={() => {
                 hapticTap();
@@ -8696,6 +8757,15 @@ function PageContent() {
           configures, and it falls back to the last real workspace when you open Settings from Home
           (see its own comment). Gating on the other one would let the panel render with nothing to
           show on its Workspace half. */}
+      {notificationsOpen && (
+        <NotificationsPanel
+          notifications={notifications}
+          onOpenTask={(taskId) => setModalTaskStack([taskId])}
+          onMarkAllRead={() => void markNotificationsRead()}
+          onMarkRead={(id) => void markNotificationsRead(id)}
+          onClose={() => setNotificationsOpen(false)}
+        />
+      )}
       {settingsOpen && settingsWorkspace && (
         <SettingsPanel
           workspace={settingsWorkspace}

@@ -5,6 +5,7 @@ import { getCurrentUserId } from '@/lib/auth/session';
 import { getWorkspaceRole, canManageWorkspace } from '@/lib/auth/access';
 import { ensureTaskAccess } from '@/lib/auth/resourceAccess';
 import { syncTaskForAllRelevantUsers, deleteTaskGoogleSyncs } from '@/lib/google/calendarSync';
+import { notify } from '@/lib/notifications';
 
 export async function PATCH(req: Request, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
@@ -115,6 +116,17 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
             body: `Tildelt: ${addedIds.map((uid) => nameById.get(uid) ?? 'Ukjent bruker').join(', ')}`,
             kind: 'assigned',
           });
+          // Hung off the diff the activity log already computes, rather than a second comparison of
+          // the same two sets — one of them would eventually disagree with the other.
+          const actor = await prisma.user.findUnique({ where: { id: userId }, select: { name: true } });
+          notify({
+            userIds: addedIds,
+            actorId: userId,
+            type: 'task_assigned',
+            title: `${actor?.name ?? 'Someone'} assigned you a task`,
+            body: existing?.title ?? null,
+            taskId: id,
+          }).catch(() => {});
         }
         if (removedIds.length > 0) {
           activities.push({

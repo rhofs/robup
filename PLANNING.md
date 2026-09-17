@@ -7534,3 +7534,66 @@ and one combined number could not say which:
 **Worth keeping as a rule:** removing a surface removes whatever was attached to it. The Chat tile
 looked like a duplicate route and was one — but it was also the only thing carrying that number, and
 nothing in the code says so. When a nav entry goes, check its badge before checking anything else.
+
+## 2026-09-17 (continued) — notifications, starting with "someone assigned you a task"
+
+Built in the order argued for a message earlier: the **event** first, the bell second. A bell built
+first would have been an empty drawer with a counter duplicating numbers that already have homes —
+which is the same mistake the Chat tile was.
+
+**What existed before this:** push notifications fired for chat messages and nothing else. Not
+assignment, not mentions, not invites. Everything else in the app either badges itself in place
+(connection requests on the `+`, workspace invites on the switcher) or vanishes silently. Being
+assigned a task was in the second group.
+
+### The shape
+
+`Notification` — recipient, type, actor, an optional taskId, and a **snapshot** of title and body.
+Denormalised deliberately: this is a record of what happened, so it should still read correctly after
+the task is renamed, and rendering a list should not need a join. `taskId` is a plain string, not a
+relation — a notification about a deleted task is still a true statement about the past; it simply
+stops being a link.
+
+`type` is a string rather than an enum so the next event is a write site, not a migration.
+
+**`lib/notifications.ts` writes the row and sends the push in one call.** That is the point of it:
+before, push lived only in the chat route, so adding an event meant remembering two unrelated things
+in two unrelated files — the shape of a bug that surfaces weeks later as "I got the push but the app
+says nothing", or the reverse. The push is fire-and-forget: the row is already written, so a provider
+being slow or down cannot make assigning a task slow, and the person still sees it next time they
+open the app.
+
+**Never notifies the actor about their own action.** Assigning yourself a task is the most common use
+of assignment, and being told about it is the noise that teaches people to ignore a bell.
+
+### Where it hangs
+
+Off the assignee diff the activity log **already computes** in the task PATCH route, rather than a
+second comparison of the same two sets — two copies of that logic would eventually disagree.
+
+### The bell
+
+Between the `+` and the identity, which is where YouTube, Slack and Discord all put it: left of
+"you", right of the actions. The same control in both contexts, because notifications are yours and
+not the workspace's.
+
+It opens a sheet, not a dropdown — on a phone this is a screen's worth of content, and a dropdown
+pinned under a 36px icon is a list read through a letterbox. Opening marks everything read: what is
+on screen has been seen, and a list that stays bold after you have read it makes the count something
+you clear by hand.
+
+Polled on the same 30s cadence as chat unread and workspace invites. There is no realtime channel for
+this and inventing one for a bell would be a lot of machinery for something checked a few times a
+day — the push is what arrives immediately; this is what the app knows when you open it.
+
+**`userId` is in the where clause of both branches of the read route**, not only the mark-all one.
+Without it, passing someone else's notification id would mark *their* notification read — small to
+get wrong, invisible to notice, since nothing in the response would differ.
+
+### Next events, when wanted
+
+Mentions in chat and docs, invite accepted, due today. Each is one `notify()` call at the place the
+event happens; no schema change and no UI change.
+
+**Not verified on device.** Build and typecheck clean; nobody has been assigned a task through it
+yet. Requires a migration on production (a new table only — nothing existing is read or reshaped).

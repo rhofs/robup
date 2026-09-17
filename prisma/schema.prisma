@@ -92,6 +92,31 @@ model UserWorkspaceGoogleCalendar {
 // layer, not the schema — SQLite/Prisma has no partial-unique-index support to express "at most
 // one row per workspaceId where role='owner'"). Distinct from Role below: this tier is a fixed,
 // three-value governance concept, not an arbitrary user-created access-grouping tag.
+// One row per thing that happened TO someone. The recipient is the subject: a notification exists
+// because a person needs to know, not because an event occurred — plenty of events concern nobody.
+//
+// title/body are snapshots, deliberately denormalised. This is a record of what happened, so it
+// should still read correctly after the task is renamed, and it must not need a join to render a
+// list. taskId is a plain string rather than a relation for the same reason — a notification about
+// a deleted task is still a true statement about the past; it simply stops being a link.
+model Notification {
+  id        String    @id @default(uuid())
+  userId    String    @map("user_id")
+  user      User      @relation("NotificationRecipient", fields: [userId], references: [id], onDelete: Cascade)
+  // 'task_assigned' today. More will follow (mentions, invites, due dates) — the column is a string
+  // rather than an enum so adding one is a write site, not a migration.
+  type      String
+  actorId   String?   @map("actor_id")
+  actor     User?     @relation("NotificationActor", fields: [actorId], references: [id], onDelete: SetNull)
+  taskId    String?   @map("task_id")
+  title     String
+  body      String?
+  readAt    DateTime? @map("read_at")
+  createdAt DateTime  @default(now()) @map("created_at")
+
+  @@index([userId, createdAt])
+}
+
 model WorkspaceMembership {
   id          String    @id @default(uuid())
   workspaceId String    @map("workspace_id")
@@ -430,6 +455,8 @@ model User {
   invitesCreated WorkspaceInvite[]
   memberInvitesSent     WorkspaceMemberInvite[] @relation("WorkspaceMemberInviteSender")
   memberInvitesReceived WorkspaceMemberInvite[] @relation("WorkspaceMemberInviteRecipient")
+  notifications          Notification[] @relation("NotificationRecipient")
+  notificationsCaused    Notification[] @relation("NotificationActor")
   connectionsAsA    Connection[]      @relation("ConnectionsAsA")
   connectionsAsB    Connection[]      @relation("ConnectionsAsB")
   connectionInvite  ConnectionInvite? @relation("ConnectionInviteCreator")
