@@ -7822,3 +7822,32 @@ Worth noting what this says about the build: `npm run build` and `tsc` were both
 entirely a runtime construction error, and there is no static check in this project that would ever
 have caught it — which is the argument for running a real device pass on anything that touches editor
 construction, rather than trusting green output.
+
+### Same session — `@` and `#` did not fire, and the honest account of why
+
+After the PluginKey crash was fixed the app loaded, and neither trigger opened a dropdown. Nothing in
+the build, the typecheck or the source read explained it, and several plausible causes were checked
+and eliminated: the default `allowedPrefixes` does allow a first-character trigger, the default
+`allow` predicate is `() => true`, the popup mounts to `document.body` rather than into the
+composer's own `overflow` box, and the draft round-trip does not re-`setContent` on every keystroke.
+
+**There is no way to run this editor from here.** The project has no jsdom, no test runner and no
+headless path — TipTap only constructs against a real DOM, and the failure is a runtime construction
+detail, which is exactly the class of bug the green build cannot see. Guessing a fifth time was the
+wrong move.
+
+So the fix is a restructure rather than a diagnosis, and it is worth stating plainly: the chat
+triggers now reuse **`mentionSuggestionOptions` verbatim** — the same object the doc editor's working
+`@` runs on — overriding only the two things that genuinely differ, the trigger character and the
+scoped item list. The hand-rolled renderer, command and plugin wiring are gone. The node is
+`ClientMentionNode`, unchanged and shared; there is one mention node in this app and there should
+stay one.
+
+`#` is its own `Extension` with its own explicit `PluginKey`, rather than a second plugin inside the
+node. That makes the duplicate-key crash structurally impossible to reintroduce rather than merely
+fixed.
+
+**If a trigger still does not fire, the next step is evidence, not another attempt**: the doc
+editor's `@` is the control — if it is broken too, the cause is in the shared path and the TipTap v3
+upgrade is the first place to look; if it works and chat does not, the difference is down to the two
+overrides above and nothing else.

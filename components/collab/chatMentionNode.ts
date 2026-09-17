@@ -1,107 +1,73 @@
 'use client';
 
-import { ReactNodeViewRenderer } from '@tiptap/react';
-import { ReactRenderer } from '@tiptap/react';
-import { Suggestion, type SuggestionOptions } from '@tiptap/suggestion';
+import { Extension } from '@tiptap/core';
+import { Suggestion } from '@tiptap/suggestion';
 import { PluginKey } from '@tiptap/pm/state';
-import { MentionNode } from '../../lib/collab/mentionNode';
 import { buildMentionOptions } from '../../lib/mentionOptions';
 import { useTaskStore } from '../../store/useTaskStore';
-import MentionChip from './MentionChip';
-import MentionSuggestionList, { type MentionSuggestionListRef } from './MentionSuggestionList';
-import type { MentionSuggestionItem } from './mentionSuggestion';
-import type { MentionKind } from '../../lib/mentions';
+import { mentionSuggestionOptions, type MentionSuggestionItem } from './mentionSuggestion';
 
-// The chat composer's own mention node.
+// The chat composer's mention triggers.
 //
-// Separate from ClientMentionNode (the doc editor's) for two reasons that are not cosmetic: it needs
-// TWO suggestion plugins rather than one — '@' for everything and '#' for tasks — and it needs to be
-// scoped to a workspace, which a doc never is because a doc is already inside one.
+// Deliberately NOT a second copy of the doc editor's mention plugin. An earlier version of this file
+// rebuilt the whole suggestion setup — its own renderer, its own command, its own plugin wiring —
+// and `@` then did not fire at all, with nothing in the build or the typecheck to say why. Rather
+// than keep guessing at the difference, this reuses `mentionSuggestionOptions` verbatim: the exact
+// object the doc editor's working `@` runs on. Only the two things that genuinely differ here are
+// overridden — which trigger character, and which items it offers.
 //
-// The store is read through getState() rather than the hook: this runs inside a ProseMirror plugin,
-// not a React render, so there is nothing subscribed to re-render.
-export type ChatMentionOptions = {
-  onJump?: (kind: MentionKind, id: string) => void;
-  // Read through a getter, not passed by value. The extension is configured once when the editor is
-  // created, while the conversation — and therefore the workspace — changes underneath it every time
-  // you open a different DM. A captured value would scope every later mention to whichever
-  // conversation happened to be open when the editor was built.
-  getWorkspaceId: () => string | null;
-};
+// The node itself is ClientMentionNode (components/collab/mentionNodeView.tsx), unchanged and shared.
+// There is one mention node in this app and there should stay one.
 
-function renderer(): SuggestionOptions<MentionSuggestionItem>['render'] {
-  return () => {
-    let component: ReactRenderer<MentionSuggestionListRef, any>;
-    let unmount: (() => void) | undefined;
-    return {
-      onStart: (props) => {
-        component = new ReactRenderer(MentionSuggestionList, { props, editor: props.editor });
-        unmount = props.mount(component.element as HTMLElement);
-      },
-      onUpdate: (props) => component.updateProps(props),
-      onKeyDown: (props) => {
-        if (props.event.key === 'Escape') {
-          unmount?.();
-          return true;
-        }
-        return component.ref?.onKeyDown({ event: props.event }) ?? false;
-      },
-      onExit: () => {
-        unmount?.();
-        component.destroy();
-      },
-    };
+function scopedItems(char: '@' | '#', getWorkspaceId: () => string | null) {
+  return ({ query }: { query: string }): MentionSuggestionItem[] => {
+    const { tasks, users, workspaces } = useTaskStore.getState();
+    return buildMentionOptions({
+      query,
+      sigil: char,
+      workspaceId: getWorkspaceId(),
+      tasks,
+      users,
+      workspaces,
+    });
   };
 }
 
-export const ChatMentionNode = MentionNode.extend<ChatMentionOptions>({
-  name: 'mention',
+export type ChatMentionTriggerOptions = {
+  // A getter, not a value: this extension is configured once when the editor is created, while the
+  // conversation — and so the workspace — changes underneath it every time a different DM is opened.
+  getWorkspaceId: () => string | null;
+};
+
+// '#' as a task-only shortcut. Its own Extension rather than a second plugin inside the node,
+// because @tiptap/suggestion defaults every plugin to the same PluginKey and ProseMirror throws on a
+// duplicate — a throw during editor construction, which takes down the whole React tree. Separate
+// extensions with explicit keys make that impossible to reintroduce by accident.
+export const ChatHashMention = Extension.create<ChatMentionTriggerOptions>({
+  name: 'chatHashMention',
 
   addOptions() {
-    return {
-      onJump: undefined,
-      getWorkspaceId: () => null,
-    };
-  },
-
-  addNodeView() {
-    return ReactNodeViewRenderer(MentionChip);
+    return { getWorkspaceId: () => null };
   },
 
   addProseMirrorPlugins() {
-    const options = this.options;
-    // A DISTINCT PluginKey per trigger, and this is not optional: @tiptap/suggestion defaults every
-    // plugin it builds to the same `new PluginKey("suggestion")`, and ProseMirror throws
-    // "Adding different instances of a keyed plugin" the moment a second one with that key is added.
-    // That throw happens while the editor is being constructed, so it takes down the whole React
-    // tree rather than degrading — the app rendered the WebView's own "This page couldn't load"
-    // screen on opening any conversation.
-    const make = (char: '@' | '#') =>
+    return [
       Suggestion<MentionSuggestionItem>({
-        pluginKey: new PluginKey(`chatMention${char}`),
+        ...mentionSuggestionOptions,
+        pluginKey: new PluginKey('chatMentionHash'),
         editor: this.editor,
-        char,
-        items: ({ query }) => {
-          const { tasks, users, workspaces } = useTaskStore.getState();
-          return buildMentionOptions({
-            query,
-            sigil: char,
-            workspaceId: options.getWorkspaceId(),
-            tasks,
-            users,
-            workspaces,
-          });
-        },
-        command: ({ editor, range, props }) => {
-          editor
-            .chain()
-            .focus()
-            .insertContentAt(range, { type: 'mention', attrs: { kind: props.kind, id: props.id, label: props.label } })
-            .insertContent(' ')
-            .run();
-        },
-        render: renderer(),
-      });
-    return [make('@'), make('#')];
+        char: '#',
+        items: scopedItems('#', this.options.getWorkspaceId),
+      }),
+    ];
   },
 });
+
+// The '@' side is the doc editor's own node, handed scoped items and its own key through the
+// `suggestion` override it already supports.
+export function chatAtSuggestion(getWorkspaceId: () => string | null) {
+  return {
+    pluginKey: new PluginKey('chatMentionAt'),
+    items: scopedItems('@', getWorkspaceId),
+  };
+}

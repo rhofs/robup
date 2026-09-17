@@ -7,7 +7,8 @@ import Paragraph from '@tiptap/extension-paragraph';
 import Text from '@tiptap/extension-text';
 import HardBreak from '@tiptap/extension-hard-break';
 import Placeholder from '@tiptap/extension-placeholder';
-import { ChatMentionNode } from './collab/chatMentionNode';
+import { ClientMentionNode } from './collab/mentionNodeView';
+import { ChatHashMention, chatAtSuggestion } from './collab/chatMentionNode';
 import { chatDocToText, chatTextToDoc } from '../lib/collab/chatDoc';
 import { runMentionJump } from '../lib/mentionJump';
 
@@ -45,7 +46,10 @@ export default function ChatComposerInput({
       Text,
       HardBreak,
       Placeholder.configure({ placeholder }),
-      ChatMentionNode.configure({ onJump: runMentionJump, getWorkspaceId }),
+      // The doc editor's own mention node, handed scoped items and its own plugin key. Same node,
+      // same renderer, same chip — only what it offers differs.
+      ClientMentionNode.configure({ onJump: runMentionJump, suggestion: chatAtSuggestion(getWorkspaceId) }),
+      ChatHashMention.configure({ getWorkspaceId }),
     ],
     content: chatTextToDoc(value),
     editorProps: {
