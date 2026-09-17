@@ -7614,3 +7614,16 @@ that copy, and nothing in the code enforces it — the two are ordinary JSX in d
 file. The comment above the copy now says so in as many words. If a third thing ever drifts, the
 answer is to extract the row into one component rendered twice, the way the context screens already
 are.
+
+### Same session — and the copy drifted a third time, in order rather than in content
+
+The bell shipped to the **left** of the `+` in the real header, while the push layer's copy had it on
+the right — so the two swapped places the moment an animation started. The copy was right: the
+header's own comment says the bell sits "between the + and the identity", and the header did not do
+what its comment said.
+
+**That is three drifts between those two rows in two days** — a missing control, a padding value, and
+now an order. The rule written down last time was "if a third thing drifts, extract the row into one
+component rendered twice". It has, so that is now the next piece of work on this header rather than a
+suggestion: everything else here is guesswork about whether two blocks of JSX in different parts of
+one file still agree, and they demonstrably do not stay agreed.

@@ -4807,24 +4807,6 @@ function PageContent() {
             destination that exists today. */}
         {useContexts && isMobile && (
           <div className="md:hidden flex items-center gap-1.5 ml-auto shrink-0">
-            {/* The bell sits between the + and the identity, which is where YouTube, Slack and
-                Discord all put it — left of "you", right of the actions. Personal, so it is the same
-                control in both contexts: notifications are yours, not the workspace's. */}
-            <button
-              onClick={() => {
-                hapticTap();
-                setNotificationsOpen(true);
-              }}
-              title="Notifications"
-              className="w-9 h-9 rounded-full flex items-center justify-center text-neutral-400 hover:text-app-strong hover:bg-neutral-800/60 active:bg-neutral-700 active:text-app-strong active:scale-90 cursor-pointer relative transition duration-100"
-            >
-              <Bell className="w-[18px] h-[18px]" />
-              {notificationUnread > 0 && (
-                <span className="absolute top-0 right-0 min-w-[15px] h-[15px] px-1 rounded-full bg-red-500 text-white text-[8px] font-bold flex items-center justify-center leading-none">
-                  {notificationUnread > 99 ? '99+' : notificationUnread}
-                </span>
-              )}
-            </button>
             <button
               onClick={() => {
                 hapticTap();
@@ -4847,6 +4829,28 @@ function PageContent() {
               {!inOfficeContext && connectionRequestsIncoming.length > 0 && (
                 <span className="absolute top-0 right-0 min-w-[15px] h-[15px] px-1 rounded-full bg-red-500 text-white text-[8px] font-bold flex items-center justify-center leading-none">
                   {connectionRequestsIncoming.length > 99 ? '99+' : connectionRequestsIncoming.length}
+                </span>
+              )}
+            </button>
+            {/* The bell sits between the + and the identity, which is where YouTube, Slack and
+                Discord all put it — left of "you", right of the actions. Personal, so it is the same
+                control in both contexts: notifications are yours, not the workspace's.
+                
+                It shipped to the LEFT of the +, contradicting this comment, while the push layer's
+                copy had it on the right — so the two swapped places the moment an animation started.
+                The copy was right and the header was wrong; this is the header corrected. */}
+            <button
+              onClick={() => {
+                hapticTap();
+                setNotificationsOpen(true);
+              }}
+              title="Notifications"
+              className="w-9 h-9 rounded-full flex items-center justify-center text-neutral-400 hover:text-app-strong hover:bg-neutral-800/60 active:bg-neutral-700 active:text-app-strong active:scale-90 cursor-pointer relative transition duration-100"
+            >
+              <Bell className="w-[18px] h-[18px]" />
+              {notificationUnread > 0 && (
+                <span className="absolute top-0 right-0 min-w-[15px] h-[15px] px-1 rounded-full bg-red-500 text-white text-[8px] font-bold flex items-center justify-center leading-none">
+                  {notificationUnread > 99 ? '99+' : notificationUnread}
                 </span>
               )}
             </button>
