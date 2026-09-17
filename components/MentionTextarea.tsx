@@ -16,6 +16,43 @@ const KIND_ICON: Record<MentionKind, typeof ListChecks> = {
 
 const MAX_RESULTS = 8;
 
+// Where the dropdown goes, given where the caret is.
+//
+// It used to always open downward from the caret, which is fine in a comment box in the middle of a
+// page and wrong in the one place mentions matter most: the chat composer sits at the bottom of the
+// screen with the keyboard under it, so the list opened straight into the keyboard and all you could
+// see was the top millimetre of the first row.
+//
+// The bottom bound is `visualViewport.height`, not `innerHeight`. In a WebView the keyboard does not
+// change innerHeight, it covers part of it — the same fact the composer's own safe-area padding had
+// to learn. Measuring against innerHeight here would conclude there is plenty of room below and put
+// the list right back under the keyboard.
+function placement(coords: CaretCoordinates): React.CSSProperties {
+  const MARGIN = 8;
+  const MAX_PANEL = 256;
+  const viewportHeight =
+    (typeof window !== 'undefined' ? window.visualViewport?.height : undefined) ??
+    (typeof window !== 'undefined' ? window.innerHeight : 800);
+  const viewportWidth = typeof window !== 'undefined' ? window.innerWidth : 400;
+
+  const below = viewportHeight - (coords.top + coords.height) - MARGIN;
+  const above = coords.top - MARGIN;
+  // Flip only when below is genuinely too cramped AND above is better — a list that jumps sides for
+  // a few pixels' difference is more disorienting than a slightly short one.
+  const up = below < 160 && above > below;
+  const maxHeight = Math.max(96, Math.min(MAX_PANEL, up ? above : below));
+
+  return {
+    position: 'fixed',
+    top: up ? Math.max(MARGIN, coords.top - maxHeight - 4) : coords.top + coords.height + 4,
+    // 256px is the panel's own width; without this it runs off the right edge whenever the caret is
+    // in the last third of the line, which on a phone is most of the time.
+    left: Math.max(MARGIN, Math.min(coords.left, viewportWidth - 256 - MARGIN)),
+    maxHeight,
+    zIndex: 90,
+  };
+}
+
 type MentionOption = { kind: MentionKind; id: string; label: string; sub?: string; score: number };
 
 // `sigil` is what opened the dropdown, and it decides what the dropdown is allowed to contain.
@@ -190,8 +227,8 @@ function MentionTextareaInner(
         createPortal(
           <div
             onMouseDown={(e) => e.preventDefault()}
-            style={{ position: 'fixed', top: coords.top + coords.height + 4, left: coords.left, zIndex: 90 }}
-            className="w-64 max-h-64 overflow-y-auto bg-neutral-900 border border-neutral-800 rounded shadow-2xl py-1"
+            style={placement(coords)}
+            className="w-64 overflow-y-auto bg-neutral-900 border border-neutral-800 rounded-xl shadow-2xl p-1"
           >
             {options.length === 0 ? (
               <p className="text-xs text-neutral-500 px-3 py-2">No matches</p>
@@ -203,7 +240,7 @@ function MentionTextareaInner(
                     key={`${opt.kind}-${opt.id}`}
                     onClick={() => selectOption(opt)}
                     onMouseEnter={() => setSelectedIndex(i)}
-                    className={`w-full text-left px-3 py-1.5 flex items-center gap-2 cursor-pointer ${
+                    className={`w-full text-left px-3 py-2.5 rounded-lg flex items-center gap-2 cursor-pointer ${
                       i === selectedIndex ? 'bg-neutral-800 text-blue-400' : 'text-neutral-300 hover:bg-neutral-800/60'
                     }`}
                   >

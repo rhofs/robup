@@ -7693,3 +7693,24 @@ right-click.
 
 **Not verified on device** — the user is travelling. Mentions in particular have had no end-to-end
 run: composing, sending, rendering, tapping a chip, and the notification are five separate paths.
+
+### Same session — the mention dropdown opened into the keyboard
+
+First thing found when mentions were actually used: the list always opened *downward* from the
+caret. That is fine in a comment box in the middle of a page and wrong in the one place mentions
+matter most — the chat composer sits at the bottom of the screen with the keyboard under it, so all
+that was visible was the top millimetre of the first row.
+
+It now flips above the caret when there is not room below, and clamps horizontally so a 256px panel
+does not run off the right edge when the caret is in the last third of the line — which on a phone is
+most of the time.
+
+**The bound is `visualViewport.height`, not `innerHeight`.** In a WebView the keyboard does not
+change `innerHeight`, it covers part of it — the same fact the composer's own safe-area padding had
+to learn a few days ago. Measuring against `innerHeight` would conclude there is plenty of room below
+and put the list straight back under the keyboard. **That is twice now that `innerHeight` has been
+the wrong number in this app; anything positioning against the bottom of the screen on mobile should
+reach for `visualViewport` first.**
+
+It flips only when below is genuinely cramped *and* above is better — a list that changes sides over
+a few pixels is more disorienting than a slightly short one.
