@@ -7803,3 +7803,22 @@ which editor happens to be on screen.
 **Not verified on device.** Typecheck and build are clean. The paths that need a real run: typing,
 picking with `@` and with `#`, Enter to send, Shift+Enter, switching conversation mid-draft,
 attachments, and the reply bar.
+
+### Same session — opening a DM rendered the WebView's own error page
+
+Hard crash, not a visual bug: the app showed "This page couldn't load" on opening any conversation.
+
+**`@tiptap/suggestion` defaults every plugin it builds to the same `new PluginKey("suggestion")`**,
+and the chat mention node adds two of them — one for `@`, one for `#`. ProseMirror throws
+`Adding different instances of a keyed plugin` the moment the second one is added, and that throw
+happens while the editor is being *constructed*, so it takes down the whole React tree instead of
+degrading to a broken composer.
+
+Each trigger now gets its own `PluginKey`. **Anything adding a second Suggestion plugin to one editor
+has to do this** — nothing in the API hints at it, the default is silently shared, and the failure
+mode is a blank app rather than a message about plugins.
+
+Worth noting what this says about the build: `npm run build` and `tsc` were both clean. The crash is
+entirely a runtime construction error, and there is no static check in this project that would ever
+have caught it — which is the argument for running a real device pass on anything that touches editor
+construction, rather than trusting green output.

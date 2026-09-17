@@ -3,6 +3,7 @@
 import { ReactNodeViewRenderer } from '@tiptap/react';
 import { ReactRenderer } from '@tiptap/react';
 import { Suggestion, type SuggestionOptions } from '@tiptap/suggestion';
+import { PluginKey } from '@tiptap/pm/state';
 import { MentionNode } from '../../lib/collab/mentionNode';
 import { buildMentionOptions } from '../../lib/mentionOptions';
 import { useTaskStore } from '../../store/useTaskStore';
@@ -69,8 +70,15 @@ export const ChatMentionNode = MentionNode.extend<ChatMentionOptions>({
 
   addProseMirrorPlugins() {
     const options = this.options;
+    // A DISTINCT PluginKey per trigger, and this is not optional: @tiptap/suggestion defaults every
+    // plugin it builds to the same `new PluginKey("suggestion")`, and ProseMirror throws
+    // "Adding different instances of a keyed plugin" the moment a second one with that key is added.
+    // That throw happens while the editor is being constructed, so it takes down the whole React
+    // tree rather than degrading — the app rendered the WebView's own "This page couldn't load"
+    // screen on opening any conversation.
     const make = (char: '@' | '#') =>
       Suggestion<MentionSuggestionItem>({
+        pluginKey: new PluginKey(`chatMention${char}`),
         editor: this.editor,
         char,
         items: ({ query }) => {
