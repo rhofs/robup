@@ -7907,3 +7907,30 @@ anchor is what the popover measures itself against, and an unrelated control in 
 menu.
 
 **Not verified on device.** Build and typecheck clean.
+
+### Same session — mentions worked on desktop and not on mobile: a missing z-index
+
+The report that settled it: `@` and `#` work in chat **on desktop**, and produce nothing **on
+mobile**, while the task-comment box works on both.
+
+That asymmetry is the whole diagnosis. The comment box uses the hand-rolled `MentionTextarea`, whose
+dropdown sets `zIndex: 90` explicitly. The Tiptap one — shared with the doc editor — set **no
+z-index at all**. `@tiptap/suggestion` mounts it into `document.body`, where with no z-index it sits
+at auto in the body's stacking order, under every positioned element that has one.
+
+On desktop the chat area has no such overlay, so it showed. On mobile the conversation pane is
+`absolute inset-0 z-10`, the composer footer is `z-10`, `<main>` takes `z-40` while pushing and the
+nav island is `z-50` — so the list rendered correctly, every time, and was painted underneath all of
+them. It was never a suggestion-plugin problem, which is why four rounds of reading the plugin found
+nothing.
+
+Set to `z-[90]`, **deliberately the same number as the other dropdown**. Two mention dropdowns that
+stack differently is a bug waiting for whichever one is used less.
+
+**The lesson, and it is about method rather than CSS:** the earlier rounds treated "it does not work"
+as one fact and reasoned about the plugin. One question — *where does it work?* — split it into two
+facts and pointed straight at the answer. When something fails on one surface and not another, the
+difference between the surfaces is the bug, and the shared code almost never is.
+
+The rows also picked up the two-line layout and touch-sized padding the other dropdown already had,
+which matters now that it is visible on a phone at all.
