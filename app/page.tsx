@@ -71,7 +71,11 @@ import {
 import { useTaskStore, HierarchySpace, HierarchyFolder, HierarchyList, HierarchyDocFolder, HierarchyRoom, HierarchyWorkspace, StatusDef, CustomFieldDef, Task, TaskDoc, AppUser } from '../store/useTaskStore';
 import { useHistoryStore } from '../store/useHistoryStore';
 import { hapticTap } from '../lib/haptics';
-import { BOOT_MARK_SRC, BOOT_MARK_ASPECT, BOOT_MARK_WIDTH_SHARE, BOOT_RING_BOX_SHARE } from '../lib/bootMark';
+import { BOOT_MARK_SRC, BOOT_MARK_WIDTH_SHARE, BOOT_RING_BOX_SHARE } from '../lib/bootMark';
+
+// The boot mark's size on screen. See its own use below for why this is a min() rather than a share.
+const BOOT_MAX_PX = 340;
+const BOOT_RING_BOX = `min(${BOOT_RING_BOX_SHARE * 100}vw, ${BOOT_RING_BOX_SHARE * 100}vh, ${BOOT_MAX_PX}px)`;
 import { setNativeBackHandler } from '../lib/nativeBack';
 import { setMentionJumpHandler } from '../lib/mentionJump';
 import { readLayoutPreference, LAYOUT_STORAGE_KEY, LAYOUT_CHANGE_EVENT } from '../lib/layoutPreference';
@@ -4343,7 +4347,15 @@ function PageContent() {
             this screen takes over is that the ring starts turning. */}
         <div
           className="relative flex items-center justify-center"
-          style={{ width: `${BOOT_RING_BOX_SHARE * 100}vw`, height: `${BOOT_RING_BOX_SHARE * 100}vw` }}
+          // The shares are taken from the native splash, which is always a portrait phone — so as
+          // bare `vw` they are right there and nonsense anywhere else. At 1920px wide, 58vw is
+          // 1114px: taller than the screen, so the ring ran off both edges. Reported on desktop.
+          //
+          // min() of the two axes and a cap: the two viewport terms keep it from ever exceeding a
+          // short or narrow window, and BOOT_MAX_PX stops it growing past the size it has on the
+          // device it was designed for. A phone is unaffected — there 58vw is the smallest of the
+          // three, which is the whole point of writing it this way rather than branching on width.
+          style={{ width: BOOT_RING_BOX, height: BOOT_RING_BOX }}
         >
           {/* The rotation is on this wrapper, not on the <svg>. A transform on a plain element gets
               its own compositing layer and runs off the main thread; the same transform applied to
@@ -4378,8 +4390,11 @@ function PageContent() {
             fetchPriority="high"
             draggable={false}
             style={{
-              width: `${BOOT_MARK_WIDTH_SHARE * 100}vw`,
-              height: `${(BOOT_MARK_WIDTH_SHARE / BOOT_MARK_ASPECT) * 100}vw`,
+              // A share of the ring box rather than of the viewport, so the two cannot be capped
+              // independently and drift out of proportion — the mark sitting off-centre or
+              // overflowing its own ring is worse than either being the wrong size.
+              width: `${(BOOT_MARK_WIDTH_SHARE / BOOT_RING_BOX_SHARE) * 100}%`,
+              height: 'auto',
             }}
           />
         </div>

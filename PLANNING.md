@@ -7934,3 +7934,22 @@ difference between the surfaces is the bug, and the shared code almost never is.
 
 The rows also picked up the two-line layout and touch-sized padding the other dropdown already had,
 which matters now that it is visible on a phone at all.
+
+### Same session — the boot screen was phone-sized in viewport units
+
+On desktop the loading mark filled and overflowed the screen. The ring box was `58vw` and the mark
+`23vw` — shares taken from the native splash, which is always a portrait phone. At 1920px wide, 58vw
+is 1114px: taller than the screen, so it ran off both edges.
+
+Now `min(58vw, 58vh, 340px)`. The two viewport terms keep it inside a short or narrow window and the
+cap stops it growing past the size it has on the device it was designed for. **A phone is unaffected**
+— there `58vw` is already the smallest of the three, which is why this is a `min()` and not a branch
+on width: there is no breakpoint to get wrong and no second value to keep in step.
+
+The mark is now sized as a percentage **of the ring box** rather than of the viewport. Capping the
+two independently would eventually let them drift out of proportion, and a mark overflowing its own
+ring is worse than either being the wrong size.
+
+Worth noting the shape of this one: nothing was wrong with the code, it was written for one device
+and stated in units that silently mean something else on another. `vw` is a share of the screen, not
+a size, and the two stop being the same thing the moment the screen changes shape.
