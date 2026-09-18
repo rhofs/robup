@@ -2450,7 +2450,11 @@ function PageContent() {
     // Reuses the existing tab ids rather than inventing new ones, so the bottom nav, the launcher
     // grid and the hidden-tabs setting all keep working untouched. 'board' is Home because that is
     // already what My Tasks is: the board over the personal workspace.
-    if (useContexts) {
+    // Mobile only. Desktop keeps the layout it always had — one tree with the workspace switcher
+    // above it, which is what the user found clear and what a persistent sidebar makes possible in a
+    // way a bottom nav does not. The two surfaces share every destination and differ only in how you
+    // reach it; see the `office` filter below for the one thing desktop drops.
+    if (useContexts && isMobile) {
       const sheetOpen = mobileSpacesOpen || mobilePersonalSpacesOpen;
       tabs.push({
         id: 'board',
@@ -2539,7 +2543,16 @@ function PageContent() {
         active: activeView === 'docs' && !mobileSheetOpen,
       });
     }
-    if (!hiddenNavTabs.has('office') && hasRealWorkspace) {
+    // Office is gone from the desktop rail under the contexts layout, by decision rather than by
+    // omission. Everything it was the entry point for now has a closer home: the workspace switcher
+    // at the top of the header covers changing workspace, the invite button beside it covers adding
+    // people, Rooms have moved into the Chat sidebar, and the member list lives in workspace
+    // settings. What is genuinely lost is "see the whole team on one screen" — said out loud when
+    // this was agreed, not discovered afterwards.
+    //
+    // The VIEW still exists and is still reachable: picking a Room opens it. Only the rail entry is
+    // removed.
+    if (!hiddenNavTabs.has('office') && hasRealWorkspace && !useContexts) {
       tabs.push({
         id: 'office',
         label: 'Office',
@@ -2560,7 +2573,7 @@ function PageContent() {
     }
     return tabs;
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [hiddenNavTabs, hasRealWorkspace, activeView, currentWorkspace, workspaces, chatUnreadCount, dmUnreadCount, channelUnreadCount, mobileSpacesOpen, mobilePersonalSpacesOpen, useContexts, openHome]);
+  }, [hiddenNavTabs, hasRealWorkspace, activeView, currentWorkspace, workspaces, chatUnreadCount, dmUnreadCount, channelUnreadCount, mobileSpacesOpen, mobilePersonalSpacesOpen, useContexts, openHome, isMobile]);
 
   // The desktop sidebar's "Me zone" (My tasks/My assigned tasks/Network/Profile) has no mobile
   // equivalent — it's inside the same hidden-below-md <aside> as the Spaces/Lists tree, and unlike
@@ -4796,6 +4809,21 @@ function PageContent() {
                 a tab one thumb away, so a menu row that only switches to it is a second way to do
                 something already in reach — and it did nothing else. */}
           </FloatingPopover>
+          {/* Inviting is an action on THIS workspace, so it belongs beside the workspace's name —
+              not beside the avatar, which is you. Desktop only: mobile has the same control in its
+              own header already, and Office used to be the way in here. */}
+          {!isMobile && hasRealWorkspace && canManageSettingsWorkspace && (
+            <button
+              onClick={() => {
+                setSettingsInitialTab('invite');
+                setSettingsOpen(true);
+              }}
+              title="Invite people to this workspace"
+              className="hidden md:flex shrink-0 w-7 h-7 rounded items-center justify-center text-neutral-500 hover:text-blue-400 hover:bg-neutral-800/60 cursor-pointer transition"
+            >
+              <UserPlus className="w-4 h-4" />
+            </button>
+          )}
         </div>
         {/* Mobile's own search pill moved down into the per-view header row below (same row as
             the back button/Spaces/Archive/Chat/Pages buttons) so it sits in one consistent spot
@@ -5189,7 +5217,21 @@ function PageContent() {
                 })}
               </div>
             ) : activeView === 'chat' ? (
-              <ChatSidebar workspaceId={activeWorkspaceId} closing={chatClosing} />
+              <ChatSidebar
+                workspaceId={activeWorkspaceId}
+                closing={chatClosing}
+                // Desktop only: on mobile Rooms already live under Office, and adding them here too
+                // would put the same list in two places on the surface that has least room for it.
+                onSelectRoom={
+                  isMobile
+                    ? undefined
+                    : (roomId) => {
+                        setActiveOfficeUserId(null);
+                        setActiveOfficeRoomId(roomId);
+                        setActiveView('office');
+                      }
+                }
+              />
             ) : (
             <div className="space-y-3">
               <div className="flex items-center justify-between px-2">
@@ -6369,7 +6411,21 @@ function PageContent() {
                             exit={{ x: '-33%' }}
                             transition={CHAT_PUSH_TRANSITION}
                           >
-                            <ChatSidebar workspaceId={activeWorkspaceId} closing={chatClosing} />
+                            <ChatSidebar
+                workspaceId={activeWorkspaceId}
+                closing={chatClosing}
+                // Desktop only: on mobile Rooms already live under Office, and adding them here too
+                // would put the same list in two places on the surface that has least room for it.
+                onSelectRoom={
+                  isMobile
+                    ? undefined
+                    : (roomId) => {
+                        setActiveOfficeUserId(null);
+                        setActiveOfficeRoomId(roomId);
+                        setActiveView('office');
+                      }
+                }
+              />
                           </motion.div>
                         ) : (
                           <motion.div

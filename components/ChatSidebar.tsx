@@ -1,13 +1,18 @@
 'use client';
 
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { Hash, MessageCircle, Pencil, Plus, Check, Bell, BellOff } from 'lucide-react';
+import { Hash, MessageCircle, Pencil, Plus, Check, Bell, BellOff, Users } from 'lucide-react';
 import { useChatStore, type ChatChannel, type Connection } from '../store/useChatStore';
 import { useSessionStore } from '../store/useSessionStore';
 import { useIsMobile } from '../hooks/useIsMobile';
 import { CHAT_PUSH_MS, CHAT_PUSH_EASE_CSS } from '../lib/chatTransition';
 import { hapticTap } from '../lib/haptics';
 import FloatingPopover from './FloatingPopover';
+import { useTaskStore, type HierarchyRoom } from '../store/useTaskStore';
+
+// A stable empty array, so the selector above does not return a new [] on every render and make
+// zustand think the value changed — the classic way a narrow selector turns into an infinite loop.
+const EMPTY_ROOMS: HierarchyRoom[] = [];
 
 type ChatSidebarProps = {
   workspaceId: string | null;
@@ -16,6 +21,10 @@ type ChatSidebarProps = {
   // intact, which meant this sidebar kept the row fully highlighted the entire time and then
   // dropped it the instant the panel was gone. Reported as the name "popping" or being "cut".
   closing?: boolean;
+  // Opens a Room. Rooms moved in here when Office left the desktop rail: a room and a channel answer
+  // the same question — where is the conversation — and with Office gone this is the only place left
+  // that asks it. The screen a room opens is unchanged; only the way in is.
+  onSelectRoom?: (roomId: string) => void;
 };
 
 // Swaps in for the Space/Folder/List tree in the main left `<aside>` while activeView === 'chat',
@@ -27,8 +36,13 @@ type ChatSidebarProps = {
 // here — Connections (finding/managing who you can message) is still its own smaller destination,
 // reachable from the Me-zone, since a Connection you haven't messaged yet has no ChatChannel row
 // at all and showing one for every Connection would mean inventing fake conversations.
-export default function ChatSidebar({ workspaceId, closing = false }: ChatSidebarProps) {
+export default function ChatSidebar({ workspaceId, closing = false, onSelectRoom }: ChatSidebarProps) {
   const isMobile = useIsMobile();
+  // Rooms and who is standing in them. Selected narrowly rather than through a whole-store
+  // subscription: this sidebar re-renders on every chat signal, and the workspace tree is the
+  // largest object in the store.
+  const rooms = useTaskStore((st) => st.workspaces.find((w) => w.id === workspaceId)?.rooms ?? EMPTY_ROOMS);
+  const users = useTaskStore((st) => st.users);
   const {
     channelsByWorkspace,
     dms,
@@ -155,6 +169,43 @@ export default function ChatSidebar({ workspaceId, closing = false }: ChatSideba
 
       {activeChatSidebarTab === 'channels' ? (
         <div className="space-y-2">
+          {/* Rooms first, and above Channels rather than behind a third toggle. They are the only
+              part of this list that changes minute to minute — who is in them right now — and the
+              same grouping the mobile layout uses under Office. The switch above stays Channels /
+              Direct Messages, untouched. */}
+          {onSelectRoom && rooms.length > 0 && (
+            <div className="space-y-0.5">
+              <p className="text-[10px] font-bold text-neutral-500 uppercase tracking-wider px-2">Rooms</p>
+              {rooms.map((room) => {
+                const occupants = users.filter((u) => u.roomId === room.id);
+                return (
+                  <button
+                    key={room.id}
+                    onClick={() => onSelectRoom(room.id)}
+                    className="w-full flex items-center gap-2 px-2 py-1.5 rounded text-left cursor-pointer hover:bg-neutral-800/60 transition"
+                  >
+                    <Users className="w-3.5 h-3.5 shrink-0 text-neutral-500" />
+                    <span className="min-w-0 flex-1 truncate text-xs text-neutral-300">{room.name}</span>
+                    {occupants.length > 0 ? (
+                      <span className="flex -space-x-1.5 shrink-0">
+                        {occupants.slice(0, 3).map((u) => (
+                          <span
+                            key={u.id}
+                            className="w-4 h-4 rounded-full border border-neutral-900 text-[7px] font-bold flex items-center justify-center text-white"
+                            style={{ backgroundColor: u.color }}
+                          >
+                            {u.initials}
+                          </span>
+                        ))}
+                      </span>
+                    ) : (
+                      <span className="text-[10px] text-neutral-600 shrink-0">empty</span>
+                    )}
+                  </button>
+                );
+              })}
+            </div>
+          )}
           <div className="flex items-center justify-between px-2">
             <p className="text-[10px] font-bold text-neutral-500 uppercase tracking-wider">Channels</p>
             <FloatingPopover

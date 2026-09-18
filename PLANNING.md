@@ -7851,3 +7851,59 @@ fixed.
 editor's `@` is the control — if it is broken too, the cause is in the shared path and the TipTap v3
 upgrade is the first place to look; if it works and chat does not, the difference is down to the two
 overrides above and nothing else.
+
+## 2026-09-18 — desktop, decided and built: the old layout minus Office
+
+The user was explicit that **mobile must not change** — he likes it — and that this is entirely about
+desktop. The contexts layout had been made the default for both, which left the desktop rail
+promising Home and Office while none of the contexts screens render above `md`.
+
+### The decision
+
+Desktop keeps the layout it always had: **Spaces · Planner · Docs · Chat**, one tree with the
+workspace switcher above it. That is the thing a persistent sidebar makes possible and a bottom nav
+does not, and it is what the user found clear.
+
+**The two surfaces now differ in model, not only in route, and that is deliberate.** Mobile has two
+contexts because it has no sidebar; desktop has one tree and a workspace switcher because it does.
+What keeps them honest is that they share *destinations*: the URL and the store carry workspace,
+space, lists, open task, open doc, open room and open conversation — never which tab you came
+through. Open the same link on the other device and you land in the same place. The layout preference
+itself is per-device, which is correct.
+
+Mobile is protected structurally, not by intention: the contexts screens render behind `isMobile`,
+and every change here sits on the other side of that same boundary.
+
+### Office is removed from the desktop rail
+
+By decision, not omission. Everything it was the entry point for has a closer home now: the workspace
+switcher covers changing workspace, a new invite button beside it covers adding people, **Rooms have
+moved into the Chat sidebar**, and the member list lives in workspace settings.
+
+**The view still exists and is still reachable** — picking a Room opens it. Only the rail entry is
+gone.
+
+**What is genuinely lost: "see the whole team on one screen."** Office was the only place on desktop
+showing everyone with their presence at once. Said out loud when this was agreed rather than
+discovered afterwards.
+
+### Rooms in the Chat sidebar
+
+A section above Channels, not a third toggle — the Channels / Direct Messages switch the user
+pointed out already exists is untouched. Rooms are the only part of that list that changes minute to
+minute (who is standing in them), so they go first, and it is the same grouping mobile uses under
+Office. Desktop only: on mobile Rooms already live under Office, and putting the same list in two
+places on the surface with least room for it is the mistake the Chat tile taught.
+
+The rooms selector is narrow (`workspaces.find(...)?.rooms`) with a **stable empty-array constant**
+for the miss — a fresh `[]` from a zustand selector reads as a changed value on every render, which
+is the classic way a narrow selector becomes an infinite loop.
+
+### Invite
+
+Beside the workspace's name, because inviting is an action on *this workspace* — not beside the
+avatar, which is you. Rendered as a sibling of the switcher popover rather than inside its anchor: an
+anchor is what the popover measures itself against, and an unrelated control in there would move the
+menu.
+
+**Not verified on device.** Build and typecheck clean.
