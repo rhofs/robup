@@ -51,17 +51,10 @@ const MentionSuggestionList = forwardRef<MentionSuggestionListRef, Props>(({ ite
   }));
 
   return (
-    /* z-[90] is the fix for "works on desktop, nothing appears on mobile", and it is not cosmetic.
-       
-       @tiptap/suggestion mounts this into document.body, and with no z-index it sits at auto in the
-       body's stacking order — under every positioned element that has one. On desktop the chat area
-       has no such overlay, so it showed. On mobile the conversation pane is `absolute inset-0 z-10`,
-       the composer footer is z-10, <main> takes z-40 while pushing and the nav island is z-50, so
-       the list rendered correctly and was painted underneath all of them.
-       
-       90 deliberately matches MentionTextarea's own dropdown exactly. Two mention dropdowns that
-       stack differently is a bug waiting for whichever one is used less. */
-    <div className="w-64 max-h-64 overflow-y-auto bg-neutral-900 border border-neutral-800 rounded-xl shadow-2xl p-1 z-[90]">
+    /* No z-index here on purpose — it would do nothing. This element is statically positioned; the
+       one the plugin positions is its parent, and that is where the stacking level is set. See
+       mentionSuggestion.ts's onStart. */
+    <div className="w-64 max-h-64 overflow-y-auto bg-neutral-900 border border-neutral-800 rounded-xl shadow-2xl p-1">
       {items.length === 0 ? (
         <p className="text-xs text-neutral-500 px-3 py-2">No matches</p>
       ) : (

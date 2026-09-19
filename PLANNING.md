@@ -7978,3 +7978,27 @@ screen, sitting next to a role toggle that is not, and the two should not look a
 `changeWorkspaceMemberRole` already existed in the store and the PATCH route already existed on the
 server; **nothing in the app called either.** A capability with no way to reach it is indistinguishable
 from a missing one, and this had been true for as long as both have existed.
+
+### Same session — the z-index fix was on an element where z-index does nothing
+
+Same report after the previous fix: mentions work in the chat composer on desktop, work in the task
+comment box on mobile, and show nothing in the chat composer on mobile.
+
+The diagnosis was right and the fix was in the wrong place. `z-[90]` went on the **list** element —
+which is statically positioned, and **`z-index` has no effect on a static element**. The element that
+actually has a place in the stacking order is its parent, the one `@tiptap/suggestion` positions with
+`position: absolute` and mounts into `document.body`. With `z-index: auto` that parent paints below
+every positioned element that *has* a z-index, regardless of DOM order — which is CSS's painting
+order, not a quirk.
+
+So on desktop, where nothing overlaps the editor, it showed. On mobile the conversation pane is
+`z-10`, the composer footer `z-10`, `<main>` takes `z-40` while pushing and the nav island is `z-50`:
+the list was constructed and positioned correctly every single time, and painted underneath all of
+them.
+
+Now set as `el.style.zIndex = '90'` in `onStart`, on the element the plugin is handed. That is
+exactly what `MentionTextarea` does on its own portal div, and is why the comment box has always
+worked on a phone while this one never has.
+
+**The lesson is narrow and worth keeping:** when a z-index appears to do nothing, check that the
+element it is on is positioned at all. A class on a static element is not a weak fix, it is not a fix.

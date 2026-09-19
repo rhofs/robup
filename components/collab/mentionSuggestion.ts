@@ -63,7 +63,23 @@ export const mentionSuggestionOptions: Partial<SuggestionOptions<MentionSuggesti
     return {
       onStart: (props) => {
         component = new ReactRenderer(MentionSuggestionList, { props, editor: props.editor });
-        unmount = props.mount(component.element as HTMLElement);
+        const el = component.element as HTMLElement;
+        // The z-index has to go HERE, on the element the plugin positions — not as a class on the
+        // list inside it.
+        //
+        // That was the previous attempt and it did nothing at all, for a reason worth remembering:
+        // `z-index` has no effect on a statically positioned element, and the inner list is static.
+        // The plugin gives THIS element `position: absolute`, so it is the one with a place in the
+        // stacking order, and without a z-index it sits at auto — which CSS paints *below* every
+        // positioned element that has one, whatever the DOM order.
+        //
+        // On desktop nothing overlaps the editor, so it showed. On mobile the chat conversation pane
+        // is z-10, the composer footer z-10, <main> z-40 while pushing and the nav island z-50: the
+        // list rendered correctly every time and was painted underneath all of them. 90 matches
+        // MentionTextarea's own dropdown, which sets it on its portal div for exactly this reason
+        // and is why the comment box has always worked on a phone.
+        el.style.zIndex = '90';
+        unmount = props.mount(el);
       },
       onUpdate: (props) => {
         component.updateProps(props);
