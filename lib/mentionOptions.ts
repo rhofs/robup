@@ -2,7 +2,15 @@ import type { AppUser, HierarchyWorkspace, Task } from '../store/useTaskStore';
 import { scoreMatch } from './search';
 import type { MentionKind } from './mentions';
 
-export type MentionOption = { kind: MentionKind; id: string; label: string; sub?: string; score: number };
+export type MentionOption = {
+  kind: MentionKind;
+  id: string;
+  label: string;
+  sub?: string;
+  score: number;
+  // When the thing was created, as a timestamp. Used only to break ties — see the sort at the end.
+  createdAt?: number;
+};
 
 export const MENTION_MAX_RESULTS = 8;
 
@@ -50,7 +58,14 @@ export function buildMentionOptions({
     const score = q ? scoreMatch(t.title, q) : 1;
     if (score === null) continue;
     const parent = t.parentId ? tasks.find((p) => p.id === t.parentId) : null;
-    results.push({ kind: 'task', id: t.id, label: t.title, sub: parent ? parent.title : listNameById.get(t.listId), score });
+    results.push({
+      kind: 'task',
+      id: t.id,
+      label: t.title,
+      sub: parent ? parent.title : listNameById.get(t.listId),
+      score,
+      createdAt: new Date(t.createdAt).getTime(),
+    });
   }
 
   if (sigil === '@') {
@@ -65,7 +80,16 @@ export function buildMentionOptions({
         for (const doc of space.spaceDocs) {
           const label = doc.title || 'Untitled';
           const score = q ? scoreMatch(label, q) : 1;
-          if (score !== null) results.push({ kind: 'doc', id: doc.id, label, sub: space.name, score });
+          if (score !== null) {
+            results.push({
+              kind: 'doc',
+              id: doc.id,
+              label,
+              sub: space.name,
+              score,
+              createdAt: new Date(doc.createdAt).getTime(),
+            });
+          }
         }
       }
     }
@@ -75,6 +99,19 @@ export function buildMentionOptions({
   // a task list crowding out the one name you were reaching for is the failure that gets noticed.
   const kindRank: Record<MentionKind, number> = { user: 0, task: 1, doc: 2 };
   return results
-    .sort((a, b) => kindRank[a.kind] - kindRank[b.kind] || a.score - b.score || a.label.length - b.label.length)
+    .sort(
+      (a, b) =>
+        kindRank[a.kind] - kindRank[b.kind] ||
+        a.score - b.score ||
+        // Newest first among equal matches, and it does most of the work before you have typed
+        // anything: with an empty query every task scores the same, so this IS the order. It used to
+        // fall through to the shortest name, which is not relevance — it is an accident of naming.
+        //
+        // Deliberately BELOW the score, not above it. Once you have typed something, what you typed
+        // is a far better signal than when a thing was made; recency only decides between candidates
+        // the query could not separate.
+        (b.createdAt ?? 0) - (a.createdAt ?? 0) ||
+        a.label.length - b.label.length
+    )
     .slice(0, MENTION_MAX_RESULTS);
 }

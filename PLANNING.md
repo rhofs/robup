@@ -8036,3 +8036,24 @@ The contexts header exists twice: the real one, and the static copy the push lay
 outgoing screen's top band. They drifted three times in two days — a missing bell, a padding value,
 an icon order. The agreed answer is to extract the row into one component rendered in both places.
 Not done yet.
+
+### 2026-09-19 — mention results order by recency once the query runs out
+
+The user's observation: the most recently created task is usually the one you mean. He is right, and
+the existing behaviour was worse than arbitrary — with an empty query every task scores identically,
+so the list fell through to **shortest name first**. That is not relevance, it is an accident of
+naming.
+
+Recency is now the tiebreaker, and it does most of the work before you have typed anything: with no
+query it *is* the order.
+
+**Placed below the score, not above it.** Once you have typed something, what you typed is a far
+better signal than when a thing was made — recency only decides between candidates the query could
+not separate. A list that reorders itself by age while you are typing a name would be worse than the
+shortest-name accident it replaces.
+
+Applies to tasks and docs. People are left alone: creation date says nothing about who you are
+reaching for, and the real signal there — who you talk to most — is not something the store can
+answer cheaply.
+
+Both pickers get it from one place, which is the whole reason `lib/mentionOptions.ts` exists.
