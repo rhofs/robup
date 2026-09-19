@@ -78,7 +78,6 @@ const BOOT_MAX_PX = 340;
 const BOOT_RING_BOX = `min(${BOOT_RING_BOX_SHARE * 100}vw, ${BOOT_RING_BOX_SHARE * 100}vh, ${BOOT_MAX_PX}px)`;
 import { setNativeBackHandler } from '../lib/nativeBack';
 import { setMentionJumpHandler } from '../lib/mentionJump';
-import { readLayoutPreference, LAYOUT_STORAGE_KEY, LAYOUT_CHANGE_EVENT } from '../lib/layoutPreference';
 import OfficeContext from '../components/mobile/OfficeContext';
 import HomeContext from '../components/mobile/HomeContext';
 import { CHAT_PUSH_MS, CHAT_PUSH_EASE } from '../lib/chatTransition';
@@ -122,7 +121,7 @@ import TrashPanel from '../components/TrashPanel';
 import OnboardingFlow from '../components/OnboardingFlow';
 import SettingsPanel, { readHiddenNavTabs, readHideWeekNumbers, type NavTabId } from '../components/SettingsPanel';
 import type { NavTab, MenuTile } from '../components/mobile/navTypes';
-import { primaryNavTabIds } from '../components/mobile/navTypes';
+import { CONTEXT_NAV_TAB_IDS } from '../components/mobile/navTypes';
 import MobileBottomNav from '../components/mobile/MobileBottomNav';
 import MobileSpacesSheet from '../components/mobile/MobileSpacesSheet';
 import MobileDocPagesSheet from '../components/mobile/MobileDocPagesSheet';
@@ -1097,27 +1096,16 @@ function PageContent() {
     if (afterPush) window.setTimeout(afterPush, CHAT_PUSH_MS);
   };
 
-  // Which navigation layout is in force. Read after mount rather than during render: it lives in
-  // localStorage, and reading it during render would make the server's HTML and the client's first
-  // pass disagree. `storage` is listened to as well so switching it in Settings takes effect in any
-  // other tab the same person has open, rather than leaving two tabs in different layouts.
-  const [layoutPref, setLayoutPref] = useState<'classic' | 'contexts'>('classic');
-  useEffect(() => {
-    setLayoutPref(readLayoutPreference());
-    const sync = () => setLayoutPref(readLayoutPreference());
-    // Both, and they cover different things: the custom event is the only one that fires in the tab
-    // that flipped the switch, and `storage` is the only one that fires in the others.
-    window.addEventListener(LAYOUT_CHANGE_EVENT, sync);
-    const onStorage = (e: StorageEvent) => {
-      if (e.key === LAYOUT_STORAGE_KEY || e.key === null) sync();
-    };
-    window.addEventListener('storage', onStorage);
-    return () => {
-      window.removeEventListener(LAYOUT_CHANGE_EVENT, sync);
-      window.removeEventListener('storage', onStorage);
-    };
-  }, []);
-  const useContexts = layoutPref === 'contexts';
+  // Which navigation the app uses is no longer a choice — it is which surface you are on.
+  //
+  // It was a setting for exactly as long as that was useful: while the contexts layout was being
+  // lived with, a switch let it be compared against the old one on the same data and turned off if
+  // it went wrong. It did not go wrong, it became the default, and then desktop kept the tree while
+  // mobile kept the contexts — at which point "classic" stopped being the old layout and became the
+  // desktop one. A preference that nobody can sensibly choose is just a branch with a UI on it.
+  //
+  // So `isMobile` is the whole condition now. Everything that used to read `useContexts` reads this.
+  const useContexts = isMobile;
 
   // Which context screen a conversation was opened from, so Back can return there.
   //
@@ -2003,14 +1991,10 @@ function PageContent() {
     // first pass only — this effect re-runs whenever searchParams or the workspace list changes,
     // and without that guard the sheet would spring open again mid-session.
     if (!hasHydratedFromUrlRef.current && isMobile && searchParams.toString() === '') {
-      // readLayoutPreference() rather than `useContexts`, and that is not a style choice.
-      // `layoutPref` is filled in by its own mount effect, which is declared above this one and
-      // therefore runs first — but its setState only lands on the NEXT render, so `useContexts` is
-      // still false right here on the very first pass. Reading localStorage directly is the only
-      // way this effect can know the truth at the moment it has to decide. Without it, every cold
-      // launch of the contexts layout opened the old Spaces sheet, which is exactly what was
-      // reported with a screenshot: the new nav underneath the old landing screen.
-      if (readLayoutPreference() === 'contexts') coldLaunchHomeRef.current = true;
+      // No storage read here any more: the old version had to reach past `layoutPref`, because that
+      // state is filled in by a mount effect whose setState had not landed yet on this first pass.
+      // `isMobile` is known synchronously, so the trap it was working around is gone with it.
+      if (isMobile) coldLaunchHomeRef.current = true;
       else setMobileSpacesOpen(true);
     }
 
@@ -2486,7 +2470,7 @@ function PageContent() {
           onClick: () => setActiveView('calendar'),
           active: activeView === 'calendar' && !sheetOpen,
         });
-        // Not bottom-nav tabs — primaryNavTabIds() pins only board/office/calendar, so these two
+        // Not bottom-nav tabs — CONTEXT_NAV_TAB_IDS pins only board/office/calendar, so these two
         // fall through to the launcher grid, which is exactly where the user asked for them to
         // stay ("Vi burde fortsatt beholde den menyløsningen vi har som en 4"). Without them the
         // contexts layout has a launcher containing nothing but the Me tiles, and Docs becomes
@@ -2547,24 +2531,10 @@ function PageContent() {
         active: activeView === 'docs' && !mobileSheetOpen,
       });
     }
-    // Office is gone from the desktop rail under the contexts layout, by decision rather than by
-    // omission. Everything it was the entry point for now has a closer home: the workspace switcher
-    // at the top of the header covers changing workspace, the invite button beside it covers adding
-    // people, Rooms have moved into the Chat sidebar, and the member list lives in workspace
-    // settings. What is genuinely lost is "see the whole team on one screen" — said out loud when
-    // this was agreed, not discovered afterwards.
-    //
-    // The VIEW still exists and is still reachable: picking a Room opens it. Only the rail entry is
-    // removed.
-    if (!hiddenNavTabs.has('office') && hasRealWorkspace && !useContexts) {
-      tabs.push({
-        id: 'office',
-        label: 'Office',
-        icon: Building2,
-        onClick: handleOfficeNavClick,
-        active: activeView === 'office' && !mobileSheetOpen,
-      });
-    }
+    // No Office entry. Desktop dropped it by decision — the workspace switcher covers changing
+    // workspace, the invite button beside it covers adding people, Rooms live in the Chat sidebar
+    // and members live in workspace settings. Mobile has its own Office tab, built above. The VIEW
+    // still exists and is still reached by picking a Room.
     if (!hiddenNavTabs.has('chat')) {
       tabs.push({
         id: 'chat',
@@ -2645,10 +2615,10 @@ function PageContent() {
   // render + highlight it), so both surfaces read the exact same "what's pinnable" list.
   const mobileGridTabs = useMemo(
     () => {
-      const pinned = primaryNavTabIds(layoutPref);
+      const pinned = CONTEXT_NAV_TAB_IDS;
       return visibleNavTabs.filter((tab) => !pinned.includes(tab.id));
     },
-    [visibleNavTabs, layoutPref]
+    [visibleNavTabs]
   );
   const pinnableMobileTiles: MenuTile[] = useMemo(() => [...mobileGridTabs, ...meNavItems], [mobileGridTabs, meNavItems]);
   // No `?? pinnableMobileTiles[0]` fallback any more — that silently pinned whatever happened to
@@ -6737,7 +6707,6 @@ function PageContent() {
       <div aria-hidden={navHidden}>
       <MobileBottomNav
         navTabs={visibleNavTabs}
-        layout={layoutPref}
         hidden={navHidden}
         behind={navHidden || boardPushing}
         menuOpen={mobileMenuOpen}

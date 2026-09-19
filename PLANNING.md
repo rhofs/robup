@@ -8002,3 +8002,37 @@ worked on a phone while this one never has.
 
 **The lesson is narrow and worth keeping:** when a z-index appears to do nothing, check that the
 element it is on is positioned at all. A class on a static element is not a weak fix, it is not a fix.
+
+## 2026-09-19 (continued) — the layout setting is gone; the surface decides
+
+`lib/layoutPreference.ts` is deleted, along with the Settings toggle, the `layout` prop threaded
+through the mobile nav, the launcher's classic-only workspace switcher, and
+`primaryNavTabIds(layout)`. `useContexts` is now simply `isMobile`.
+
+**Why it was right to have it and right to remove it.** It was a setting for exactly as long as that
+was useful: while the contexts layout was being lived with, a switch let it be compared against the
+old one on the same data and turned off if it went wrong. It did not go wrong, it became the default,
+and then desktop kept the tree while mobile kept the contexts — at which point **"classic" stopped
+being the old layout and became the desktop one**. A preference nobody can sensibly choose is a
+branch with a UI on it.
+
+Two consequences worth recording:
+
+- **The Office rail entry is deleted outright**, not gated. With the preference gone, `!useContexts`
+  would have meant "on desktop" and quietly brought Office back to the very rail it was removed from.
+  The gate was load-bearing in a way that had nothing to do with what it said.
+- **The cold-launch effect no longer reads localStorage.** It had to, because `layoutPref` was filled
+  in by a mount effect whose `setState` had not landed on that first pass — a real trap, documented
+  when it was found. `isMobile` is known synchronously, so the workaround goes with the thing it was
+  working around.
+
+`PRIMARY_NAV_TAB_IDS` and its chooser are gone; `CONTEXT_NAV_TAB_IDS` is simply what the mobile nav
+pins. The warning about that list being a *lookup table* rather than a rendered list is kept —
+it cost two rounds once, and it is still true.
+
+### Still to do, named so it is not lost again
+
+The contexts header exists twice: the real one, and the static copy the push layer draws for the
+outgoing screen's top band. They drifted three times in two days — a missing bell, a padding value,
+an icon order. The agreed answer is to extract the row into one component rendered in both places.
+Not done yet.

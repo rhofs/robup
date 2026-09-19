@@ -26,25 +26,15 @@ export type MenuTile = {
   badge?: number;
 };
 
-// The 3 tabs pinned to fixed slots in the bottom pill nav (MobileBottomNav.tsx) — shared with
-// app/page.tsx and AppLauncherGrid.tsx so "everything else" is filtered consistently in one place
-// instead of three separate hardcoded copies of the same 3 ids.
-export const PRIMARY_NAV_TAB_IDS: NavTabId[] = ['board', 'calendar', 'chat'];
-
-// The same three fixed slots under the new two-context layout: Home, Office, Planner.
+// The three tabs pinned to the fixed slots in the bottom pill nav (MobileBottomNav.tsx) — shared
+// with app/page.tsx and AppLauncherGrid.tsx so "everything else" is filtered consistently in one
+// place instead of three separate hardcoded copies of the same ids.
 //
-// This constant is the fix for a bug that cost a whole round of "bryteren er på" / "fortsatt
-// samme": the bottom nav does NOT render the navTabs list it is handed. It looks each of the ids
-// above up in that list and drops everything else. So the contexts layout could build a perfectly
-// correct Home/Office/Planner list and still paint the old bar — `office` is not in
-// PRIMARY_NAV_TAB_IDS, so it was filtered out, leaving exactly the two surviving slots plus the
-// launcher. The switch worked the whole time; the nav was throwing its output away one layer down.
+// NOT rendered as given by the nav: it looks each of these up in the navTabs list it is handed and
+// drops everything else. That cost two rounds once — a correctly built tab list whose ids were not
+// on this list simply vanished, with nothing anywhere to say why. Anything building a nav list has
+// to be read together with what consumes it.
 //
-// The lesson generalises past this file: a prop named `navTabs` that is treated as a lookup table
-// rather than a list is invisible at the call site. Anything that builds a nav list has to be read
-// together with what consumes it.
+// The old PRIMARY_NAV_TAB_IDS (board/calendar/chat) and the primaryNavTabIds(layout) helper that
+// chose between them are gone with the layout setting: mobile is always this list now.
 export const CONTEXT_NAV_TAB_IDS: NavTabId[] = ['board', 'office', 'calendar'];
-
-export function primaryNavTabIds(layout: 'classic' | 'contexts'): NavTabId[] {
-  return layout === 'contexts' ? CONTEXT_NAV_TAB_IDS : PRIMARY_NAV_TAB_IDS;
-}

@@ -4,8 +4,7 @@ import { useLayoutEffect, useRef, useState } from 'react';
 import { ChevronDown, ChevronUp, LayoutGrid, Menu as MenuIcon } from 'lucide-react';
 import { AnimatePresence, motion } from 'framer-motion';
 import type { NavTab, MenuTile } from './navTypes';
-import { primaryNavTabIds } from './navTypes';
-import type { LayoutPreference } from '../../lib/layoutPreference';
+import { CONTEXT_NAV_TAB_IDS } from './navTypes';
 import { CHAT_PUSH_MS, CHAT_PUSH_EASE } from '../../lib/chatTransition';
 import { hapticTap } from '../../lib/haptics';
 import AppLauncherGridContent from './AppLauncherGrid';
@@ -13,14 +12,10 @@ import type { HierarchyWorkspace } from '../../store/useTaskStore';
 
 type Props = {
   // NOT rendered as given: the three ids for the current layout are looked up in this list and
-  // everything else is dropped (see primaryNavTabIds). Handing this component a tab whose id is not
+  // everything else is dropped (see CONTEXT_NAV_TAB_IDS). Handing this component a tab whose id is not
   // one of those three renders nothing at all, silently — which is exactly how the contexts layout
   // shipped once looking completely unchanged.
   navTabs: NavTab[];
-  // Which layout is switched on, because it decides both *which* three ids fill the fixed slots and
-  // whether `board` keeps its mobile-only Spaces behaviour below. In the contexts layout `board` is
-  // Home, a real destination with its own onClick, so that override has to be off.
-  layout: LayoutPreference;
   // True while something deeper than a context fills the screen. The nav travels away with the
   // screen it belongs to rather than switching off — it is part of that page leaving, not a
   // separate event. Same -33% and the same late opacity release as the push layer and the Spaces
@@ -247,7 +242,6 @@ export default function MobileBottomNav({
   onOpenTrash,
   showArchived,
   onToggleArchive,
-  layout,
   hidden,
   behind,
   realWorkspaces,
@@ -255,8 +249,9 @@ export default function MobileBottomNav({
   onSelectWorkspace,
   onCreateWorkspace,
 }: Props) {
-  const contexts = layout === 'contexts';
-  const primaryTabs = primaryNavTabIds(layout)
+  // This nav only exists on mobile, and mobile is always the contexts layout now — the setting that
+  // used to make that a question is gone. See app/page.tsx's `useContexts`.
+  const primaryTabs = CONTEXT_NAV_TAB_IDS
     .map((id) => navTabs.find((t) => t.id === id))
     .filter((t): t is NavTab => !!t);
 
@@ -312,7 +307,7 @@ export default function MobileBottomNav({
   // Derived from the active slot's index against the previous one — a ref rather than state,
   // because reading it must not itself cause a render.
   const activeSlotIndex = primaryTabs.findIndex((t) =>
-    t.id === 'board' && !contexts ? t.active || spacesOpen : t.active && !spacesOpen
+    t.active && !spacesOpen
   );
   const resolvedSlotIndex = activeSlotIndex === -1 ? primaryTabs.length : activeSlotIndex;
   const prevSlotIndexRef = useRef(resolvedSlotIndex);
@@ -498,7 +493,6 @@ export default function MobileBottomNav({
                 onToggleArchive={onToggleArchive}
                 onNavigate={onNavigate}
                 realWorkspaces={realWorkspaces}
-                showWorkspaceSwitcher={layout === 'classic'}
                 activeWorkspaceId={activeWorkspaceId}
                 onSelectWorkspace={onSelectWorkspace}
                 onCreateWorkspace={onCreateWorkspace}
@@ -514,10 +508,9 @@ export default function MobileBottomNav({
               className="flex items-center justify-between gap-0.5 px-1.5 py-1.5"
             >
             {primaryTabs.map((tab) => {
-              // Classic only. In the contexts layout this same id is Home and must behave like any
-              // other tab — keeping the override there gave Home the label "Spaces", the launcher
-              // grid icon, and a tap that opened the old Spaces sheet instead of Home.
-              const isSpaces = tab.id === 'board' && !contexts;
+              // The old "board is really Spaces" override is gone with the classic layout: on this
+              // surface `board` is Home, a real destination with its own label, icon and onClick.
+              const isSpaces = false;
               const Icon = isSpaces ? LayoutGrid : tab.icon;
               const label = isSpaces ? 'Spaces' : tab.label;
               // Opening Spaces doesn't change activeView, so whatever tab was active before stays

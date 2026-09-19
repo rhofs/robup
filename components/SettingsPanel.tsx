@@ -17,7 +17,6 @@ import { useChatStore } from '../store/useChatStore';
 import { getPushStatus, enablePush, disablePush } from '../lib/pushClient';
 import { useInstallPrompt } from '../hooks/useInstallPrompt';
 import { useIsMobile } from '../hooks/useIsMobile';
-import { readLayoutPreference, setLayoutPreference, type LayoutPreference } from '../lib/layoutPreference';
 import { Capacitor } from '@capacitor/core';
 import ColorSwatchPicker from './ColorSwatchPicker';
 import { copyToClipboard } from '../lib/copyToClipboard';
@@ -390,8 +389,6 @@ export default function SettingsPanel({
   // separate subscriptions) — see lib/pushClient.ts.
   const [pushStatus, setPushStatus] = useState<'unsupported' | 'subscribed' | 'not-subscribed' | 'loading'>('loading');
   const [pushTest, setPushTest] = useState<string | null>(null);
-  const [layout, setLayout] = useState<LayoutPreference>('contexts');
-  useEffect(() => setLayout(readLayoutPreference()), []);
   const [pushError, setPushError] = useState<string | null>(null);
   useEffect(() => {
     getPushStatus().then(setPushStatus);
@@ -1193,37 +1190,9 @@ export default function SettingsPanel({
                 <HapticDiagnostics strength={haptics} />
               </>
             )}
-            {/* Now ON by default, so this reads as a way back rather than as something to try. The
-                wording matters: someone who reaches for this is looking for the app they had, and
-                the control should say that plainly instead of naming the thing they do not want. */}
-            <div className="text-[10px] uppercase tracking-wide text-neutral-500 px-1 pt-3 pb-1">Navigation</div>
-            <button
-              onClick={() => {
-                const next: LayoutPreference = layout === 'contexts' ? 'classic' : 'contexts';
-                setLayoutPreference(next);
-                setLayout(next);
-              }}
-              className="w-full flex items-start gap-2.5 px-2 py-2.5 rounded hover:bg-neutral-800/60 cursor-pointer text-left transition"
-            >
-              <span
-                className={`mt-0.5 w-8 h-4.5 rounded-full shrink-0 relative transition ${
-                  layout === 'contexts' ? 'bg-blue-600' : 'bg-neutral-700'
-                }`}
-              >
-                <span
-                  className={`absolute top-0.5 w-3.5 h-3.5 rounded-full bg-white transition-all ${
-                    layout === 'contexts' ? 'left-4' : 'left-0.5'
-                  }`}
-                />
-              </span>
-              <span className="text-xs text-neutral-300">
-                Home and Office
-                <span className="block text-neutral-500 mt-0.5">
-                  Two places instead of separate tabs for everything. Turn this off for the older
-                  layout. Only on this device.
-                </span>
-              </span>
-            </button>
+            {/* The Home-and-Office / classic switch used to sit here. It is gone: which navigation
+                you get is which surface you are on, not a preference — see app/page.tsx's
+                `useContexts`. A setting nobody can sensibly choose is a branch with a UI on it. */}
             <div className="text-[10px] uppercase tracking-wide text-neutral-500 px-1 pt-3 pb-1">Planner</div>
             <button
               onClick={toggleWeekNumbers}
