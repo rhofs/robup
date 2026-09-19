@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState } from 'react';
 import Papa from 'papaparse';
-import { X, Settings, Check, Trash2, Plus, Link2, Upload, Share2, Download, Monitor, Sun, Moon, Smartphone, ArrowLeft, ChevronRight, Pencil, Shield, UserPlus, UserCircle, Building2 } from 'lucide-react';
+import { X, Settings, Check, Trash2, Plus, Link2, Upload, Share2, Download, Monitor, Sun, Moon, Smartphone, ArrowLeft, ChevronRight, Pencil, Shield, UserPlus, UserCircle, Building2, Users } from 'lucide-react';
 import { readThemePreference, setThemePreference, type ThemePreference } from '../lib/theme';
 import {
   readHapticStrength,
@@ -358,13 +358,15 @@ export default function SettingsPanel({
     unassignRole,
     updateWorkspaceDetails,
     sendWorkspaceMemberInvite,
+    changeWorkspaceMemberRole,
+    removeWorkspaceMember,
     sendWorkspaceMemberInviteByEmail,
   } = useTaskStore();
   const { connections, fetchConnections } = useChatStore();
   // initialTab is kept as the caller-facing shape so no call site had to change when this panel was
   // split in two — the old tab names still say enough to land in the right place.
   const [section, setSection] = useState<'you' | 'workspace'>(initialTab === 'account' ? 'you' : 'workspace');
-  const [sub, setSub] = useState<null | 'roles' | 'invite' | 'import' | 'profile'>(
+  const [sub, setSub] = useState<null | 'roles' | 'invite' | 'import' | 'profile' | 'members'>(
     initialTab === 'roles' || initialTab === 'invite' || initialTab === 'import' ? initialTab : null
   );
   const [weekNumbersHidden, setWeekNumbersHidden] = useState(() => readHideWeekNumbers());
@@ -379,6 +381,9 @@ export default function SettingsPanel({
   // here by Owner/Admin only (server-enforced too, see PATCH /api/workspaces/[id]/route.ts).
   const [emailDraft, setEmailDraft] = useState(workspace.workEmail ?? '');
   const [logoDraft, setLogoDraft] = useState(workspace.avatarUrl ?? '');
+  // Which member the remove confirmation is open for — an id rather than a boolean, so the
+  // confirmation can name the person it is about.
+  const [removeTarget, setRemoveTarget] = useState<string | null>(null);
   const [editingEmail, setEditingEmail] = useState(false);
 
   // --- Push notifications --- per-browser, not per-account (a phone and a laptop are two
@@ -560,7 +565,9 @@ export default function SettingsPanel({
                   ? `Import into ${workspace.name}`
                   : sub === 'profile'
                     ? 'Work profile'
-                    : 'Settings'}
+                    : sub === 'members'
+                      ? `People in ${workspace.name}`
+                      : 'Settings'}
           </h3>
           <button
             onClick={onClose}
@@ -591,7 +598,89 @@ export default function SettingsPanel({
           </div>
         )}
 
-        {sub === 'profile' ? (
+        {sub === 'members' ? (
+          <div className="px-4 pb-4 space-y-0.5 h-[26rem] overflow-y-auto">
+            {workspace.members.map((m) => {
+              const isOwner = m.workspaceRole === 'owner';
+              return (
+                <div key={m.id} className="w-full flex items-center gap-2.5 px-3 py-2.5 rounded-xl">
+                  {m.avatarUrl ? (
+                    // eslint-disable-next-line @next/next/no-img-element
+                    <img src={m.avatarUrl} alt="" className="w-8 h-8 rounded-full object-cover shrink-0" />
+                  ) : (
+                    <span
+                      className="w-8 h-8 rounded-full shrink-0 flex items-center justify-center text-[10px] font-bold text-white"
+                      style={{ backgroundColor: m.color }}
+                    >
+                      {m.initials}
+                    </span>
+                  )}
+                  <span className="min-w-0 flex-1">
+                    <span className="block text-xs text-neutral-200 truncate">
+                      {m.name}
+                      {m.id === user?.id && <span className="text-neutral-500"> (you)</span>}
+                    </span>
+                    <span className="block text-[11px] text-neutral-500 capitalize">{m.workspaceRole}</span>
+                  </span>
+                  {/* The owner is deliberately not editable here, and the server refuses it too —
+                      this only hides a control that would always fail. Everything else is admin-only,
+                      so a plain member sees a list and nothing they can break. */}
+                  {canManage && !isOwner && m.id !== user?.id && (
+                    <span className="flex items-center gap-1 shrink-0">
+                      <button
+                        onClick={() =>
+                          changeWorkspaceMemberRole(
+                            workspace.id,
+                            m.id,
+                            m.workspaceRole === 'admin' ? 'member' : 'admin'
+                          )
+                        }
+                        title={m.workspaceRole === 'admin' ? 'Make a member' : 'Make an admin'}
+                        className="text-[10px] px-2 py-1.5 rounded-lg border border-neutral-700 text-neutral-300 hover:bg-neutral-800/60 cursor-pointer transition"
+                      >
+                        {m.workspaceRole === 'admin' ? 'Make member' : 'Make admin'}
+                      </button>
+                      <button
+                        onClick={() => setRemoveTarget(m.id)}
+                        title="Remove from workspace"
+                        className="w-8 h-8 rounded-lg flex items-center justify-center text-neutral-500 hover:text-red-400 hover:bg-neutral-800/60 cursor-pointer transition"
+                      >
+                        <Trash2 className="w-3.5 h-3.5" />
+                      </button>
+                    </span>
+                  )}
+                </div>
+              );
+            })}
+            {/* Removing someone takes their access to everything in here, so it asks first — the
+                one destructive action on this screen, sitting beside a role toggle that is not. */}
+            {removeTarget && (
+              <div className="mt-2 rounded-xl border border-red-500/40 bg-red-500/5 p-3 space-y-2">
+                <p className="text-[11px] text-neutral-300">
+                  Remove {workspace.members.find((m) => m.id === removeTarget)?.name} from{' '}
+                  {workspace.name}? They lose access to everything in it.
+                </p>
+                <div className="flex gap-2">
+                  <button
+                    onClick={() => {
+                      removeWorkspaceMember(workspace.id, removeTarget);
+                      setRemoveTarget(null);
+                    }}
+                    className="flex-1 text-[11px] py-2 rounded-lg bg-red-600 hover:bg-red-500 text-white font-medium cursor-pointer"
+                  >
+                    Remove
+                  </button>
+                  <button
+                    onClick={() => setRemoveTarget(null)}
+                    className="flex-1 text-[11px] py-2 rounded-lg border border-neutral-700 text-neutral-300 hover:bg-neutral-800/60 cursor-pointer"
+                  >
+                    Cancel
+                  </button>
+                </div>
+              </div>
+            )}
+          </div>
+        ) : sub === 'profile' ? (
           // Everything that IS the workspace — its mark, its name, its type, its work email. Moved
           // off the Workspace list and behind "Edit work profile", so that list opens on who this
           // workspace is rather than on a form.
@@ -1289,6 +1378,26 @@ export default function SettingsPanel({
                   </button>
                 )}
               </div>
+            )}
+            {/* Who is in this workspace. It had no home at all until now: the only member list in
+                the app was the checkbox grid inside an expanded Role, which is a role tool that
+                happens to show names, and it is admin-only. On desktop the Office tab used to
+                answer this and no longer exists; this is where that answer moved. Visible to every
+                member, because "who am I working with" is not an administrative question. */}
+            {!workspace.isPersonal && (
+              <button
+                onClick={() => setSub('members')}
+                className="w-full flex items-center gap-2.5 px-3 py-3 rounded-xl hover:bg-neutral-800/50 active:bg-neutral-800 cursor-pointer text-left transition"
+              >
+                <Users className="w-4 h-4 text-neutral-500 shrink-0" />
+                <span className="min-w-0 flex-1">
+                  <span className="block text-xs text-neutral-200">People</span>
+                  <span className="block text-[11px] text-neutral-500">
+                    {workspace.members.length} {workspace.members.length === 1 ? 'member' : 'members'}
+                  </span>
+                </span>
+                <ChevronRight className="w-4 h-4 text-neutral-600 shrink-0" />
+              </button>
             )}
             {/* Sub-screens, not tabs. Each of these is something you go and do once and come
                 back from; a tab implies a place you might sit in. Hidden for a personal workspace,

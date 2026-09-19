@@ -7953,3 +7953,28 @@ ring is worse than either being the wrong size.
 Worth noting the shape of this one: nothing was wrong with the code, it was written for one device
 and stated in units that silently mean something else on another. `vw` is a share of the screen, not
 a size, and the two stop being the same thing the moment the screen changes shape.
+
+## 2026-09-19 — "is there any way to see who is in a workspace?" — there was not
+
+Asked directly, and the honest answer was no. The only member list in the whole app was the checkbox
+grid inside an **expanded Role** in Settings — a role tool that happens to show names, admin-only, and
+not something anyone would look for when the question is "who am I working with". Office used to
+answer it on desktop and no longer exists there; mobile still has Office, so the gap was
+desktop-shaped but the missing screen was missing everywhere.
+
+This is the loss flagged when Office left the rail, arriving as a real report a day later. Worth
+noting: it was flagged, recorded, and still nobody built it until it was hit — a written-down
+known gap is not the same as a fixed one.
+
+**People** is now a sub-screen of the Workspace half: avatar, name, role, and "(you)". Visible to
+**every member**, not just admins, because "who am I working with" is not an administrative question
+— which is precisely what was wrong with the only list that existed before.
+
+Admins additionally get a role toggle and a remove button. Neither appears for the **owner** or for
+**yourself**: the server already refuses both, so showing controls there would only offer actions
+that always fail. Removing asks first and names the person — it is the one destructive action on the
+screen, sitting next to a role toggle that is not, and the two should not look alike.
+
+`changeWorkspaceMemberRole` already existed in the store and the PATCH route already existed on the
+server; **nothing in the app called either.** A capability with no way to reach it is indistinguishable
+from a missing one, and this had been true for as long as both have existed.
