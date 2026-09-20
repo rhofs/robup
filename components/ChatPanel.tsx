@@ -111,6 +111,13 @@ function groupIntoDays(messages: ChatMessage[]): { label: string; runs: Run[] }[
   return days;
 }
 
+// Unsent drafts, per conversation, at module scope.
+//
+// NOT a ref: on mobile the whole panel is unmounted when a conversation closes, so a ref would be
+// recreated empty on the way back — which is the exact case that lost the text. It lives as long as
+// the tab does and is deliberately not persisted; a draft is a thought in progress, not a document.
+const chatDrafts: Record<string, string> = {};
+
 export default function ChatPanel() {
   const { channelsByWorkspace, dms, messagesByChannel, loadedChannelIds, activeChannelId, fetchMessages, postMessage, deleteMessage, setActiveThreadRootId, toggleReaction } =
     useChatStore();
@@ -168,6 +175,10 @@ export default function ChatPanel() {
   // Carries a plain title/snippet snapshot at click time (not just an id) purely so the composer
   // chip has something to render immediately without an extra lookup.
   const [replyTarget, setReplyTarget] = useState<{ id: string; authorName: string; body: string } | null>(null);
+  // Drafts are kept per conversation, in a ref that outlives the panel.
+  //
+  // A half-written message disappeared the moment you left a conversation and came back — on mobile
+  // that is one tap, and leaving to look something up mid-sentence is the normal way to use chat.
   const [draft, setDraft] = useState('');
   const [sending, setSending] = useState(false);
   // Media (Phase 6) + generic files (this pass). Picked but not-yet-sent attachment — shows a
@@ -191,6 +202,33 @@ export default function ChatPanel() {
   // nothing has to measure scrollHeight on every keystroke.
 
   const workspaces = useTaskStore((s) => s.workspaces);
+  // Restore this conversation's draft when it changes, and stash the outgoing one first. Keyed on
+  // the channel id so two half-written messages never bleed into each other.
+  const draftChannelRef = useRef<string | null>(null);
+  useEffect(() => {
+    const previous = draftChannelRef.current;
+    if (previous && previous !== activeChannelId) chatDrafts[previous] = draft;
+    if (previous !== activeChannelId) {
+      draftChannelRef.current = activeChannelId;
+      setDraft(activeChannelId ? chatDrafts[activeChannelId] ?? '' : '');
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    // `draft` is read but deliberately not a dependency: this effect exists to react to the CHANNEL
+    // changing, and listing the draft would make it run on every keystroke and immediately restore
+    // what it had just saved.
+  }, [activeChannelId]);
+
+  // Unmounting counts as leaving. On mobile the whole panel is torn down when a conversation closes,
+  // so without this the stash above never runs for the one case that actually loses text.
+  useEffect(() => {
+    return () => {
+      const id = draftChannelRef.current;
+      if (id) chatDrafts[id] = draftRef.current;
+    };
+  }, []);
+  const draftRef = useRef(draft);
+  draftRef.current = draft;
+
   const activeChannel =
     Object.values(channelsByWorkspace).flat().find((c) => c.id === activeChannelId) ?? dms.find((c) => c.id === activeChannelId);
   // Both channel types now carry `.members` (real channels via GET/POST
@@ -419,6 +457,7 @@ export default function ChatPanel() {
       const sent = await postMessage(activeChannelId, { body: trimmed, quotedMessageId: replyTarget?.id, attachment });
       if (sent) {
         setDraft('');
+        if (activeChannelId) delete chatDrafts[activeChannelId];
         setReplyTarget(null);
         clearPendingAttachment();
       }
@@ -510,7 +549,12 @@ export default function ChatPanel() {
       >
       <div
         ref={contentRef}
-        className={`pt-3 space-y-4 ${
+        // max-w-3xl on desktop. The conversation ran the full width of a wide monitor, which does
+        // two things badly: a line of chat becomes a line of prose nobody wants to read, and the
+        // hover actions — pinned to the right of each row — end up a hand's width away from the
+        // message they belong to. Reported as the second of those. Capping the column fixes both at
+        // once, and is what every chat client does for the same reason.
+        className={`pt-3 space-y-4 md:max-w-3xl ${
           // px-1 left the avatars almost against the screen edge — 4px here plus each row's own
           // px-2. Reported on iPhone, where the rounded display makes the last few pixels of the
           // left edge unusable in a way a flat screenshot does not show.

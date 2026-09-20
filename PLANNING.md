@@ -8057,3 +8057,51 @@ reaching for, and the real signal there — who you talk to most — is not some
 answer cheaply.
 
 Both pickers get it from one place, which is the whole reason `lib/mentionOptions.ts` exists.
+
+## 2026-09-20 — first real use of mentions in chat, and what it turned up
+
+Six reports from actually using the feature. Five fixed, one left alone with a reason, one noted for
+later.
+
+**A person mention opened their Office page.** Naming someone in a message is an act of talking to
+them, so the useful next step is talking to them. It was the Office page because that was the only
+per-person screen when mentions were built — and Office is not even in the desktop rail any more, so
+the chip was landing people on a surface they otherwise never see. Now opens the conversation via
+`createOrOpenDM`, which is idempotent.
+
+Where there is no shared workspace and no connection the server refuses and the tap quietly does
+nothing. The user suggested offering an invite there; **not built**, deliberately — offering to
+connect is a real flow with its own consent step, and it belongs with Connections rather than
+smuggled into a tap on a chip.
+
+**Drafts were lost on leaving a conversation.** On mobile that is one tap, and leaving mid-sentence
+to look something up is the normal way to use chat. Now kept per conversation in a **module-level**
+map — the first attempt used a ref, which is recreated empty when the panel unmounts, and the panel
+unmounting is exactly the case that lost the text. Cleared when the message is sent, or the sent text
+comes back. Not persisted: a draft is a thought in progress, not a document.
+
+**The search row jumped when entering and leaving a conversation.** Self-inflicted: that row's
+padding collapses when a conversation opens, because the search pill is hidden there and its room
+goes with it. As a bare class swap it was a jolt — "pushes opp" going in, "dyttet ned" coming back.
+Now eased over the same 520ms as the push it happens alongside, so the two read as one movement.
+
+**The hover actions sat a hand's width from the message on a wide screen.** The conversation ran the
+full width of the monitor, so actions pinned to the right of each row ended up far from the text.
+Capped the column at `max-w-3xl` on desktop, which fixes that and the older problem it was hiding: a
+line of chat should not be a line of prose.
+
+**The mention dropdown was cropped by the screen edge**, most visibly on `#`, which is typed
+mid-sentence and therefore furthest right. It was `w-64 max-h-64` — 256px in both directions whatever
+room exists. Now sized against the viewport. Worth stating plainly: **floating-ui placement can only
+move a box, it cannot make one smaller**, so no amount of plugin configuration would have fixed this.
+
+### Not fixed
+
+**The floating bottom nav appeared over the chat once, going in and out, and then did not.**
+Intermittent and not reproduced. Nothing is being changed on a single unreproducible sighting —
+recorded so the next report has something to join up with.
+
+### To test when possible
+
+Mentions in a DM should offer only the workspace both people share. The user has no second account to
+hand; this is the one item on the test list that cannot be checked alone.

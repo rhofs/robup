@@ -4204,9 +4204,18 @@ function PageContent() {
       setNavigation(space.id, []);
       setDocsNavigation(doc.folderId, id);
     } else if (kind === 'user') {
-      setActiveView('office');
-      setActiveOfficeUserId(id);
-      setActiveOfficeRoomId(null);
+      // Open the conversation, not their Office page.
+      //
+      // Naming someone in a message is an act of talking to them, so the useful next step is talking
+      // to them — not a profile screen. It was the Office page because that was the only per-person
+      // screen when mentions were built; Office is no longer even in the desktop rail, so the chip
+      // was landing people on a surface they otherwise never see.
+      //
+      // createOrOpenDM is idempotent: it opens the existing conversation or makes one. Where there
+      // is no shared workspace and no connection the server refuses, and this quietly does nothing
+      // rather than pretending — offering to connect from here is a real feature and belongs with
+      // Connections, not smuggled into a tap on a chip.
+      void handleStartDMFromOffice(id);
     }
   };
 
@@ -5513,7 +5522,12 @@ function PageContent() {
               Calendar/Chat's own tighter p-2 content-wrapper budget (they were the two specifically
               flagged as feeling cramped, since every other view already used a roomier p-6). */}
           <div
-            className={`relative md:h-11 pt-2 md:py-0 px-3 md:px-6 flex items-center gap-2 justify-between border-b-0 md:border-b border-neutral-800/40 ${
+            // transition-[padding]: this row's height changes when a conversation opens, because the
+            // search pill is hidden there and its room goes with it. As a bare class swap that was a
+            // jump — reported as the search bar being "pushed up" on the way in and everything being
+            // "dyttet ned" on the way back. Eased over the same duration as the push it happens
+            // alongside, so the two read as one movement instead of a movement and a jolt.
+            className={`relative md:h-11 pt-2 md:py-0 px-3 md:px-6 flex items-center gap-2 justify-between border-b-0 md:border-b border-neutral-800/40 transition-[padding] duration-[520ms] ease-[cubic-bezier(0.42,0,0.18,1)] ${
               // pb-9 is the search pill's room — the pill is taller than this row's other contents
               // and the padding was tuned around it. In an open conversation the pill is hidden, so
               // that padding is holding open a band containing nothing but the Back arrow, which is

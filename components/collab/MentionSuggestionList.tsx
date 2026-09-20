@@ -54,7 +54,13 @@ const MentionSuggestionList = forwardRef<MentionSuggestionListRef, Props>(({ ite
     /* No z-index here on purpose — it would do nothing. This element is statically positioned; the
        one the plugin positions is its parent, and that is where the stacking level is set. See
        mentionSuggestion.ts's onStart. */
-    <div className="w-64 max-h-64 overflow-y-auto bg-neutral-900 border border-neutral-800 rounded-xl shadow-2xl p-1">
+    /* Sized against the viewport, not fixed. `w-64 max-h-64` is 256px in both directions whatever
+       room exists, and on a phone with the keyboard up there is not 256px of height below the caret
+       and often not 256px of width to the right of it — so the list was cropped by the screen edge.
+       Reported on the `#` trigger, which is usually typed mid-sentence and therefore furthest right.
+       
+       The floating-ui placement the plugin does can only move a box; it cannot make one smaller. */
+    <div className="w-[min(16rem,calc(100vw-1.5rem))] max-h-[min(16rem,45vh)] overflow-y-auto bg-neutral-900 border border-neutral-800 rounded-xl shadow-2xl p-1">
       {items.length === 0 ? (
         <p className="text-xs text-neutral-500 px-3 py-2">No matches</p>
       ) : (
