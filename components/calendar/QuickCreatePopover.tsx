@@ -182,8 +182,19 @@ export default function QuickCreatePopover({
             />
           </div>
 
-          {tab === 'task' ? (
-            <>
+          {/* Both panels are rendered, stacked in one grid cell, with the inactive one
+              `invisible`. The popover is then always as tall as the taller of the two, so switching
+              tabs changes what is in the box and not the size of the box — reported as it jumping
+              and shrinking on the way from Event to Task.
+              
+              `invisible` rather than `hidden`: visibility:hidden keeps the element's space, which is
+              the whole point here, and takes its fields out of the tab order for free, which
+              `opacity-0` would not. */}
+          <div className="grid">
+            <div
+              className={`col-start-1 row-start-1 space-y-3 ${tab === 'task' ? '' : 'invisible'}`}
+              aria-hidden={tab !== 'task'}
+            >
               <div className="grid grid-cols-2 gap-3">
                 <div className="space-y-1.5">
                   <label className="text-[10px] uppercase tracking-wide text-neutral-500 font-semibold">Space *</label>
@@ -254,9 +265,11 @@ export default function QuickCreatePopover({
                   </div>
                 </div>
               </div>
-            </>
-          ) : (
-            <>
+            </div>
+            <div
+              className={`col-start-1 row-start-1 space-y-3 ${tab === 'event' ? '' : 'invisible'}`}
+              aria-hidden={tab !== 'event'}
+            >
               <div className="space-y-1.5">
                 <label className="text-[10px] uppercase tracking-wide text-neutral-500 font-semibold">Space (optional, for color)</label>
                 <select
@@ -391,8 +404,8 @@ export default function QuickCreatePopover({
                   </FloatingPopover>
                 </div>
               </div>
-            </>
-          )}
+            </div>
+          </div>
         </div>
 
         <div className="p-5 pt-0">

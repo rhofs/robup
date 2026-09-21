@@ -8105,3 +8105,18 @@ recorded so the next report has something to join up with.
 
 Mentions in a DM should offer only the workspace both people share. The user has no second account to
 hand; this is the one item on the test list that cannot be checked alone.
+
+### 2026-09-21 — the Planner's quick-create popover resized between its tabs
+
+Switching from Event to Task made the popover jump and shrink, because the two tab bodies are
+different heights and only one was ever mounted.
+
+Both are rendered now, stacked in a single grid cell, with the inactive one `invisible`. The popover
+is therefore always as tall as the taller of the two: switching tabs changes what is in the box, not
+the size of the box.
+
+**`invisible`, not `hidden` or `opacity-0`**, and the choice does all three jobs at once:
+`visibility: hidden` keeps the element's space — which is the entire point — *and* removes its fields
+from the tab order, which `opacity-0` would not. The alternative, measuring the taller panel and
+pinning a `min-height`, needs a ref, a resize observer and a number that goes stale the next time
+either panel gains a field.
