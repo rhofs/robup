@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect } from 'react';
+import { useEffect, useRef } from 'react';
 import { EditorContent, useEditor } from '@tiptap/react';
 import Document from '@tiptap/extension-document';
 import Paragraph from '@tiptap/extension-paragraph';
@@ -36,6 +36,14 @@ export default function ChatComposerInput({
   getWorkspaceId: () => string | null;
   maxHeight: number;
 }) {
+  // Read through a ref by the two options below. `useEditor` runs its extension list ONCE, so
+  // anything passed by value there is frozen at whatever the first conversation was — which is
+  // exactly what happened to the placeholder: every conversation said "Message <the first person you
+  // opened>". The workspace getter was written this way from the start for the same reason; the
+  // placeholder was not, and it is the same mistake one prop along.
+  const placeholderRef = useRef(placeholder);
+  placeholderRef.current = placeholder;
+
   const editor = useEditor({
     // Required by Tiptap in React 18+ SSR: without it the first client render can differ from the
     // server's and React discards the editor's DOM.
@@ -45,7 +53,7 @@ export default function ChatComposerInput({
       Paragraph,
       Text,
       HardBreak,
-      Placeholder.configure({ placeholder }),
+      Placeholder.configure({ placeholder: () => placeholderRef.current }),
       // The doc editor's own mention node, handed scoped items and its own plugin key. Same node,
       // same renderer, same chip — only what it offers differs.
       ClientMentionNode.configure({ onJump: runMentionJump, suggestion: chatAtSuggestion(getWorkspaceId) }),

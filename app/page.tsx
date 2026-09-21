@@ -4815,7 +4815,10 @@ function PageContent() {
               title="Invite people to this workspace"
               className="hidden md:flex shrink-0 w-7 h-7 rounded items-center justify-center text-neutral-500 hover:text-blue-400 hover:bg-neutral-800/60 cursor-pointer transition"
             >
-              <UserPlus className="w-4 h-4" />
+              {/* A building, not a person. A person-plus is what Connections uses, and the two
+                  controls do different things to different lists — one adds someone to your own
+                  network, the other to the company. Reading the same is the problem. */}
+              <Building2 className="w-4 h-4" />
             </button>
           )}
         </div>
@@ -4860,9 +4863,14 @@ function PageContent() {
               // filled background, so the press is felt on a button too small for a subtle one.
               className="w-9 h-9 rounded-full flex items-center justify-center text-neutral-400 hover:text-app-strong hover:bg-neutral-800/60 active:bg-neutral-700 active:text-app-strong active:scale-90 cursor-pointer relative transition duration-100"
             >
-              {/* UserPlus, not Plus: a bare plus says "make something", and this one only ever adds
-                  a person — a connection in Home, a workspace member in Office. */}
-              <UserPlus className="w-[18px] h-[18px]" />
+              {/* Two different icons for two different lists: a person joins YOUR network in Home,
+                  a person joins THE COMPANY in Office. They were both UserPlus, which made one
+                  control look like it did the same thing in both places when it does not. */}
+              {inOfficeContext ? (
+                <Building2 className="w-[18px] h-[18px]" />
+              ) : (
+                <UserPlus className="w-[18px] h-[18px]" />
+              )}
               {!inOfficeContext && connectionRequestsIncoming.length > 0 && (
                 <span className="absolute top-0 right-0 min-w-[15px] h-[15px] px-1 rounded-full bg-red-500 text-white text-[8px] font-bold flex items-center justify-center leading-none">
                   {connectionRequestsIncoming.length > 99 ? '99+' : connectionRequestsIncoming.length}
@@ -8564,7 +8572,11 @@ function PageContent() {
               )}
               <span className="flex items-center gap-1.5 ml-auto shrink-0">
                 <span className="w-9 h-9 rounded-full flex items-center justify-center text-neutral-400">
-                  <UserPlus className="w-[18px] h-[18px]" />
+                  {pushContextRef.current === 'office' ? (
+                    <Building2 className="w-[18px] h-[18px]" />
+                  ) : (
+                    <UserPlus className="w-[18px] h-[18px]" />
+                  )}
                 </span>
                 <span className="w-9 h-9 rounded-full flex items-center justify-center text-neutral-400 relative">
                   <Bell className="w-[18px] h-[18px]" />
@@ -8760,7 +8772,14 @@ function PageContent() {
           onClick={() => setCreatingWorkspace(false)}
         >
           <div
-            className="w-full max-w-sm bg-neutral-900 border border-neutral-800 rounded-2xl p-4 space-y-2.5"
+            // max-h + its own scroll. The sheet is anchored to the bottom of the screen, and with
+            // the keyboard up there is far less screen than it needs — so the top of it, including
+            // the name you have already typed, was simply pushed off and clipped. Reported as the
+            // thing you were writing disappearing when you tapped Work email.
+            //
+            // dvh rather than vh: vh is the viewport as if no browser chrome or keyboard existed,
+            // which is the measurement that caused the problem.
+            className="w-full max-w-sm max-h-[calc(100dvh-2rem)] overflow-y-auto bg-neutral-900 border border-neutral-800 rounded-2xl p-4 space-y-2.5"
             onClick={(e) => e.stopPropagation()}
           >
             <h2 className="text-sm font-semibold text-app-strong">New workspace</h2>

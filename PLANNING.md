@@ -8120,3 +8120,39 @@ the size of the box.
 from the tab order, which `opacity-0` would not. The alternative, measuring the taller panel and
 pinning a `min-height`, needs a ref, a resize observer and a number that goes stale the next time
 either panel gains a field.
+
+## 2026-09-21 (continued) — four from a desktop pass
+
+**Every conversation's composer said "Message <the first person you opened>".** `useEditor` runs its
+extension list **once**, so `Placeholder.configure({ placeholder })` froze the string at whatever the
+first conversation was. The workspace scope was written as a getter from the start for exactly this
+reason; the placeholder was not, and it is the same mistake one prop along. Now a function the
+extension calls per render, reading a ref.
+
+**Worth generalising, because it will happen again:** anything handed to `useEditor` by value is
+captured for the editor's whole life. If it can change while the editor stays mounted, it has to be
+a getter or a ref.
+
+**The workspace invite button used a person-plus**, the same icon Connections uses. The two controls
+add someone to different lists — your own network, or the company — and reading the same is the
+problem. Now a building, in the desktop header, in the mobile Office header, and in the push layer's
+copy of that header, which has to match or the icon changes mid-animation.
+
+**Creating a workspace on mobile lost what you had typed** the moment you tapped Work email. The
+sheet is anchored to the bottom of the screen with no height limit of its own, so with the keyboard up
+it was taller than the space left and its top — including the name already entered — was pushed off
+and clipped. Now `max-h-[calc(100dvh-2rem)]` with its own scroll. **`dvh`, not `vh`**: `vh` is the
+viewport as if no keyboard existed, which is the measurement that caused it.
+
+### Raised and deliberately not built
+
+The user is weighing a different desktop arrangement: a toggle in the Workspace area between Rooms
+and work, with DMs moved down beside My Tasks / Assigned / Connections. Said as thinking aloud
+("jeg vurderer"), not a decision, and it would move conversations out of the Chat tab that was agreed
+two days ago. **Not started.** Recorded so it is not lost, and so that if it does happen it happens as
+a decision rather than drift.
+
+### Still untested
+
+Changing someone's role, removing a member, notifications, iPhone, and mentions in a DM (needs a
+second account).
