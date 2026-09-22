@@ -1,7 +1,7 @@
 'use client';
 
 import { forwardRef, useEffect, useImperativeHandle, useState } from 'react';
-import { ListChecks, FileText, UserCircle } from 'lucide-react';
+import { ListChecks, FileText, UserCircle, Paperclip } from 'lucide-react';
 import type { MentionKind } from '../../lib/mentions';
 import type { MentionSuggestionItem } from './mentionSuggestion';
 
@@ -9,6 +9,7 @@ const KIND_ICON: Record<MentionKind, typeof ListChecks> = {
   task: ListChecks,
   doc: FileText,
   user: UserCircle,
+  file: Paperclip,
 };
 
 type Props = {

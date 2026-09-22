@@ -4,6 +4,7 @@ import { collectFolderIdsUnder } from '../lib/folderTree';
 import { collectDocFolderIdsUnder } from '../lib/docFolderTree';
 import { startOfDay } from '../lib/calendarDates';
 import { useHistoryStore } from './useHistoryStore';
+import { uploadChatFile } from '../lib/uploadChatFile';
 import { useSessionStore } from './useSessionStore';
 
 export type StatusDef = {
@@ -49,8 +50,21 @@ export type AppUser = {
   hasPassword?: boolean;
 };
 
+export type TaskAttachment = {
+  id: string;
+  url: string;
+  kind: 'image' | 'file';
+  fileName: string | null;
+  byteSize: number | null;
+  createdAt: string;
+  uploadedBy?: AppUser | null;
+};
+
 export type Task = PrismaTask & {
   assignees: AppUser[];
+  // Optional because older cached payloads and the optimistic rows created before a POST returns do
+  // not carry it — every reader treats a missing list as an empty one rather than a failure.
+  attachments?: TaskAttachment[];
   _localId?: string;
 };
 
@@ -516,6 +530,8 @@ interface TaskStore {
   // one task, one order value; the caller renumbers a whole run of siblings inside a
   // useHistoryStore transaction so a single Ctrl+Z (or the mobile Undo toast) puts them all back.
   reorderTask: (taskId: string, order: number) => Promise<void>;
+  addTaskAttachment: (taskId: string, file: File) => Promise<void>;
+  removeTaskAttachment: (taskId: string, attachmentId: string) => Promise<void>;
   deleteList: (spaceId: string, listId: string) => Promise<void>;
   // Non-destructive, independent of deleteList/Trash — cascades to every Task inside (see
   // lib/archiveCascade.ts). `archived: false` restores.
@@ -2212,6 +2228,39 @@ export const useTaskStore = create<TaskStore>((set, get) => {
         label: 'Move list',
         undo: () => get().moveList(targetSpaceId ?? spaceId, listId, oldFolderId, spaceId),
         redo: () => get().moveList(spaceId, listId, folderId, targetSpaceId),
+      });
+    },
+
+    addTaskAttachment: async (taskId, file) => {
+      // Upload first, record second. If the upload fails there is nothing to undo; if the record
+      // fails the file is orphaned on disk, which is the cheaper of the two failures and the same
+      // trade chat already makes.
+      const uploaded = await uploadChatFile(file, 'task');
+      const res = await fetch(`/api/tasks/${taskId}/attachments`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(uploaded),
+      });
+      if (!res.ok) throw new Error((await res.json().catch(() => ({}))).error || 'Could not attach the file');
+      const attachment = await res.json();
+      set((state) => ({
+        tasks: state.tasks.map((t) =>
+          t.id === taskId ? { ...t, attachments: [...(t.attachments ?? []), attachment] } : t
+        ),
+      }));
+    },
+
+    removeTaskAttachment: async (taskId, attachmentId) => {
+      // No undo entry. Undo would have to re-upload a file this app has deliberately not deleted
+      // from disk, through a route that does not accept an id — an undo that lies about what it
+      // restored is worse than no undo.
+      set((state) => ({
+        tasks: state.tasks.map((t) =>
+          t.id === taskId ? { ...t, attachments: (t.attachments ?? []).filter((a) => a.id !== attachmentId) } : t
+        ),
+      }));
+      await fetch(`/api/tasks/${taskId}/attachments?attachmentId=${encodeURIComponent(attachmentId)}`, {
+        method: 'DELETE',
       });
     },
 

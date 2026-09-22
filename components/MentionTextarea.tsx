@@ -2,7 +2,7 @@
 
 import { forwardRef, useEffect, useImperativeHandle, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
-import { ListChecks, FileText, UserCircle } from 'lucide-react';
+import { ListChecks, FileText, UserCircle, Paperclip } from 'lucide-react';
 import { useTaskStore } from '../store/useTaskStore';
 import { buildMentionOptions, type MentionOption } from '../lib/mentionOptions';
 import { buildMentionToken, type MentionKind } from '../lib/mentions';
@@ -12,6 +12,7 @@ const KIND_ICON: Record<MentionKind, typeof ListChecks> = {
   task: ListChecks,
   doc: FileText,
   user: UserCircle,
+  file: Paperclip,
 };
 
 // Where the dropdown goes, given where the caret is.

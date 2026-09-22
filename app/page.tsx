@@ -26,6 +26,7 @@ import {
   Calendar as CalendarIcon,
   Bell,
   UserPlus,
+  Paperclip,
   House as HouseIcon,
   UserCircle,
   LogOut,
@@ -97,6 +98,7 @@ import ConfirmDialog from '../components/ConfirmDialog';
 import FloatingPopover from '../components/FloatingPopover';
 import { activeGlowStyle } from '../lib/activeGlowStyle';
 import { copyToClipboard } from '../lib/copyToClipboard';
+import { formatBytes } from '../lib/formatBytes';
 import DocExportMenu from '../components/collab/DocExportMenu';
 import TaskRow, { ColumnDef } from '../components/TaskRow';
 import FolderTree, { FOLDER_ICON_CHOICES, FOLDER_ICON_MAP } from '../components/FolderTree';
@@ -719,6 +721,8 @@ function PageContent() {
     moveList,
     reorderList,
     reorderTask,
+    addTaskAttachment,
+    removeTaskAttachment,
     updateList,
     deleteList,
     archiveList,
@@ -1530,6 +1534,23 @@ function PageContent() {
   }, []);
   const [newSpaceDraft, setNewSpaceDraft] = useState('');
   const [workspaceSwitcherOpen, setWorkspaceSwitcherOpen] = useState(false);
+  const taskFileInputRef = useRef<HTMLInputElement>(null);
+  const [attachmentBusy, setAttachmentBusy] = useState(false);
+  const [attachmentError, setAttachmentError] = useState<string | null>(null);
+  const handleAttachFile = async (taskId: string, file: File) => {
+    setAttachmentError(null);
+    setAttachmentBusy(true);
+    try {
+      await addTaskAttachment(taskId, file);
+    } catch (err) {
+      // Surfaced in the panel rather than as a toast: the toast would be gone by the time someone
+      // looked back at the section that failed, and the size and type limits are the usual reason.
+      setAttachmentError(err instanceof Error ? err.message : 'Could not attach the file');
+    } finally {
+      setAttachmentBusy(false);
+    }
+  };
+
   const [creatingWorkspace, setCreatingWorkspace] = useState(false);
   const [newWorkspaceDraft, setNewWorkspaceDraft] = useState('');
   // A more "official" workspace-creation step (backlog #2) — org type + an optional work email,
@@ -4203,6 +4224,12 @@ function PageContent() {
       setActiveView('docs');
       setNavigation(space.id, []);
       setDocsNavigation(doc.folderId, id);
+    } else if (kind === 'file') {
+      // Opens the file itself. Not the task it hangs off: someone tapping a file chip wants the
+      // file, and the task is one more hop away either way (its name is on the chip's own subtitle
+      // in the picker, and in the Files list it came from).
+      const found = tasks.flatMap((t) => t.attachments ?? []).find((a) => a.id === id);
+      if (found) window.open(found.url, '_blank', 'noopener,noreferrer');
     } else if (kind === 'user') {
       // Open the conversation, not their Office page.
       //
@@ -7949,6 +7976,79 @@ function PageContent() {
                   value={activeModalTask.description}
                   onCommit={(value) => optimisticSetDescription(activeModalTask.id, value)}
                 />
+
+                {/* Files — anything that is not a Doc. Above Documents deliberately: a Doc is
+                    something you write here, an attachment is something you brought with you, and
+                    the second is what people go looking for. */}
+                <div className="space-y-2 pt-4 border-t border-neutral-800">
+                  <div className="flex items-center justify-between">
+                    <h3 className="text-xs font-medium text-neutral-500 flex items-center gap-1.5">
+                      <Paperclip className="w-3.5 h-3.5" /> Files
+                    </h3>
+                    <button
+                      onClick={() => taskFileInputRef.current?.click()}
+                      disabled={attachmentBusy}
+                      className="text-[11px] text-blue-400 hover:text-blue-300 disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer"
+                    >
+                      {attachmentBusy ? 'Uploading…' : '+ Attach'}
+                    </button>
+                  </div>
+                  <input
+                    ref={taskFileInputRef}
+                    type="file"
+                    className="hidden"
+                    onChange={(e) => {
+                      const file = e.target.files?.[0];
+                      // Cleared immediately so picking the SAME file twice still fires a change
+                      // event the second time — otherwise a failed upload cannot be retried without
+                      // picking something else first.
+                      e.target.value = '';
+                      if (file) void handleAttachFile(activeModalTask.id, file);
+                    }}
+                  />
+                  {attachmentError && <p className="text-[11px] text-red-400">{attachmentError}</p>}
+                  {(activeModalTask.attachments ?? []).length === 0 && !attachmentBusy && (
+                    <p className="text-[11px] text-neutral-500">No files yet.</p>
+                  )}
+                  <div className="space-y-1">
+                    {(activeModalTask.attachments ?? []).map((a) => (
+                      <div
+                        key={a.id}
+                        className="group flex items-center gap-2.5 px-2 py-2 rounded-lg hover:bg-neutral-800/50 transition"
+                      >
+                        {a.kind === 'image' ? (
+                          // eslint-disable-next-line @next/next/no-img-element
+                          <img src={a.url} alt="" className="w-8 h-8 rounded object-cover shrink-0" />
+                        ) : (
+                          <span className="w-8 h-8 rounded bg-neutral-800 shrink-0 flex items-center justify-center text-neutral-400">
+                            <FileText className="w-4 h-4" />
+                          </span>
+                        )}
+                        <a
+                          href={a.url}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="min-w-0 flex-1"
+                        >
+                          <span className="block text-xs text-neutral-200 truncate hover:underline">
+                            {a.fileName || 'File'}
+                          </span>
+                          <span className="block text-[10px] text-neutral-500">
+                            {a.byteSize ? formatBytes(a.byteSize) : ''}
+                            {a.uploadedBy ? ` · ${a.uploadedBy.name}` : ''}
+                          </span>
+                        </a>
+                        <button
+                          onClick={() => removeTaskAttachment(activeModalTask.id, a.id)}
+                          title="Remove"
+                          className="shrink-0 w-7 h-7 rounded flex items-center justify-center text-neutral-600 hover:text-red-400 hover:bg-neutral-800 cursor-pointer md:opacity-0 md:group-hover:opacity-100 transition"
+                        >
+                          <Trash2 className="w-3.5 h-3.5" />
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                </div>
 
                 {/* Docs — multiple named documents, live collaborative editing */}
                 <div className="space-y-2 pt-4 border-t border-neutral-800">

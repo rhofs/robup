@@ -455,6 +455,7 @@ model User {
   invitesCreated WorkspaceInvite[]
   memberInvitesSent     WorkspaceMemberInvite[] @relation("WorkspaceMemberInviteSender")
   memberInvitesReceived WorkspaceMemberInvite[] @relation("WorkspaceMemberInviteRecipient")
+  taskAttachments        TaskAttachment[] @relation("TaskAttachmentUploader")
   notifications          Notification[] @relation("NotificationRecipient")
   notificationsCaused    Notification[] @relation("NotificationActor")
   connectionsAsA    Connection[]      @relation("ConnectionsAsA")
@@ -605,6 +606,7 @@ model Task {
   assignees User[]    @relation("TaskAssignees")
   comments  Comment[]
   docs      Doc[]
+  attachments TaskAttachment[]
   chatChannels ChatChannel[]
 
   customFieldValues String @default("{}") @map("custom_field_values")
@@ -966,6 +968,31 @@ model ChatReaction {
   createdAt DateTime @default(now()) @map("created_at")
 
   @@unique([messageId, userId, emoji])
+}
+
+// A file hanging off a task. Same shape as ChatAttachment below — deliberately, because it is the
+// same thing in a different place, and the upload route, the size limits and the type allowlist are
+// already shared. Separate models rather than one polymorphic table because a nullable messageId AND
+// a nullable taskId is a row that can be wrong in two directions, and the database would not stop it.
+//
+// uploadedById is kept even though the task's own activity log records who added it: the log is
+// prose and can be trimmed, while "who put this here" is a property of the file.
+model TaskAttachment {
+  id     String @id @default(uuid())
+  taskId String @map("task_id")
+  task   Task   @relation(fields: [taskId], references: [id], onDelete: Cascade)
+
+  url      String
+  kind     String  @default("file")
+  fileName String? @map("file_name")
+  byteSize Int?    @map("byte_size")
+
+  uploadedById String? @map("uploaded_by_id")
+  uploadedBy   User?   @relation("TaskAttachmentUploader", fields: [uploadedById], references: [id], onDelete: SetNull)
+
+  createdAt DateTime @default(now()) @map("created_at")
+
+  @@index([taskId])
 }
 
 model ChatAttachment {

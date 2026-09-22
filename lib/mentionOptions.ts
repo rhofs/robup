@@ -68,6 +68,28 @@ export function buildMentionOptions({
     });
   }
 
+  // Attachments, searched by their own file name. Offered under '@' alongside everything else and
+  // under '#' with tasks, because a file belongs to a task and someone reaching for one by name is
+  // usually reaching for the work it is attached to.
+  for (const t of tasks) {
+    if (listIds && !listIds.has(t.listId)) continue;
+    for (const a of t.attachments ?? []) {
+      const label = a.fileName || 'File';
+      const score = q ? scoreMatch(label, q) : 1;
+      if (score === null) continue;
+      results.push({
+        kind: 'file',
+        id: a.id,
+        label,
+        // Which task it hangs off, for the same reason a task shows its list: two files called
+        // "utkast.pdf" are indistinguishable without it.
+        sub: t.title,
+        score,
+        createdAt: new Date(a.createdAt).getTime(),
+      });
+    }
+  }
+
   if (sigil === '@') {
     for (const u of users) {
       if (memberIds && !memberIds.has(u.id)) continue;
@@ -97,7 +119,7 @@ export function buildMentionOptions({
 
   // People first under '@'. '@' reads as addressing a person in every app that has ever had it, and
   // a task list crowding out the one name you were reaching for is the failure that gets noticed.
-  const kindRank: Record<MentionKind, number> = { user: 0, task: 1, doc: 2 };
+  const kindRank: Record<MentionKind, number> = { user: 0, task: 1, file: 2, doc: 3 };
   return results
     .sort(
       (a, b) =>

@@ -1,6 +1,6 @@
 'use client';
 
-import { ListChecks, FileText, UserCircle } from 'lucide-react';
+import { ListChecks, FileText, UserCircle, Paperclip } from 'lucide-react';
 import { useTaskStore } from '../store/useTaskStore';
 import { parseMentions, resolveMentionEntity, type MentionKind } from '../lib/mentions';
 
@@ -8,6 +8,7 @@ const KIND_ICON: Record<MentionKind, typeof ListChecks> = {
   task: ListChecks,
   doc: FileText,
   user: UserCircle,
+  file: Paperclip,
 };
 
 // No natural per-entity color for tasks/docs the way assignees already have `user.color` — fixed
@@ -16,6 +17,9 @@ const KIND_COLOR: Record<MentionKind, string> = {
   task: '#618cd1',
   doc: '#349f7c',
   user: '#8d97a5',
+  // Warmer than the rest on purpose: a file is the one kind here that leaves the app when you tap
+  // it, and it should not read as just another internal link.
+  file: '#b9834a',
 };
 
 type MentionTextProps = {

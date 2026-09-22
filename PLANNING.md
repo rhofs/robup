@@ -8156,3 +8156,49 @@ a decision rather than drift.
 
 Changing someone's role, removing a member, notifications, iPhone, and mentions in a DM (needs a
 second account).
+
+## 2026-09-22 — files on tasks, and a fourth mention kind
+
+Asked for together, and they belong together: a file you cannot point at from a message is a file
+nobody else finds.
+
+### Attachments
+
+`TaskAttachment` — the same shape as `ChatAttachment`, deliberately, because it is the same thing in
+a different place. **Two models rather than one polymorphic table**: a nullable `messageId` *and* a
+nullable `taskId` is a row that can be wrong in two directions and the database would not stop it.
+
+The upload itself goes through the existing `POST /api/uploads/image` with `context=task`, which is
+now on both allowlists. **Same type allowlist and same size caps as chat, on purpose** — a file is a
+file, and two sets of rules for one upload is how one of them ends up more permissive by accident.
+The route that decides what may be written into `public/` stays the only one.
+
+`POST /api/tasks/[id]/attachments` only *records* that a file belongs to a task, and it validates the
+url against the shape this app's own upload route produces. Without that check a caller could point
+an "attachment" at any address at all, and everyone opening the task would follow a link the app
+appears to vouch for. `DELETE` has `taskId` in the where clause as well as the id, or anyone with
+access to any task could delete an attachment on a task they cannot see.
+
+**The file on disk is never deleted.** It may be referenced from a chat message or a doc and this
+route cannot know — the same reason chat attachments are never unlinked. Removing an attachment
+therefore has **no undo entry**: undo would have to restore a row pointing at a file through a route
+that does not accept an id, and an undo that lies about what it restored is worse than none.
+
+### Mentioning them
+
+`MentionKind` gains `'file'`. Adding it to the union made TypeScript name **every** place that had to
+change — four icon maps, two colour maps, the sort ranking — which is the entire payoff of those maps
+being `Record<MentionKind, …>` rather than loose objects.
+
+A mention rather than a plain link, because a link would carry the URL in the message text, and the
+URL is the one part that does not survive anything: rename or move the file and the link is stale. An
+id resolves to whatever the file is called now.
+
+Attachments are offered under `@` **and** under `#`: a file belongs to a task, and someone reaching
+for one by name is usually reaching for the work it is attached to. Each result shows its task, for
+the same reason tasks show their list — two files called "utkast.pdf" are otherwise identical rows.
+
+Tapping a file chip opens the file. Not the task it hangs off: someone tapping a file wants the file.
+
+**Not verified on device.** Build and typecheck clean. Needs a migration on production — a new table
+only, nothing existing read or reshaped.

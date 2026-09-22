@@ -4,10 +4,15 @@
 // authoritative `kind` (never trust the client's own guess for this — the server derives it from
 // the file's actual validated MIME type, not the extension/picker path). Throws on failure —
 // callers surface the message. Formerly uploadChatImage.ts, before non-image files existed.
-export async function uploadChatFile(file: File): Promise<{ url: string; fileName: string; byteSize: number; kind: 'image' | 'file' }> {
+export async function uploadChatFile(
+  file: File,
+  // Which folder under public/uploads the file lands in, and which allowlist the route applies.
+  // Chat and task attachments share both; the separation is only so the files are not one heap.
+  context: 'chat' | 'task' = 'chat'
+): Promise<{ url: string; fileName: string; byteSize: number; kind: 'image' | 'file' }> {
   const formData = new FormData();
   formData.append('file', file);
-  formData.append('context', 'chat');
+  formData.append('context', context);
   const res = await fetch('/api/uploads/image', { method: 'POST', body: formData });
   const data = await res.json();
   if (!res.ok) throw new Error(data.error || 'Upload failed');

@@ -1,7 +1,7 @@
 'use client';
 
 import { NodeViewWrapper, type ReactNodeViewProps } from '@tiptap/react';
-import { ListChecks, FileText, UserCircle } from 'lucide-react';
+import { ListChecks, FileText, UserCircle, Paperclip } from 'lucide-react';
 import { useTaskStore } from '../../store/useTaskStore';
 import { resolveMentionEntity, type MentionKind } from '../../lib/mentions';
 import type { MentionSuggestionExtensionOptions } from './mentionSuggestion';
@@ -10,6 +10,7 @@ const KIND_ICON: Record<MentionKind, typeof ListChecks> = {
   task: ListChecks,
   doc: FileText,
   user: UserCircle,
+  file: Paperclip,
 };
 
 // Same fixed accent-per-kind palette as components/MentionText.tsx, kept in sync deliberately —
@@ -19,6 +20,9 @@ const KIND_COLOR: Record<MentionKind, string> = {
   task: '#618cd1',
   doc: '#349f7c',
   user: '#8d97a5',
+  // Warmer than the rest on purpose: a file is the one kind here that leaves the app when you tap
+  // it, and it should not read as just another internal link.
+  file: '#b9834a',
 };
 
 // Node view for the `mention` node (lib/collab/mentionNode.ts) — live-resolves the current name
