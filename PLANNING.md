@@ -8220,3 +8220,29 @@ Two details carried over from `ChatPanel` rather than rediscovered:
 
 One file per drop. The upload route takes one and an attachment row is one; a loop needs its own
 partial-failure story, which is worth having as a decision rather than as a side effect.
+
+### Same session — task files 404'd, and now open in a preview
+
+**The 404 was a half-applied change, and the worst kind.** `'task'` was added to the upload route's
+`ALLOWED_CONTEXTS` and not to the *serving* route's. Those two lists are the two halves of one rule —
+what may be written, and what may be read back — and nothing links them. So uploading worked
+perfectly, the attachment appeared in the list, and every attempt to open it 404'd.
+
+Both lists now carry a comment pointing at the other. If a fourth context ever appears it has to
+appear twice, and that should be said in the place where half the job gets done.
+
+**Files open in the app now, not a new tab.** A new tab is wrong for two separate reasons: you lose
+your place in the task you were reading, and in the Android app a new tab is a different browser
+entirely, so coming back is a cold start.
+
+`AttachmentPreview` shows images inline, hands PDFs and text to the browser's own viewer in an
+iframe, and for everything else says so plainly and offers the download — better than an empty frame
+that looks broken. Download stays available and explicit throughout: opening something and keeping it
+are two different intentions, and only one of them should be the default.
+
+It lives at page level rather than inside the task modal, because a **file mention in a chat message**
+opens the same preview and that is nowhere near the modal. Hardware Back closes it first, ahead of
+the other overlays.
+
+**No PDF library.** The browser already has a viewer, and shipping one for a file type it renders
+natively is weight for nothing.

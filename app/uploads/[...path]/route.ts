@@ -16,7 +16,11 @@ import { getCurrentUserId } from '@/lib/auth/session';
 // A route handler reads the disk per request, so it has no such build-time notion. Files that DID
 // exist at build time are still served by the static handler before this ever runs — this catches
 // exactly the ones that would otherwise 404, which is why the stored URLs need no migration.
-const ALLOWED_CONTEXTS = new Set(['docs', 'chat']);
+// Must be kept in step with the upload route's own ALLOWED_CONTEXTS. They are two halves of one
+// rule — what may be written, and what may be read back — and 'task' was added to the first and not
+// the second, so task attachments uploaded fine and then 404'd on every open. Nothing links the two
+// lists; if a fourth context ever appears, it appears here too.
+const ALLOWED_CONTEXTS = new Set(['docs', 'chat', 'task']);
 
 // uuid.ext, matching exactly what the upload route generates. Anything else is refused outright
 // rather than sanitized: the filename is machine-generated, so there is no legitimate shape other

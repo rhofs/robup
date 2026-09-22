@@ -99,6 +99,7 @@ import FloatingPopover from '../components/FloatingPopover';
 import { activeGlowStyle } from '../lib/activeGlowStyle';
 import { copyToClipboard } from '../lib/copyToClipboard';
 import { formatBytes } from '../lib/formatBytes';
+import AttachmentPreview, { type PreviewFile } from '../components/AttachmentPreview';
 import DocExportMenu from '../components/collab/DocExportMenu';
 import TaskRow, { ColumnDef } from '../components/TaskRow';
 import FolderTree, { FOLDER_ICON_CHOICES, FOLDER_ICON_MAP } from '../components/FolderTree';
@@ -1268,6 +1269,10 @@ function PageContent() {
     setNativeBackHandler(() => {
       // The panel first: it is on top of everything, so Back belongs to it before it belongs to the
       // app underneath. One level at a time — a sub-screen returns to the list, the list closes.
+      if (previewFile) {
+        setPreviewFile(null);
+        return true;
+      }
       if (notificationsOpen) {
         setNotificationsOpen(false);
         return true;
@@ -1536,6 +1541,9 @@ function PageContent() {
   const [workspaceSwitcherOpen, setWorkspaceSwitcherOpen] = useState(false);
   const taskFileInputRef = useRef<HTMLInputElement>(null);
   const [taskDragActive, setTaskDragActive] = useState(false);
+  // Which attachment the preview is showing. Held at page level rather than inside the task modal
+  // because a file mention in a chat message opens it too, and that is nowhere near the modal.
+  const [previewFile, setPreviewFile] = useState<PreviewFile | null>(null);
   // Counts enter/leave rather than trusting a single leave event: dragging across a child element
   // fires leave on the parent, so a bare boolean flickers off every time the cursor crosses a
   // border. Same counter ChatPanel uses, for the same reason.
@@ -4261,7 +4269,9 @@ function PageContent() {
       // file, and the task is one more hop away either way (its name is on the chip's own subtitle
       // in the picker, and in the Files list it came from).
       const found = tasks.flatMap((t) => t.attachments ?? []).find((a) => a.id === id);
-      if (found) window.open(found.url, '_blank', 'noopener,noreferrer');
+      if (found) {
+        setPreviewFile({ url: found.url, fileName: found.fileName, kind: found.kind, byteSize: found.byteSize });
+      }
     } else if (kind === 'user') {
       // Open the conversation, not their Office page.
       //
@@ -8072,11 +8082,11 @@ function PageContent() {
                             <FileText className="w-4 h-4" />
                           </span>
                         )}
-                        <a
-                          href={a.url}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className="min-w-0 flex-1"
+                        <button
+                          onClick={() =>
+                            setPreviewFile({ url: a.url, fileName: a.fileName, kind: a.kind, byteSize: a.byteSize })
+                          }
+                          className="min-w-0 flex-1 text-left cursor-pointer"
                         >
                           <span className="block text-xs text-neutral-200 truncate hover:underline">
                             {a.fileName || 'File'}
@@ -8085,7 +8095,7 @@ function PageContent() {
                             {a.byteSize ? formatBytes(a.byteSize) : ''}
                             {a.uploadedBy ? ` · ${a.uploadedBy.name}` : ''}
                           </span>
-                        </a>
+                        </button>
                         <button
                           onClick={() => removeTaskAttachment(activeModalTask.id, a.id)}
                           title="Remove"
@@ -9015,6 +9025,7 @@ function PageContent() {
           configures, and it falls back to the last real workspace when you open Settings from Home
           (see its own comment). Gating on the other one would let the panel render with nothing to
           show on its Workspace half. */}
+      {previewFile && <AttachmentPreview file={previewFile} onClose={() => setPreviewFile(null)} />}
       {notificationsOpen && (
         <NotificationsPanel
           notifications={notifications}
