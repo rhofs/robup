@@ -8270,3 +8270,25 @@ already uses — via a new `data-task-row` attribute on both the mobile and desk
 **Worth keeping:** a threshold expressed as a proportion is a threshold that means different things
 on different surfaces. Where the two surfaces genuinely differ in size — a card against a table row —
 a proportion needs a floor in real units, or it is only tuned for whichever one it was written on.
+
+### 2026-09-22 (continued) — two small ones, and three questions left open
+
+**The office invite icon carries a plus now.** A bare building said "workspace" but not "add someone
+to it", which is the half that matters on a button — and the Connections control beside it has had a
+plus all along, so one of the pair read as an action and the other as a label.
+
+**The drag handle is visible.** It was a grey glyph on a grey card with no background: findable once
+you know it is there, invisible until then. Now a filled pill, which is what says "this is a
+control" on a surface with no cursor to change.
+
+### Raised, not built — recorded so none of it is lost
+
+- **`@everyone` / `@all` / `@assignees`.** Asked for in passing. Not started: what it should *do* is
+  the part that needs deciding, not the token. `@everyone` in a channel notifying every member is
+  obvious; in a DM it is meaningless; `@assignees` only means anything where a task is in scope. Each
+  is a `notify()` call once the rule is settled.
+- **Followers on a task.** Explicitly shelved by the user in the same breath ("vi kan skrinlegge
+  det... kan komme senere"). Recorded because a shelved idea and a forgotten one look identical a
+  month later.
+- **Docs split between private and workspace docs**, with a toggle. Raised as a need without a shape
+  ("vi må ha noe smart der"). Discussed below rather than built.

@@ -4899,10 +4899,14 @@ function PageContent() {
               title="Invite people to this workspace"
               className="hidden md:flex shrink-0 w-7 h-7 rounded items-center justify-center text-neutral-500 hover:text-blue-400 hover:bg-neutral-800/60 cursor-pointer transition"
             >
-              {/* A building, not a person. A person-plus is what Connections uses, and the two
-                  controls do different things to different lists — one adds someone to your own
-                  network, the other to the company. Reading the same is the problem. */}
-              <Building2 className="w-4 h-4" />
+              {/* A building with a plus on it. The bare building said "workspace" but not "add
+                  someone to it", which is the half that matters on a button — and the Connections
+                  control next to it has carried a plus all along, so one of the pair read as an
+                  action and the other as a label. */}
+              <span className="relative inline-flex">
+                <Building2 className="w-4 h-4" />
+                <Plus className="absolute -right-1 -bottom-1 w-2.5 h-2.5 stroke-[3.5] bg-neutral-900 rounded-full" />
+              </span>
             </button>
           )}
         </div>
@@ -4951,7 +4955,10 @@ function PageContent() {
                   a person joins THE COMPANY in Office. They were both UserPlus, which made one
                   control look like it did the same thing in both places when it does not. */}
               {inOfficeContext ? (
-                <Building2 className="w-[18px] h-[18px]" />
+                <span className="relative inline-flex">
+                  <Building2 className="w-[18px] h-[18px]" />
+                  <Plus className="absolute -right-1 -bottom-1 w-2.5 h-2.5 stroke-[3.5] bg-neutral-950 rounded-full" />
+                </span>
               ) : (
                 <UserPlus className="w-[18px] h-[18px]" />
               )}
@@ -8746,7 +8753,10 @@ function PageContent() {
               <span className="flex items-center gap-1.5 ml-auto shrink-0">
                 <span className="w-9 h-9 rounded-full flex items-center justify-center text-neutral-400">
                   {pushContextRef.current === 'office' ? (
-                    <Building2 className="w-[18px] h-[18px]" />
+                    <span className="relative inline-flex">
+                      <Building2 className="w-[18px] h-[18px]" />
+                      <Plus className="absolute -right-1 -bottom-1 w-2.5 h-2.5 stroke-[3.5] bg-neutral-950 rounded-full" />
+                    </span>
                   ) : (
                     <UserPlus className="w-[18px] h-[18px]" />
                   )}

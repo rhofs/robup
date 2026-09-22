@@ -392,7 +392,12 @@ function TaskRowImpl({
               // the same reason: touch-action is latched when the gesture begins, so it cannot be
               // changed once a drag is under way.
               style={{ touchAction: 'pan-y' }}
-              className="shrink-0 text-neutral-600 cursor-grab active:cursor-grabbing p-2"
+              // Visible enough to aim at. It was `text-neutral-600` with no background — a grey
+              // glyph on a grey card, which is findable once you know it is there and invisible
+              // until then. Reported as not being able to tell where the handle is. A filled pill
+              // behind it says "this is a control", and the cursor change alone never says that on
+              // a phone, where there is no cursor.
+              className="shrink-0 text-neutral-400 cursor-grab active:cursor-grabbing p-1.5 rounded-lg bg-neutral-800/70 active:bg-neutral-700"
             >
               <GripVertical className="w-4 h-4" />
             </span>
