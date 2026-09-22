@@ -8327,3 +8327,19 @@ and a Space belongs to exactly one workspace — without that, opening a private
 workspace was active would have left the two disagreeing about where you are. The Space picker in the
 create bar also resets when the scope changes, since a Space chosen in one half is meaningless in the
 other.
+
+### 2026-09-22 (continued) — the board uses its width, and the drop target says where
+
+**The board is full width now.** `max-w-6xl mx-auto` is right for prose — a Doc, where a long line is
+genuinely harder to read — and wrong for a table of tasks with columns in it. On a wide monitor the
+cap left most of the screen empty on both sides while the columns themselves stayed cramped. Docs keep
+the cap for exactly the reason the board loses it.
+
+**The drop indicator opens a gap rather than drawing a hairline.** Two rows sitting flush with a 2px
+line between them asks you to aim at a seam: you had to be exactly right, and nothing told you when
+you were. The rows now visibly move apart as the pointer approaches, which answers "am I going
+between these" before there is anything to read — the line just says which gap. The user's own
+suggestion, and the right one.
+
+Together with the pixel floor on the reorder band from earlier today, dropping between two tasks
+should now be something you can do without aiming.

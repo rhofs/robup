@@ -5957,7 +5957,14 @@ function PageContent() {
                 ? 'flex-1 min-h-0 flex flex-col'
                 : (activeView === 'board' || activeView === 'docs') && activeStandaloneDoc?.pageWidth === 'full'
                 ? 'w-full space-y-2'
-                : 'max-w-6xl mx-auto space-y-2'
+                : // The board uses the width it is given. max-w-6xl centred is right for prose — a
+                  // Doc, where a long line is genuinely harder to read — and wrong for a table of
+                  // tasks with columns in it, where the cap left a wide monitor mostly empty on both
+                  // sides while the columns themselves stayed cramped. Docs keep the cap for exactly
+                  // the reason the board loses it.
+                  activeView === 'board'
+                  ? 'w-full space-y-2'
+                  : 'max-w-6xl mx-auto space-y-2'
             }
           >
             {activeView === 'board' && !showingSpaceHome && !showingHomeContext && (

@@ -333,7 +333,18 @@ function TaskRowImpl({
       exit={{ opacity: 0, scale: 0.85, filter: 'blur(6px)', y: -6 }}
       transition={{ duration: 0.28, ease: 'easeOut' }}
     >
-      {dropIndicator === 'above' && <div className="h-0.5 -mb-0.5 rounded-full bg-blue-500" />}
+      {/* The gap IS the indication, and the line only names it.
+          
+          A 2px line between two rows that sit flush against each other asks you to aim at a seam —
+          you had to be exactly right, and there was nothing to tell you when you were. Opening a
+          real space instead means the two rows visibly move apart as you approach, which is the
+          answer to "am I going between these" before you have to read anything. The line then just
+          says which gap. */}
+      {dropIndicator === 'above' && (
+        <div className="h-7 -mb-1 flex items-center px-1" aria-hidden>
+          <span className="h-1 w-full rounded-full bg-blue-500 shadow-[0_0_0_3px_rgba(59,130,246,0.18)]" />
+        </div>
+      )}
       {isMobile ? (
         // ================= MOBILE ROW — a "card," not a table row: checkbox + title on top
         // (title wraps instead of truncating), status/assignee/dates/custom fields always visible
@@ -557,7 +568,11 @@ function TaskRowImpl({
           </div>
         </div>
       )}
-      {dropIndicator === 'below' && <div className="h-0.5 -mt-0.5 rounded-full bg-blue-500" />}
+      {dropIndicator === 'below' && (
+        <div className="h-7 -mt-1 flex items-center px-1" aria-hidden>
+          <span className="h-1 w-full rounded-full bg-blue-500 shadow-[0_0_0_3px_rgba(59,130,246,0.18)]" />
+        </div>
+      )}
     </motion.div>
   );
 }
