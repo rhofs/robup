@@ -8246,3 +8246,27 @@ the other overlays.
 
 **No PDF library.** The browser already has a viewer, and shipping one for a file type it renders
 natively is weight for nothing.
+
+### 2026-09-22 — reordering tasks was impossible on desktop
+
+"Når jeg trekker med musa, så ser det ut som at det kun kan legge den inn i andre tasks." Working on
+mobile, not on desktop.
+
+**Two causes, both in the same few lines.**
+
+**The reorder band is a fraction of the row's height.** 30% of a mobile card is roughly 24px at each
+edge; 30% of a compact desktop row is about 11px — a target you hit by luck with a mouse in motion.
+The fraction was tuned on the taller of the two rows and quietly became unusable on the other, which
+is why it looked like nesting was the only thing on offer: the middle 40% was almost the whole row.
+Now a **pixel minimum** as well as a fraction, clamped so the middle never disappears either — making
+nesting impossible instead would be the same bug facing the other way.
+
+**The row was measured once and then trusted.** The position within a row was computed from the rect
+dnd-kit captured when the drag began, and that rect does not follow the list scrolling underneath it.
+On desktop a drag long enough to reorder anything usually scrolls. The row under the pointer is now
+found with `elementFromPoint` and measured live — the same approach the Planner's day-range drag
+already uses — via a new `data-task-row` attribute on both the mobile and desktop row roots.
+
+**Worth keeping:** a threshold expressed as a proportion is a threshold that means different things
+on different surfaces. Where the two surfaces genuinely differ in size — a card against a table row —
+a proportion needs a floor in real units, or it is only tuned for whichever one it was written on.

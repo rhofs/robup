@@ -3329,15 +3329,30 @@ function PageContent() {
   useEffect(() => {
     if (!activeDragTask) return;
     const REORDER_EDGE_FRACTION = 0.3;
+    // A minimum band in pixels as well as a fraction. 30% of a mobile card is roughly 24px; 30% of a
+    // compact desktop row is about 11px at each edge, which is a target you hit by luck with a mouse
+    // in motion. Reported as reordering being impossible on desktop while working fine on a phone —
+    // the fraction was tuned on the taller of the two rows and quietly became unusable on the other.
+    const MIN_EDGE_PX = 16;
     const onPointerMove = (e: PointerEvent) => {
-      const over = taskOverRef.current;
-      if (!over) {
+      // The row is found and measured under the pointer, not read from the rect dnd-kit captured.
+      // That rect is taken when the drag starts and does not follow the list scrolling underneath —
+      // and on desktop a drag long enough to reorder anything usually scrolls. Same elementFromPoint
+      // approach the Planner's day-range drag already uses.
+      const el = document.elementFromPoint(e.clientX, e.clientY)?.closest('[data-task-row]') as HTMLElement | null;
+      const targetId = el?.dataset.taskRow ?? null;
+      if (!el || !targetId || targetId === activeDragTask.id) {
         setTaskDropIndicator(null);
         return;
       }
-      const offset = (e.clientY - over.top) / (over.height || 1);
-      if (offset < REORDER_EDGE_FRACTION) setTaskDropIndicator({ targetId: over.targetId, position: 'above' });
-      else if (offset > 1 - REORDER_EDGE_FRACTION) setTaskDropIndicator({ targetId: over.targetId, position: 'below' });
+      const rect = el.getBoundingClientRect();
+      const edge = Math.max(MIN_EDGE_PX, rect.height * REORDER_EDGE_FRACTION);
+      // Never let the edges eat the whole row: on a very short row the middle must still exist, or
+      // nesting becomes the thing that is impossible instead.
+      const safeEdge = Math.min(edge, rect.height * 0.4);
+      const y = e.clientY - rect.top;
+      if (y < safeEdge) setTaskDropIndicator({ targetId, position: 'above' });
+      else if (y > rect.height - safeEdge) setTaskDropIndicator({ targetId, position: 'below' });
       else setTaskDropIndicator(null);
     };
     window.addEventListener('pointermove', onPointerMove);

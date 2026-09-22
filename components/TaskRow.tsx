@@ -362,6 +362,9 @@ function TaskRowImpl({
         // app/page.tsx) already handles touch via the Pointer Events API. =================
         <div
           ref={setNodeRef}
+          // Lets the drag code find this row under the pointer and measure it live — see
+          // app/page.tsx's reorder-indicator effect for why a measured rect was not enough.
+          data-task-row={task.id}
           className={`relative rounded-xl bg-neutral-800/50 ${isSelected ? 'ring-1 ring-inset ring-blue-500/60' : ''} ${
             isOver ? 'ring-1 ring-inset ring-neutral-500' : ''
           } ${isDragging ? 'opacity-40' : ''}`}
@@ -476,6 +479,7 @@ function TaskRowImpl({
         // ================= DESKTOP ROW (unchanged) =================
         <div
           ref={setNodeRef}
+          data-task-row={task.id}
           {...attributes}
           {...listeners}
           onClick={onOpen}
