@@ -8343,3 +8343,32 @@ suggestion, and the right one.
 
 Together with the pixel floor on the reorder band from earlier today, dropping between two tasks
 should now be something you can do without aiming.
+
+### 2026-09-22 (continued) — making the board full width broke where drops land
+
+Two faults, both introduced by earlier changes the same day, and both worth keeping because they are
+the same kind of mistake seen from two sides.
+
+**`elementFromPoint` returned the drag overlay, not the row.** The overlay follows the cursor, so the
+topmost element under the pointer during a drag is always it — and it is portaled to the body, so
+`.closest('[data-task-row]')` from there finds nothing. The indicator was therefore null on every
+move. Now `elementsFromPoint` (plural), taking the first entry that *is* a row, which skips whatever
+is floating above it.
+
+**`closestCenter` stopped being a sensible measure once the board went full width.** It compares the
+dragged item's centre to each droppable's **centre**. A full-width task row has its centre in the
+middle of a very wide area; a List in the narrow sidebar has its centre near the left edge. Dragging
+a task near the left of the list therefore resolved to a sidebar item — reported exactly that way:
+the Spaces tree highlighting while dragging among tasks.
+
+Now `pointerWithin` with `closestCenter` as the fallback. `pointerWithin` asks the only question that
+matters — what is the pointer actually over — and the fallback keeps dropping into the tree's gaps
+working.
+
+**The lesson is one thing said twice:** both bugs came from asking *where is the thing* when the
+question was *where is the pointer*. During a drag the pointer is the intent; every geometry derived
+from the dragged element is a guess about it.
+
+And a smaller one: widening a container changed behaviour in a component that never mentions width,
+because a collision strategy reads geometry the layout owns. A pure-looking CSS change is not
+necessarily one.

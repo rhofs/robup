@@ -7,6 +7,7 @@ import { AnimatePresence, motion, useAnimationControls } from 'framer-motion';
 import {
   DndContext,
   closestCenter,
+  pointerWithin,
   PointerSensor,
   useSensor,
   useSensors,
@@ -3339,7 +3340,18 @@ function PageContent() {
       // That rect is taken when the drag starts and does not follow the list scrolling underneath —
       // and on desktop a drag long enough to reorder anything usually scrolls. Same elementFromPoint
       // approach the Planner's day-range drag already uses.
-      const el = document.elementFromPoint(e.clientX, e.clientY)?.closest('[data-task-row]') as HTMLElement | null;
+      // elementsFromPoint (plural), not elementFromPoint.
+      //
+      // The drag overlay follows the cursor, so the topmost element under the pointer during a drag
+      // is the overlay itself — and it is portaled to the body, outside the list, so `.closest` from
+      // it finds no row at all. The singular version therefore returned null on every move and the
+      // indicator never appeared, which is how "you can only reorder in the Spaces tree, and there
+      // is no indication" happened. The plural version hands back the whole stack, so the row is
+      // simply the first entry that is one.
+      const el = document
+        .elementsFromPoint(e.clientX, e.clientY)
+        .map((n) => n.closest('[data-task-row]'))
+        .find((n): n is HTMLElement => n instanceof HTMLElement) ?? null;
       const targetId = el?.dataset.taskRow ?? null;
       if (!el || !targetId || targetId === activeDragTask.id) {
         setTaskDropIndicator(null);
@@ -4621,7 +4633,22 @@ function PageContent() {
   return (
     <DndContext
       sensors={taskSensors}
-      collisionDetection={closestCenter}
+      // pointerWithin first, closestCenter only as a fallback.
+      //
+      // closestCenter compares the dragged item's centre to each droppable's CENTRE, and that stops
+      // being a sensible measure the moment droppables differ wildly in width. The board is full
+      // width now, so a task row's centre sits in the middle of a very wide area — while a List in
+      // the narrow sidebar has its centre near the left edge. Dragging a task near the left of the
+      // list therefore resolved to a sidebar item, which is exactly what was reported: the Spaces
+      // tree highlighting while dragging among tasks.
+      //
+      // pointerWithin asks the only question that matters here — what is the pointer actually over —
+      // and falls back to centres when it is over nothing, which is what keeps dropping onto the
+      // tree's gaps working.
+      collisionDetection={(args) => {
+        const within = pointerWithin(args);
+        return within.length > 0 ? within : closestCenter(args);
+      }}
       onDragStart={handleTaskDragStart}
       onDragOver={handleTaskDragOver}
       onDragEnd={handleTaskDragEnd}
