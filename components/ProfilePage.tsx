@@ -137,7 +137,7 @@ function PasswordSection({ hasPassword }: { hasPassword: boolean }) {
               value={current}
               onChange={(e) => setCurrent(e.target.value)}
               placeholder="Current password"
-              className="w-full bg-neutral-950 border border-neutral-800 rounded px-2 py-1.5 text-xs text-app-strong placeholder:text-neutral-600 focus:outline-none focus:border-blue-500"
+              className="w-full bg-neutral-950 border border-neutral-800 rounded-lg px-2 py-1.5 text-xs text-app-strong placeholder:text-neutral-600 focus:outline-none focus:border-blue-500"
             />
           )}
           <input
@@ -149,7 +149,7 @@ function PasswordSection({ hasPassword }: { hasPassword: boolean }) {
               if (e.key === 'Enter') submit();
             }}
             placeholder="New password (at least 8 characters)"
-            className="w-full bg-neutral-950 border border-neutral-800 rounded px-2 py-1.5 text-xs text-app-strong placeholder:text-neutral-600 focus:outline-none focus:border-blue-500"
+            className="w-full bg-neutral-950 border border-neutral-800 rounded-lg px-2 py-1.5 text-xs text-app-strong placeholder:text-neutral-600 focus:outline-none focus:border-blue-500"
           />
           {error && <p className="text-[10px] text-red-400">{error}</p>}
           <div className="flex gap-2">
@@ -346,7 +346,7 @@ function DangerZone({ user }: { user: AppUser }) {
               placeholder="Confirm your password"
               value={password}
               onChange={(e) => setPassword(e.target.value)}
-              className="w-full bg-neutral-950 border border-neutral-700 rounded px-3 py-2 text-xs text-app-strong focus:outline-none focus:border-red-500"
+              className="w-full bg-neutral-950 border border-neutral-700 rounded-lg px-3 py-2 text-xs text-app-strong focus:outline-none focus:border-red-500"
             />
           ) : (
             <input
@@ -355,7 +355,7 @@ function DangerZone({ user }: { user: AppUser }) {
               placeholder={`Type "${user.email ?? 'your email'}" to confirm`}
               value={confirmEmail}
               onChange={(e) => setConfirmEmail(e.target.value)}
-              className="w-full bg-neutral-950 border border-neutral-700 rounded px-3 py-2 text-xs text-app-strong focus:outline-none focus:border-red-500"
+              className="w-full bg-neutral-950 border border-neutral-700 rounded-lg px-3 py-2 text-xs text-app-strong focus:outline-none focus:border-red-500"
             />
           )}
           {error && <p className="text-[11px] text-red-400">{error}</p>}
@@ -402,7 +402,7 @@ function AvatarEditor({ user, onCommit }: { user: AppUser; onCommit: (url: strin
             }
           }}
           placeholder="Paste an image URL…"
-          className="w-56 bg-neutral-950 border border-blue-500 rounded px-2 py-1 text-xs text-app-strong focus:outline-none"
+          className="w-56 bg-neutral-950 border border-blue-500 rounded-lg px-2 py-1 text-xs text-app-strong focus:outline-none"
         />
         <button onClick={commit} className="text-[11px] bg-blue-600 hover:bg-blue-500 text-white px-2 py-1 rounded cursor-pointer">
           Save
@@ -530,7 +530,7 @@ function UsernameField({
               }
             }}
             placeholder="username"
-            className="flex-1 bg-neutral-950 border border-blue-500 rounded px-2 py-1 text-xs text-app-strong focus:outline-none disabled:opacity-50"
+            className="flex-1 bg-neutral-950 border border-blue-500 rounded-lg px-2 py-1 text-xs text-app-strong focus:outline-none disabled:opacity-50"
           />
           <button
             onClick={commit}
@@ -593,7 +593,7 @@ function BioBlock({ value, onCommit }: { value: string | null; onCommit: (value:
         }}
         rows={3}
         placeholder="Write a short bio…"
-        className="w-full bg-neutral-950/60 border border-blue-500 rounded px-3 py-2 text-xs text-app-strong focus:outline-none resize-none"
+        className="w-full bg-neutral-950/60 border border-blue-500 rounded-lg px-3 py-2 text-xs text-app-strong focus:outline-none resize-none"
       />
     );
   }

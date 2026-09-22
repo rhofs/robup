@@ -80,7 +80,7 @@ function ResetPasswordForm() {
         placeholder="New password"
         minLength={8}
         required
-        className="w-full bg-neutral-950 border border-neutral-700 rounded px-3 py-2 text-xs text-app-strong focus:outline-none focus:border-blue-500"
+        className="w-full bg-neutral-950 border border-neutral-700 rounded-lg px-3 py-2 text-xs text-app-strong focus:outline-none focus:border-blue-500"
       />
       <input
         type="password"
@@ -88,7 +88,7 @@ function ResetPasswordForm() {
         onChange={(e) => setConfirm(e.target.value)}
         placeholder="Repeat new password"
         required
-        className="w-full bg-neutral-950 border border-neutral-700 rounded px-3 py-2 text-xs text-app-strong focus:outline-none focus:border-blue-500"
+        className="w-full bg-neutral-950 border border-neutral-700 rounded-lg px-3 py-2 text-xs text-app-strong focus:outline-none focus:border-blue-500"
       />
       {error && <p className="text-[11px] text-red-400">{error}</p>}
       <button

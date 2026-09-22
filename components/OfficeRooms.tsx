@@ -94,7 +94,7 @@ export default function OfficeRooms({
             open={inviteOpen}
             onClose={() => setInviteOpen(false)}
             align="right"
-            panelClassName="w-64 bg-neutral-900 border border-neutral-800 rounded shadow-xl py-1.5"
+            panelClassName="w-64 bg-neutral-900 border border-neutral-800 rounded-xl shadow-xl py-1.5"
             anchor={
               <button
                 onClick={() => setInviteOpen((o) => !o)}
@@ -202,7 +202,7 @@ export default function OfficeRooms({
                 }
               }}
               placeholder="Room name..."
-              className="w-full bg-neutral-950 border border-blue-500 rounded px-2 py-1.5 text-xs text-app-strong focus:outline-none"
+              className="w-full bg-neutral-950 border border-blue-500 rounded-lg px-2 py-1.5 text-xs text-app-strong focus:outline-none"
             />
           </div>
         ) : (
@@ -333,7 +333,7 @@ function RoomBox({ room, members, workspace, currentUserId, canManage, taskCount
                   setEditingName(false);
                 }
               }}
-              className="bg-neutral-950 border border-blue-500 rounded px-1.5 py-0.5 text-xs text-app-strong focus:outline-none min-w-0"
+              className="bg-neutral-950 border border-blue-500 rounded-lg px-1.5 py-0.5 text-xs text-app-strong focus:outline-none min-w-0"
             />
           ) : (
             <button

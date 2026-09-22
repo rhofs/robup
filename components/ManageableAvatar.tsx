@@ -114,7 +114,7 @@ export default function ManageableAvatar({
             {canManage ? <Settings2 className="w-[65%] h-[65%]" /> : <MessageCircle className="w-[60%] h-[60%]" />}
           </button>
         }
-        panelClassName="w-56 bg-neutral-900 border border-neutral-800 rounded shadow-xl py-1.5 max-h-72 overflow-y-auto"
+        panelClassName="w-56 bg-neutral-900 border border-neutral-800 rounded-xl shadow-xl py-1.5 max-h-72 overflow-y-auto"
       >
         <div className="px-3 py-1.5 border-b border-neutral-800 mb-1">
           <div className="text-xs text-neutral-200 font-medium truncate">{user.name}</div>

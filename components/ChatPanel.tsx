@@ -945,7 +945,7 @@ export function MessageActions({
           open={pickerOpen}
           onClose={() => setPickerOpen(false)}
           align="right"
-          panelClassName="bg-neutral-900 border border-neutral-800 rounded shadow-xl p-1 flex gap-0.5"
+          panelClassName="bg-neutral-900 border border-neutral-800 rounded-xl shadow-xl p-1 flex gap-0.5"
           anchor={
             <button onClick={() => setPickerOpen((o) => !o)} title="Add reaction" className={btn}>
               <SmilePlus className={icon} />

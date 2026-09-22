@@ -89,7 +89,7 @@ export default function LocationAutocompleteInput({ value, onChange, placeholder
         className={className}
       />
       {open && suggestions.length > 0 && (
-        <div className="absolute z-20 top-full left-0 right-0 mt-1 bg-neutral-900 border border-neutral-700 rounded shadow-xl max-h-48 overflow-y-auto">
+        <div className="absolute z-20 top-full left-0 right-0 mt-1 bg-neutral-900 border border-neutral-700 rounded-xl shadow-xl max-h-48 overflow-y-auto">
           {suggestions.map((s, i) => (
             <button
               key={i}

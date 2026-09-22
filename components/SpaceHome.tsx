@@ -213,7 +213,7 @@ function CoverBanner({ space, onCommit }: { space: HierarchySpace; onCommit: (ur
               }
             }}
             placeholder="Paste an image URL…"
-            className="w-full max-w-md bg-neutral-950 border border-blue-500 rounded px-3 py-1.5 text-xs text-app-strong focus:outline-none"
+            className="w-full max-w-md bg-neutral-950 border border-blue-500 rounded-lg px-3 py-1.5 text-xs text-app-strong focus:outline-none"
           />
           <button onClick={commit} className="text-[11px] bg-blue-600 hover:bg-blue-500 text-white px-2.5 py-1.5 rounded cursor-pointer">
             Save
@@ -232,7 +232,7 @@ function CoverBanner({ space, onCommit }: { space: HierarchySpace; onCommit: (ur
         <button
           onClick={() => setEditing(true)}
           title="Edit cover image"
-          className="absolute bottom-2 right-2 bg-neutral-950/70 hover:bg-neutral-900 border border-neutral-700 rounded px-2 py-1 text-[10px] text-neutral-300 flex items-center gap-1 cursor-pointer"
+          className="absolute bottom-2 right-2 bg-neutral-950/70 hover:bg-neutral-900 border border-neutral-700 rounded-lg px-2 py-1 text-[10px] text-neutral-300 flex items-center gap-1 cursor-pointer"
         >
           <ImageIcon className="w-3 h-3" /> {space.coverImageUrl ? 'Change cover' : 'Add cover'}
         </button>
@@ -266,7 +266,7 @@ function DescriptionBlock({ value, onCommit }: { value: string | null; onCommit:
         }}
         rows={3}
         placeholder="Add a description…"
-        className="w-full bg-neutral-900/60 border border-blue-500 rounded px-3 py-2 text-xs text-app-strong focus:outline-none resize-none"
+        className="w-full bg-neutral-900/60 border border-blue-500 rounded-lg px-3 py-2 text-xs text-app-strong focus:outline-none resize-none"
       />
     );
   }

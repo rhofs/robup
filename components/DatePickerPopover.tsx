@@ -98,7 +98,7 @@ export default function DatePickerPopover({ value, onChange, placeholder = 'Not 
       open={open}
       onClose={() => setOpen(false)}
       align={align}
-      panelClassName="w-64 bg-neutral-900 border border-neutral-800 rounded shadow-2xl overflow-hidden text-xs"
+      panelClassName="w-64 bg-neutral-900 border border-neutral-800 rounded-xl shadow-2xl overflow-hidden text-xs"
       anchor={
         <button
           type="button"
@@ -270,12 +270,12 @@ function TimeField({ value, onCommit }: { value: Date; onCommit: (hh: number, mm
           if (e.key === 'Enter') (e.target as HTMLInputElement).blur();
         }}
         placeholder="HH:MM"
-        className="w-14 bg-neutral-900 border border-neutral-700 rounded px-2 py-1 text-[11px] text-neutral-200 text-center focus:outline-none focus:border-blue-500"
+        className="w-14 bg-neutral-900 border border-neutral-700 rounded-lg px-2 py-1 text-[11px] text-neutral-200 text-center focus:outline-none focus:border-blue-500"
       />
       <FloatingPopover
         open={menuOpen}
         onClose={() => setMenuOpen(false)}
-        panelClassName="w-16 max-h-48 overflow-y-auto bg-neutral-900 border border-neutral-800 rounded shadow-xl py-1"
+        panelClassName="w-16 max-h-48 overflow-y-auto bg-neutral-900 border border-neutral-800 rounded-xl shadow-xl py-1"
         anchor={
           <button
             type="button"

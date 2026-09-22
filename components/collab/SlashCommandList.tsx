@@ -55,7 +55,7 @@ const SlashCommandList = forwardRef<SlashCommandListRef, Props>(({ items, comman
   }));
 
   return (
-    <div className="w-56 max-h-64 overflow-y-auto bg-neutral-900 border border-neutral-800 rounded shadow-2xl py-1">
+    <div className="w-56 max-h-64 overflow-y-auto bg-neutral-900 border border-neutral-800 rounded-xl shadow-2xl py-1">
       {items.length === 0 ? (
         <p className="text-xs text-neutral-500 px-3 py-2">No matches</p>
       ) : (

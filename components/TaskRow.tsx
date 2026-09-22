@@ -153,7 +153,7 @@ function TaskRowImpl({
         <FloatingPopover
           open={statusOpen}
           onClose={() => setStatusOpen(false)}
-          panelClassName="w-40 bg-neutral-900 border border-neutral-800 rounded shadow-xl p-1.5"
+          panelClassName="w-40 bg-neutral-900 border border-neutral-800 rounded-xl shadow-xl p-1.5"
           anchor={
             <button
               onClick={(e) => {
@@ -189,7 +189,7 @@ function TaskRowImpl({
         <FloatingPopover
           open={assigneeOpen}
           onClose={() => setAssigneeOpen(false)}
-          panelClassName={isMobile ? 'w-56 bg-neutral-900 border border-neutral-800 rounded shadow-xl p-1.5' : 'w-44 bg-neutral-900 border border-neutral-800 rounded shadow-xl p-1.5'}
+          panelClassName={isMobile ? 'w-56 bg-neutral-900 border border-neutral-800 rounded-xl shadow-xl p-1.5' : 'w-44 bg-neutral-900 border border-neutral-800 rounded-xl shadow-xl p-1.5'}
           anchor={
             <button
               onClick={(e) => {
@@ -512,7 +512,7 @@ function TaskRowImpl({
                     setEditingTitle(false);
                   }
                 }}
-                className="w-full bg-neutral-900 border border-blue-500 rounded px-1.5 py-0.5 text-neutral-100 focus:outline-none"
+                className="w-full bg-neutral-900 border border-blue-500 rounded-lg px-1.5 py-0.5 text-neutral-100 focus:outline-none"
               />
             ) : (
               <>

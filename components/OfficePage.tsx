@@ -271,7 +271,7 @@ export function EditableField({
           }
         }}
         placeholder={placeholder}
-        className="bg-neutral-950 border border-blue-500 rounded px-2 py-1 text-xs text-app-strong focus:outline-none"
+        className="bg-neutral-950 border border-blue-500 rounded-lg px-2 py-1 text-xs text-app-strong focus:outline-none"
       />
     );
   }

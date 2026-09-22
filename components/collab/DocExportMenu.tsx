@@ -59,7 +59,7 @@ export default function DocExportMenu({ docId, onToast }: DocExportMenuProps) {
       open={open}
       onClose={() => setOpen(false)}
       align="right"
-      panelClassName="w-56 bg-neutral-900 border border-neutral-800 rounded shadow-xl py-1"
+      panelClassName="w-56 bg-neutral-900 border border-neutral-800 rounded-xl shadow-xl py-1"
       anchor={
         <button
           onClick={() => setOpen((o) => !o)}

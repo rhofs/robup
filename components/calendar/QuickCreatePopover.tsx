@@ -146,7 +146,7 @@ export default function QuickCreatePopover({
     >
       <div
         onClick={(e) => e.stopPropagation()}
-        className="w-full max-w-[420px] my-6 md:my-0 max-h-[85vh] bg-neutral-900 border border-neutral-800 rounded shadow-2xl overflow-y-auto"
+        className="w-full max-w-[420px] my-6 md:my-0 max-h-[85vh] bg-neutral-900 border border-neutral-800 rounded-xl shadow-2xl overflow-y-auto"
       >
         <div className="px-5 py-4 border-b border-neutral-800 flex items-center justify-between">
           <h3 className="font-bold text-sm text-app-strong">New</h3>
@@ -178,7 +178,7 @@ export default function QuickCreatePopover({
               onChange={(e) => setTitle(e.target.value)}
               onKeyDown={(e) => e.key === 'Enter' && canCreate && handleCreate()}
               placeholder={tab === 'task' ? 'Task title...' : 'Event title...'}
-              className="w-full bg-neutral-950 border border-neutral-700 rounded px-3 py-2 text-xs text-app-strong focus:outline-none focus:border-blue-500"
+              className="w-full bg-neutral-950 border border-neutral-700 rounded-lg px-3 py-2 text-xs text-app-strong focus:outline-none focus:border-blue-500"
             />
           </div>
 
@@ -204,7 +204,7 @@ export default function QuickCreatePopover({
                       setSpaceId(e.target.value);
                       setListId('');
                     }}
-                    className="w-full bg-neutral-950 border border-neutral-700 rounded px-2 py-2 text-xs text-app-strong focus:outline-none focus:border-blue-500"
+                    className="w-full bg-neutral-950 border border-neutral-700 rounded-lg px-2 py-2 text-xs text-app-strong focus:outline-none focus:border-blue-500"
                   >
                     <option value="">Select a space...</option>
                     {spaces.map((s) => (
@@ -221,7 +221,7 @@ export default function QuickCreatePopover({
                     value={listId}
                     onChange={(e) => setListId(e.target.value)}
                     disabled={!selectedSpace}
-                    className="w-full bg-neutral-950 border border-neutral-700 rounded px-2 py-2 text-xs text-app-strong focus:outline-none focus:border-blue-500 disabled:opacity-40 disabled:cursor-not-allowed"
+                    className="w-full bg-neutral-950 border border-neutral-700 rounded-lg px-2 py-2 text-xs text-app-strong focus:outline-none focus:border-blue-500 disabled:opacity-40 disabled:cursor-not-allowed"
                   >
                     <option value="">{selectedSpace ? 'Select a list...' : 'Pick a space first'}</option>
                     {selectedSpace?.lists.map((l) => (
@@ -236,7 +236,7 @@ export default function QuickCreatePopover({
               <div className="grid grid-cols-2 gap-3">
                 <div className="space-y-1.5">
                   <label className="text-[10px] uppercase tracking-wide text-neutral-500 font-semibold">Start date</label>
-                  <div className="bg-neutral-950 border border-neutral-700 rounded px-1 py-0.5 inline-block">
+                  <div className="bg-neutral-950 border border-neutral-700 rounded-lg px-1 py-0.5 inline-block">
                     <DatePickerPopover
                       value={startDate}
                       onChange={setStartDate}
@@ -251,7 +251,7 @@ export default function QuickCreatePopover({
                 </div>
                 <div className="space-y-1.5">
                   <label className="text-[10px] uppercase tracking-wide text-neutral-500 font-semibold">Due date</label>
-                  <div className="bg-neutral-950 border border-neutral-700 rounded px-1 py-0.5 inline-block">
+                  <div className="bg-neutral-950 border border-neutral-700 rounded-lg px-1 py-0.5 inline-block">
                     <DatePickerPopover
                       value={dueDate}
                       onChange={setDueDate}
@@ -275,7 +275,7 @@ export default function QuickCreatePopover({
                 <select
                   value={eventSpaceId}
                   onChange={(e) => setEventSpaceId(e.target.value)}
-                  className="w-full bg-neutral-950 border border-neutral-700 rounded px-2 py-2 text-xs text-app-strong focus:outline-none focus:border-blue-500"
+                  className="w-full bg-neutral-950 border border-neutral-700 rounded-lg px-2 py-2 text-xs text-app-strong focus:outline-none focus:border-blue-500"
                 >
                   <option value="">No space</option>
                   {spaces.map((s) => (
@@ -289,13 +289,13 @@ export default function QuickCreatePopover({
               <div className="grid grid-cols-2 gap-3">
                 <div className="space-y-1.5">
                   <label className="text-[10px] uppercase tracking-wide text-neutral-500 font-semibold">Start *</label>
-                  <div className="bg-neutral-950 border border-neutral-700 rounded px-1 py-0.5 inline-block">
+                  <div className="bg-neutral-950 border border-neutral-700 rounded-lg px-1 py-0.5 inline-block">
                     <DatePickerPopover value={eventStart} onChange={setEventStart} placeholder="Not set" />
                   </div>
                 </div>
                 <div className="space-y-1.5">
                   <label className="text-[10px] uppercase tracking-wide text-neutral-500 font-semibold">End *</label>
-                  <div className="bg-neutral-950 border border-neutral-700 rounded px-1 py-0.5 inline-block">
+                  <div className="bg-neutral-950 border border-neutral-700 rounded-lg px-1 py-0.5 inline-block">
                     <DatePickerPopover value={eventEnd} onChange={setEventEnd} placeholder="Not set" />
                   </div>
                 </div>
@@ -323,7 +323,7 @@ export default function QuickCreatePopover({
                   value={eventLocation}
                   onChange={setEventLocation}
                   placeholder="Add a location..."
-                  className="w-full bg-neutral-950 border border-neutral-700 rounded px-3 py-2 text-xs text-app-strong focus:outline-none focus:border-blue-500"
+                  className="w-full bg-neutral-950 border border-neutral-700 rounded-lg px-3 py-2 text-xs text-app-strong focus:outline-none focus:border-blue-500"
                 />
                 {eventLocation.trim() && (
                   <a
@@ -354,7 +354,7 @@ export default function QuickCreatePopover({
                   onChange={(e) => setEventDescription(e.target.value)}
                   rows={2}
                   placeholder="Add a description..."
-                  className="w-full bg-neutral-950 border border-neutral-700 rounded px-3 py-2 text-xs text-app-strong focus:outline-none focus:border-blue-500 resize-none"
+                  className="w-full bg-neutral-950 border border-neutral-700 rounded-lg px-3 py-2 text-xs text-app-strong focus:outline-none focus:border-blue-500 resize-none"
                 />
               </div>
 
@@ -371,7 +371,7 @@ export default function QuickCreatePopover({
                   <FloatingPopover
                     open={assigneePickerOpen}
                     onClose={() => setAssigneePickerOpen(false)}
-                    panelClassName="w-44 bg-neutral-900 border border-neutral-800 rounded shadow-xl p-1.5"
+                    panelClassName="w-44 bg-neutral-900 border border-neutral-800 rounded-xl shadow-xl p-1.5"
                     anchor={
                       <button
                         onClick={() => setAssigneePickerOpen((o) => !o)}

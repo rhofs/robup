@@ -24,7 +24,7 @@ export default function ConnectionAvatarMenu({ user, onViewProfile, onStartDM, s
     <FloatingPopover
       open={menuOpen}
       onClose={() => setMenuOpen(false)}
-      panelClassName="w-40 bg-neutral-900 border border-neutral-800 rounded shadow-xl py-1"
+      panelClassName="w-40 bg-neutral-900 border border-neutral-800 rounded-xl shadow-xl py-1"
       anchor={
         <button
           onClick={onViewProfile}

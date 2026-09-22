@@ -70,7 +70,7 @@ export default function RoomDetail({ room, members, workspace, currentUserId, ca
                     setEditingName(false);
                   }
                 }}
-                className="bg-neutral-950 border border-blue-500 rounded px-2 py-1 text-lg font-semibold text-app-strong focus:outline-none w-full"
+                className="bg-neutral-950 border border-blue-500 rounded-lg px-2 py-1 text-lg font-semibold text-app-strong focus:outline-none w-full"
               />
             ) : (
               <button

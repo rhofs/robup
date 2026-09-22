@@ -62,7 +62,7 @@ export default function EventDetailModal({ event, workspaces, users, currentUser
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-scrim/70 backdrop-blur-xs" onClick={onClose}>
-      <div onClick={(e) => e.stopPropagation()} className="w-[420px] bg-neutral-900 border border-neutral-800 rounded shadow-2xl overflow-hidden">
+      <div onClick={(e) => e.stopPropagation()} className="w-[420px] bg-neutral-900 border border-neutral-800 rounded-xl shadow-2xl overflow-hidden">
         {/* Same "where did this come from" tell as the ClickUp reference screenshot (Google icon
             + "in <account email>") — shown for any event synced to Google, whether it originated
             there or was pushed out from Siqt, not just imports. */}
@@ -89,7 +89,7 @@ export default function EventDetailModal({ event, workspaces, users, currentUser
                   setEditingTitle(false);
                 }
               }}
-              className="flex-1 bg-neutral-950 border border-blue-500 rounded px-2 py-1 text-sm text-app-strong focus:outline-none mr-2"
+              className="flex-1 bg-neutral-950 border border-blue-500 rounded-lg px-2 py-1 text-sm text-app-strong focus:outline-none mr-2"
             />
           ) : (
             <button onClick={() => setEditingTitle(true)} className="font-bold text-sm text-app-strong cursor-text text-left truncate mr-2">
@@ -105,7 +105,7 @@ export default function EventDetailModal({ event, workspaces, users, currentUser
           <div className="grid grid-cols-2 gap-3">
             <div className="space-y-1.5">
               <label className="text-[10px] uppercase tracking-wide text-neutral-500 font-semibold">Start</label>
-              <div className="bg-neutral-950 border border-neutral-700 rounded px-1 py-0.5 inline-block">
+              <div className="bg-neutral-950 border border-neutral-700 rounded-lg px-1 py-0.5 inline-block">
                 <DatePickerPopover
                   value={new Date(event.startDate).toISOString()}
                   onChange={(v) => {
@@ -123,7 +123,7 @@ export default function EventDetailModal({ event, workspaces, users, currentUser
             </div>
             <div className="space-y-1.5">
               <label className="text-[10px] uppercase tracking-wide text-neutral-500 font-semibold">End</label>
-              <div className="bg-neutral-950 border border-neutral-700 rounded px-1 py-0.5 inline-block">
+              <div className="bg-neutral-950 border border-neutral-700 rounded-lg px-1 py-0.5 inline-block">
                 <DatePickerPopover
                   value={new Date(event.endDate).toISOString()}
                   onChange={(v) => {
@@ -155,7 +155,7 @@ export default function EventDetailModal({ event, workspaces, users, currentUser
             <select
               value={event.spaceId ?? ''}
               onChange={(e) => onUpdate({ spaceId: e.target.value || null })}
-              className="w-full bg-neutral-950 border border-neutral-700 rounded px-2 py-2 text-xs text-app-strong focus:outline-none focus:border-blue-500"
+              className="w-full bg-neutral-950 border border-neutral-700 rounded-lg px-2 py-2 text-xs text-app-strong focus:outline-none focus:border-blue-500"
             >
               <option value="">No space</option>
               {spaces.map((s) => (
@@ -181,7 +181,7 @@ export default function EventDetailModal({ event, workspaces, users, currentUser
               value={event.location ?? ''}
               onChange={(v) => onUpdate({ location: v || null })}
               placeholder="Add a location..."
-              className="w-full bg-neutral-950 border border-neutral-700 rounded px-3 py-2 text-xs text-app-strong focus:outline-none focus:border-blue-500"
+              className="w-full bg-neutral-950 border border-neutral-700 rounded-lg px-3 py-2 text-xs text-app-strong focus:outline-none focus:border-blue-500"
             />
             {event.location && (
               <a
@@ -202,7 +202,7 @@ export default function EventDetailModal({ event, workspaces, users, currentUser
               onChange={(e) => onUpdate({ description: e.target.value || null })}
               rows={3}
               placeholder="Add a description..."
-              className="w-full bg-neutral-950 border border-neutral-700 rounded px-3 py-2 text-xs text-app-strong focus:outline-none focus:border-blue-500 resize-none"
+              className="w-full bg-neutral-950 border border-neutral-700 rounded-lg px-3 py-2 text-xs text-app-strong focus:outline-none focus:border-blue-500 resize-none"
             />
           </div>
 
@@ -217,7 +217,7 @@ export default function EventDetailModal({ event, workspaces, users, currentUser
               <FloatingPopover
                 open={assigneePickerOpen}
                 onClose={() => setAssigneePickerOpen(false)}
-                panelClassName="w-44 bg-neutral-900 border border-neutral-800 rounded shadow-xl p-1.5"
+                panelClassName="w-44 bg-neutral-900 border border-neutral-800 rounded-xl shadow-xl p-1.5"
                 anchor={
                   <button
                     onClick={() => setAssigneePickerOpen((o) => !o)}

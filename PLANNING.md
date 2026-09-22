@@ -8292,3 +8292,38 @@ control" on a surface with no cursor to change.
   month later.
 - **Docs split between private and workspace docs**, with a toggle. Raised as a need without a shape
   ("vi må ha noe smart der"). Discussed below rather than built.
+
+## 2026-09-22 (continued) — desktop design, stage 1, and the Docs split
+
+### Stage 1: radius and surfaces
+
+Three habits made desktop and mobile read as two products, and only one of them is layout. Stage 1
+takes the cheapest and highest-impact of the three, with no layout change at all:
+
+Every floating surface — panels, menus, popovers, dialogs — went from `rounded` (4px) to
+`rounded-xl`, across 21 files. Fields and selects went from `rounded` to `rounded-lg`, because a 4px
+input inside a 12px card is the other half of the same problem: the sheet is soft and everything in
+it is sharp. The task modal, which was literally `rounded-xl md:rounded` — soft on a phone and sharp
+on a monitor — is now `rounded-2xl` on both.
+
+**Deliberately stopping here before touching rows.** Stage 2 is row height and type scale, and that
+is where desktop gives up density it currently earns something from — worth seeing stage 1 first
+rather than doing both and not knowing which did what. Stage 3, sharing the components mobile grew
+(the space list, People) instead of desktop keeping its own for the same data, is a refactor rather
+than a styling pass.
+
+### Docs: Mine / Workspace
+
+The tab showed one workspace's documents and never said which. A private doc and a team doc are the
+same object — a Doc under a Space — and the only thing separating them is which workspace that Space
+belongs to. That was already true; the tab just kept it a secret.
+
+Now the same two-option pill Home/Office and Settings use — its third appearance, identical each
+time, which is the point. Defaults to the workspace: the Docs tab only exists once there is a real
+one, so the team's documents are what someone opening it is almost always after.
+
+**Opening a doc from the other half switches workspace first.** `setNavigation` points at a Space,
+and a Space belongs to exactly one workspace — without that, opening a private doc while a team
+workspace was active would have left the two disagreeing about where you are. The Space picker in the
+create bar also resets when the scope changes, since a Space chosen in one half is meaningless in the
+other.

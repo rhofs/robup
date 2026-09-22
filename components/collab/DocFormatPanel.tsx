@@ -264,7 +264,7 @@ export default function DocFormatPanel({
         <div className="space-y-1.5 pb-2 mb-1 border-b border-neutral-800">
           <label className="text-[9px] uppercase tracking-wide text-neutral-500 block">Page</label>
 
-          <div className="flex items-center gap-1 bg-neutral-950 border border-neutral-800 rounded p-0.5">
+          <div className="flex items-center gap-1 bg-neutral-950 border border-neutral-800 rounded-lg p-0.5">
             <button
               type="button"
               onClick={() => onUpdateDoc({ pageWidth: 'normal' })}
@@ -300,7 +300,7 @@ export default function DocFormatPanel({
                 if (coverUploading) return;
                 setCoverOpen(false);
               }}
-              panelClassName="w-52 bg-neutral-900 border border-neutral-800 rounded shadow-xl p-2 space-y-1.5"
+              panelClassName="w-52 bg-neutral-900 border border-neutral-800 rounded-xl shadow-xl p-2 space-y-1.5"
               anchor={
                 <button
                   type="button"
@@ -327,7 +327,7 @@ export default function DocFormatPanel({
                 }}
                 placeholder="Paste an image URL..."
                 disabled={coverUploading}
-                className="w-full bg-neutral-950 border border-neutral-700 rounded px-2 py-1 text-[11px] text-app-strong focus:outline-none focus:border-blue-500 disabled:opacity-50"
+                className="w-full bg-neutral-950 border border-neutral-700 rounded-lg px-2 py-1 text-[11px] text-app-strong focus:outline-none focus:border-blue-500 disabled:opacity-50"
               />
               <button
                 type="button"
@@ -435,7 +435,7 @@ export default function DocFormatPanel({
         <FloatingPopover
           open={colorOpen}
           onClose={() => setColorOpen(false)}
-          panelClassName="w-44 bg-neutral-900 border border-neutral-800 rounded shadow-xl p-2"
+          panelClassName="w-44 bg-neutral-900 border border-neutral-800 rounded-xl shadow-xl p-2"
           anchor={
             <button
               type="button"
@@ -460,7 +460,7 @@ export default function DocFormatPanel({
         <FloatingPopover
           open={highlightOpen}
           onClose={() => setHighlightOpen(false)}
-          panelClassName="w-44 bg-neutral-900 border border-neutral-800 rounded shadow-xl p-2"
+          panelClassName="w-44 bg-neutral-900 border border-neutral-800 rounded-xl shadow-xl p-2"
           anchor={
             <button
               type="button"
@@ -506,7 +506,7 @@ export default function DocFormatPanel({
             if (!value) editor.chain().focus().unsetFontFamily().run();
             else editor.chain().focus().setFontFamily(value).run();
           }}
-          className="w-full bg-neutral-950 border border-neutral-700 rounded px-1.5 py-1 text-[11px] text-neutral-200 focus:outline-none focus:border-blue-500"
+          className="w-full bg-neutral-950 border border-neutral-700 rounded-lg px-1.5 py-1 text-[11px] text-neutral-200 focus:outline-none focus:border-blue-500"
         >
           {FONT_FAMILIES.map((f) => (
             <option key={f.label} value={f.value}>
@@ -561,7 +561,7 @@ export default function DocFormatPanel({
                   const n = parseInt(value, 10);
                   if (!Number.isNaN(n)) applySize(n);
                 }}
-                className="w-full min-w-0 text-center bg-neutral-950 border border-neutral-700 rounded px-1 py-1 text-[11px] text-neutral-200 focus:outline-none focus:border-blue-500"
+                className="w-full min-w-0 text-center bg-neutral-950 border border-neutral-700 rounded-lg px-1 py-1 text-[11px] text-neutral-200 focus:outline-none focus:border-blue-500"
               />
               {/* A native <datalist>-backed input was tried first — cheap, but the actual
                   dropdown never reliably showed up (reported directly), and native datalist
@@ -572,7 +572,7 @@ export default function DocFormatPanel({
                 open={sizeMenuOpen}
                 onClose={() => setSizeMenuOpen(false)}
                 align="right"
-                panelClassName="w-16 max-h-56 overflow-y-auto bg-neutral-900 border border-neutral-800 rounded shadow-xl py-1"
+                panelClassName="w-16 max-h-56 overflow-y-auto bg-neutral-900 border border-neutral-800 rounded-xl shadow-xl py-1"
                 anchor={
                   <button
                     type="button"

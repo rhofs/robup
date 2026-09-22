@@ -66,7 +66,7 @@ export default function ViewProfileModal({ userId, onClose, onStartDM }: ViewPro
             exit={{ opacity: 0, scale: 0.94, y: 8 }}
             transition={{ duration: 0.18, ease: 'easeOut' }}
             onClick={(e) => e.stopPropagation()}
-            className="w-[360px] bg-neutral-900 border border-neutral-800 rounded shadow-2xl p-5 space-y-4"
+            className="w-[360px] bg-neutral-900 border border-neutral-800 rounded-xl shadow-2xl p-5 space-y-4"
           >
             <div className="flex items-start justify-between">
               <span className="text-[10px] font-bold text-neutral-500 uppercase tracking-wider">Profile</span>

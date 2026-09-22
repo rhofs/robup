@@ -398,7 +398,7 @@ export default function MobileSpacesSheet({
                   if (e.key === 'Escape') cancelNewSpace();
                 }}
                 placeholder="Space name..."
-                className="flex-1 bg-neutral-950 border border-blue-500 rounded px-3 py-1.5 text-sm text-app-strong focus:outline-none"
+                className="flex-1 bg-neutral-950 border border-blue-500 rounded-lg px-3 py-1.5 text-sm text-app-strong focus:outline-none"
               />
               <button
                 onMouseDown={(e) => e.preventDefault()}
@@ -710,7 +710,7 @@ function NewFolderOrListRow({
             if (e.key === 'Escape') cancel();
           }}
           placeholder={mode === 'folder' ? 'Folder name...' : mode === 'list' ? 'List name...' : 'Doc title...'}
-          className="flex-1 min-w-0 bg-neutral-950 border border-blue-500 rounded px-2 py-1 text-[13px] text-app-strong focus:outline-none"
+          className="flex-1 min-w-0 bg-neutral-950 border border-blue-500 rounded-lg px-2 py-1 text-[13px] text-app-strong focus:outline-none"
         />
         <button
           onMouseDown={(e) => e.preventDefault()}
@@ -736,7 +736,7 @@ function NewFolderOrListRow({
       <FloatingPopover
         open={menuOpen}
         onClose={() => setMenuOpen(false)}
-        panelClassName="w-36 bg-neutral-900 border border-neutral-800 rounded shadow-xl py-1"
+        panelClassName="w-36 bg-neutral-900 border border-neutral-800 rounded-xl shadow-xl py-1"
         anchor={
           <button
             onClick={() => setMenuOpen((o) => !o)}

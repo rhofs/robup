@@ -181,7 +181,7 @@ function LoginPageContent() {
           <button
             type="button"
             onClick={() => signIn('google', { redirectTo: callbackUrl })}
-            className="w-full flex items-center justify-center gap-2 bg-neutral-950 border border-neutral-700 rounded px-3 py-2 text-xs text-app-strong hover:bg-neutral-800/60 transition cursor-pointer mb-4"
+            className="w-full flex items-center justify-center gap-2 bg-neutral-950 border border-neutral-700 rounded-lg px-3 py-2 text-xs text-app-strong hover:bg-neutral-800/60 transition cursor-pointer mb-4"
           >
             Continue with Google
           </button>
@@ -199,7 +199,7 @@ function LoginPageContent() {
                 placeholder="Name"
                 value={name}
                 onChange={(e) => setName(e.target.value)}
-                className="w-full bg-neutral-950 border border-neutral-700 rounded px-3 py-2 text-xs text-app-strong focus:outline-none focus:border-blue-500"
+                className="w-full bg-neutral-950 border border-neutral-700 rounded-lg px-3 py-2 text-xs text-app-strong focus:outline-none focus:border-blue-500"
               />
             )}
             <input
@@ -208,7 +208,7 @@ function LoginPageContent() {
               required
               value={email}
               onChange={(e) => setEmail(e.target.value)}
-              className="w-full bg-neutral-950 border border-neutral-700 rounded px-3 py-2 text-xs text-app-strong focus:outline-none focus:border-blue-500"
+              className="w-full bg-neutral-950 border border-neutral-700 rounded-lg px-3 py-2 text-xs text-app-strong focus:outline-none focus:border-blue-500"
             />
             <input
               type="password"
@@ -217,7 +217,7 @@ function LoginPageContent() {
               minLength={mode === 'signup' ? 8 : undefined}
               value={password}
               onChange={(e) => setPassword(e.target.value)}
-              className="w-full bg-neutral-950 border border-neutral-700 rounded px-3 py-2 text-xs text-app-strong focus:outline-none focus:border-blue-500"
+              className="w-full bg-neutral-950 border border-neutral-700 rounded-lg px-3 py-2 text-xs text-app-strong focus:outline-none focus:border-blue-500"
             />
             {error && <p className="text-[11px] text-red-400">{error}</p>}
             <button
@@ -245,7 +245,7 @@ function LoginPageContent() {
                       value={forgotEmail}
                       onChange={(e) => setForgotEmail(e.target.value)}
                       placeholder="Your email address"
-                      className="w-full bg-neutral-950 border border-neutral-700 rounded px-3 py-2 text-xs text-app-strong focus:outline-none focus:border-blue-500"
+                      className="w-full bg-neutral-950 border border-neutral-700 rounded-lg px-3 py-2 text-xs text-app-strong focus:outline-none focus:border-blue-500"
                     />
                     <div className="flex items-center gap-2">
                       <button

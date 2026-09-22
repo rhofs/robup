@@ -724,7 +724,7 @@ export default function SettingsPanel({
                             if (e.key === 'Escape') setLogoDraft(workspace.avatarUrl ?? '');
                           }}
                           placeholder="Logo image URL (optional)"
-                          className="mt-2 w-full bg-neutral-950 border border-neutral-800 rounded px-2 py-1.5 text-[11px] text-app-strong placeholder:text-neutral-600 focus:outline-none focus:border-blue-500"
+                          className="mt-2 w-full bg-neutral-950 border border-neutral-800 rounded-lg px-2 py-1.5 text-[11px] text-app-strong placeholder:text-neutral-600 focus:outline-none focus:border-blue-500"
                         />
                       </>
                     ) : (
@@ -738,7 +738,7 @@ export default function SettingsPanel({
                   <div className="flex items-center gap-2">
                     <span className="text-[10px] text-neutral-500 w-16 shrink-0">Type</span>
                     {canManage ? (
-                      <div className="flex items-center gap-1 bg-neutral-950 border border-neutral-800 rounded p-0.5 flex-1">
+                      <div className="flex items-center gap-1 bg-neutral-950 border border-neutral-800 rounded-lg p-0.5 flex-1">
                         <button
                           onClick={() => updateWorkspaceDetails(workspace.id, { orgType: 'company' })}
                           className={`flex-1 text-[10px] py-1 rounded cursor-pointer transition ${
@@ -781,7 +781,7 @@ export default function SettingsPanel({
                             setEditingEmail(false);
                           }
                         }}
-                        className="flex-1 bg-neutral-950 border border-blue-500 rounded px-2 py-1 text-xs text-app-strong focus:outline-none"
+                        className="flex-1 bg-neutral-950 border border-blue-500 rounded-lg px-2 py-1 text-xs text-app-strong focus:outline-none"
                       />
                     ) : (
                       <button
@@ -866,7 +866,7 @@ export default function SettingsPanel({
                     if (e.key === 'Escape') setCreatingRole(false);
                   }}
                   placeholder="Role name..."
-                  className="w-full bg-neutral-950 border border-blue-500 rounded px-2 py-1.5 text-xs text-app-strong focus:outline-none"
+                  className="w-full bg-neutral-950 border border-blue-500 rounded-lg px-2 py-1.5 text-xs text-app-strong focus:outline-none"
                 />
                 <ColorSwatchPicker value={newRoleColor} onChange={setNewRoleColor} choices={ROLE_COLOR_CHOICES} size="sm" />
                 <button
@@ -921,7 +921,7 @@ export default function SettingsPanel({
                 value={inviteEmail}
                 onChange={(e) => setInviteEmail(e.target.value)}
                 placeholder="name@example.com"
-                className="flex-1 bg-neutral-950 border border-neutral-700 rounded px-2 py-1.5 text-xs text-app-strong focus:outline-none focus:border-blue-500"
+                className="flex-1 bg-neutral-950 border border-neutral-700 rounded-lg px-2 py-1.5 text-xs text-app-strong focus:outline-none focus:border-blue-500"
               />
               <button
                 type="submit"
@@ -941,7 +941,7 @@ export default function SettingsPanel({
               value={directQuery}
               onChange={(e) => setDirectQuery(e.target.value)}
               placeholder="Search your Network..."
-              className="w-full bg-neutral-950 border border-neutral-700 rounded px-2 py-1.5 text-xs text-app-strong focus:outline-none focus:border-blue-500"
+              className="w-full bg-neutral-950 border border-neutral-700 rounded-lg px-2 py-1.5 text-xs text-app-strong focus:outline-none focus:border-blue-500"
             />
             {directInviteError && <p className="text-[11px] text-red-400">{directInviteError}</p>}
             <div className="space-y-1 max-h-32 overflow-y-auto">
@@ -983,7 +983,7 @@ export default function SettingsPanel({
               <div className="space-y-1 pt-1">
                 <p className="text-[10px] text-neutral-500">Pending:</p>
                 {directPending.map((inv) => (
-                  <div key={inv.id} className="flex items-center justify-between bg-neutral-950/60 border border-neutral-800 rounded px-2.5 py-1.5">
+                  <div key={inv.id} className="flex items-center justify-between bg-neutral-950/60 border border-neutral-800 rounded-lg px-2.5 py-1.5">
                     <span className="text-xs text-neutral-300">{inv.toUser.name}</span>
                     <button
                       onClick={async () => {
@@ -1012,7 +1012,7 @@ export default function SettingsPanel({
               <select
                 value={newInviteRole}
                 onChange={(e) => setNewInviteRole(e.target.value as 'admin' | 'member')}
-                className="bg-neutral-950 border border-neutral-700 rounded px-2 py-1.5 text-xs text-app-strong focus:outline-none"
+                className="bg-neutral-950 border border-neutral-700 rounded-lg px-2 py-1.5 text-xs text-app-strong focus:outline-none"
               >
                 <option value="member">Joins as Member</option>
                 <option value="admin">Joins as Admin</option>
@@ -1032,7 +1032,7 @@ export default function SettingsPanel({
                 <p className="text-xs text-neutral-500">No active invite links.</p>
               ) : (
                 invites.map((inv) => (
-                  <div key={inv.id} className="flex items-center justify-between bg-neutral-950/60 border border-neutral-800 rounded px-3 py-2">
+                  <div key={inv.id} className="flex items-center justify-between bg-neutral-950/60 border border-neutral-800 rounded-lg px-3 py-2">
                     <div className="min-w-0">
                       <div className="text-xs text-neutral-300 truncate">Joins as {inv.role === 'admin' ? 'Admin' : 'Member'}</div>
                       <div className="text-[10px] text-neutral-600">by {inv.createdBy.name}</div>
@@ -1065,7 +1065,7 @@ export default function SettingsPanel({
             </button>
 
             {importPreview && (
-              <div className="bg-neutral-950/60 border border-neutral-800 rounded px-3 py-2.5 space-y-1 text-xs text-neutral-300">
+              <div className="bg-neutral-950/60 border border-neutral-800 rounded-lg px-3 py-2.5 space-y-1 text-xs text-neutral-300">
                 <div>{importPreview.taskCount} tasks will be created{importPreview.skippedCount > 0 && `, ${importPreview.skippedCount} rows skipped (missing name/list)`}</div>
                 <div className="text-neutral-500">{importPreview.spaceNames.size} Spaces · {importPreview.folderPaths.size} Folder paths · {importPreview.listNames.size} Lists · {importPreview.statusNames.size} Statuses</div>
                 <div className="text-neutral-500">
@@ -1085,7 +1085,7 @@ export default function SettingsPanel({
             {importError && <p className="text-[11px] text-red-400">{importError}</p>}
 
             {importResult && (
-              <div className="bg-neutral-950/60 border border-neutral-800 rounded px-3 py-2.5 space-y-1 text-xs text-neutral-300">
+              <div className="bg-neutral-950/60 border border-neutral-800 rounded-lg px-3 py-2.5 space-y-1 text-xs text-neutral-300">
                 <div className="text-green-400 font-medium">Import complete</div>
                 <div>{importResult.tasksCreated} tasks, {importResult.spacesCreated} Spaces, {importResult.foldersCreated} Folders, {importResult.listsCreated} Lists, {importResult.statusesCreated} Statuses created</div>
                 {importResult.unmatchedAssignees.length > 0 && (
@@ -1136,7 +1136,7 @@ export default function SettingsPanel({
               </div>
             )}
             <div className="text-[10px] uppercase tracking-wide text-neutral-500 px-1 pb-1">Appearance</div>
-            <div className="flex items-center gap-1 bg-neutral-950 border border-neutral-800 rounded p-0.5 mb-3">
+            <div className="flex items-center gap-1 bg-neutral-950 border border-neutral-800 rounded-lg p-0.5 mb-3">
               {THEME_OPTIONS.map(({ value, label, icon: Icon }) => (
                 <button
                   key={value}
@@ -1171,7 +1171,7 @@ export default function SettingsPanel({
               (isMobile && typeof navigator !== 'undefined' && 'vibrate' in navigator)) && (
               <>
                 <div className="text-[10px] uppercase tracking-wide text-neutral-500 px-1 pb-1">Haptics</div>
-                <div className="flex items-center gap-1 bg-neutral-950 border border-neutral-800 rounded p-0.5 mb-3">
+                <div className="flex items-center gap-1 bg-neutral-950 border border-neutral-800 rounded-lg p-0.5 mb-3">
                   {HAPTIC_OPTIONS.map(({ value, label }) => (
                     <button
                       key={value}

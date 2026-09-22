@@ -40,7 +40,7 @@ export default function ConfirmDialog({
             exit={{ opacity: 0, scale: 0.94, y: 8 }}
             transition={{ duration: 0.18, ease: 'easeOut' }}
             onClick={(e) => e.stopPropagation()}
-            className="w-[340px] bg-neutral-900 border border-neutral-800 rounded shadow-2xl p-5"
+            className="w-[340px] bg-neutral-900 border border-neutral-800 rounded-xl shadow-2xl p-5"
           >
             <h3 className="font-bold text-sm text-app-strong mb-1.5">{title}</h3>
             <p className="text-xs text-neutral-400 mb-4">{message}</p>

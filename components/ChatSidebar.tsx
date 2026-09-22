@@ -211,7 +211,7 @@ export default function ChatSidebar({ workspaceId, closing = false, onSelectRoom
             <FloatingPopover
               open={newChannelOpen}
               onClose={() => setNewChannelOpen(false)}
-              panelClassName="w-56 bg-neutral-900 border border-neutral-800 rounded shadow-xl p-2"
+              panelClassName="w-56 bg-neutral-900 border border-neutral-800 rounded-xl shadow-xl p-2"
               anchor={
                 <button onClick={() => setNewChannelOpen((o) => !o)} title="New channel" className="text-neutral-500 hover:text-blue-400 cursor-pointer">
                   <Plus className="w-3.5 h-3.5" />
@@ -279,7 +279,7 @@ export default function ChatSidebar({ workspaceId, closing = false, onSelectRoom
             <FloatingPopover
               open={newChatOpen}
               onClose={() => setNewChatOpen(false)}
-              panelClassName="w-56 bg-neutral-900 border border-neutral-800 rounded shadow-xl py-1"
+              panelClassName="w-56 bg-neutral-900 border border-neutral-800 rounded-xl shadow-xl py-1"
               anchor={
                 <button onClick={() => setNewChatOpen((o) => !o)} title="New message" className="text-neutral-500 hover:text-blue-400 cursor-pointer">
                   <Plus className="w-3.5 h-3.5" />
@@ -370,7 +370,7 @@ function NewChannelForm({ onCreate }: { onCreate: (name: string) => void }) {
           if (e.key === 'Enter') submit();
         }}
         placeholder="e.g. marketing"
-        className="w-full bg-neutral-950 border border-neutral-800 rounded px-2 py-1.5 text-xs text-app-strong placeholder:text-neutral-600 focus:outline-none focus:border-blue-500"
+        className="w-full bg-neutral-950 border border-neutral-800 rounded-lg px-2 py-1.5 text-xs text-app-strong placeholder:text-neutral-600 focus:outline-none focus:border-blue-500"
       />
       <button
         onClick={submit}
@@ -395,7 +395,7 @@ function ChannelRenameInput({ channel, onCommit }: { channel: ChatChannel; onCom
         if (e.key === 'Enter') (e.target as HTMLInputElement).blur();
         if (e.key === 'Escape') onCommit(null);
       }}
-      className="w-full bg-neutral-950 border border-blue-500 rounded px-2 py-1 text-[11px] text-app-strong focus:outline-none"
+      className="w-full bg-neutral-950 border border-blue-500 rounded-lg px-2 py-1 text-[11px] text-app-strong focus:outline-none"
     />
   );
 }
