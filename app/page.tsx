@@ -3330,31 +3330,52 @@ function PageContent() {
   useEffect(() => {
     if (!activeDragTask) return;
     const REORDER_EDGE_FRACTION = 0.3;
-    // A minimum band in pixels as well as a fraction. 30% of a mobile card is roughly 24px; 30% of a
-    // compact desktop row is about 11px at each edge, which is a target you hit by luck with a mouse
-    // in motion. Reported as reordering being impossible on desktop while working fine on a phone —
-    // the fraction was tuned on the taller of the two rows and quietly became unusable on the other.
-    const MIN_EDGE_PX = 16;
-    const onPointerMove = (e: PointerEvent) => {
-      // The row is found and measured under the pointer, not read from the rect dnd-kit captured.
-      // That rect is taken when the drag starts and does not follow the list scrolling underneath —
-      // and on desktop a drag long enough to reorder anything usually scrolls. Same elementFromPoint
-      // approach the Planner's day-range drag already uses.
-      // elementsFromPoint (plural), not elementFromPoint.
-      //
-      // The drag overlay follows the cursor, so the topmost element under the pointer during a drag
-      // is the overlay itself — and it is portaled to the body, outside the list, so `.closest` from
-      // it finds no row at all. The singular version therefore returned null on every move and the
-      // indicator never appeared, which is how "you can only reorder in the Spaces tree, and there
-      // is no indication" happened. The plural version hands back the whole stack, so the row is
-      // simply the first entry that is one.
-      const el = document
-        .elementsFromPoint(e.clientX, e.clientY)
+    // Bands in pixels as well as a fraction. 30% of a mobile card is roughly 24px; 30% of a compact
+    // desktop row is about 11px at each edge, which is a target you hit by luck with a mouse in
+    // motion. The fraction was tuned on the taller of the two rows and quietly became unusable on
+    // the other.
+    const MIN_EDGE_PX = 20;
+    // How far above and below to look when the pointer is in the gap BETWEEN two cards. That gap is
+    // the one place someone aiming "between two tasks" actually points at — and it contains no row,
+    // so the hit test found nothing and the indicator cleared. The literal target was the only dead
+    // spot on the screen. Reported as having to be absurdly precise.
+    const GAP_PROBE_PX = 14;
+
+    const rowAt = (x: number, y: number): HTMLElement | null =>
+      document
+        .elementsFromPoint(x, y)
         .map((n) => n.closest('[data-task-row]'))
         .find((n): n is HTMLElement => n instanceof HTMLElement) ?? null;
+
+    const onPointerMove = (e: PointerEvent) => {
+      // elementsFromPoint (plural), not elementFromPoint: the drag overlay follows the cursor and is
+      // portaled to the body, so the topmost element under the pointer during a drag is always it,
+      // and `.closest` from there finds no row at all.
+      let el = rowAt(e.clientX, e.clientY);
+      // In the gap: whichever side has a row decides, and the answer is unambiguous — a pointer just
+      // below a row means "after it", just above one means "before it".
+      let forced: 'above' | 'below' | null = null;
+      if (!el) {
+        const aboveRow = rowAt(e.clientX, e.clientY - GAP_PROBE_PX);
+        if (aboveRow) {
+          el = aboveRow;
+          forced = 'below';
+        } else {
+          const belowRow = rowAt(e.clientX, e.clientY + GAP_PROBE_PX);
+          if (belowRow) {
+            el = belowRow;
+            forced = 'above';
+          }
+        }
+      }
+
       const targetId = el?.dataset.taskRow ?? null;
       if (!el || !targetId || targetId === activeDragTask.id) {
         setTaskDropIndicator(null);
+        return;
+      }
+      if (forced) {
+        setTaskDropIndicator({ targetId, position: forced });
         return;
       }
       const rect = el.getBoundingClientRect();
@@ -3367,6 +3388,7 @@ function PageContent() {
       else if (y > rect.height - safeEdge) setTaskDropIndicator({ targetId, position: 'below' });
       else setTaskDropIndicator(null);
     };
+
     window.addEventListener('pointermove', onPointerMove);
     return () => window.removeEventListener('pointermove', onPointerMove);
   }, [activeDragTask]);

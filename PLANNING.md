@@ -8372,3 +8372,21 @@ from the dragged element is a guess about it.
 And a smaller one: widening a container changed behaviour in a component that never mentions width,
 because a collision strategy reads geometry the layout owns. A pure-looking CSS change is not
 necessarily one.
+
+### 2026-09-22 (continued) — the gap between two cards was the only dead spot on the screen
+
+"Vi må være så sykt nøyaktig mellom de to tasker."
+
+The list spaces its cards apart, and the hit test only ever asked which **row** the pointer was over.
+So the pointer sitting in the gap — which is the literal thing someone aiming "between two tasks"
+points at — found no row and cleared the indicator. The one position that names the intention exactly
+was the one position that registered nothing.
+
+When no row is under the pointer it now probes 14px up and then down. Whichever side has a row
+decides, and the answer is unambiguous: just below a row means after it, just above one means before
+it. The edge bands also grew from a 16px floor to 20px.
+
+**Worth remembering as a shape:** the feature was built by asking "which row am I on, and where in
+it", which is a question about rows. The user's question was "am I between these two", which is a
+question about the space between rows — and that space existed in the layout and nowhere in the
+logic.
