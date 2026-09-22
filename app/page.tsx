@@ -1535,6 +1535,38 @@ function PageContent() {
   const [newSpaceDraft, setNewSpaceDraft] = useState('');
   const [workspaceSwitcherOpen, setWorkspaceSwitcherOpen] = useState(false);
   const taskFileInputRef = useRef<HTMLInputElement>(null);
+  const [taskDragActive, setTaskDragActive] = useState(false);
+  // Counts enter/leave rather than trusting a single leave event: dragging across a child element
+  // fires leave on the parent, so a bare boolean flickers off every time the cursor crosses a
+  // border. Same counter ChatPanel uses, for the same reason.
+  const taskDragCounterRef = useRef(0);
+  const handleTaskDragEnterFile = (e: React.DragEvent) => {
+    if (!e.dataTransfer.types.includes('Files')) return;
+    e.preventDefault();
+    taskDragCounterRef.current += 1;
+    setTaskDragActive(true);
+  };
+  const handleTaskDragLeaveFile = (e: React.DragEvent) => {
+    if (!e.dataTransfer.types.includes('Files')) return;
+    e.preventDefault();
+    taskDragCounterRef.current = Math.max(0, taskDragCounterRef.current - 1);
+    if (taskDragCounterRef.current === 0) setTaskDragActive(false);
+  };
+  const handleTaskDragOverFile = (e: React.DragEvent) => {
+    // preventDefault on dragover is what makes an element a drop target at all — without it the
+    // browser opens the file in the tab instead, which is a spectacular way to lose your place.
+    if (e.dataTransfer.types.includes('Files')) e.preventDefault();
+  };
+  const handleTaskDropFile = (e: React.DragEvent, taskId: string) => {
+    if (!e.dataTransfer.types.includes('Files')) return;
+    e.preventDefault();
+    taskDragCounterRef.current = 0;
+    setTaskDragActive(false);
+    // One file. The upload route takes one, the attachment row is one, and a loop here would need
+    // its own partial-failure story — worth having, but as a decision rather than as a side effect.
+    const file = e.dataTransfer.files?.[0];
+    if (file) void handleAttachFile(taskId, file);
+  };
   const [attachmentBusy, setAttachmentBusy] = useState(false);
   const [attachmentError, setAttachmentError] = useState<string | null>(null);
   const handleAttachFile = async (taskId: string, file: File) => {
@@ -7650,8 +7682,24 @@ function PageContent() {
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             transition={{ duration: 0.15 }}
-            className="w-full max-w-6xl h-[88vh] bg-neutral-900 border border-neutral-800 rounded-xl md:rounded shadow-2xl overflow-hidden"
+            // Drop anywhere on the task, not only on the Files section. Somebody dragging a file at
+            // a task is aiming at the task; making them find a particular strip of it first is a
+            // rule the app would be enforcing for its own convenience. Same handlers and the same
+            // enter/leave counter as ChatPanel, which is where this pattern already existed.
+            onDragEnter={handleTaskDragEnterFile}
+            onDragLeave={handleTaskDragLeaveFile}
+            onDragOver={handleTaskDragOverFile}
+            onDrop={(e) => handleTaskDropFile(e, activeModalTask.id)}
+            className="relative w-full max-w-6xl h-[88vh] bg-neutral-900 border border-neutral-800 rounded-xl md:rounded shadow-2xl overflow-hidden"
           >
+            {taskDragActive && (
+              <div className="absolute inset-0 z-20 flex items-center justify-center bg-scrim/85 border-2 border-dashed border-blue-500 rounded-xl pointer-events-none">
+                <div className="flex flex-col items-center gap-2 text-blue-400">
+                  <Paperclip className="w-8 h-8" />
+                  <span className="text-sm font-medium">Drop to attach</span>
+                </div>
+              </div>
+            )}
           <div className="flex flex-col h-full">
             <div className="px-6 py-4 border-b border-neutral-800 flex items-center justify-between bg-neutral-950/40 shrink-0">
               {/* Smaller, lower-contrast on mobile — a breadcrumb is orientation, not the main

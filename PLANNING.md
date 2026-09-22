@@ -8202,3 +8202,21 @@ Tapping a file chip opens the file. Not the task it hangs off: someone tapping a
 
 **Not verified on device.** Build and typecheck clean. Needs a migration on production — a new table
 only, nothing existing read or reshaped.
+
+### Same session — drag and drop onto a task
+
+Dropping a file anywhere on the open task attaches it, with the same dashed overlay chat uses.
+
+**Anywhere on the task, not just the Files section.** Somebody dragging a file at a task is aiming at
+the task; making them find a particular strip of it first is a rule the app would be enforcing for
+its own convenience.
+
+Two details carried over from `ChatPanel` rather than rediscovered:
+
+- **The enter/leave counter.** Dragging across a child element fires `dragleave` on the parent, so a
+  bare boolean flickers off every time the cursor crosses an internal border.
+- **`preventDefault` on `dragover`** is what makes an element a drop target at all. Without it the
+  browser navigates to the dropped file — which, in a single-page app, loses everything.
+
+One file per drop. The upload route takes one and an attachment row is one; a loop needs its own
+partial-failure story, which is worth having as a decision rather than as a side effect.
