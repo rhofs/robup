@@ -136,14 +136,34 @@ export default function ChatPanel() {
   // visualViewport is the only thing that reports this: the keyboard does not change innerHeight in
   // a WebView, it just covers part of it. 120px rather than any positive difference, so that the
   // iOS URL bar collapsing cannot be mistaken for a keyboard.
-  const [keyboardOpen, setKeyboardOpen] = useState(false);
+  // How much of the layout viewport the keyboard is covering, in pixels — not just whether it is up.
+  //
+  // The composer is anchored to the bottom of the panel, and the panel's bottom is the bottom of the
+  // LAYOUT viewport. In a WebView that pans rather than resizes, the keyboard covers part of that
+  // without changing it, so the composer sits underneath the keyboard. The browser normally pans to
+  // keep the focused field visible — and scrolling the messages undoes that pan, which is why it
+  // appeared only when scrolling up.
+  //
+  // Measuring the overlap and lifting the composer by it puts the field where the user can see it
+  // regardless of what the pan is doing. On a WebView that resizes instead, the overlap is 0 and
+  // nothing moves, so this is safe either way.
+  const [keyboardOverlap, setKeyboardOverlap] = useState(0);
+  const keyboardOpen = keyboardOverlap > 120;
   useEffect(() => {
     const vv = typeof window !== 'undefined' ? window.visualViewport : null;
     if (!vv) return;
-    const onResize = () => setKeyboardOpen(window.innerHeight - vv.height > 120);
+    const onResize = () => {
+      // offsetTop matters on iOS, where the visual viewport can be scrolled within the layout one.
+      const overlap = window.innerHeight - vv.height - vv.offsetTop;
+      setKeyboardOverlap(overlap > 0 ? overlap : 0);
+    };
     onResize();
     vv.addEventListener('resize', onResize);
-    return () => vv.removeEventListener('resize', onResize);
+    vv.addEventListener('scroll', onResize);
+    return () => {
+      vv.removeEventListener('resize', onResize);
+      vv.removeEventListener('scroll', onResize);
+    };
   }, []);
   // One shared timer (not a hook-per-row, since the number of rows changes) — same long-press
   // pattern as components/calendar/WeekRow.tsx's day-cell long-press: hold still for 500ms,
@@ -702,11 +722,14 @@ export default function ChatPanel() {
       <div
         className={
           isMobile
-            ? `absolute inset-x-0 bottom-0 z-10 px-3 pt-6 bg-gradient-to-t from-neutral-950 via-neutral-950/95 to-transparent ${
+            ? `absolute inset-x-0 z-10 px-3 pt-6 bg-gradient-to-t from-neutral-950 via-neutral-950/95 to-transparent ${
                 keyboardOpen ? 'pb-2' : 'pb-[calc(env(safe-area-inset-bottom)+10px)]'
               }`
             : undefined
         }
+        // bottom is the measured keyboard overlap, so the composer sits just above the keyboard
+        // rather than underneath it. 0 when the viewport resizes instead of being covered.
+        style={isMobile ? { bottom: keyboardOverlap } : undefined}
       >
       {typingUsers.length > 0 && (
         <div className="px-1 pt-1 text-[11px] text-neutral-500 italic truncate">

@@ -3059,7 +3059,12 @@ function PageContent() {
   };
 
   const handleArchiveClick = (task: Task) => {
-    optimisticArchiveTask(task.id, !task.archived);
+    const done = !task.archived;
+    optimisticArchiveTask(task.id, done);
+    // Ticking a task off is one click and it makes the task leave the list you were looking at —
+    // which is exactly the shape of an action that needs a way back. Moving, nesting and bulk
+    // actions have all offered one for a while; this, the most common of the lot, did not.
+    showUndoableToast(done ? `Done: ${task.title}` : `Reopened: ${task.title}`);
   };
 
   const handleDeleteTask = (task: Task) => {
@@ -3201,10 +3206,14 @@ function PageContent() {
   const clearSelection = () => setSelectedIds(new Set());
 
   const bulkArchive = (archived: boolean) => {
+    const count = selectedIds.size;
     useHistoryStore.getState().transaction(archived ? 'Archive tasks' : 'Unarchive tasks', () => {
       selectedIds.forEach((id) => optimisticArchiveTask(id, archived));
     });
     clearSelection();
+    // One toast for the whole batch, and one undo — the transaction above already groups them, so
+    // the offer matches what pressing it actually does.
+    showUndoableToast(`${count} ${count === 1 ? 'task' : 'tasks'} ${archived ? 'done' : 'reopened'}`);
   };
   const bulkDelete = () => {
     if (!window.confirm(`Delete ${selectedIds.size} tasks? This cannot be undone.`)) return;
@@ -6995,8 +7004,14 @@ function PageContent() {
         <div className="fixed bottom-6 left-1/2 -tranneutral-x-1/2 z-40 bg-neutral-900 border border-neutral-700 rounded-xl shadow-2xl px-4 py-2.5 flex items-center gap-3">
           <span className="text-xs text-neutral-300 font-medium">{selectedIds.size} selected</span>
           <div className="w-px h-5 bg-neutral-700"></div>
+          {/* Done first, and separate from Archive, because they are not the same thing: finishing
+              a task is the everyday action and archiving is putting it away. They happened to share
+              a mechanism, which is a reason to keep the code together and not the labels. */}
           <button onClick={() => bulkArchive(true)} className="text-xs text-neutral-300 hover:text-app-strong px-2 py-1 rounded hover:bg-neutral-800 cursor-pointer flex items-center gap-1.5">
-            <Archive className="w-3.5 h-3.5" /> Archive
+            <Check className="w-3.5 h-3.5" /> Done
+          </button>
+          <button onClick={() => bulkArchive(false)} className="text-xs text-neutral-300 hover:text-app-strong px-2 py-1 rounded hover:bg-neutral-800 cursor-pointer flex items-center gap-1.5">
+            <Archive className="w-3.5 h-3.5" /> Reopen
           </button>
           <div className="relative">
             <button

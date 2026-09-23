@@ -8431,3 +8431,26 @@ second route because the gap opening is the thing that made the target findable 
 It is anchored to the panel and not to the message list, so it cannot scroll on its own; what moved
 was everything at once. Scrolling past the top of the messages chained to the page behind, which
 dragged the whole conversation out of view. `overscroll-contain` on the list.
+
+### 2026-09-23 (continued) — the composer behind the keyboard, and undo on "done"
+
+**The composer sits above the keyboard now, measured rather than assumed.** It is anchored to the
+bottom of the panel, and the panel's bottom is the bottom of the *layout* viewport. In a WebView that
+pans rather than resizes, the keyboard covers part of that without changing it, so the composer is
+underneath it. The browser normally pans to keep the focused field visible — and scrolling the
+messages undoes that pan, which is exactly why this only showed up when scrolling up.
+
+`visualViewport` gives the overlap in pixels (`innerHeight - height - offsetTop`, the last term for
+iOS, where the visual viewport can be scrolled inside the layout one), and the footer's `bottom` is
+set to it. On a WebView that resizes instead, the overlap is 0 and nothing moves — safe either way.
+**Third time `visualViewport` has been the right measurement and `innerHeight` the wrong one.**
+
+**Ticking a task done now offers an undo.** It is one click, and it makes the task leave the list you
+were looking at — the exact shape of an action that needs a way back. Moving, nesting and bulk
+actions have offered one for a while; the most common action of the lot did not.
+
+**Bulk Done and Reopen** in the selection bar, which already existed with Archive and Move. Done is
+listed first and separately from Archive: finishing a task is the everyday action and archiving is
+putting it away. They happen to share a mechanism, which is a reason to keep the code together and
+not the labels. The batch gets one toast and one undo, matching the transaction that already grouped
+it.
