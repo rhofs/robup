@@ -8584,3 +8584,39 @@ parser; what is missing is the two buttons. Left for its own pass rather than ha
 that lists doc templates nobody can create would be worse than nothing.
 
 **Not verified on device.** Needs a migration on production — a new table only.
+
+## 2026-09-23 (continued) — a colleague could not sign in to the app
+
+Christer signs in fine on the web and gets Auth.js's "There is a problem with the server
+configuration" in the app.
+
+**The underlying cause is already documented here and is a rule rather than a bug**: Google refuses
+OAuth inside an embedded WebView, because any app could read what you type in its own window. The
+app's only working route is email + password, and an account created with Google has none — which is
+why the forgot-password flow was taught to send a link to Google-only accounts a few weeks ago.
+
+**What was still wrong is that the button was still there.** The login page offered "Continue with
+Google" inside the app, where it can never work. Someone presses it, gets a server error, and
+reasonably concludes their account is broken — which is exactly what happened. A control that cannot
+work is worse than no control, because the failure reads as the app being broken rather than as the
+route being unavailable.
+
+Inside the app the button is now replaced by a short note: the app signs in with email and password,
+and Forgot password sets one for a Google account too. The web login is untouched.
+
+`Capacitor.isNativePlatform()` is read **after mount**, not during render — this page is
+server-rendered, and asking during render makes the server's HTML and the client's first pass
+disagree. The layout preference cost a round over the same thing.
+
+### What is NOT established
+
+The exact error string Christer saw is Auth.js's `Configuration` page, and I did not reproduce it or
+read the production logs. The most likely path is the Google button, but a genuine config problem
+would look the same from the outside. **Worth checking directly if he still cannot get in after
+setting a password:** whether `AUTH_URL=https://siqt.no` is still set on the Pterodactyl server —
+`auth.ts`'s own comment says to confirm that rather than assume it, and this is exactly the situation
+it was written for.
+
+**The real fix stays deferred**: a native Google sign-in plugin, where Android performs the sign-in
+outside the WebView. It needs an OAuth client tied to the app's signing certificate, so it belongs
+with the signed release build rather than the debug APK.

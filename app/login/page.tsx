@@ -1,9 +1,10 @@
 'use client';
 
-import { Suspense, useState } from 'react';
+import { Suspense, useEffect, useState } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { signIn } from 'next-auth/react';
 import { List, Calendar, FileText, MessageSquare } from 'lucide-react';
+import { Capacitor } from '@capacitor/core';
 
 // Same four icons as the real app's own nav rail (app/page.tsx), matching each feature exactly —
 // a logged-out visitor should recognize the same icons once they're actually inside the app. Was
@@ -30,6 +31,12 @@ export default function LoginPage() {
 }
 
 function LoginPageContent() {
+  // Read after mount, never during render: this page is server-rendered, and asking Capacitor
+  // whether it is native during render makes the server's HTML and the client's first pass
+  // disagree. The same lesson the layout preference cost a round over.
+  const [inApp, setInApp] = useState(false);
+  useEffect(() => setInApp(Capacitor.isNativePlatform()), []);
+
   const router = useRouter();
   const searchParams = useSearchParams();
   // Where to land after a successful sign-in/sign-up — defaults to the app shell, but an invite
@@ -178,19 +185,42 @@ function LoginPageContent() {
             </button>
           </div>
 
-          <button
-            type="button"
-            onClick={() => signIn('google', { redirectTo: callbackUrl })}
-            className="w-full flex items-center justify-center gap-2 bg-neutral-950 border border-neutral-700 rounded-lg px-3 py-2 text-xs text-app-strong hover:bg-neutral-800/60 transition cursor-pointer mb-4"
-          >
-            Continue with Google
-          </button>
+          {/* Google is hidden inside the app, and this is a rule rather than a preference: Google
+              deliberately refuses OAuth inside an embedded WebView, because any app could read what
+              you type in its own window. The button could never work here, and a button that cannot
+              work is worse than none — someone presses it, gets a server error, and reasonably
+              concludes their account is broken. That is exactly what happened to a colleague signing
+              in for the first time.
+              
+              Anyone whose account was made with Google has no password, so the note below points at
+              the one route that gives them one. The web login is unchanged. */}
+          {inApp ? (
+            <div className="mb-4 rounded-lg border border-neutral-800 bg-neutral-950/60 px-3 py-2.5">
+              <p className="text-[11px] text-neutral-400">
+                The app signs in with email and password. Google sign-in only works in a browser.
+              </p>
+              <p className="text-[11px] text-neutral-500 mt-1">
+                Made your account with Google? Use <span className="text-neutral-300">Forgot password</span>{' '}
+                below to set one — it works for Google accounts too.
+              </p>
+            </div>
+          ) : (
+            <>
+              <button
+                type="button"
+                onClick={() => signIn('google', { redirectTo: callbackUrl })}
+                className="w-full flex items-center justify-center gap-2 bg-neutral-950 border border-neutral-700 rounded-lg px-3 py-2 text-xs text-app-strong hover:bg-neutral-800/60 transition cursor-pointer mb-4"
+              >
+                Continue with Google
+              </button>
 
-          <div className="flex items-center gap-2 mb-4">
-            <div className="h-px flex-1 bg-neutral-800" />
-            <span className="text-[10px] text-neutral-500 uppercase tracking-wide">or</span>
-            <div className="h-px flex-1 bg-neutral-800" />
-          </div>
+              <div className="flex items-center gap-2 mb-4">
+                <div className="h-px flex-1 bg-neutral-800" />
+                <span className="text-[10px] text-neutral-500 uppercase tracking-wide">or</span>
+                <div className="h-px flex-1 bg-neutral-800" />
+              </div>
+            </>
+          )}
 
           <form onSubmit={handleSubmit} className="space-y-3">
             {mode === 'signup' && (
