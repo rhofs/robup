@@ -8475,3 +8475,17 @@ single strip of pixels. There were two strips available the whole time.
 jitter: the layout shift it was written for moves the *rows*, and a row moving produces no pointer
 movement, so the anchor breaks that loop merely by existing. 18px was defensive, and it made
 deliberate small movements feel stuck.
+
+### 2026-09-23 (continued) — 168 icons
+
+The set went from 73 to 168, for Spaces, Folders and Lists alike. Every added name was checked
+against `lucide-react`'s actual exports before being written down rather than after — a missing icon
+does not fail the build, it renders as nothing, which is the sort of thing that ships.
+
+Grouped by what they are for — work and process, people, money, media, technical, nature, health,
+travel, food, symbols — because the picker shows them in list order, and a list sorted by nothing is
+a list you scan twice.
+
+**The three pickers are now capped and scrollable.** 168 buttons at 28px in an uncapped wrap grid is
+a dialog taller than the screen; the size of the set is a property of the picker, not only of the
+list.

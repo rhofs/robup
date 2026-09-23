@@ -7465,7 +7465,9 @@ function PageContent() {
               </div>
               <div>
                 <label className="text-[11px] text-neutral-400 mb-1 block">Icon</label>
-                <div className="flex flex-wrap gap-1.5">
+                {/* Capped and scrollable. The set grew from 73 icons to 168, and an uncapped wrap grid of 168
+                    28px buttons is a dialog taller than the screen. */}
+                <div className="flex flex-wrap gap-1.5 max-h-44 overflow-y-auto pr-1">
                   <button
                     onClick={() => setEditSpaceIcon(null)}
                     title="Default (plain color dot)"
@@ -7562,7 +7564,9 @@ function PageContent() {
               </div>
               <div>
                 <label className="text-[11px] text-neutral-400 mb-1 block">Icon</label>
-                <div className="flex flex-wrap gap-1.5">
+                {/* Capped and scrollable. The set grew from 73 icons to 168, and an uncapped wrap grid of 168
+                    28px buttons is a dialog taller than the screen. */}
+                <div className="flex flex-wrap gap-1.5 max-h-44 overflow-y-auto pr-1">
                   <button
                     onClick={() => setEditFolderIcon(null)}
                     title="Default"
@@ -7640,7 +7644,9 @@ function PageContent() {
               </div>
               <div>
                 <label className="text-[11px] text-neutral-400 mb-1 block">Icon</label>
-                <div className="flex flex-wrap gap-1.5">
+                {/* Capped and scrollable. The set grew from 73 icons to 168, and an uncapped wrap grid of 168
+                    28px buttons is a dialog taller than the screen. */}
+                <div className="flex flex-wrap gap-1.5 max-h-44 overflow-y-auto pr-1">
                   <button
                     onClick={() => setEditListIcon(null)}
                     title="Default"
