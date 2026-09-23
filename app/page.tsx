@@ -28,6 +28,7 @@ import {
   Bell,
   UserPlus,
   Paperclip,
+  Bookmark,
   House as HouseIcon,
   UserCircle,
   LogOut,
@@ -102,6 +103,7 @@ import { copyToClipboard } from '../lib/copyToClipboard';
 import { contextMenuPosition } from '../lib/contextMenuPosition';
 import { formatBytes } from '../lib/formatBytes';
 import AttachmentPreview, { type PreviewFile } from '../components/AttachmentPreview';
+import { parseTaskTemplate } from '../lib/templates';
 import DocExportMenu from '../components/collab/DocExportMenu';
 import TaskRow, { ColumnDef } from '../components/TaskRow';
 import FolderTree, { FOLDER_ICON_CHOICES, FOLDER_ICON_MAP } from '../components/FolderTree';
@@ -710,6 +712,11 @@ function PageContent() {
     moveList,
     reorderList,
     reorderTask,
+    templates,
+    fetchTemplates,
+    saveTemplate,
+    deleteTemplate,
+    createTaskFromTemplate,
     addTaskAttachment,
     removeTaskAttachment,
     updateList,
@@ -1532,6 +1539,39 @@ function PageContent() {
   // Which attachment the preview is showing. Held at page level rather than inside the task modal
   // because a file mention in a chat message opens it too, and that is nowhere near the modal.
   const [previewFile, setPreviewFile] = useState<PreviewFile | null>(null);
+
+  // Templates. The save dialog carries the task it was opened from rather than an id, so the name it
+  // suggests and the snapshot it takes come from the same object — an id would have to be looked up
+  // again and could have changed in between.
+  const [templateSaveTarget, setTemplateSaveTarget] = useState<Task | null>(null);
+  const [templateName, setTemplateName] = useState('');
+  const [templatePickerOpen, setTemplatePickerOpen] = useState(false);
+  useEffect(() => {
+    if (activeWorkspaceId) void fetchTemplates(activeWorkspaceId);
+  }, [activeWorkspaceId, fetchTemplates]);
+
+  const handleSaveTemplate = async () => {
+    if (!templateSaveTarget || !activeWorkspaceId) return;
+    const name = templateName.trim() || templateSaveTarget.title;
+    // The snapshot is taken here, from what is on screen, and never re-read later — that is what
+    // makes it a template rather than a live reference to the task it came from.
+    const subtasks = tasks
+      .filter((t) => t.parentId === templateSaveTarget.id && !t.archived)
+      .sort((a, b) => a.order - b.order)
+      .map((t) => t.title);
+    try {
+      await saveTemplate(activeWorkspaceId, name, 'task', {
+        title: templateSaveTarget.title,
+        description: templateSaveTarget.description ?? null,
+        status: templateSaveTarget.status ?? null,
+        subtasks,
+      });
+      setTemplateSaveTarget(null);
+      showToast(`Saved template "${name}"`);
+    } catch (err) {
+      showToast(err instanceof Error ? err.message : 'Could not save the template');
+    }
+  };
   // Counts enter/leave rather than trusting a single leave event: dragging across a child element
   // fires leave on the parent, so a bare boolean flickers off every time the cursor crosses a
   // border. Same counter ChatPanel uses, for the same reason.
@@ -6116,6 +6156,15 @@ function PageContent() {
                     </button>
                   )
                 )}
+                {/* Next to the task count rather than hidden in a menu: a template is only worth
+                    having if it is easier to reach than retyping the list it replaces. */}
+                <button
+                  onClick={() => setTemplatePickerOpen(true)}
+                  title="New from template"
+                  className="text-[11px] rounded-lg px-3 py-2 border border-neutral-800 text-neutral-400 hover:text-neutral-200 hover:bg-neutral-800/60 cursor-pointer flex items-center gap-1.5 transition"
+                >
+                  <Bookmark className="w-3.5 h-3.5" /> Template
+                </button>
                 {overdueTasksInView.length > 0 && (
                   <button
                     onClick={(e) => {
@@ -7061,6 +7110,16 @@ function PageContent() {
               className="w-full text-left px-3 py-1.5 text-xs text-neutral-300 hover:bg-neutral-800/60 cursor-pointer flex items-center gap-2"
             >
               <Maximize2 className="w-3.5 h-3.5" /> Open
+            </button>
+            <button
+              onClick={() => {
+                setTemplateSaveTarget(taskMenu.task);
+                setTemplateName(taskMenu.task.title);
+                setTaskMenu(null);
+              }}
+              className="w-full text-left px-3 py-1.5 text-xs text-neutral-300 hover:bg-neutral-800/60 cursor-pointer flex items-center gap-2"
+            >
+              <Bookmark className="w-3.5 h-3.5" /> Save as template
             </button>
             <button
               onClick={() => {
@@ -9184,6 +9243,104 @@ function PageContent() {
           configures, and it falls back to the last real workspace when you open Settings from Home
           (see its own comment). Gating on the other one would let the panel render with nothing to
           show on its Workspace half. */}
+      {/* Save a task as a template. A dialog rather than an inline rename, because naming a template
+          is a decision — the name is how it will be recognised months later, and the task's own title
+          is only a starting suggestion. */}
+      {templateSaveTarget && (
+        <div
+          className="fixed inset-0 z-[70] flex items-center justify-center bg-scrim/70 backdrop-blur-xs p-3"
+          onClick={() => setTemplateSaveTarget(null)}
+        >
+          <div
+            onClick={(e) => e.stopPropagation()}
+            className="w-full max-w-sm bg-neutral-900 border border-neutral-800 rounded-2xl p-4 space-y-3 shadow-2xl"
+          >
+            <h3 className="text-sm font-semibold text-app-strong">Save as template</h3>
+            <p className="text-[11px] text-neutral-500">
+              Keeps the title, description, status and every subtask. Dates, assignees and files stay
+              with this task — they belong to the work, not to its shape.
+            </p>
+            <input
+              autoFocus
+              value={templateName}
+              onChange={(e) => setTemplateName(e.target.value)}
+              onKeyDown={(e) => e.key === 'Enter' && void handleSaveTemplate()}
+              placeholder="Template name"
+              className="w-full bg-neutral-950 border border-neutral-700 rounded-lg px-3 py-2 text-sm text-app-strong focus:outline-none focus:border-blue-500"
+            />
+            <div className="flex gap-2">
+              <button
+                onClick={() => setTemplateSaveTarget(null)}
+                className="flex-1 bg-neutral-800 hover:bg-neutral-700 text-neutral-300 text-sm py-2 rounded-lg font-medium cursor-pointer"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={() => void handleSaveTemplate()}
+                className="flex-1 bg-blue-600 hover:bg-blue-500 text-white text-sm py-2 rounded-lg font-medium cursor-pointer"
+              >
+                Save
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Pick a template to create from. */}
+      {templatePickerOpen && (
+        <div
+          className="fixed inset-0 z-[70] flex items-center justify-center bg-scrim/70 backdrop-blur-xs p-3"
+          onClick={() => setTemplatePickerOpen(false)}
+        >
+          <div
+            onClick={(e) => e.stopPropagation()}
+            className="w-full max-w-sm max-h-[calc(100dvh-2rem)] overflow-y-auto bg-neutral-900 border border-neutral-800 rounded-2xl p-3 space-y-1 shadow-2xl"
+          >
+            <h3 className="text-sm font-semibold text-app-strong px-1 pb-1">New from template</h3>
+            {templates.filter((t) => t.kind === 'task').length === 0 && (
+              <p className="text-[11px] text-neutral-500 px-1 py-3">
+                No templates yet. Right-click any task and choose &ldquo;Save as template&rdquo;.
+              </p>
+            )}
+            {templates
+              .filter((t) => t.kind === 'task')
+              .map((t) => {
+                const parsed = parseTaskTemplate(t.payloadJson);
+                return (
+                  <div key={t.id} className="group flex items-center gap-2 rounded-xl hover:bg-neutral-800/50 transition">
+                    <button
+                      onClick={() => {
+                        const listId = [...activeListIds][0] ?? currentSpace?.lists[0]?.id;
+                        if (!listId || !currentSpace) {
+                          showToast('Open a list first — a task has to be created somewhere.');
+                          return;
+                        }
+                        void createTaskFromTemplate(t.id, listId, currentSpace.id);
+                        setTemplatePickerOpen(false);
+                      }}
+                      className="min-w-0 flex-1 text-left px-3 py-2.5 cursor-pointer"
+                    >
+                      <span className="block text-xs text-neutral-200 truncate">{t.name}</span>
+                      <span className="block text-[11px] text-neutral-500">
+                        {parsed.subtasks.length > 0
+                          ? `${parsed.subtasks.length} ${parsed.subtasks.length === 1 ? 'subtask' : 'subtasks'}`
+                          : 'No subtasks'}
+                      </span>
+                    </button>
+                    <button
+                      onClick={() => activeWorkspaceId && void deleteTemplate(activeWorkspaceId, t.id)}
+                      title="Delete template"
+                      className="shrink-0 w-8 h-8 rounded-lg flex items-center justify-center text-neutral-600 hover:text-red-400 hover:bg-neutral-800 cursor-pointer md:opacity-0 md:group-hover:opacity-100 transition"
+                    >
+                      <Trash2 className="w-3.5 h-3.5" />
+                    </button>
+                  </div>
+                );
+              })}
+          </div>
+        </div>
+      )}
+
       {previewFile && <AttachmentPreview file={previewFile} onClose={() => setPreviewFile(null)} />}
       {notificationsOpen && (
         <NotificationsPanel

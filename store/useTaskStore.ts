@@ -5,6 +5,7 @@ import { collectDocFolderIdsUnder } from '../lib/docFolderTree';
 import { startOfDay } from '../lib/calendarDates';
 import { useHistoryStore } from './useHistoryStore';
 import { uploadChatFile } from '../lib/uploadChatFile';
+import { parseTaskTemplate, type AppTemplate, type TemplateKind } from '../lib/templates';
 import { useSessionStore } from './useSessionStore';
 
 export type StatusDef = {
@@ -530,6 +531,12 @@ interface TaskStore {
   // one task, one order value; the caller renumbers a whole run of siblings inside a
   // useHistoryStore transaction so a single Ctrl+Z (or the mobile Undo toast) puts them all back.
   reorderTask: (taskId: string, order: number) => Promise<void>;
+  templates: AppTemplate[];
+  fetchTemplates: (workspaceId: string) => Promise<void>;
+  saveTemplate: (workspaceId: string, name: string, kind: TemplateKind, payload: unknown) => Promise<void>;
+  deleteTemplate: (workspaceId: string, templateId: string) => Promise<void>;
+  // Creates a whole task from a saved shape, subtasks included, as one undoable step.
+  createTaskFromTemplate: (templateId: string, listId: string, spaceId: string) => Promise<void>;
   addTaskAttachment: (taskId: string, file: File) => Promise<void>;
   removeTaskAttachment: (taskId: string, attachmentId: string) => Promise<void>;
   deleteList: (spaceId: string, listId: string) => Promise<void>;
@@ -2228,6 +2235,63 @@ export const useTaskStore = create<TaskStore>((set, get) => {
         label: 'Move list',
         undo: () => get().moveList(targetSpaceId ?? spaceId, listId, oldFolderId, spaceId),
         redo: () => get().moveList(spaceId, listId, folderId, targetSpaceId),
+      });
+    },
+
+    templates: [],
+
+    fetchTemplates: async (workspaceId) => {
+      try {
+        const res = await fetch(`/api/workspaces/${workspaceId}/templates`);
+        if (res.ok) set({ templates: await res.json() });
+      } catch {
+        // Silent: templates are a convenience, and a failed fetch should leave the picker empty
+        // rather than break the screen it lives on.
+      }
+    },
+
+    saveTemplate: async (workspaceId, name, kind, payload) => {
+      const res = await fetch(`/api/workspaces/${workspaceId}/templates`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name, kind, payload }),
+      });
+      if (!res.ok) throw new Error((await res.json().catch(() => ({}))).error || 'Could not save the template');
+      const created = await res.json();
+      set((state) => ({ templates: [created, ...state.templates] }));
+    },
+
+    deleteTemplate: async (workspaceId, templateId) => {
+      set((state) => ({ templates: state.templates.filter((t) => t.id !== templateId) }));
+      await fetch(`/api/workspaces/${workspaceId}/templates?templateId=${encodeURIComponent(templateId)}`, {
+        method: 'DELETE',
+      });
+    },
+
+    createTaskFromTemplate: async (templateId, listId, spaceId) => {
+      const template = get().templates.find((t) => t.id === templateId);
+      if (!template || template.kind !== 'task') return;
+      const payload = parseTaskTemplate(template.payloadJson);
+      const parentId = crypto.randomUUID();
+      // One transaction for the parent and every subtask, so undo removes the whole thing. Applying
+      // a template is one action in the user's head; it should be one in the history too.
+      await useHistoryStore.getState().transaction(`Use template "${template.name}"`, async () => {
+        await get().optimisticCreateTask(
+          payload.title || template.name,
+          listId,
+          spaceId,
+          null,
+          null,
+          null,
+          parentId,
+          payload.status ?? undefined
+        );
+        if (payload.description) await get().optimisticSetDescription(parentId, payload.description);
+        // Sequential, not Promise.all: subtasks carry an order, and firing them together makes that
+        // order whatever the network returns first.
+        for (const title of payload.subtasks) {
+          await get().optimisticCreateTask(title, listId, spaceId, parentId);
+        }
       });
     },
 

@@ -8540,3 +8540,47 @@ entry applying to every hour was visible during none of them.
 
 It gets its own max height and scroll, so a day with a dozen all-day entries cannot push the hours
 off the screen entirely.
+
+## 2026-09-23 (continued) — templates, for tasks
+
+Saved shapes to make new tasks from: title, description, status and **every subtask**. Saved from any
+task's right-click menu; used from a "Template" button beside the task count.
+
+### What is in one, and what is deliberately not
+
+Subtasks are the reason the feature is worth having — a checklist rebuilt by hand every time is
+exactly what people want back. Dates, assignees and files stay with the task they came from: they
+belong to the work, not to its shape. The dialog says so, because a template that quietly carried an
+assignee would be discovered the hard way.
+
+**No priority.** The column exists in the schema and *nothing in the app reads or writes it* — checked
+rather than assumed. Carrying it would be a field that silently does nothing, which is worse than an
+absent one because it looks like it works.
+
+### Shape of the thing
+
+`payloadJson` in one column rather than real rows, and that is the whole design: a template is a
+**snapshot**. Real rows would mean a template that changes when its source task changes, subtasks
+that can be deleted out from under it, and foreign keys to objects nobody expects a template to
+depend on. The snapshot is taken at save time from what is on screen and never re-read.
+
+`lib/templates.ts` is the only place that parses it, and its parsers are **total** — anything
+unparseable or from a future shape comes back empty rather than throwing. A convenience that can
+break the screen it sits on is worse than one that is occasionally blank.
+
+**Workspace-scoped, and not admin-gated.** Any member may save one. A template is something someone
+made for their own repeated work, and requiring permission to save one is how a feature like this
+ends up unused. Personal-workspace templates are private without needing a separate idea of privacy.
+
+Applying one is a single transaction, so undo removes the parent and every subtask together — it is
+one action in the user's head and should be one in the history. The subtasks are created
+**sequentially**, because they carry an order and firing them at once makes that order whatever the
+network returns first.
+
+### Not done
+
+**Doc templates.** The model and the API already take `kind: 'doc'` and `lib/templates.ts` has the
+parser; what is missing is the two buttons. Left for its own pass rather than half-wired — a picker
+that lists doc templates nobody can create would be worse than nothing.
+
+**Not verified on device.** Needs a migration on production — a new table only.

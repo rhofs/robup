@@ -49,6 +49,7 @@ model Workspace {
   // nobody else is ever a member, so nothing scoped under it is ever returned to anyone else's
   // GET /api/tasks etc.
   memberships     WorkspaceMembership[]
+  templates       Template[]
   roles           Role[]
   invites         WorkspaceInvite[]
   memberInvites   WorkspaceMemberInvite[]
@@ -115,6 +116,37 @@ model Notification {
   createdAt DateTime  @default(now()) @map("created_at")
 
   @@index([userId, createdAt])
+}
+
+// A saved shape to make new things from — a task with its subtasks, or a doc with its content.
+//
+// The payload is JSON in a column rather than real rows, and that is deliberate: a template is a
+// SNAPSHOT, not a live thing. Real rows would mean a template that changes when the task it came
+// from changes, subtasks that can be deleted out from under it, and foreign keys to objects nobody
+// expects a template to depend on. The same reasoning accessJson and contributorIdsJson already
+// follow elsewhere in this schema.
+//
+// Workspace-scoped, so a team shares its templates and a personal workspace's stay personal without
+// any separate notion of privacy.
+model Template {
+  id          String    @id @default(uuid())
+  workspaceId String    @map("workspace_id")
+  workspace   Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+
+  name String
+  // 'task' | 'doc'. A string rather than an enum so a third kind is a write site, not a migration —
+  // the same call made for Notification.type.
+  kind String
+  // The snapshot. Shape depends on kind; see lib/templates.ts, which is the only place that reads
+  // or writes it.
+  payloadJson String @map("payload_json")
+
+  createdById String? @map("created_by_id")
+  createdBy   User?   @relation("TemplateAuthor", fields: [createdById], references: [id], onDelete: SetNull)
+
+  createdAt DateTime @default(now()) @map("created_at")
+
+  @@index([workspaceId, kind])
 }
 
 model WorkspaceMembership {
@@ -456,6 +488,7 @@ model User {
   memberInvitesSent     WorkspaceMemberInvite[] @relation("WorkspaceMemberInviteSender")
   memberInvitesReceived WorkspaceMemberInvite[] @relation("WorkspaceMemberInviteRecipient")
   taskAttachments        TaskAttachment[] @relation("TaskAttachmentUploader")
+  templates              Template[]       @relation("TemplateAuthor")
   notifications          Notification[] @relation("NotificationRecipient")
   notificationsCaused    Notification[] @relation("NotificationActor")
   connectionsAsA    Connection[]      @relation("ConnectionsAsA")
