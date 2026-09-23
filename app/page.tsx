@@ -99,6 +99,7 @@ import ConfirmDialog from '../components/ConfirmDialog';
 import FloatingPopover from '../components/FloatingPopover';
 import { activeGlowStyle } from '../lib/activeGlowStyle';
 import { copyToClipboard } from '../lib/copyToClipboard';
+import { contextMenuPosition } from '../lib/contextMenuPosition';
 import { formatBytes } from '../lib/formatBytes';
 import AttachmentPreview, { type PreviewFile } from '../components/AttachmentPreview';
 import DocExportMenu from '../components/collab/DocExportMenu';
@@ -464,20 +465,6 @@ const DEFAULT_COLUMN_WIDTHS: Record<string, number> = { name: 280 };
 // deliberately generous estimate rather than a measurement: these menus hold between two and six
 // short items, and opening slightly higher than strictly necessary near the bottom of the screen is
 // invisible, while overflowing it is not.
-const CONTEXT_MENU_WIDTH_PX = 192; // w-48
-const CONTEXT_MENU_MAX_HEIGHT_PX = 240;
-const CONTEXT_MENU_MARGIN_PX = 8;
-
-function contextMenuPosition(x: number, y: number): { top: number; left: number } {
-  if (typeof window === 'undefined') return { top: y, left: x };
-  const maxLeft = window.innerWidth - CONTEXT_MENU_WIDTH_PX - CONTEXT_MENU_MARGIN_PX;
-  const maxTop = window.innerHeight - CONTEXT_MENU_MAX_HEIGHT_PX - CONTEXT_MENU_MARGIN_PX;
-  return {
-    left: Math.max(CONTEXT_MENU_MARGIN_PX, Math.min(x, maxLeft)),
-    top: Math.max(CONTEXT_MENU_MARGIN_PX, Math.min(y, maxTop)),
-  };
-}
-
 const NAV_TOTAL_HEIGHT_PB_CLASS = 'pb-[calc(4.75rem+env(safe-area-inset-bottom)+10px)]';
 
 // The search pill's own *static* label (shown before it's even tapped), not just what

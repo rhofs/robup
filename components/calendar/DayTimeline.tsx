@@ -156,9 +156,16 @@ export default function DayTimeline({
   };
 
   return (
-    <div ref={scrollRef} className="flex flex-col h-full overflow-y-auto">
+    /* The all-day band is OUTSIDE the scrolling area, pinned above it — the way Google Calendar
+       does it, and for the reason it does: something that lasts all day has no position on an hour
+       grid, so scrolling to 3pm should not scroll it out of sight. It was inside the scroller, which
+       meant the one entry that applies to every hour was visible during none of them.
+       
+       Its own max height and scroll, because a day with a dozen all-day entries should not push the
+       hours off the screen entirely. */
+    <div className="flex flex-col h-full min-h-0">
       {(allDayTasks.length > 0 || allDayEvents.length > 0) && (
-        <div className="shrink-0 border-b border-neutral-800 px-3 py-2 space-y-1">
+        <div className="shrink-0 border-b border-neutral-800 px-3 py-2 space-y-1 max-h-32 overflow-y-auto">
           <div className="text-[9px] uppercase tracking-wider text-neutral-500 mb-1">All day</div>
           {allDayTasks.map((task) => (
             <AllDayChip key={task.id} label={task.title} color={taskColorOf(task)} onClick={() => onOpenTask(task.id)} />
@@ -176,7 +183,8 @@ export default function DayTimeline({
         </div>
       )}
 
-      <div className="relative flex-1" style={{ minHeight: 24 * HOUR_H }}>
+      <div ref={scrollRef} className="flex-1 min-h-0 overflow-y-auto">
+      <div className="relative" style={{ minHeight: 24 * HOUR_H }}>
         <div className="absolute inset-0">
           {Array.from({ length: 24 }, (_, h) => (
             <div key={h} className="relative border-b border-neutral-800/50" style={{ height: HOUR_H }}>
@@ -298,6 +306,7 @@ export default function DayTimeline({
             return [...eventBlocks, ...taskBlocks];
           })()}
         </div>
+      </div>
       </div>
     </div>
   );

@@ -8521,3 +8521,22 @@ single-line event chip lost a notch of vertical padding it did not have room for
 
 Both floors were changed together — there are two, for tasks and for events, and fixing one would
 have left the other clipping in exactly the same way.
+
+### 2026-09-23 (continued) — right-click on a day, and the all-day band stays put
+
+**A day cell in the month view now has a right-click menu on desktop**: create on that day, open the
+day, show its month. Desktop only — touch already has the long press for the same ground, and
+offering both from one surface means one of them fires by accident.
+
+`contextMenuPosition` moved out of `app/page.tsx` into `lib/contextMenuPosition.ts` on the way. It
+now positions the task, Space, Folder, List, Doc and day menus, and a second copy of those three
+numbers would have drifted the first time one menu changed width — which is a thing that has happened
+in this codebase more than once this month.
+
+**The all-day band in Day view is pinned above the scrolling hours**, the way Google Calendar does
+it, and for the reason it does: something that lasts all day has no position on an hour grid, so
+scrolling to 3pm should not scroll it out of sight. It was *inside* the scroller, which meant the one
+entry applying to every hour was visible during none of them.
+
+It gets its own max height and scroll, so a day with a dozen all-day entries cannot push the hours
+off the screen entirely.

@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { ChevronLeft, ChevronRight, Eye, Maximize2, Plus } from 'lucide-react';
+import { ChevronLeft, ChevronRight, Eye, Maximize2, Plus, CalendarDays, CalendarRange } from 'lucide-react';
 import {
   addDays,
   chunkIntoWeeks,
@@ -18,6 +18,7 @@ import { assignLanes, clipRangeToWeek, type ClippedSegment, type DragMode, type 
 import { useTaskStore, StatusDef, Task, Event, HierarchyWorkspace } from '../../store/useTaskStore';
 import { useIsMobile } from '../../hooks/useIsMobile';
 import WeekRow, { BAR_GAP, BAR_H, DAY_NUM_H, GUTTER_WIDTH } from './WeekRow';
+import { contextMenuPosition } from '../../lib/contextMenuPosition';
 import DayTimeline from './DayTimeline';
 
 type Granularity = 'month' | 'week' | 'day';
@@ -235,6 +236,22 @@ export default function CalendarView({ tasks, events, statuses, workspaces, show
     }
     return map;
   }, [tasks]);
+
+  // Right-click on a day. Desktop only — touch already has the long-press gesture for the same
+  // ground, and offering both from one surface means one of them fires by accident.
+  const [dayMenu, setDayMenu] = useState<{ x: number; y: number; day: Date } | null>(null);
+  useEffect(() => {
+    if (!dayMenu) return;
+    const close = () => setDayMenu(null);
+    // Capture phase, so a click that lands on something interactive still closes this first rather
+    // than leaving a menu open behind whatever it opened.
+    window.addEventListener('click', close, true);
+    window.addEventListener('scroll', close, true);
+    return () => {
+      window.removeEventListener('click', close, true);
+      window.removeEventListener('scroll', close, true);
+    };
+  }, [dayMenu]);
 
   const drillToDay = (day: Date) => {
     setFocusDate(day);
@@ -715,6 +732,7 @@ export default function CalendarView({ tasks, events, statuses, workspaces, show
                 activeDrag={weekDrag}
                 onOpenTask={onOpenTask}
                 onDrillDay={drillToDay}
+                onDayContextMenu={isMobile ? undefined : (x, y, day) => setDayMenu({ x, y, day })}
                 onQuickAddDay={(start, end) =>
                   onRequestCreateTask(start, start.getTime() === end.getTime() ? undefined : end)
                 }
@@ -758,6 +776,46 @@ export default function CalendarView({ tasks, events, statuses, workspaces, show
           </div>
         )}
       </div>
+
+      {dayMenu && (
+        <div
+          className="fixed z-[61] w-48 bg-neutral-900 border border-neutral-800 rounded-xl shadow-2xl py-1"
+          style={contextMenuPosition(dayMenu.x, dayMenu.y)}
+          onClick={(e) => e.stopPropagation()}
+        >
+          <div className="px-3 py-1.5 text-[10px] uppercase tracking-wide text-neutral-500">
+            {formatFullDate(dayMenu.day)}
+          </div>
+          <button
+            onClick={() => {
+              onRequestCreateTask(dayMenu.day);
+              setDayMenu(null);
+            }}
+            className="w-full text-left px-3 py-2 text-xs text-neutral-300 hover:bg-neutral-800/60 cursor-pointer flex items-center gap-2"
+          >
+            <Plus className="w-3.5 h-3.5 text-neutral-500" /> New on this day
+          </button>
+          <button
+            onClick={() => {
+              drillToDay(dayMenu.day);
+              setDayMenu(null);
+            }}
+            className="w-full text-left px-3 py-2 text-xs text-neutral-300 hover:bg-neutral-800/60 cursor-pointer flex items-center gap-2"
+          >
+            <CalendarDays className="w-3.5 h-3.5 text-neutral-500" /> Open this day
+          </button>
+          <button
+            onClick={() => {
+              setFocusDate(dayMenu.day);
+              setGranularity('month');
+              setDayMenu(null);
+            }}
+            className="w-full text-left px-3 py-2 text-xs text-neutral-300 hover:bg-neutral-800/60 cursor-pointer flex items-center gap-2"
+          >
+            <CalendarRange className="w-3.5 h-3.5 text-neutral-500" /> Show its month
+          </button>
+        </div>
+      )}
     </div>
   );
 }

@@ -89,6 +89,9 @@ type WeekRowProps = {
   // A range, not a day: holding a cell and dragging across others draws one. A single tap-and-hold
   // reports the same day twice, which is what a one-day event is.
   onQuickAddDay: (day: Date, endDay: Date) => void;
+  // Right-click on a day. Desktop only by nature — a long press already covers the same ground on
+  // touch, and the two should not both fire from one gesture.
+  onDayContextMenu?: (x: number, y: number, day: Date) => void;
   // The selection currently being drawn, owned by CalendarView so it can be highlighted across week
   // rows — a drag that starts in one week and ends in the next is the normal case, not the edge one.
   pendingRange: { start: Date; end: Date } | null;
@@ -123,6 +126,7 @@ export default function WeekRow({
   onOpenTask,
   onDrillDay,
   onQuickAddDay,
+  onDayContextMenu,
   pendingRange,
   onPendingRangeChange,
   onDragStart,
@@ -376,6 +380,17 @@ export default function WeekRow({
             return (
               <div key={i} className="relative group/day">
                 <button
+                  onContextMenu={
+                    onDayContextMenu
+                      ? (e) => {
+                          // preventDefault so the browser's own menu does not open on top of ours —
+                          // the same thing the Spaces tree does for its own right-click menus.
+                          e.preventDefault();
+                          e.stopPropagation();
+                          onDayContextMenu(e.clientX, e.clientY, day);
+                        }
+                      : undefined
+                  }
                   onClick={() => {
                     // A long-press that just fired onQuickAddDay still generates a trailing click
                     // once the finger lifts — swallow exactly that one rather than also drilling
