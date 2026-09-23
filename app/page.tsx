@@ -30,6 +30,7 @@ import {
   Paperclip,
   Bookmark,
   ClipboardList,
+  MoreHorizontal,
   House as HouseIcon,
   UserCircle,
   LogOut,
@@ -718,6 +719,7 @@ function PageContent() {
     fetchTemplates,
     saveTemplate,
     deleteTemplate,
+    updateTemplate,
     createTaskFromTemplate,
     applyTemplateToTask,
     addTaskAttachment,
@@ -1548,10 +1550,14 @@ function PageContent() {
   // again and could have changed in between.
   const [templateSaveTarget, setTemplateSaveTarget] = useState<Task | null>(null);
   const [templateName, setTemplateName] = useState('');
+  const [taskModalMenuOpen, setTaskModalMenuOpen] = useState(false);
+  const [templatesSubmenuOpen, setTemplatesSubmenuOpen] = useState(false);
   // Either "make a new task from this" or "add this template's subtasks to the task I am in". One
   // picker for both, because the list it shows and the rows it draws are identical — only what the
   // tap does differs, and that is a property of how it was opened.
-  const [templatePicker, setTemplatePicker] = useState<{ mode: 'create' } | { mode: 'apply'; taskId: string } | null>(null);
+  const [templatePicker, setTemplatePicker] = useState<
+    { mode: 'create' } | { mode: 'apply'; taskId: string } | { mode: 'update'; taskId: string } | null
+  >(null);
   useEffect(() => {
     if (activeWorkspaceId) void fetchTemplates(activeWorkspaceId);
   }, [activeWorkspaceId, fetchTemplates]);
@@ -8002,27 +8008,6 @@ function PageContent() {
               <div className="flex items-center gap-2 shrink-0">
                 {/* Mobile-only — the UUID itself is hidden from the main view (see below), so this
                     is the one place left to grab it if it's ever actually needed. */}
-                {/* Templates, inside the open task — which is where ClickUp puts them and where the
-                    user looked for them. They were only on the row's right-click menu, which means
-                    they were unreachable from the one screen where you can see what a template would
-                    be made of. */}
-                <button
-                  onClick={() => {
-                    setTemplateSaveTarget(activeModalTask);
-                    setTemplateName(activeModalTask.title);
-                  }}
-                  title="Save this task as a template"
-                  className="text-[11px] px-2.5 py-1 rounded-lg border cursor-pointer transition flex items-center gap-1.5 text-neutral-400 border-neutral-800 hover:bg-neutral-800/60"
-                >
-                  <Bookmark className="w-3.5 h-3.5" /> Save template
-                </button>
-                <button
-                  onClick={() => setTemplatePicker({ mode: 'apply', taskId: activeModalTask.id })}
-                  title="Add a template's subtasks to this task"
-                  className="text-[11px] px-2.5 py-1 rounded-lg border cursor-pointer transition flex items-center gap-1.5 text-neutral-400 border-neutral-800 hover:bg-neutral-800/60"
-                >
-                  <ClipboardList className="w-3.5 h-3.5" /> Apply template
-                </button>
                 <button
                   onClick={() => {
                     navigator.clipboard.writeText(activeModalTask.id);
@@ -8033,27 +8018,104 @@ function PageContent() {
                 >
                   <Copy className="w-3.5 h-3.5" />
                 </button>
-                {canManageCurrentWorkspace && (
+                {/* One ⋯ menu instead of a row of loose icons — the shape ClickUp uses and the user
+                    asked for. Everything here is something you do to the task as a whole rather than
+                    to a field in it, which is the line that decides what belongs in it. */}
+                <div className="relative">
                   <button
-                    onClick={() =>
-                      setAccessControlTarget({
-                        kind: 'task',
-                        id: activeModalTask.id,
-                        label: 'Task',
-                        isPrivate: activeModalTask.isPrivate,
-                        accessJson: activeModalTask.accessJson,
-                      })
-                    }
-                    title={activeModalTask.isPrivate ? 'Private — manage access' : 'Manage access'}
-                    className={`text-[11px] px-2.5 py-1 rounded border cursor-pointer transition flex items-center gap-1.5 ${
-                      activeModalTask.isPrivate
-                        ? 'bg-neutral-800 text-blue-400 border-neutral-700'
-                        : 'text-neutral-400 border-neutral-800 hover:bg-neutral-800/60'
-                    }`}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setTaskModalMenuOpen((o) => !o);
+                      setTemplatesSubmenuOpen(false);
+                    }}
+                    title="More"
+                    className="text-[11px] px-2.5 py-1 rounded-lg border cursor-pointer transition flex items-center gap-1.5 text-neutral-400 border-neutral-800 hover:bg-neutral-800/60"
                   >
-                    <Lock className="w-3.5 h-3.5" />
+                    <MoreHorizontal className="w-3.5 h-3.5" />
                   </button>
-                )}
+                  {taskModalMenuOpen && (
+                    <>
+                      <div
+                        className="fixed inset-0 z-[60]"
+                        onClick={() => {
+                          setTaskModalMenuOpen(false);
+                          setTemplatesSubmenuOpen(false);
+                        }}
+                      />
+                      <div
+                        onClick={(e) => e.stopPropagation()}
+                        className="absolute right-0 top-9 z-[61] w-56 bg-neutral-900 border border-neutral-800 rounded-xl shadow-2xl p-1"
+                      >
+                        {canManageCurrentWorkspace && (
+                          <button
+                            onClick={() => {
+                              setAccessControlTarget({
+                                kind: 'task',
+                                id: activeModalTask.id,
+                                label: 'Task',
+                                isPrivate: activeModalTask.isPrivate,
+                                accessJson: activeModalTask.accessJson,
+                              });
+                              setTaskModalMenuOpen(false);
+                            }}
+                            className="w-full text-left px-3 py-2 rounded-lg text-xs text-neutral-300 hover:bg-neutral-800/60 cursor-pointer flex items-center gap-2"
+                          >
+                            <Lock className="w-3.5 h-3.5 text-neutral-500" />
+                            {activeModalTask.isPrivate ? 'Private — manage access' : 'Manage access'}
+                          </button>
+                        )}
+
+                        {/* Templates expands in place rather than opening a second floating layer.
+                            A submenu that flies out needs somewhere to fly to, and this menu is
+                            already anchored to the right edge of a dialog. */}
+                        <button
+                          onClick={() => setTemplatesSubmenuOpen((o) => !o)}
+                          className="w-full text-left px-3 py-2 rounded-lg text-xs text-neutral-300 hover:bg-neutral-800/60 cursor-pointer flex items-center gap-2"
+                        >
+                          <Bookmark className="w-3.5 h-3.5 text-neutral-500" />
+                          <span className="flex-1">Templates</span>
+                          {templatesSubmenuOpen ? (
+                            <ChevronDown className="w-3.5 h-3.5 text-neutral-600" />
+                          ) : (
+                            <ChevronRight className="w-3.5 h-3.5 text-neutral-600" />
+                          )}
+                        </button>
+                        {templatesSubmenuOpen && (
+                          <div className="ml-3 pl-2 border-l border-neutral-800 space-y-0.5">
+                            <button
+                              onClick={() => {
+                                setTemplatePicker({ mode: 'apply', taskId: activeModalTask.id });
+                                setTaskModalMenuOpen(false);
+                              }}
+                              className="w-full text-left px-3 py-2 rounded-lg text-xs text-neutral-300 hover:bg-neutral-800/60 cursor-pointer flex items-center gap-2"
+                            >
+                              <ClipboardList className="w-3.5 h-3.5 text-neutral-500" /> Apply a template
+                            </button>
+                            <button
+                              onClick={() => {
+                                setTemplateSaveTarget(activeModalTask);
+                                setTemplateName(activeModalTask.title);
+                                setTaskModalMenuOpen(false);
+                              }}
+                              className="w-full text-left px-3 py-2 rounded-lg text-xs text-neutral-300 hover:bg-neutral-800/60 cursor-pointer flex items-center gap-2"
+                            >
+                              <Bookmark className="w-3.5 h-3.5 text-neutral-500" /> Save as template
+                            </button>
+                            <button
+                              onClick={() => {
+                                setTemplatePicker({ mode: 'update', taskId: activeModalTask.id });
+                                setTaskModalMenuOpen(false);
+                              }}
+                              className="w-full text-left px-3 py-2 rounded-lg text-xs text-neutral-300 hover:bg-neutral-800/60 cursor-pointer flex items-center gap-2"
+                            >
+                              <RefreshCw className="w-3.5 h-3.5 text-neutral-500" /> Update existing template
+                            </button>
+                          </div>
+                        )}
+                      </div>
+                    </>
+                  )}
+                </div>
                 <button
                   onClick={() => setShowActivityPanel((v) => !v)}
                   title={showActivityPanel ? 'Hide Activity & Comments' : 'Show Activity & Comments'}
@@ -9360,7 +9422,11 @@ function PageContent() {
             className="w-full max-w-sm max-h-[calc(100dvh-2rem)] overflow-y-auto bg-neutral-900 border border-neutral-800 rounded-2xl p-3 space-y-1 shadow-2xl"
           >
             <h3 className="text-sm font-semibold text-app-strong px-1 pb-1">
-              {templatePicker.mode === 'apply' ? 'Add a template to this task' : 'New from template'}
+              {templatePicker.mode === 'apply'
+                ? 'Add a template to this task'
+                : templatePicker.mode === 'update'
+                  ? 'Overwrite a template with this task'
+                  : 'New from template'}
             </h3>
             {templates.filter((t) => t.kind === 'task').length === 0 && (
               <p className="text-[11px] text-neutral-500 px-1 py-3">
@@ -9375,6 +9441,27 @@ function PageContent() {
                   <div key={t.id} className="group flex items-center gap-2 rounded-xl hover:bg-neutral-800/50 transition">
                     <button
                       onClick={() => {
+                        if (templatePicker.mode === 'update') {
+                          // Overwrites the template with this task's current outline, keeping its
+                          // name. Someone updating a template is keeping what it is called and
+                          // changing what is inside it.
+                          const target = tasks.find((x) => x.id === templatePicker.taskId);
+                          if (!target || !activeWorkspaceId) return;
+                          const subtasks = tasks
+                            .filter((x) => x.parentId === target.id && !x.archived)
+                            .sort((a, b) => a.order - b.order)
+                            .map((x) => x.title);
+                          void updateTemplate(activeWorkspaceId, t.id, {
+                            title: target.title,
+                            description: target.description ?? null,
+                            status: target.status ?? null,
+                            subtasks,
+                          })
+                            .then(() => showToast(`Updated "${t.name}"`))
+                            .catch((err) => showToast(err instanceof Error ? err.message : 'Could not update'));
+                          setTemplatePicker(null);
+                          return;
+                        }
                         if (templatePicker.mode === 'apply') {
                           void applyTemplateToTask(t.id, templatePicker.taskId);
                           setTemplatePicker(null);

@@ -47,6 +47,33 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
   return NextResponse.json(template);
 }
 
+// Overwrite an existing template with a new snapshot — "update existing template" rather than
+// saving a second one with a similar name. The name is left alone: someone updating a template is
+// keeping the thing it is called and changing what is inside it.
+export async function PATCH(req: Request, { params }: { params: Promise<{ id: string }> }) {
+  const { id } = await params;
+  const userId = await getCurrentUserId();
+  if (!userId) return NextResponse.json({ error: 'Not authenticated' }, { status: 401 });
+  if (!(await getWorkspaceRole(id, userId))) {
+    return NextResponse.json({ error: 'Not a member of this workspace' }, { status: 403 });
+  }
+
+  const body = await req.json().catch(() => ({}));
+  if (typeof body.templateId !== 'string') {
+    return NextResponse.json({ error: 'templateId required' }, { status: 400 });
+  }
+
+  // workspaceId in the where clause, so a template in another workspace cannot be overwritten by id.
+  const result = await prisma.template.updateMany({
+    where: { id: body.templateId, workspaceId: id },
+    data: { payloadJson: JSON.stringify(body.payload ?? {}) },
+  });
+  if (result.count === 0) return NextResponse.json({ error: 'Template not found' }, { status: 404 });
+
+  const template = await prisma.template.findUnique({ where: { id: body.templateId } });
+  return NextResponse.json(template);
+}
+
 export async function DELETE(req: Request, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
   const userId = await getCurrentUserId();

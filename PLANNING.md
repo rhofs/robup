@@ -8741,3 +8741,23 @@ hit area is now 24px.
 **Templates are in the open task now.** They were only on the row's right-click menu, which means
 they were unreachable from the one screen where you can see what a template would be made of — and
 that is where the user looked, and where ClickUp puts them.
+
+### 2026-09-23 (continued) — the task's ⋯ menu
+
+Asked for with a ClickUp screenshot, and the shape is right: one ⋯ menu in the open task rather than a
+row of loose icons. What belongs in it is everything you do to the task *as a whole*, rather than to
+a field in it — which is the line that decides membership rather than "what is left over".
+
+- **Manage access**, moved in from its own icon button.
+- **Templates**, expanding in place: Apply a template, Save as template, Update existing template.
+
+**The submenu expands in place rather than flying out.** A flyout needs somewhere to fly to, and this
+menu is already anchored to the right edge of a dialog — the space it would need is off the screen.
+
+**Update existing template** is new: it overwrites a template's payload with the task's current
+outline and **leaves the name alone**. Someone updating a template is keeping what it is called and
+changing what is inside it. It reuses the same picker as the other two — the list and the rows are
+identical, and only what a tap does differs, which is a property of how the picker was opened.
+
+`workspaceId` is in the `updateMany` where clause as well as the id, so a template in another
+workspace cannot be overwritten by guessing one.

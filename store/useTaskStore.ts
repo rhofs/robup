@@ -535,6 +535,7 @@ interface TaskStore {
   fetchTemplates: (workspaceId: string) => Promise<void>;
   saveTemplate: (workspaceId: string, name: string, kind: TemplateKind, payload: unknown) => Promise<void>;
   deleteTemplate: (workspaceId: string, templateId: string) => Promise<void>;
+  updateTemplate: (workspaceId: string, templateId: string, payload: unknown) => Promise<void>;
   // Creates a whole task from a saved shape, subtasks included, as one undoable step.
   createTaskFromTemplate: (templateId: string, listId: string, spaceId: string) => Promise<void>;
   // Applies a template INTO a task that already exists: its subtasks are added under that task, in
@@ -2309,6 +2310,17 @@ export const useTaskStore = create<TaskStore>((set, get) => {
       if (!res.ok) throw new Error((await res.json().catch(() => ({}))).error || 'Could not save the template');
       const created = await res.json();
       set((state) => ({ templates: [created, ...state.templates] }));
+    },
+
+    updateTemplate: async (workspaceId, templateId, payload) => {
+      const res = await fetch(`/api/workspaces/${workspaceId}/templates`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ templateId, payload }),
+      });
+      if (!res.ok) throw new Error((await res.json().catch(() => ({}))).error || 'Could not update the template');
+      const updated = await res.json();
+      set((state) => ({ templates: state.templates.map((t) => (t.id === templateId ? updated : t)) }));
     },
 
     deleteTemplate: async (workspaceId, templateId) => {
