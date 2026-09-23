@@ -8409,3 +8409,25 @@ the line where the task already is.
 **The general shape, which is the useful part:** when a position can be described two ways, the two
 descriptions will eventually disagree at the boundary between them. Pick one and convert at the
 edge — the alternative is a threshold fight between two states that mean the same thing.
+
+### 2026-09-23 — the remaining flicker was a feedback loop, not a threshold
+
+Better after the canonical-gap fix, still flickering. The cause is the indicator itself: showing it
+inserts a real gap, which pushes every row below it down — and the rows moving is exactly what the
+hit test reads on the very next pointer event. Decide, move the world, re-measure the moved world,
+decide again. Framer's layout animations make it worse by moving the rows *gradually*, so several
+events land mid-flight.
+
+Sticking to a decision for 18px of pointer travel breaks the loop at its only fixed point: **the
+pointer is the one thing in this system that does not move by itself.** Nesting anchors too — without
+that, the middle of a row re-decided on every event, which is where the loop started.
+
+**Worth keeping:** an indicator that changes layout is inside the loop it is reporting on. Either it
+must not affect layout, or the decision has to be held independently of geometry. This took the
+second route because the gap opening is the thing that made the target findable in the first place.
+
+### Same session — the chat composer scrolled away on mobile
+
+It is anchored to the panel and not to the message list, so it cannot scroll on its own; what moved
+was everything at once. Scrolling past the top of the messages chained to the page behind, which
+dragged the whole conversation out of view. `overscroll-contain` on the list.

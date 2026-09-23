@@ -3369,7 +3369,22 @@ function PageContent() {
       return { targetId, position: 'below' } as const;
     };
 
+    // Where the pointer was when the current gap was chosen, and how far it has to move before
+    // another one may be chosen.
+    //
+    // This is the fix for the remaining flicker, and the cause is a feedback loop rather than a
+    // threshold: showing the indicator inserts a real gap, which pushes every row below it down, and
+    // the rows moving is what the hit test reads on the very next event. Decide, move the world,
+    // re-measure the moved world, decide again. Framer's layout animations make it worse by moving
+    // the rows gradually, so several events land mid-flight.
+    //
+    // Sticking to a decision for 18px of pointer travel breaks the loop at its only weak point: the
+    // pointer is the one thing in this that does not move by itself.
+    let anchorY: number | null = null;
+    const STICKY_PX = 18;
+
     const onPointerMove = (e: PointerEvent) => {
+      if (anchorY !== null && Math.abs(e.clientY - anchorY) < STICKY_PX) return;
       // elementsFromPoint (plural), not elementFromPoint: the drag overlay follows the cursor and is
       // portaled to the body, so the topmost element under the pointer during a drag is always it,
       // and `.closest` from there finds no row at all.
@@ -3393,10 +3408,12 @@ function PageContent() {
 
       const targetId = el?.dataset.taskRow ?? null;
       if (!el || !targetId || targetId === activeDragTask.id) {
+        anchorY = null;
         setTaskDropIndicator(null);
         return;
       }
       if (forced) {
+        anchorY = e.clientY;
         setTaskDropIndicator(canonical(targetId, forced));
         return;
       }
@@ -3406,9 +3423,18 @@ function PageContent() {
       // nesting becomes the thing that is impossible instead.
       const safeEdge = Math.min(edge, rect.height * 0.4);
       const y = e.clientY - rect.top;
-      if (y < safeEdge) setTaskDropIndicator(canonical(targetId, 'above'));
-      else if (y > rect.height - safeEdge) setTaskDropIndicator(canonical(targetId, 'below'));
-      else setTaskDropIndicator(null);
+      if (y < safeEdge) {
+        anchorY = e.clientY;
+        setTaskDropIndicator(canonical(targetId, 'above'));
+      } else if (y > rect.height - safeEdge) {
+        anchorY = e.clientY;
+        setTaskDropIndicator(canonical(targetId, 'below'));
+      } else {
+        // Nesting is a decision too, and it also has to stick: without an anchor here the middle of
+        // a row re-decides on every event, which is where the loop started.
+        anchorY = e.clientY;
+        setTaskDropIndicator(null);
+      }
     };
 
     window.addEventListener('pointermove', onPointerMove);

@@ -544,7 +544,12 @@ export default function ChatPanel() {
       <div
         ref={scrollRef}
         onScroll={handleMessagesScroll}
-        className={`${isMobile ? 'absolute inset-0' : 'flex-1'} overflow-y-auto overflow-x-hidden`}
+        // overscroll-contain: without it, scrolling past the top or bottom of the messages chains
+        // the scroll to the page behind, and on a phone that drags the whole conversation — composer
+        // included — out of view. The composer is anchored to the panel, not to the list, so it
+        // cannot scroll away on its own; what moves is everything at once. Reported as the composer
+        // disappearing when scrolling up.
+        className={`${isMobile ? 'absolute inset-0' : 'flex-1'} overflow-y-auto overflow-x-hidden overscroll-contain`}
         onClick={() => setHeldMessageId(null)}
       >
       <div
