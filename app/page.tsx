@@ -3432,6 +3432,19 @@ function PageContent() {
         .map((n) => n.closest('[data-task-row]'))
         .find((n): n is HTMLElement => n instanceof HTMLElement) ?? null;
 
+    // Every row in the SAME list as the given one, in document order.
+    //
+    // Not `document.querySelectorAll` across the page, which is what this used to be. A task modal is
+    // rendered on top of the board it was opened from, so the document contains both the subtask
+    // rows and the board's own rows — and "the row after this one" could be a task from an entirely
+    // different list, sitting behind the dialog. Reordering then resolved to a task with a different
+    // parent, which reorderTaskRelativeTo correctly refuses, so dropping a subtask did nothing at
+    // all. Reported as subtasks simply not being reorderable.
+    const siblingRows = (row: HTMLElement): HTMLElement[] => {
+      const container = row.parentElement?.parentElement ?? document.body;
+      return Array.from(container.querySelectorAll('[data-task-row]')) as HTMLElement[];
+    };
+
     // One name per gap.
     //
     // "Below row A" and "above row B" are two descriptions of the same place, and the code produced
@@ -3444,7 +3457,9 @@ function PageContent() {
     // after the last row, which has nothing following it to be above.
     const canonical = (targetId: string, position: 'above' | 'below') => {
       if (position === 'above') return { targetId, position } as const;
-      const rows = Array.from(document.querySelectorAll('[data-task-row]')) as HTMLElement[];
+      const anchorRow = document.querySelector(`[data-task-row="${targetId}"]`) as HTMLElement | null;
+      if (!anchorRow) return { targetId, position } as const;
+      const rows = siblingRows(anchorRow);
       const i = rows.findIndex((r) => r.dataset.taskRow === targetId);
       const next = i >= 0 ? rows[i + 1] : undefined;
       const nextId = next?.dataset.taskRow;

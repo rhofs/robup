@@ -523,6 +523,19 @@ function TaskRowImpl({
           {doneToggle}
 
           <div className="font-medium flex items-center gap-2 truncate pr-4 text-neutral-200">
+            {/* A visible grip, on hover. The whole desktop row has always been draggable, which
+                works and says nothing — and a capability nobody can see is one nobody has. Reported
+                as there being "no way" to reorder subtasks, which was half true: the machinery was
+                there and nothing pointed at it.
+                
+                -ml-1 so it sits in the row's own padding rather than shifting the title, and the
+                column keeps its width whether or not the cursor is over it. */}
+            <span
+              title="Drag to reorder"
+              className="shrink-0 -ml-1 text-neutral-700 group-hover:text-neutral-500 cursor-grab active:cursor-grabbing transition-colors"
+            >
+              <GripVertical className="w-3.5 h-3.5" />
+            </span>
             {editingTitle ? (
               <input
                 autoFocus

@@ -8761,3 +8761,28 @@ identical, and only what a tap does differs, which is a property of how the pick
 
 `workspaceId` is in the `updateMany` where clause as well as the id, so a template in another
 workspace cannot be overwritten by guessing one.
+
+### 2026-09-23 (continued) — subtasks could not be reordered, and the cause was mine
+
+"Jeg har ikke noen mulighet til å endre rekkefølgen av subtasks" — needed before templates are worth
+saving, since a template is an ordered checklist.
+
+The machinery was all there: subtask rows are real `TaskRow`s inside the same `DndContext`, and
+`reorderTaskRelativeTo` handles them correctly. What broke it was the canonical-gap lookup added
+three days ago, which asked `document.querySelectorAll('[data-task-row]')` — **across the whole
+document**.
+
+A task modal is rendered on top of the board it was opened from, so the document holds both the
+subtask rows and the board's own rows behind the dialog. "The row after this one" could therefore be
+a task from an entirely different list, and reordering resolved to a task with a different parent —
+which `reorderTaskRelativeTo` correctly refuses. So dropping a subtask did nothing at all, silently.
+
+Now scoped to the rows sharing the dragged row's own container.
+
+**The general shape:** a document-wide query inside a component that exists more than once on screen
+is a bug waiting for the second instance. There was only ever one task list until the modal started
+rendering another one.
+
+**And a visible grip on desktop rows.** The whole row has always been draggable, which works and says
+nothing — a capability nobody can see is one nobody has, and "there is no way to do this" was half
+true for exactly that reason.
