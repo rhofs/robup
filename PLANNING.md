@@ -8663,3 +8663,42 @@ and the rows are identical, and only what a tap does differs.
 - **9 — returning to My Tasks forgets the last Space/List** on desktop.
 - **10 — an occasional stray animation on the task list**, unprompted. Likely the 30s poll replacing
   rows that framer then animates; needs watching rather than a guess.
+
+## 2026-09-23 (continued) — item 5: why startup got slow after the import
+
+Taken first because it is paid on every launch. Three causes, all found by reading rather than
+guessing, and all real.
+
+**The Task table had no indexes at all** — nor did Comment, Event, ChatMessage or Doc. **SQLite does
+not index foreign keys on its own**, which is easy to assume it does because most other databases
+effectively do. Every task query was therefore a full table scan: invisible with a few hundred rows,
+and exactly what turns into a crawl when an import brings in thousands.
+
+Added `[listId, deletedAt]` and `[parentId]` on Task, plus the obvious ones elsewhere. The pair is
+what the common query actually asks for: every read filters out deleted rows and almost every one
+also scopes to a list. **Indexes only — no table is read, written or reshaped, and an index can be
+added to a live database without touching a row.**
+
+**Two quadratic loops on the client:**
+
+- `FolderTree` counted tasks per list with `tasks.filter(...)` *inside* the map over lists — lists ×
+  tasks comparisons on every render of the tree, which is every poll, every edit and every drag
+  frame. Now counted once into a Map. Its folder counts used `Array.includes` inside a filter, which
+  is a scan inside a scan; now a Set.
+- `buildMentionOptions` looked up each task's parent with `tasks.find(...)` inside the loop over
+  tasks — O(n²), **on every character typed into a mention**. Now a Map built once. This one was
+  mine, from four days ago.
+
+**A gotcha worth recording:** `new Map()` failed to compile in `FolderTree.tsx` because the lucide
+icon `Map` shadows the built-in constructor in that file. The error named neither the icon nor the
+import. Aliased to `MapIcon`.
+
+### What is NOT addressed, and would be next
+
+`GET /api/tasks` still returns **every task in every workspace the user belongs to**, with assignees
+and attachments, and filters visibility in JS afterwards. The indexes make the query cheap; the
+payload is still whatever the account has. If startup is still slow after this, that is the next
+thing to attack — and it should be measured before it is changed, since the honest fix (load the
+active workspace first, the rest behind it) touches the store's assumption that `tasks` is complete.
+
+**Needs a migration on production.**

@@ -48,6 +48,10 @@ export function buildMentionOptions({
 
   // Where each task lives, so two subtasks with the same name can be told apart. In a real workspace
   // a name like "Påsyn" repeats across every video, and without this the list is identical rows.
+  // Parents by id, built once. It was `tasks.find(...)` inside the loop over tasks — O(n²), which is
+  // invisible with a few hundred tasks and several million comparisons per keystroke once a real
+  // import has landed. The mention picker runs this on every character typed.
+  const taskById = new Map(tasks.map((t) => [t.id, t] as const));
   const listNameById = new Map(
     workspaces.flatMap((w) => w.spaces).flatMap((sp) => sp.lists.map((l) => [l.id, l.name] as const))
   );
@@ -57,7 +61,7 @@ export function buildMentionOptions({
     if (listIds && !listIds.has(t.listId)) continue;
     const score = q ? scoreMatch(t.title, q) : 1;
     if (score === null) continue;
-    const parent = t.parentId ? tasks.find((p) => p.id === t.parentId) : null;
+    const parent = t.parentId ? taskById.get(t.parentId) : null;
     results.push({
       kind: 'task',
       id: t.id,

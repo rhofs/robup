@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useDraggable, useDroppable } from '@dnd-kit/core';
 import FloatingPopover from './FloatingPopover';
 import {
@@ -44,7 +44,10 @@ import {
   Wifi,
   Globe,
   Compass,
-  Map,
+  // Aliased: the bare name shadows the built-in Map constructor in this file, which fails at the
+  // one place that builds a real Map and nowhere else — an error that names neither the icon nor
+  // the import.
+  Map as MapIcon,
   Home,
   Building,
   ShoppingCart,
@@ -269,7 +272,7 @@ export const FOLDER_ICON_MAP: Record<string, LucideIcon> = {
   wifi: Wifi,
   globe: Globe,
   compass: Compass,
-  map: Map,
+  map: MapIcon,
   home: Home,
   building: Building,
   'shopping-cart': ShoppingCart,
@@ -451,6 +454,17 @@ export default function FolderTree(props: FolderTreeProps) {
 function FolderLevel(props: FolderTreeProps & { parentId: string | null; depth: number }) {
   const { space, tasks, activeView, activeListIds, calendarVisibleListIds, onNavigateList, toggleCalendarList, parentId, depth, showArchived } = props;
   const { createList, createFolder, createSpaceDoc, renameList } = useTaskStore();
+  // Counted once per render of this level instead of once per list row. It was
+  // `tasks.filter(...)` inside the map over lists — lists × tasks comparisons every time the tree
+  // re-rendered, which is every poll, every edit and every drag frame.
+  const topLevelCountByList = useMemo(() => {
+    const counts = new Map<string, number>();
+    for (const t of tasks) {
+      if (t.parentId !== null || t.archived) continue;
+      counts.set(t.listId, (counts.get(t.listId) ?? 0) + 1);
+    }
+    return counts;
+  }, [tasks]);
   const [addMode, setAddMode] = useState<'list' | 'folder' | 'doc' | null>(null);
   const [draft, setDraft] = useState('');
   const [createMenuOpen, setCreateMenuOpen] = useState(false);
@@ -498,7 +512,7 @@ function FolderLevel(props: FolderTreeProps & { parentId: string | null; depth: 
         type SidebarItem = { key: string; order: number; render: () => React.ReactNode };
         const listItems: SidebarItem[] = lists.map((list) => {
           const isActive = activeView === 'board' && activeListIds.has(list.id);
-          const count = tasks.filter((t) => t.listId === list.id && t.parentId === null && !t.archived).length;
+          const count = topLevelCountByList.get(list.id) ?? 0;
           return {
             key: list.id,
             order: list.order,
@@ -806,7 +820,10 @@ function FolderRow(props: FolderTreeProps & { folder: HierarchyFolder; parentId:
   const listIdsUnder = collectListIdsUnder(space, folder.id);
   const allChecked = listIdsUnder.length > 0 && listIdsUnder.every((id) => calendarVisibleListIds.has(id));
   const someChecked = listIdsUnder.some((id) => calendarVisibleListIds.has(id));
-  const folderTaskCount = tasks.filter((t) => t.parentId === null && !t.archived && listIdsUnder.includes(t.listId)).length;
+  // A Set, not Array.includes: this runs per folder, over every task, and `includes` makes it a scan
+  // inside a scan. Same reason the per-list counts are precomputed rather than filtered per row.
+  const listIdsUnderSet = new Set(listIdsUnder);
+  const folderTaskCount = tasks.filter((t) => t.parentId === null && !t.archived && listIdsUnderSet.has(t.listId)).length;
 
   const commit = () => {
     setEditing(false);

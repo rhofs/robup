@@ -653,6 +653,15 @@ model Task {
 
   createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime @updatedAt @map("updated_at")
+
+  // SQLite does not index foreign keys on its own, and this table had no indexes at all — so every
+  // task query was a full table scan. Harmless with a few hundred rows and the reason startup
+  // slowed to a crawl after a real import brought in thousands.
+  //
+  // listId+deletedAt together: every read of this table filters out deleted rows, and almost every
+  // one also scopes to a list, so the pair is what the common query actually asks for.
+  @@index([listId, deletedAt])
+  @@index([parentId])
 }
 
 // Planner "Event" — happens on a given day, clickable for details like Google Calendar, but
@@ -693,6 +702,8 @@ model Event {
   deletedAt   DateTime? @map("deleted_at")
   createdAt   DateTime  @default(now()) @map("created_at")
   updatedAt   DateTime  @updatedAt @map("updated_at")
+
+  @@index([workspaceId])
 }
 
 // One row per (Task, assignee) who's Google-connected — the Task itself is the single source of
@@ -759,6 +770,8 @@ model Comment {
   author   User?   @relation(fields: [authorId], references: [id], onDelete: SetNull)
 
   createdAt DateTime @default(now()) @map("created_at")
+
+  @@index([taskId])
 }
 
 // 10. Navngitte dokumenter — enten under en task (autolagring i task-modalen), eller løsrevet i en
@@ -827,6 +840,9 @@ model Doc {
 
   createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@index([spaceId, deletedAt])
+  @@index([taskId])
 }
 
 // Selection-anchored comments on a Doc's own content — separate from Comment (Task-only, no
@@ -988,6 +1004,9 @@ model ChatMessage {
   attachments ChatAttachment[]
 
   createdAt DateTime @default(now()) @map("created_at")
+
+  // Messages are always read newest-first within one channel.
+  @@index([channelId, createdAt])
 }
 
 model ChatReaction {
