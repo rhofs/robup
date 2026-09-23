@@ -8489,3 +8489,20 @@ a list you scan twice.
 **The three pickers are now capped and scrollable.** 168 buttons at 28px in an uncapped wrap grid is
 a dialog taller than the screen; the size of the set is a property of the picker, not only of the
 list.
+
+### 2026-09-23 (continued) — dates hid the year, which only mattered once an import existed
+
+Date badges showed "4. mar" with no year, reachable only by opening the picker. Noticed straight
+after a CSV import, which is exactly when it starts to matter: an import brings in whatever dates the
+source had, and a bare day-and-month says nothing about whether a task was last year or next.
+
+Dropping the year was right for the ordinary case — almost every date in a task list is within a few
+months, and a year on every badge is noise. It became wrong the moment dates from other years existed
+in quantity.
+
+Now the year appears only when it is not the current one — the same rule the chat day separators
+already use, and the same reason: **show the part that is surprising, leave out the part that is
+assumed.**
+
+A fair note on the original choice: it was not wrong when it was made. It was right for the data the
+app had, and the import changed the data.

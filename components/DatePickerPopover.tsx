@@ -41,7 +41,20 @@ const addDays = (d: Date, n: number) => {
 const isSameDay = (a: Date | null, b: Date | null) =>
   !!a && !!b && a.getFullYear() === b.getFullYear() && a.getMonth() === b.getMonth() && a.getDate() === b.getDate();
 
-const formatShort = (d: Date) => `${d.getDate()}. ${MONTH_LABELS[d.getMonth()].slice(0, 3)}`;
+// Day and month, plus the year whenever it is not this one.
+//
+// Dropping the year is right for the ordinary case — almost every date in a task list is within a few
+// months, and "4. mar 2026" on every badge is noise. It stops being right the moment dates from other
+// years exist, which they now do: an import brings in whatever the source had, and "4. mar" on an
+// imported task says nothing about whether it was last year or next. The year was reachable only by
+// opening the picker.
+//
+// Same rule the chat day separators already use, and the same reason: show the part that is
+// surprising, leave out the part that is assumed.
+const formatShort = (d: Date) => {
+  const base = `${d.getDate()}. ${MONTH_LABELS[d.getMonth()].slice(0, 3)}`;
+  return d.getFullYear() === new Date().getFullYear() ? base : `${base} ${d.getFullYear()}`;
+};
 
 // Quarter-hour options for the time dropdown below — a plain, quick "pick a common time" list.
 // The text input right next to it still accepts anything (e.g. 14:07), this is just a shortcut.
