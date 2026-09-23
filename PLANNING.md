@@ -8620,3 +8620,46 @@ it was written for.
 **The real fix stays deferred**: a native Google sign-in plugin, where Android performs the sign-in
 outside the WebView. It needs an OAuth client tied to the app's signing certificate, so it belongs
 with the signed release build rather than the debug APK.
+
+## 2026-09-23 (continued) — a long feedback list, worked through in order of clarity
+
+Eleven items plus a twelfth mid-way. Five are done, and the rest are named below with what each
+actually needs, rather than half-attempted.
+
+**11 — dragging to select text in a title dragged the task.** The whole desktop row is the drag
+handle, which is right for grabbing a task and wrong the moment the row contains a field. Now a
+pointerdown whose target is inside an input, textarea, select or contenteditable does not start a
+drag. Checked on the target rather than by excluding a region: the row's editable parts move around,
+and a list of coordinates would go stale the next time a column is added.
+
+**6 — opening a task on mobile landed in the comments.** `showActivityPanel` defaults to on, which is
+right on desktop where the panel sits *beside* the task and wrong on a phone, where there is no room
+for two panes so it *replaces* it. Reset per opened task rather than defaulted once: on a phone this
+is not a layout preference, it is where you are inside the task, and each task opens at the beginning
+of itself.
+
+**4 — Home is now Me.** "Home" says "the front page of the app", which is not what it is: it is your
+half, sitting opposite the company's. With a person icon rather than a house, the pair reads as a
+pair.
+
+**3 — Start page setting.** Me, Office or Planner, per device, shown only on mobile since desktop has
+one tree and a switcher and no "which tab" to choose. Written explicitly including the default — the
+layout preference already cost a round on that exact point.
+
+**12 — Apply a template into an existing task**, alongside Save as template in the same menu, the way
+ClickUp does it (screenshot supplied). Its subtasks are added under the task, in order, after
+whatever is there; the template's own title and description are left alone, because you are adding a
+checklist to a piece of work rather than replacing the work. One picker serves both modes — the list
+and the rows are identical, and only what a tap does differs.
+
+### Named, not done
+
+- **1 — tasks look flat on mobile.** Visual, and worth its own pass alongside the desktop stage 2.
+- **2 — DM transition on mobile** enters at an angle and the layer behind jumps on the way back.
+- **5 — slow startup with many tasks.** Almost certainly the whole task list being fetched at once;
+  this is a real performance piece, not a tweak, and guessing at it would waste the round.
+- **7 — emoji button for DMs on desktop.**
+- **8 — the date picker attaches to the wrong column** when several custom date fields sit together.
+- **9 — returning to My Tasks forgets the last Space/List** on desktop.
+- **10 — an occasional stray animation on the task list**, unprompted. Likely the 30s poll replacing
+  rows that framer then animates; needs watching rather than a guess.

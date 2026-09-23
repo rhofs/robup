@@ -498,6 +498,20 @@ function TaskRowImpl({
           data-task-row={task.id}
           {...attributes}
           {...listeners}
+          // A drag must not start from something you are typing in.
+          //
+          // The whole desktop row is the drag handle, which is right for grabbing a task and wrong
+          // the moment the row contains a field: selecting part of a title by dragging across it
+          // started dragging the task instead, so the text could not be selected at all. Reported
+          // exactly that way.
+          //
+          // Checked on the event's target rather than by excluding a region, because the row's
+          // editable parts move around — title, dates, custom fields — and a list of coordinates
+          // would go stale the next time a column is added.
+          onPointerDownCapture={(e) => {
+            const el = e.target as HTMLElement | null;
+            if (el?.closest('input, textarea, select, [contenteditable="true"]')) e.stopPropagation();
+          }}
           onClick={onOpen}
           onContextMenu={(e) => onContextMenu?.(e, task)}
           className={`grid items-center px-4 py-2.5 text-xs hover:bg-neutral-800/50 transition-colors duration-150 cursor-pointer group ${

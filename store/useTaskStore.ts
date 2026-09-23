@@ -537,6 +537,10 @@ interface TaskStore {
   deleteTemplate: (workspaceId: string, templateId: string) => Promise<void>;
   // Creates a whole task from a saved shape, subtasks included, as one undoable step.
   createTaskFromTemplate: (templateId: string, listId: string, spaceId: string) => Promise<void>;
+  // Applies a template INTO a task that already exists: its subtasks are added under that task, in
+  // order, after whatever is already there. The template's own title and description are left alone
+  // — you are adding a checklist to a piece of work, not replacing the work.
+  applyTemplateToTask: (templateId: string, taskId: string) => Promise<void>;
   addTaskAttachment: (taskId: string, file: File) => Promise<void>;
   removeTaskAttachment: (taskId: string, attachmentId: string) => Promise<void>;
   deleteList: (spaceId: string, listId: string) => Promise<void>;
@@ -2291,6 +2295,27 @@ export const useTaskStore = create<TaskStore>((set, get) => {
         // order whatever the network returns first.
         for (const title of payload.subtasks) {
           await get().optimisticCreateTask(title, listId, spaceId, parentId);
+        }
+      });
+    },
+
+    applyTemplateToTask: async (templateId, taskId) => {
+      const template = get().templates.find((t) => t.id === templateId);
+      if (!template || template.kind !== 'task') return;
+      const parent = get().tasks.find((t) => t.id === taskId);
+      if (!parent) return;
+      const payload = parseTaskTemplate(template.payloadJson);
+      if (payload.subtasks.length === 0) return;
+      const space = get()
+        .workspaces.flatMap((w) => w.spaces)
+        .find((sp) => sp.lists.some((l) => l.id === parent.listId));
+      if (!space) return;
+      await useHistoryStore.getState().transaction(`Apply template "${template.name}"`, async () => {
+        // Sequential, same as creating from a template: subtasks carry an order, and firing them
+        // together makes that order whatever the network returns first — which is precisely the
+        // thing a checklist template exists to get right.
+        for (const title of payload.subtasks) {
+          await get().optimisticCreateTask(title, parent.listId, space.id, taskId);
         }
       });
     },

@@ -29,6 +29,7 @@ import {
   UserPlus,
   Paperclip,
   Bookmark,
+  ClipboardList,
   House as HouseIcon,
   UserCircle,
   LogOut,
@@ -81,6 +82,7 @@ const BOOT_MAX_PX = 340;
 const BOOT_RING_BOX = `min(${BOOT_RING_BOX_SHARE * 100}vw, ${BOOT_RING_BOX_SHARE * 100}vh, ${BOOT_MAX_PX}px)`;
 import { setNativeBackHandler } from '../lib/nativeBack';
 import { setMentionJumpHandler } from '../lib/mentionJump';
+import { readStartPage } from '../lib/startPage';
 import OfficeContext from '../components/mobile/OfficeContext';
 import HomeContext from '../components/mobile/HomeContext';
 import { CHAT_PUSH_MS, CHAT_PUSH_EASE } from '../lib/chatTransition';
@@ -717,6 +719,7 @@ function PageContent() {
     saveTemplate,
     deleteTemplate,
     createTaskFromTemplate,
+    applyTemplateToTask,
     addTaskAttachment,
     removeTaskAttachment,
     updateList,
@@ -1545,7 +1548,10 @@ function PageContent() {
   // again and could have changed in between.
   const [templateSaveTarget, setTemplateSaveTarget] = useState<Task | null>(null);
   const [templateName, setTemplateName] = useState('');
-  const [templatePickerOpen, setTemplatePickerOpen] = useState(false);
+  // Either "make a new task from this" or "add this template's subtasks to the task I am in". One
+  // picker for both, because the list it shows and the rows it draws are identical — only what the
+  // tap does differs, and that is a property of how it was opened.
+  const [templatePicker, setTemplatePicker] = useState<{ mode: 'create' } | { mode: 'apply'; taskId: string } | null>(null);
   useEffect(() => {
     if (activeWorkspaceId) void fetchTemplates(activeWorkspaceId);
   }, [activeWorkspaceId, fetchTemplates]);
@@ -2109,6 +2115,19 @@ function PageContent() {
     localStorage.setItem(ACTIVITY_PANEL_STORAGE_KEY, String(showActivityPanel));
   }, [showActivityPanel]);
 
+  // Opening a task on mobile shows the TASK.
+  //
+  // showActivityPanel defaults to on, which is right on desktop where the panel sits beside the task
+  // — and wrong on a phone, where there is no room for two panes so the panel *replaces* it. Every
+  // task therefore opened on its comments. Reported as exactly that.
+  //
+  // Reset per task rather than defaulted once: on a phone this is not a layout preference, it is
+  // where you are inside the task, and each task you open starts at the beginning of itself.
+  const openedModalTaskId = modalTaskStack[modalTaskStack.length - 1] ?? null;
+  useEffect(() => {
+    if (isMobile && openedModalTaskId) setShowActivityPanel(false);
+  }, [isMobile, openedModalTaskId]);
+
   // Calendar filter defaults to "everything visible"; newly created lists join the visible set too.
   useEffect(() => {
     const allListIds = workspaces.flatMap((w) => w.spaces.flatMap((s) => s.lists.map((l) => l.id)));
@@ -2509,6 +2528,17 @@ function PageContent() {
     if (!coldLaunchHomeRef.current || !useContexts || !isMobile) return;
     if (!currentUserId || workspaces.length === 0) return;
     coldLaunchHomeRef.current = false;
+    // Where a cold launch lands, per the Start page setting. Read here rather than at the moment the
+    // flag was set, because this is the point where the workspaces it may need actually exist.
+    const start = readStartPage();
+    if (start === 'planner') {
+      setActiveView('calendar');
+      return;
+    }
+    if (start === 'office' && hasRealWorkspace) {
+      openOfficeContext();
+      return;
+    }
     void openHome();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [useContexts, isMobile, currentUserId, workspaces.length]);
@@ -2535,8 +2565,11 @@ function PageContent() {
       const sheetOpen = mobileSpacesOpen || mobilePersonalSpacesOpen;
       tabs.push({
         id: 'board',
-        label: 'Home',
-        icon: HouseIcon,
+        // "Me", not "Home". Home says "the front page of the app", which is not what this is — it is
+        // your own half of it, sitting opposite the company's. The user's call, and it makes the
+        // pair read as a pair.
+        label: 'Me',
+        icon: UserCircle,
         onClick: () => void openHome(),
         active: !!currentWorkspace?.isPersonal && (activeView === 'board' || mobilePersonalSpacesOpen),
         // DMs are yours, so they belong to Home no matter which workspace is active.
@@ -4844,7 +4877,7 @@ function PageContent() {
               <span className="md:hidden text-lg font-semibold text-app-strong shrink-0">
                 {/* "Home" only when you are actually on Home. A launcher screen gets its own name —
                     it is a place you navigated to, and labelling it Home says the opposite. */}
-                {DEEP_LAUNCHER_VIEWS.includes(activeView) ? mobileHeaderTitle : 'Home'}
+                {DEEP_LAUNCHER_VIEWS.includes(activeView) ? mobileHeaderTitle : 'Me'}
               </span>
             )
           ) : (
@@ -6159,7 +6192,7 @@ function PageContent() {
                 {/* Next to the task count rather than hidden in a menu: a template is only worth
                     having if it is easier to reach than retyping the list it replaces. */}
                 <button
-                  onClick={() => setTemplatePickerOpen(true)}
+                  onClick={() => setTemplatePicker({ mode: 'create' })}
                   title="New from template"
                   className="text-[11px] rounded-lg px-3 py-2 border border-neutral-800 text-neutral-400 hover:text-neutral-200 hover:bg-neutral-800/60 cursor-pointer flex items-center gap-1.5 transition"
                 >
@@ -7120,6 +7153,15 @@ function PageContent() {
               className="w-full text-left px-3 py-1.5 text-xs text-neutral-300 hover:bg-neutral-800/60 cursor-pointer flex items-center gap-2"
             >
               <Bookmark className="w-3.5 h-3.5" /> Save as template
+            </button>
+            <button
+              onClick={() => {
+                setTemplatePicker({ mode: 'apply', taskId: taskMenu.task.id });
+                setTaskMenu(null);
+              }}
+              className="w-full text-left px-3 py-1.5 text-xs text-neutral-300 hover:bg-neutral-800/60 cursor-pointer flex items-center gap-2"
+            >
+              <ClipboardList className="w-3.5 h-3.5" /> Apply template
             </button>
             <button
               onClick={() => {
@@ -8941,7 +8983,7 @@ function PageContent() {
                   <ChevronDown className="w-4 h-4 text-neutral-500 shrink-0" />
                 </span>
               ) : (
-                <span className="text-lg font-semibold text-app-strong shrink-0">Home</span>
+                <span className="text-lg font-semibold text-app-strong shrink-0">Me</span>
               )}
               <span className="flex items-center gap-1.5 ml-auto shrink-0">
                 <span className="w-9 h-9 rounded-full flex items-center justify-center text-neutral-400">
@@ -9287,16 +9329,18 @@ function PageContent() {
       )}
 
       {/* Pick a template to create from. */}
-      {templatePickerOpen && (
+      {templatePicker && (
         <div
           className="fixed inset-0 z-[70] flex items-center justify-center bg-scrim/70 backdrop-blur-xs p-3"
-          onClick={() => setTemplatePickerOpen(false)}
+          onClick={() => setTemplatePicker(null)}
         >
           <div
             onClick={(e) => e.stopPropagation()}
             className="w-full max-w-sm max-h-[calc(100dvh-2rem)] overflow-y-auto bg-neutral-900 border border-neutral-800 rounded-2xl p-3 space-y-1 shadow-2xl"
           >
-            <h3 className="text-sm font-semibold text-app-strong px-1 pb-1">New from template</h3>
+            <h3 className="text-sm font-semibold text-app-strong px-1 pb-1">
+              {templatePicker.mode === 'apply' ? 'Add a template to this task' : 'New from template'}
+            </h3>
             {templates.filter((t) => t.kind === 'task').length === 0 && (
               <p className="text-[11px] text-neutral-500 px-1 py-3">
                 No templates yet. Right-click any task and choose &ldquo;Save as template&rdquo;.
@@ -9310,13 +9354,19 @@ function PageContent() {
                   <div key={t.id} className="group flex items-center gap-2 rounded-xl hover:bg-neutral-800/50 transition">
                     <button
                       onClick={() => {
+                        if (templatePicker.mode === 'apply') {
+                          void applyTemplateToTask(t.id, templatePicker.taskId);
+                          setTemplatePicker(null);
+                          showToast(`Added "${t.name}"`);
+                          return;
+                        }
                         const listId = [...activeListIds][0] ?? currentSpace?.lists[0]?.id;
                         if (!listId || !currentSpace) {
                           showToast('Open a list first — a task has to be created somewhere.');
                           return;
                         }
                         void createTaskFromTemplate(t.id, listId, currentSpace.id);
-                        setTemplatePickerOpen(false);
+                        setTemplatePicker(null);
                       }}
                       className="min-w-0 flex-1 text-left px-3 py-2.5 cursor-pointer"
                     >

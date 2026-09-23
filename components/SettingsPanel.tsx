@@ -19,6 +19,7 @@ import { useInstallPrompt } from '../hooks/useInstallPrompt';
 import { useIsMobile } from '../hooks/useIsMobile';
 import { Capacitor } from '@capacitor/core';
 import ColorSwatchPicker from './ColorSwatchPicker';
+import { readStartPage, setStartPage, type StartPage } from '../lib/startPage';
 import { copyToClipboard } from '../lib/copyToClipboard';
 
 // Moved here from the now-deleted AccountSettingsPanel.tsx along with the rest of the Account
@@ -379,6 +380,10 @@ export default function SettingsPanel({
   // --- Workspace identity (backlog #2) --- org type + work email, set at creation, editable
   // here by Owner/Admin only (server-enforced too, see PATCH /api/workspaces/[id]/route.ts).
   const [emailDraft, setEmailDraft] = useState(workspace.workEmail ?? '');
+  // Read after mount for the same reason every other stored preference here is: localStorage does
+  // not exist while the server renders this.
+  const [start, setStart] = useState<StartPage>('me');
+  useEffect(() => setStart(readStartPage()), []);
   const [logoDraft, setLogoDraft] = useState(workspace.avatarUrl ?? '');
   // Which member the remove confirmation is open for — an id rather than a boolean, so the
   // confirmation can name the person it is about.
@@ -1190,6 +1195,34 @@ export default function SettingsPanel({
                 <HapticDiagnostics strength={haptics} />
               </>
             )}
+            {/* Where the app opens. Only meaningful on a phone — desktop has one tree and a
+                workspace switcher, so there is no "which tab" to choose. */}
+            {isMobile && (
+              <>
+                <div className="text-[10px] uppercase tracking-wide text-neutral-500 px-1 pt-3 pb-1">Start page</div>
+                <div className="flex items-center gap-1 bg-neutral-950 border border-neutral-800 rounded-lg p-0.5 mb-3">
+                  {([
+                    ['me', 'Me'],
+                    ['office', 'Office'],
+                    ['planner', 'Planner'],
+                  ] as const).map(([value, label]) => (
+                    <button
+                      key={value}
+                      onClick={() => {
+                        setStartPage(value);
+                        setStart(value);
+                      }}
+                      className={`flex-1 text-[11px] py-1.5 rounded cursor-pointer transition ${
+                        start === value ? 'bg-neutral-800 text-app-strong' : 'text-neutral-500 hover:text-neutral-300'
+                      }`}
+                    >
+                      {label}
+                    </button>
+                  ))}
+                </div>
+              </>
+            )}
+
             {/* The Home-and-Office / classic switch used to sit here. It is gone: which navigation
                 you get is which surface you are on, not a preference — see app/page.tsx's
                 `useContexts`. A setting nobody can sensibly choose is a branch with a UI on it. */}
