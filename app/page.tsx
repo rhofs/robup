@@ -3338,12 +3338,22 @@ function PageContent() {
   // are about to get. Without a dead zone, nesting would become almost unhittable on a phone.
   useEffect(() => {
     if (!activeDragTask) return;
-    const REORDER_EDGE_FRACTION = 0.3;
+    const REORDER_EDGE_FRACTION = 0.22;
     // Bands in pixels as well as a fraction. 30% of a mobile card is roughly 24px; 30% of a compact
     // desktop row is about 11px at each edge, which is a target you hit by luck with a mouse in
     // motion. The fraction was tuned on the taller of the two rows and quietly became unusable on
     // the other.
-    const MIN_EDGE_PX = 20;
+    // Modest edges, because the GAP between cards is now a reliable target in its own right.
+    //
+    // The floor was raised to 20px when reordering was the hard one, and that inverted the problem:
+    // on a 50px row it left 20 above, 20 below and 10 in the middle, so nesting became the thing you
+    // could not hit. Reported immediately, which is what a fix that trades one failure for its
+    // mirror image deserves.
+    //
+    // The row body is nesting's territory and the space between rows is reordering's. Splitting them
+    // that way means neither has to be won at the other's expense — which is what every version of
+    // this before it was doing.
+    const MIN_EDGE_PX = 10;
     // How far above and below to look when the pointer is in the gap BETWEEN two cards. That gap is
     // the one place someone aiming "between two tasks" actually points at — and it contains no row,
     // so the hit test found nothing and the indicator cleared. The literal target was the only dead
@@ -3390,7 +3400,11 @@ function PageContent() {
     // Sticking to a decision for 18px of pointer travel breaks the loop at its only weak point: the
     // pointer is the one thing in this that does not move by itself.
     let anchorY: number | null = null;
-    const STICKY_PX = 18;
+    // Enough to ignore pointer jitter, not enough to ignore intent. It only needs to beat noise:
+    // the layout shift it was written for moves the ROWS, and a row moving produces no pointer
+    // movement at all, so the loop is already broken by the anchor existing. 18px was defensive and
+    // made deliberate small moves feel stuck.
+    const STICKY_PX = 8;
 
     const onPointerMove = (e: PointerEvent) => {
       if (anchorY !== null && Math.abs(e.clientY - anchorY) < STICKY_PX) return;
@@ -3428,9 +3442,9 @@ function PageContent() {
       }
       const rect = el.getBoundingClientRect();
       const edge = Math.max(MIN_EDGE_PX, rect.height * REORDER_EDGE_FRACTION);
-      // Never let the edges eat the whole row: on a very short row the middle must still exist, or
-      // nesting becomes the thing that is impossible instead.
-      const safeEdge = Math.min(edge, rect.height * 0.4);
+      // Never let the edges eat the row: the middle keeps at least 40% of it, so nesting stays
+      // reachable on a short row without anyone having to aim.
+      const safeEdge = Math.min(edge, rect.height * 0.3);
       const y = e.clientY - rect.top;
       if (y < safeEdge) {
         anchorY = e.clientY;

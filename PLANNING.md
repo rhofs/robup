@@ -8454,3 +8454,24 @@ listed first and separately from Archive: finishing a task is the everyday actio
 putting it away. They happen to share a mechanism, which is a reason to keep the code together and
 not the labels. The batch gets one toast and one undo, matching the transaction that already grouped
 it.
+
+### 2026-09-23 (continued) — and then nesting became the hard one
+
+The 20px edge floor, added when reordering was impossible, inverted the problem: on a 50px row it
+left 20px above, 20px below and **10px in the middle**, so dropping a task *into* another one stopped
+working. Reported immediately — which is what a fix that trades one failure for its mirror image
+deserves.
+
+The resolution is not another number, it is a division of labour that the earlier rounds made
+possible without noticing: **the row body belongs to nesting, and the space between rows belongs to
+reordering.** Now that the gap is a real target — probed, canonical, and opening visibly — the in-row
+edges do not have to carry reordering at all. They are back to a 22% band with a 10px floor, capped
+so the middle always keeps at least 40% of the row.
+
+Every version of this before it was trying to win one behaviour at the other's expense inside a
+single strip of pixels. There were two strips available the whole time.
+
+**The stickiness dropped from 18px to 8px** in the same pass. It only ever needed to beat pointer
+jitter: the layout shift it was written for moves the *rows*, and a row moving produces no pointer
+movement, so the anchor breaks that loop merely by existing. 18px was defensive, and it made
+deliberate small movements feel stuck.
