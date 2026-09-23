@@ -557,9 +557,12 @@ function TaskRowImpl({
                     startRename();
                   }}
                   title="Rename"
-                  className="opacity-0 group-hover:opacity-100 text-neutral-500 hover:text-neutral-200 shrink-0 cursor-pointer"
+                  // A 12px glyph with no padding is a 12px target. It only appears on hover, so it
+                  // is aimed at rather than stumbled onto, which makes the size the whole
+                  // interaction. The icon stays small; the hit area does not.
+                  className="opacity-0 group-hover:opacity-100 text-neutral-500 hover:text-neutral-200 hover:bg-neutral-800 rounded shrink-0 cursor-pointer w-6 h-6 flex items-center justify-center -my-1"
                 >
-                  <Pencil className="w-3 h-3" />
+                  <Pencil className="w-3.5 h-3.5" />
                 </button>
               </>
             )}

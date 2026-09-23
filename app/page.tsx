@@ -8002,6 +8002,27 @@ function PageContent() {
               <div className="flex items-center gap-2 shrink-0">
                 {/* Mobile-only — the UUID itself is hidden from the main view (see below), so this
                     is the one place left to grab it if it's ever actually needed. */}
+                {/* Templates, inside the open task — which is where ClickUp puts them and where the
+                    user looked for them. They were only on the row's right-click menu, which means
+                    they were unreachable from the one screen where you can see what a template would
+                    be made of. */}
+                <button
+                  onClick={() => {
+                    setTemplateSaveTarget(activeModalTask);
+                    setTemplateName(activeModalTask.title);
+                  }}
+                  title="Save this task as a template"
+                  className="text-[11px] px-2.5 py-1 rounded-lg border cursor-pointer transition flex items-center gap-1.5 text-neutral-400 border-neutral-800 hover:bg-neutral-800/60"
+                >
+                  <Bookmark className="w-3.5 h-3.5" /> Save template
+                </button>
+                <button
+                  onClick={() => setTemplatePicker({ mode: 'apply', taskId: activeModalTask.id })}
+                  title="Add a template's subtasks to this task"
+                  className="text-[11px] px-2.5 py-1 rounded-lg border cursor-pointer transition flex items-center gap-1.5 text-neutral-400 border-neutral-800 hover:bg-neutral-800/60"
+                >
+                  <ClipboardList className="w-3.5 h-3.5" /> Apply template
+                </button>
                 <button
                   onClick={() => {
                     navigator.clipboard.writeText(activeModalTask.id);

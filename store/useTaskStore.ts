@@ -690,14 +690,33 @@ export const useTaskStore = create<TaskStore>((set, get) => {
         // Workspace-scoped endpoints need to know who's asking — "You are: (none)" deliberately
         // sees zero workspaces (see PLANNING.md), so this can genuinely come back empty.
         const userId = useSessionStore.getState().currentUserId ?? '';
-        const [workspacesRes, tasksRes, usersRes, taskDocsRes, eventsRes] = await Promise.all([
-          fetch(`/api/workspaces?userId=${userId}`),
-          fetch(`/api/tasks?userId=${userId}`),
+
+        // Workspaces first, alone, because everything below depends on knowing which one is active —
+        // and because it is the small request. Only once it lands can the task fetch be scoped.
+        const workspacesRes = await fetch(`/api/workspaces?userId=${userId}`);
+        const workspaces = await workspacesRes.json();
+
+        // Which workspace the app is about to show. Same rules as the full resolution further down;
+        // this is only an early read of the answer so the first task fetch can be scoped to it.
+        const previousId = get().activeWorkspaceId;
+        const scopeWorkspaceId: string | null =
+          (workspaces.some((w: HierarchyWorkspace) => w.id === previousId) ? previousId : null) ??
+          workspaces.find((w: HierarchyWorkspace) => w.id === get().lastRealWorkspaceId)?.id ??
+          workspaces.find((w: HierarchyWorkspace) => !w.isPersonal)?.id ??
+          workspaces.find((w: HierarchyWorkspace) => w.isPersonal)?.id ??
+          null;
+
+        // The first paint waits only on the active workspace's tasks. Everything else the app can
+        // eventually see — other workspaces' tasks, for My Tasks, the Planner and mentions — arrives
+        // behind it, and the screen is usable in the meantime. With one workspace this is exactly
+        // what it always was; with several it is the difference between waiting for your own work
+        // and waiting for the whole company's.
+        const [tasksRes, usersRes, taskDocsRes, eventsRes] = await Promise.all([
+          fetch(`/api/tasks?userId=${userId}${scopeWorkspaceId ? `&workspaceId=${scopeWorkspaceId}` : ''}`),
           fetch('/api/users'),
           fetch(`/api/task-docs?userId=${userId}`),
           fetch(`/api/events?userId=${userId}`),
         ]);
-        const workspaces = await workspacesRes.json();
         const tasks = await tasksRes.json();
         const users = await usersRes.json();
         const taskDocs = await taskDocsRes.json();
@@ -786,6 +805,33 @@ export const useTaskStore = create<TaskStore>((set, get) => {
               ? { ...state.lastPositionByWorkspaceId, [activeWorkspaceId]: { spaceId: activeSpaceId, listIds: [...activeListIds] } }
               : state.lastPositionByWorkspaceId,
         }));
+
+        // The rest of the tasks, behind the paint.
+        //
+        // Deliberately not awaited: the screen is already usable, and this is the part that used to
+        // be the wait. Merged rather than replaced, because by the time it lands the user may well
+        // have created or edited something — dropping the fetched rows on top of live state would
+        // undo whatever happened in between.
+        if (scopeWorkspaceId && workspaces.length > 1) {
+          void (async () => {
+            try {
+              const restRes = await fetch(
+                `/api/tasks?userId=${userId}&excludeWorkspaceId=${scopeWorkspaceId}`
+              );
+              if (!restRes.ok) return;
+              const rest: Task[] = await restRes.json();
+              set((state) => {
+                const known = new Set(state.tasks.map((t) => t.id));
+                const additions = rest.filter((t) => !known.has(t.id));
+                return additions.length > 0 ? { tasks: [...state.tasks, ...additions] } : {};
+              });
+            } catch {
+              // Silent: the active workspace is already on screen, and the app has always tolerated
+              // not having every other workspace's tasks in memory — that is the state it is in for
+              // the first moments of every load now.
+            }
+          })();
+        }
       } catch (error) {
         console.error('Error fetching data:', error);
         set({ isLoading: false, hasLoadedOnce: true });

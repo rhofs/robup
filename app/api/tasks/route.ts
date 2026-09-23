@@ -4,7 +4,7 @@ import { getCurrentUserId } from '@/lib/auth/session';
 import { getTaskVisibilityContext } from '@/lib/auth/access';
 import { ensureListAccess } from '@/lib/auth/resourceAccess';
 
-export async function GET() {
+export async function GET(req: Request) {
   const userId = await getCurrentUserId();
   // Same "no identity, no data" rule as GET /api/workspaces — a private workspace's tasks must
   // never be sent to a request that isn't asserting a member's identity.
@@ -13,8 +13,28 @@ export async function GET() {
   const visibility = await getTaskVisibilityContext(userId);
   if (!visibility) return NextResponse.json([]);
 
+  // Optionally scoped to one workspace.
+  //
+  // The app needs every task it can see eventually — My Tasks, the Planner and mentions all reach
+  // across workspaces — but it does not need them all before it can draw anything. The client asks
+  // for the active workspace first, renders, and fetches the rest behind that. Without a scope here
+  // the first paint waited on every task in every workspace, which is what an import made painful.
+  const workspaceId = new URL(req.url).searchParams.get('workspaceId');
+  const excludeWorkspaceId = new URL(req.url).searchParams.get('excludeWorkspaceId');
+
   const tasks = await prisma.task.findMany({
-    where: { deletedAt: null, list: { space: { workspace: { memberships: { some: { userId } } } } } },
+    where: {
+      deletedAt: null,
+      list: {
+        space: {
+          workspace: {
+            memberships: { some: { userId } },
+            ...(workspaceId ? { id: workspaceId } : {}),
+            ...(excludeWorkspaceId ? { id: { not: excludeWorkspaceId } } : {}),
+          },
+        },
+      },
+    },
     include: {
       assignees: { select: publicUserSelect },
       attachments: { orderBy: { createdAt: 'asc' }, include: { uploadedBy: { select: publicUserSelect } } },

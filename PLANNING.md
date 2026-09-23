@@ -8702,3 +8702,42 @@ thing to attack — and it should be measured before it is changed, since the ho
 active workspace first, the rest behind it) touches the store's assumption that `tasks` is complete.
 
 **Needs a migration on production.**
+
+### 2026-09-23 (continued) — startup, second attempt: it was the payload
+
+The indexes helped the database and the launch was still slow, which settles the question the last
+round could not: **it is the payload, not the query.**
+
+`GET /api/tasks` returned every task in every workspace the user belongs to, and the first paint
+waited on all of it. The app genuinely needs them all eventually — My Tasks, the Planner and mentions
+all reach across workspaces — but it does not need them all before it can draw anything.
+
+Now staged:
+
+1. **Workspaces first, alone.** It is the small request, and everything else depends on knowing which
+   workspace is active.
+2. **The active workspace's tasks**, scoped by a new `workspaceId` parameter, alongside users, docs
+   and events. This is what the first paint waits on.
+3. **Everything else, behind the paint**, via `excludeWorkspaceId`, not awaited.
+
+The late arrival is **merged, not replaced**: by the time it lands the user may have created or
+edited something, and dropping fetched rows on top of live state would undo whatever happened in
+between.
+
+With one workspace this is exactly what it always was. With several it is the difference between
+waiting for your own work and waiting for the whole company's.
+
+**What this changes about the app's assumptions:** `tasks` is no longer guaranteed complete in the
+first moments after load. Nothing breaks — cross-workspace views simply fill in — but anything
+written later that assumes "every task I can see is in the store" now has a window where that is
+false, and should say so out loud rather than discover it.
+
+### Same round — two smaller ones
+
+**The rename button was a 12px glyph with no padding**, and it only appears on hover, so it is aimed
+at rather than stumbled onto — which makes the size the whole interaction. The icon stays small; the
+hit area is now 24px.
+
+**Templates are in the open task now.** They were only on the row's right-click menu, which means
+they were unreachable from the one screen where you can see what a template would be made of — and
+that is where the user looked, and where ClickUp puts them.
