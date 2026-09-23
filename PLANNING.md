@@ -8506,3 +8506,18 @@ assumed.**
 
 A fair note on the original choice: it was not wrong when it was made. It was right for the data the
 app had, and the import changed the data.
+
+### 2026-09-23 (continued) — Day view clipped its own chip text
+
+Reported with a screenshot: titles in the Planner's Day view lose their bottom edge.
+
+The chip floor was `Math.max(20, …)` while the chip itself is `px-2.5 py-1.5` around 10px text —
+12px of padding plus a ~14px line is 26px before anything else is in it. **A minimum that is smaller
+than the thing it contains is not a minimum.** Raised to 28.
+
+The other half: the title sits in a `flex flex-col`, where a text node will happily be squeezed below
+its own line height. `leading-tight shrink-0` stops it being compressed by its siblings, and the
+single-line event chip lost a notch of vertical padding it did not have room for either.
+
+Both floors were changed together — there are two, for tasks and for events, and fixing one would
+have left the other clipping in exactly the same way.

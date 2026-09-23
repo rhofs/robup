@@ -228,7 +228,10 @@ export default function DayTimeline({
                 }
               }
               const top = (startMin / 60) * HOUR_H;
-              const height = Math.max(20, ((endMin - startMin) / 60) * HOUR_H);
+              // 28px, not 20. The chip is px-2.5 py-1.5 around 10px text: 12px of padding plus a ~14px line
+      // is 26px before anything else, so a 20px floor guaranteed the title was clipped on every
+      // short event. A minimum that is smaller than the thing it contains is not a minimum.
+      const height = Math.max(28, ((endMin - startMin) / 60) * HOUR_H);
               const { col, cols } = columns.get(event.id) ?? { col: 0, cols: 1 };
               return (
                 <DayEventBlock
@@ -262,7 +265,10 @@ export default function DayTimeline({
               }
             }
             const top = (startMin / 60) * HOUR_H;
-            const height = Math.max(20, ((endMin - startMin) / 60) * HOUR_H);
+            // 28px, not 20. The chip is px-2.5 py-1.5 around 10px text: 12px of padding plus a ~14px line
+      // is 26px before anything else, so a 20px floor guaranteed the title was clipped on every
+      // short event. A minimum that is smaller than the thing it contains is not a minimum.
+      const height = Math.max(28, ((endMin - startMin) / 60) * HOUR_H);
             const color = taskColorOf(task);
             const { col, cols } = columns.get(task.id) ?? { col: 0, cols: 1 };
 
@@ -377,7 +383,7 @@ function DayEventBlock({
         title={event.title}
         // Dashed border + CalendarClock icon — same Task-vs-Event tell as WeekRow.tsx's EventBar,
         // kept visually consistent across every Planner granularity.
-        className={`relative w-full h-full rounded-md px-2.5 py-1.5 text-[10px] font-medium truncate cursor-grab active:cursor-grabbing text-left border border-dashed transition-colors flex items-center gap-1 ${
+        className={`relative w-full h-full rounded-md px-2.5 py-1 text-[10px] font-medium leading-tight truncate cursor-grab active:cursor-grabbing text-left border border-dashed transition-colors flex items-center gap-1 ${
           isDraggingThis ? 'opacity-70 ring-2 ring-app-strong/70' : ''
         }`}
         style={{
@@ -462,7 +468,9 @@ function DayTaskBlock({
           color,
         }}
       >
-        <span className="truncate">{task.title}</span>
+        {/* leading-tight and shrink-0: in a flex column a text node will happily be squeezed below
+            its own line height, which is the other half of how the title lost its descenders. */}
+        <span className="truncate leading-tight shrink-0">{task.title}</span>
         {task.assignees.length > 0 && height >= 34 && (
           <span className="flex items-center -space-x-1 mt-0.5">
             {task.assignees.slice(0, 3).map((a) => (
