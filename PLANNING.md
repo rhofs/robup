@@ -8390,3 +8390,22 @@ it. The edge bands also grew from a 16px floor to 20px.
 it", which is a question about rows. The user's question was "am I between these two", which is a
 question about the space between rows — and that space existed in the layout and nowhere in the
 logic.
+
+### 2026-09-23 — two names for one gap, and the flicker that came with it
+
+"Akkurat nå er det 2 punkter mellom hver task, en under den øverste, og en over den under."
+
+Exactly right, and it is a modelling problem rather than a threshold one. "Below row A" and "above
+row B" describe the same position, and the code could produce either: the bottom band of one row and
+the top band of the next are adjacent, and the gap probe answers differently depending on which
+direction it looks first. Moving through that boundary swapped between two representations of one
+place — and because they render on different rows, the line jumped.
+
+Every gap is now canonically **"above the row that follows"**, with one exception: the gap after the
+last row, which has nothing following it to be above. The dragged row is skipped when looking for
+that follower, since it is still in the list while it travels and naming the gap after it would put
+the line where the task already is.
+
+**The general shape, which is the useful part:** when a position can be described two ways, the two
+descriptions will eventually disagree at the boundary between them. Pick one and convert at the
+edge — the alternative is a threshold fight between two states that mean the same thing.

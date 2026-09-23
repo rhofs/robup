@@ -3347,6 +3347,28 @@ function PageContent() {
         .map((n) => n.closest('[data-task-row]'))
         .find((n): n is HTMLElement => n instanceof HTMLElement) ?? null;
 
+    // One name per gap.
+    //
+    // "Below row A" and "above row B" are two descriptions of the same place, and the code produced
+    // both: the bottom band of one row and the top band of the next are adjacent, and the gap probe
+    // could answer either way depending on which direction it looked first. Moving through that
+    // boundary flipped between two representations of one position, and since they render on
+    // different rows the line visibly jumped — reported as flicker.
+    //
+    // So every gap is canonically "above the row that follows", with the single exception of the one
+    // after the last row, which has nothing following it to be above.
+    const canonical = (targetId: string, position: 'above' | 'below') => {
+      if (position === 'above') return { targetId, position } as const;
+      const rows = Array.from(document.querySelectorAll('[data-task-row]')) as HTMLElement[];
+      const i = rows.findIndex((r) => r.dataset.taskRow === targetId);
+      const next = i >= 0 ? rows[i + 1] : undefined;
+      const nextId = next?.dataset.taskRow;
+      // Skipping the dragged row itself: it is still in the list while it travels, and naming the
+      // gap after it would put the line where the task already is.
+      if (nextId && nextId !== activeDragTask.id) return { targetId: nextId, position: 'above' } as const;
+      return { targetId, position: 'below' } as const;
+    };
+
     const onPointerMove = (e: PointerEvent) => {
       // elementsFromPoint (plural), not elementFromPoint: the drag overlay follows the cursor and is
       // portaled to the body, so the topmost element under the pointer during a drag is always it,
@@ -3375,7 +3397,7 @@ function PageContent() {
         return;
       }
       if (forced) {
-        setTaskDropIndicator({ targetId, position: forced });
+        setTaskDropIndicator(canonical(targetId, forced));
         return;
       }
       const rect = el.getBoundingClientRect();
@@ -3384,8 +3406,8 @@ function PageContent() {
       // nesting becomes the thing that is impossible instead.
       const safeEdge = Math.min(edge, rect.height * 0.4);
       const y = e.clientY - rect.top;
-      if (y < safeEdge) setTaskDropIndicator({ targetId, position: 'above' });
-      else if (y > rect.height - safeEdge) setTaskDropIndicator({ targetId, position: 'below' });
+      if (y < safeEdge) setTaskDropIndicator(canonical(targetId, 'above'));
+      else if (y > rect.height - safeEdge) setTaskDropIndicator(canonical(targetId, 'below'));
       else setTaskDropIndicator(null);
     };
 
