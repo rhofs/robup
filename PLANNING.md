@@ -8786,3 +8786,22 @@ rendering another one.
 **And a visible grip on desktop rows.** The whole row has always been draggable, which works and says
 nothing — a capability nobody can see is one nobody has, and "there is no way to do this" was half
 true for exactly that reason.
+
+### 2026-09-23 (continued) — subtasks nested but would not reorder
+
+The band split was tuned on the board, where cards are **spaced apart** and the gap between them does
+most of the reordering work — the in-row bands only have to catch what the gap misses, so 22% each
+side was plenty.
+
+The subtask list inside a task has no gaps: its rows sit flush. There the bands are the *only* target,
+and 22% of a 38px row is 8px at each edge against 22px of nesting in the middle. So subtasks nested
+and nothing else.
+
+**Equal thirds now** — above, nest, below — which is the answer that needs no tuning per surface: the
+same proportion on a tall mobile card and a compact desktop row, and neither behaviour has to be won
+at the other's expense.
+
+**This is the third time these numbers have moved**, each time because a value tuned on one surface
+was wrong on another: a fraction alone failed the compact row, a pixel floor alone ate the middle,
+and a board-tuned fraction failed the flush list. Thirds is the first version that does not encode an
+assumption about which list it is in.

@@ -3404,7 +3404,16 @@ function PageContent() {
   // are about to get. Without a dead zone, nesting would become almost unhittable on a phone.
   useEffect(() => {
     if (!activeDragTask) return;
-    const REORDER_EDGE_FRACTION = 0.22;
+    // Thirds: top third reorders above, bottom third reorders below, middle third nests.
+    //
+    // 0.22 was tuned for the board, where the cards are spaced apart and the GAP between them does
+    // most of the reordering work — the in-row bands only have to catch what the gap misses. The
+    // subtask list inside a task has no gaps: its rows sit flush, so the bands are the only target
+    // there, and a 22% band on a 38px row is 8px. Reported as subtasks only ever nesting.
+    //
+    // Equal thirds is the answer that needs no tuning per surface: it is the same proportion on a
+    // tall card and a compact row, and neither behaviour has to be won at the other's expense.
+    const REORDER_EDGE_FRACTION = 0.33;
     // Bands in pixels as well as a fraction. 30% of a mobile card is roughly 24px; 30% of a compact
     // desktop row is about 11px at each edge, which is a target you hit by luck with a mouse in
     // motion. The fraction was tuned on the taller of the two rows and quietly became unusable on
@@ -3419,7 +3428,7 @@ function PageContent() {
     // The row body is nesting's territory and the space between rows is reordering's. Splitting them
     // that way means neither has to be won at the other's expense — which is what every version of
     // this before it was doing.
-    const MIN_EDGE_PX = 10;
+    const MIN_EDGE_PX = 12;
     // How far above and below to look when the pointer is in the gap BETWEEN two cards. That gap is
     // the one place someone aiming "between two tasks" actually points at — and it contains no row,
     // so the hit test found nothing and the indicator cleared. The literal target was the only dead
@@ -3525,7 +3534,7 @@ function PageContent() {
       const edge = Math.max(MIN_EDGE_PX, rect.height * REORDER_EDGE_FRACTION);
       // Never let the edges eat the row: the middle keeps at least 40% of it, so nesting stays
       // reachable on a short row without anyone having to aim.
-      const safeEdge = Math.min(edge, rect.height * 0.3);
+      const safeEdge = Math.min(edge, rect.height * 0.35);
       const y = e.clientY - rect.top;
       if (y < safeEdge) {
         anchorY = e.clientY;
