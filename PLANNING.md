@@ -8805,3 +8805,76 @@ at the other's expense.
 was wrong on another: a fraction alone failed the compact row, a pixel floor alone ate the middle,
 and a board-tuned fraction failed the flush list. Thirds is the first version that does not encode an
 assumption about which list it is in.
+
+## 2026-09-24 — three more from the feedback list: 7, 9 and 8
+
+### 7 — an emoji button, on desktop only
+
+A phone keyboard has an emoji key; a physical keyboard does not, and typing one means leaving the
+app. That is why the report was specifically "på desktop", and why this button is gated on
+`!isMobile` rather than added everywhere — on a phone it would be a second, worse copy of a control
+the OS already provides.
+
+`components/EmojiPicker.tsx`. Still no emoji-picker library, which is the same call already made for
+reactions: the schema stores raw unicode with no shortcodes, so a library would bring a search index
+and a sprite sheet to what is a list of characters. Eight categories, curated rather than exhaustive
+— roughly 700 of the ~3,800 emoji, chosen as ones someone might actually put in a work message.
+
+What a curated list cannot do is search, and **Recent is the answer to that**, not a nicety: the
+emoji any one person uses is a short list, and putting it first removes most of the hunting search
+would otherwise be for. Kept in `localStorage` under `siqt.emoji.recent`, read in an effect rather
+than in initial state (a value that differs between server and client is a hydration mismatch) and
+every access wrapped — a browser set to block site data throws on the accessor itself.
+
+Two details that are the difference between working and nearly working:
+
+- **It inserts at the caret, not at the end.** `ChatComposerInput` now fills an optional `insertRef`
+  with a function that goes through the editor. Appending to the `value` string would have been one
+  line and would put every emoji at the end of the message no matter where you were typing.
+- **The trigger is excluded from the outside-click check** (`triggerRef`). Without that the panel
+  closes on mousedown and the button's own click reopens it, so it can never be shut by the button
+  that opened it.
+
+The panel stays open after a pick — picking two in a row is common, and closing on the first is the
+annoying half of every picker that does it.
+
+### 9 — My Tasks forgot where you were, on desktop only
+
+The store has had `lastPositionByWorkspaceId` for months, and `setActiveWorkspaceId` restores from it
+on every switch. The desktop sidebar's "My tasks" button called that action and then called
+`setNavigation(spaceId, [listId])` **unconditionally on the next line**, throwing the restore away
+one line after it happened and dropping you on the auto-created List every time.
+
+Mobile's `openMyTasks` was moved onto the restore when the mechanism was introduced. This button was
+the copy that never followed — which is why the memory looked like it "sometimes" worked: it worked
+on the phone.
+
+The default List is still there as a *fallback*, for the other half of the original bug (nothing
+remembered means no List selected, which lands on SpaceHome instead of on the tasks) — now guarded by
+reading `activeListIds` back out of the store after the restore. Also given the missing try/catch: a
+failed `ensurePersonalWorkspace` stopped at the rejected await and the click looked like it did
+nothing, the same silent dead tap already fixed on the mobile tile.
+
+### 8 — the date picker wrote to the column to its left
+
+Reported as "kalenderknappen for å velge dato er kobla på feil column ... den følger med columnen som
+er ved siden av, selv om den gir dato til den columnen til venstre", worst with several custom date
+fields in a row.
+
+**The grid was short one cell.** `TaskRow`'s desktop row rendered `selectCheckbox` as a direct grid
+child, and `selectCheckbox` is `null` when the row is not selectable. A null child of a grid is not an
+empty cell — it is no cell at all, so every column after it slid one place left while the header above
+stayed where it was.
+
+The board always passes `selectable` on desktop, so the board was fine. **The subtask table inside an
+open task does not** — and that is the one place where the cell under "Due date" was really the
+column to its left. Several date fields in a row is where it becomes invisible: the values all look
+alike, so there is nothing to give the shift away except picking a date and watching it land next
+door.
+
+The cell is now structural — `<div className="flex items-center">{selectCheckbox}</div>` — so no
+future caller can shift the grid by leaving a prop out.
+
+**Worth remembering:** a conditionally-rendered direct child of a CSS grid is a column shift waiting
+for the caller that omits the prop. The container counts children; it does not know one of them was
+supposed to be there.

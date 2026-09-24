@@ -519,7 +519,20 @@ function TaskRowImpl({
           } ${isDragging ? 'opacity-40' : ''} ${isSelected ? 'bg-neutral-700/30' : ''}`}
           style={{ gridTemplateColumns: gridTemplate }}
         >
-          {selectCheckbox}
+          {/* A cell, always — even when there is no checkbox to put in it.
+              
+              selectCheckbox is null when the row is not selectable, and a null child of a grid is
+              not an empty cell, it is no cell at all: every column after it slides one place left
+              while the header above stays put. That is what happened to the subtask table inside an
+              open task, which renders TaskRow without `selectable` — the cell under the "Due date"
+              heading was really the column to its left, so the calendar you opened there wrote to
+              the wrong field. Reported as "kalenderknappen ... er kobla på feil column ... selv om
+              den gir dato til den columnen til venstre", and worst with several custom date fields
+              in a row, where there is nothing about the values themselves to give the shift away.
+              
+              Structural rather than conditional, so no future caller can shift the grid by leaving
+              a prop out. */}
+          <div className="flex items-center">{selectCheckbox}</div>
           {doneToggle}
 
           <div className="font-medium flex items-center gap-2 truncate pr-4 text-neutral-200">

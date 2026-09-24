@@ -5405,14 +5405,32 @@ function PageContent() {
                     // reusing it this way is what makes the personal Space/List tree "just work."
                     onClick={async () => {
                       if (!currentUserId) return;
-                      // Same fix as the mobile "My Tasks" tile (app/page.tsx's meNavItems) —
-                      // selecting just the workspace left activeSpaceId pointed at its one
-                      // auto-created Space with no List chosen, landing on SpaceHome instead of
-                      // the tasks themselves. Selecting the List directly skips that.
-                      const { workspaceId, spaceId, listId } = await ensurePersonalWorkspace(currentUserId);
-                      setActiveWorkspaceId(workspaceId);
-                      setNavigation(spaceId, [listId]);
-                      setActiveView('board');
+                      try {
+                        // The default Space/List is a FALLBACK here, not the destination.
+                        //
+                        // setActiveWorkspaceId already restores this workspace's own last-visited
+                        // Space/List (store-level lastPositionByWorkspaceId). This handler then
+                        // called setNavigation unconditionally, which threw that restore away one
+                        // line after it happened and dropped you back on the auto-created List every
+                        // time — so picking a different personal List, going elsewhere and coming
+                        // back always forgot where you were. Mobile's openMyTasks was moved onto the
+                        // restore months ago; this button was the copy that never followed.
+                        //
+                        // The fallback still matters for the other half of the original bug:
+                        // selecting only the workspace, with nothing remembered, leaves no List
+                        // chosen and lands on SpaceHome instead of on the tasks.
+                        const { workspaceId, spaceId, listId } = await ensurePersonalWorkspace(currentUserId);
+                        setActiveWorkspaceId(workspaceId);
+                        // Read fresh from the store rather than from a closed-over value:
+                        // setActiveWorkspaceId has already written the restored position by now.
+                        if (useTaskStore.getState().activeListIds.size === 0) setNavigation(spaceId, [listId]);
+                        setActiveView('board');
+                      } catch (err) {
+                        // Without this an ensurePersonalWorkspace failure stopped at the rejected
+                        // await and the click looked like it did nothing at all — the same silent
+                        // dead tap already fixed on the mobile tile.
+                        showToast(`Couldn't open My Tasks: ${err instanceof Error ? err.message : 'unknown error'}`);
+                      }
                     }}
                     className={`w-full text-left px-2 py-1.5 rounded text-[11px] cursor-pointer flex items-center gap-1.5 transition ${
                       // Requires activeView === 'board' too, not just "the active workspace

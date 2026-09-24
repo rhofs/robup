@@ -1,13 +1,14 @@
 'use client';
 
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { Send, Reply, Trash2, X, MessagesSquare, Paperclip, SmilePlus, FileText, Download, UploadCloud } from 'lucide-react';
+import { Send, Reply, Trash2, X, MessagesSquare, Paperclip, Smile, SmilePlus, FileText, Download, UploadCloud } from 'lucide-react';
 import { useChatStore, type ChatMessage, type ChatAttachment, type ChatReaction, type ChatDMMember } from '../store/useChatStore';
 import { useSessionStore } from '../store/useSessionStore';
 import { dateKey } from '../lib/navUrl';
 import { useTaskStore } from '../store/useTaskStore';
 import { renderChatMessageBody } from '../lib/chatFormat';
 import ChatComposerInput from './ChatComposerInput';
+import EmojiPicker from './EmojiPicker';
 import { useChatChannelConnection } from '../lib/collab/useChatChannelConnection';
 import { uploadChatFile } from '../lib/uploadChatFile';
 import { formatBytes } from '../lib/formatBytes';
@@ -201,6 +202,10 @@ export default function ChatPanel() {
   // that is one tap, and leaving to look something up mid-sentence is the normal way to use chat.
   const [draft, setDraft] = useState('');
   const [sending, setSending] = useState(false);
+  // Desktop only — see EmojiPicker for why a phone does not get this button.
+  const [emojiOpen, setEmojiOpen] = useState(false);
+  const emojiButtonRef = useRef<HTMLButtonElement>(null);
+  const insertIntoComposer = useRef<((text: string) => void) | null>(null);
   // Media (Phase 6) + generic files (this pass). Picked but not-yet-sent attachment — shows a
   // local blob-URL preview immediately for images (before any network call), uploaded only once
   // the user actually hits Send, same "don't touch the network until the user commits" convention
@@ -791,6 +796,33 @@ export default function ChatPanel() {
         }`}
       >
         <input ref={fileInputRef} type="file" onChange={handleFileInputChange} className="hidden" />
+        {!isMobile && (
+          <div className="relative shrink-0">
+            {emojiOpen && (
+              <EmojiPicker
+                triggerRef={emojiButtonRef}
+                onClose={() => setEmojiOpen(false)}
+                onPick={(emoji) => {
+                  // Through the editor when it is mounted, so the emoji lands at the caret. The
+                  // append is the fallback for the frame before the editor exists, which is the only
+                  // case where the end of the message is the right answer anyway.
+                  if (insertIntoComposer.current) insertIntoComposer.current(emoji);
+                  else handleDraftChange(draft + emoji);
+                }}
+              />
+            )}
+            <button
+              ref={emojiButtonRef}
+              onClick={() => setEmojiOpen((v) => !v)}
+              title="Emoji"
+              className={`w-7 h-7 rounded-lg flex items-center justify-center hover:bg-neutral-800/60 cursor-pointer transition ${
+                emojiOpen ? 'text-blue-400 bg-neutral-800/60' : 'text-neutral-500 hover:text-blue-400'
+              }`}
+            >
+              <Smile className="w-4 h-4" />
+            </button>
+          </div>
+        )}
         <button
           onClick={() => fileInputRef.current?.click()}
           title="Attach a file or image"
@@ -814,6 +846,7 @@ export default function ChatPanel() {
           // it, so a captured id would scope every later mention to the first DM you opened.
           getWorkspaceId={() => mentionWorkspaceId}
           maxHeight={COMPOSER_MAX_HEIGHT_PX}
+          insertRef={insertIntoComposer}
         />
         <button
           onClick={handleSend}

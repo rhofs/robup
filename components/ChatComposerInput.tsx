@@ -28,6 +28,7 @@ export default function ChatComposerInput({
   placeholder,
   getWorkspaceId,
   maxHeight,
+  insertRef,
 }: {
   value: string;
   onChange: (text: string) => void;
@@ -35,6 +36,11 @@ export default function ChatComposerInput({
   placeholder: string;
   getWorkspaceId: () => string | null;
   maxHeight: number;
+  // Filled with a function that inserts text at the caret, for callers that put characters in from
+  // outside the keyboard (the emoji picker). Going through the editor rather than through `value`
+  // is what keeps the caret where it was — appending to the string would land every emoji at the
+  // end of the message no matter where you were typing.
+  insertRef?: React.MutableRefObject<((text: string) => void) | null>;
 }) {
   // Read through a ref by the two options below. `useEditor` runs its extension list ONCE, so
   // anything passed by value there is frozen at whatever the first conversation was — which is
@@ -79,6 +85,14 @@ export default function ChatComposerInput({
     },
     onUpdate: ({ editor: e }) => onChange(chatDocToText(e.getJSON())),
   });
+
+  useEffect(() => {
+    if (!insertRef) return;
+    insertRef.current = editor ? (text: string) => editor.chain().focus().insertContent(text).run() : null;
+    return () => {
+      insertRef.current = null;
+    };
+  }, [editor, insertRef]);
 
   // Reset when the caller clears or replaces the draft — sending a message, or switching
   // conversation. Guarded against echoing the editor's own updates back into it, which would move
