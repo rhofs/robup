@@ -352,13 +352,25 @@ export default function MobileBottomNav({
   const pillDirection: 'left' | 'right' = resolvedSlotIndex >= prevSlotIndexRef.current ? 'right' : 'left';
   prevSlotIndexRef.current = resolvedSlotIndex;
 
-  // Did the pill actually move on this render? True only on the single render where the held id
-  // changes, which is the render on which the new NavPill mounts — so it reaches that pill exactly
-  // when there was a real journey to show. On a remount of this whole component the ref initialises
-  // to the current value, so it is false, and nothing squashes.
-  const prevHeldRef = useRef<string | null>(heldActiveTabId);
-  const pillMoved = prevHeldRef.current !== heldActiveTabId;
-  prevHeldRef.current = heldActiveTabId;
+  // Which slot the pill is in, counting the pinned one — the previous version tracked only the
+  // three primary tabs, and that is why coming back from a conversation still popped.
+  //
+  // The sequence: leaving a DM remounts this component (see the height animation's `measured`
+  // guard), and on that first render `activeView` is still 'chat', so no tab is active and there is
+  // no pill at all. The view flips to 'board' at the END of the push, a pill appears, and "null to
+  // home" read as a move. Which is exactly what the report said — fine from a list, where the view
+  // never changes, and a pop from a conversation, where it does.
+  //
+  // Including the pinned slot matters for the other direction: with only the primary tabs, going to
+  // or from the pinned tile looked like "something to nothing" and got no squash for a move that
+  // really happened.
+  const activeSlotKey = heldActiveTabId ?? (!menuOpen && pinnedActive ? pinnedTile?.id ?? 'pinned' : null);
+
+  // Did the pill actually move? Only when it was somewhere BEFORE — `prev !== null` is what makes a
+  // remount silent, since a pill cannot have travelled from a position this instance never had.
+  const prevSlotKeyRef = useRef<string | null>(activeSlotKey);
+  const pillMoved = prevSlotKeyRef.current !== null && prevSlotKeyRef.current !== activeSlotKey;
+  prevSlotKeyRef.current = activeSlotKey;
 
   // True once the real measured heights have replaced the guesses above. Until then the island's
   // height animation is suppressed (see `transition` on the motion.div below), because the very

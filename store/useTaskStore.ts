@@ -1095,12 +1095,28 @@ export const useTaskStore = create<TaskStore>((set, get) => {
         .find((s) => s.id === spaceId);
       const defaultStatus = explicitStatus ?? space?.statuses?.[0]?.name ?? 'To Do';
 
+      // `order` matters here, and its absence was a real bug rather than an omission.
+      //
+      // Without it a freshly created task carries `order: undefined` until the POST comes back —
+      // and the board sorts with `a.order - b.order`, which against undefined is NaN. A comparator
+      // that returns NaN does not merely misplace that one row: the sort's result becomes
+      // unspecified, and V8 will happily return an arbitrary permutation of the WHOLE list. Worse,
+      // the same comparator decides the order a drag then writes to the server, so one drag made
+      // while any task in the list was still unsaved could bake a scrambled order into the database
+      // permanently. That is indistinguishable from "the order is not being saved".
+      //
+      // Same rule the server uses for a real create (see POST /api/tasks): land at the bottom of
+      // this list and parent, one past the current maximum.
+      const siblingOrders = get()
+        .tasks.filter((t) => t.listId === listId && (t.parentId ?? null) === (parentId ?? null))
+        .map((t) => t.order ?? 0);
       const tempTask: any = {
         id: tempId,
         _localId: tempId,
         title,
         status: defaultStatus,
         priority: 3,
+        order: siblingOrders.length ? Math.max(...siblingOrders) + 1 : 0,
         listId,
         parentId,
         assignees: [],

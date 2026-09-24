@@ -9087,3 +9087,69 @@ sees the padding change and scrolls to the bottom if that is where the reader al
 correctly against the keyboard and something else that has to make room for it is not. The composer
 was fixed, then the composer's own scroll, and now the list behind it. When one element starts
 tracking a measurement, every element that reserves space for it has to track it too.
+
+## 2026-09-24 (continued) — four more, and one of them explains why order kept "not saving"
+
+### Task order: a missing field made a sort comparator return NaN
+
+The server half was verified this session rather than assumed — a scratch database built from the
+migrations, seeded, and the reorder route's own queries run against it: the sibling lookup, the
+access check and the `$transaction` of `order = index` updates all do exactly what they should. So
+the write path was not the problem.
+
+**`optimisticCreateTask` built its temporary task without an `order` field.** Every task created in
+the app therefore carried `order: undefined` until its POST came back. The board sorts with
+`a.order - b.order`, and against `undefined` that is `NaN` — and a comparator that returns NaN does
+not merely misplace one row. The result of the sort becomes *unspecified*, and V8 will return an
+arbitrary permutation of the whole array.
+
+The part that makes it persistent rather than cosmetic: **the same comparator decides the order a
+drag writes to the server.** `reorderTaskRelativeTo` sorts the siblings, builds the new sequence from
+that sorted list, and sends it. One drag performed while any task in the list was still unsaved
+therefore baked a scrambled order into the database, permanently, and every refresh afterwards
+faithfully showed it. From the outside that is indistinguishable from the order not being saved at
+all.
+
+Fixed at the source — a new task now lands one past the current maximum for its list and parent, the
+same rule `POST /api/tasks` uses server-side — and both comparators now read `(a.order ?? 0)`,
+because the failure mode is "the entire list is in a random order" and the cost of preventing it is
+four characters.
+
+**And a refused reorder now says so.** It used to end in silence: the rows snapped back and nothing
+explained why. That silence is most of the reason this took four rounds — every report could only
+describe the symptom.
+
+**Still not confirmed** to be the whole of what was reported. The mechanism is real and it produces
+exactly this symptom, but it was found by reading, not by reproducing on the user's data.
+
+### The keyboard: making room is not the same as showing what it covers
+
+Last round gave the message list padding that tracks the keyboard, so the last message *can* be
+scrolled clear of it. Nothing scrolled it. Opening the keyboard now jumps to the newest message.
+
+Deliberately not gated on `stickToBottomRef`, unlike the content ResizeObserver: that guard exists so
+someone reading history is never moved by content settling underneath them, and opening the keyboard
+is not something that happens underneath anyone — it is a deliberate "I am about to type". Only on
+the way up; dismissing the keyboard leaves the view where it is, because that is often someone
+dismissing it in order to read.
+
+### The nav pill, third attempt — and the user's own observation is what found it
+
+"Den funker fint om jeg går fra liste og tilbake... Men fra Samtale til DM viewen så popper den inn."
+
+That distinction is the whole diagnosis. Leaving a conversation remounts the nav, and on the first
+render after that remount `activeView` is still `'chat'` — so no tab is active and there is no pill
+at all. The view flips to `'board'` only at the END of the push, a pill appears, and "nothing to
+Home" read as a move. Coming back from a list, the view never changes, so there was never a gap.
+
+`pillMoved` now requires a previous position that actually existed: `prev !== null`. A pill cannot
+have travelled from a place this instance never had. The tracked value also includes the pinned
+slot now, so going to or from the fourth tile — a real move that used to look like "something to
+nothing" — squashes as it should.
+
+### Docs: both halves showed the same Spaces
+
+The Workspace half was fed `currentWorkspace`, which is whichever workspace is active — and that is
+the **personal** one whenever you arrive at Docs from My Tasks. So both halves listed the same
+private Spaces, under a toggle whose first option said "Workspace". Now `realSheetWorkspace`, the
+same "last real workspace" fallback every other path in this file uses.

@@ -393,6 +393,36 @@ export default function ChatPanel() {
     observer.observe(content);
     return () => observer.disconnect();
   }, []);
+  // Opening the keyboard jumps to the newest message.
+  //
+  // Making room for the keyboard is not the same as showing what it covers: the padding added above
+  // means the last message CAN be scrolled clear of it, and until this effect existed you had to do
+  // that yourself. Reported as exactly that — "den burde jo automatisk pushes opp når keyboardet går
+  // opp? Så jeg ikke trenger å scrolle?".
+  //
+  // Deliberately not gated on stickToBottomRef, unlike the content observer above. That guard exists
+  // so someone reading history is never moved by content settling underneath them — but opening the
+  // keyboard is not something that happens underneath anyone, it is a deliberate "I am about to
+  // type", and you type at the bottom. Every chat app on a phone behaves this way.
+  //
+  // Only on the way UP: closing the keyboard leaves the view where it is, because that is often
+  // someone dismissing it to read.
+  const prevKeyboardOverlapRef = useRef(0);
+  useEffect(() => {
+    const el = scrollRef.current;
+    // 40px of slack so the iOS URL bar collapsing cannot be mistaken for a keyboard opening.
+    const opening = keyboardOverlap > prevKeyboardOverlapRef.current + 40;
+    prevKeyboardOverlapRef.current = keyboardOverlap;
+    if (!el || !opening) return;
+    // The padding this depends on is applied in the same commit, so scrollHeight is already correct
+    // by the time an effect runs. The extra frame is for the WebView, which is still panning.
+    el.scrollTop = el.scrollHeight;
+    const raf = requestAnimationFrame(() => {
+      el.scrollTop = el.scrollHeight;
+    });
+    return () => cancelAnimationFrame(raf);
+  }, [keyboardOverlap]);
+
   // Has this conversation ever finished loading? Cached messages render instantly on a second
   // visit; the very first open genuinely has nothing to show yet, and the difference matters
   // because "empty" and "not loaded" look identical from `messages.length` alone.

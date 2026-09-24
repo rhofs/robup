@@ -2976,8 +2976,13 @@ function PageContent() {
       // descending (newest first), which is why a task typed into the row at the bottom appeared
       // at the top instead. Tasks created from now on also carry a real `order` putting them last;
       // this makes the same true for everything created before that existed, which is all tied at 0.
+      // `?? 0`, not a bare subtraction. A missing `order` makes this comparator return NaN, and a
+      // NaN comparator does not put one row in the wrong place — it makes the sort's whole result
+      // unspecified. Every task now carries an order from the moment it is created (see
+      // optimisticCreateTask), so this should never fire; it is here because the failure mode is
+      // "the entire list is in a random order" and the cost of preventing it is four characters.
       result = [...result].sort(
-        (a, b) => a.order - b.order || new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime()
+        (a, b) => (a.order ?? 0) - (b.order ?? 0) || new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime()
       );
     }
     if (sortBy !== 'none') {
@@ -3958,7 +3963,10 @@ function PageContent() {
 
     const siblings = tasks
       .filter((t) => t.listId === dragged.listId && (t.parentId ?? null) === (dragged.parentId ?? null) && !t.archived)
-      .sort((a, b) => a.order - b.order || new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime());
+      // Same NaN guard as filteredTasks, and it matters more here: this sort decides the order that
+      // gets WRITTEN, so an unspecified result is not a display glitch, it is a scrambled list saved
+      // to the database.
+      .sort((a, b) => (a.order ?? 0) - (b.order ?? 0) || new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime());
     const withoutDragged = siblings.filter((t) => t.id !== draggedId);
     const targetIndex = withoutDragged.findIndex((t) => t.id === targetId);
     if (targetIndex === -1) return false;
@@ -4475,6 +4483,12 @@ function PageContent() {
           (moved) => {
             // Only once the move is on the undo stack, and only if there was one.
             if (moved) showUndoableToast('Task moved');
+            // And say so when there wasn't. A refused reorder used to end in silence: the rows
+            // snapped back and nothing said why, which is most of the reason this took four rounds
+            // to pin down — every report could only describe the symptom. The two ways it can be
+            // refused are a target in a different List or under a different parent (not a reorder,
+            // a move) and the server rejecting the write.
+            else showToast('Couldn\u2019t reorder — tasks can only be reordered within the same list.');
           }
         );
         return;
@@ -4747,7 +4761,7 @@ function PageContent() {
   const currentSubtasks = activeModalTask
     ? tasks
         .filter((t) => t.parentId === activeModalTask.id && !t.archived)
-        .sort((a, b) => a.order - b.order || new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime())
+        .sort((a, b) => (a.order ?? 0) - (b.order ?? 0) || new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime())
     : [];
   const activeComments = activeModalTask ? comments[activeModalTask.id] || [] : [];
   const allListsFlat = workspaces.flatMap((ws) => ws.spaces.flatMap((s) => s.lists.map((l) => ({ ...l, spaceName: s.name }))));
@@ -6912,9 +6926,16 @@ function PageContent() {
               // would an aggregate view even file it under?), so that stays where it already lives:
               // inside a Space's own board view.
               <DocsBrowser
-                spaces={currentWorkspace?.spaces ?? []}
+                // realSheetWorkspace, not currentWorkspace. The two halves of this screen are "the
+                // company's docs" and "mine", and currentWorkspace is whichever workspace happens
+                // to be active — which is the PERSONAL one whenever you arrive here from My Tasks.
+                // Both halves then listed the same private Spaces, under a toggle whose first option
+                // said "Workspace". Reported as the Space dropdown only ever offering the personal
+                // Spaces. This falls back to the last real workspace exactly like every other
+                // "come back to a real workspace" path in this file.
+                spaces={realSheetWorkspace?.spaces ?? []}
                 personalSpaces={personalWorkspace?.spaces ?? []}
-                workspaceName={currentWorkspace?.isPersonal ? 'Workspace' : currentWorkspace?.name ?? 'Workspace'}
+                workspaceName={realSheetWorkspace?.name ?? 'Workspace'}
                 onOpenDoc={(spaceId, folderId, docId) => {
                   setModalTaskStack([]);
                   // Switch workspace first when the doc lives in the other half. setNavigation
