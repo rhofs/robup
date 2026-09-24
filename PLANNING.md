@@ -8948,3 +8948,28 @@ its own; a rail there would be a second answer to a question already asked.
 
 **Not verified on a device.** This is a visual judgement and it may be one step too far or not far
 enough — the rail in particular is the kind of thing that either reads instantly or reads as stripes.
+
+### 2026-09-24 (continued) — item 10: the leading theory is wrong, and it is still open
+
+The note left last time guessed "likely the 30s poll replacing rows that framer then animates". That
+is now ruled out: **nothing re-fetches tasks on a timer.** The four 30-second intervals in
+`app/page.tsx` are chat unread counts, workspace invites, connection requests and notifications, and
+`fetchInitialData` — the only thing that writes `tasks` wholesale — runs on mount and on an identity
+change, nothing else.
+
+Also ruled out, each checked rather than assumed:
+
+- **Duplicate `layoutId`s across the push layer.** The context push renders the Home/Office screen
+  twice, not the board, so no TaskRow's `layoutId` exists in two places at once.
+- **A re-fetch on focus or visibility change.** There is none.
+
+What remains plausible and is *not* established: `layout` on every TaskRow means framer re-measures
+on every render and animates any delta it finds, so anything that shifts the list by a pixel — a
+change of height above it, a scrollbar, a store update landing mid-scroll — produces motion that
+nobody asked for. The staged startup fetch added this week is a new candidate of exactly that shape:
+its background half merges the other workspaces' tasks into the store a second or two after first
+paint, with no user action anywhere near it.
+
+**What would actually settle it** is knowing *when* it happens: within the first seconds after
+launch, on switching workspace, or while genuinely idle. Those three point at three different causes,
+and guessing between them is how the last round was spent. Left open deliberately.
