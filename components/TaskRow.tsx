@@ -376,10 +376,34 @@ function TaskRowImpl({
           // Lets the drag code find this row under the pointer and measure it live — see
           // app/page.tsx's reorder-indicator effect for why a measured rect was not enough.
           data-task-row={task.id}
-          className={`relative rounded-xl bg-neutral-800/50 ${isSelected ? 'ring-1 ring-inset ring-blue-500/60' : ''} ${
-            isOver ? 'ring-1 ring-inset ring-neutral-500' : ''
-          } ${isDragging ? 'opacity-40' : ''}`}
+          // "Er den for flat? Eller er det fargene?" — the two are the same answer. The card was a
+          // translucent grey rectangle on a grey sheet with no shadow (deliberately: in dark mode a
+          // shadow on near-black is invisible work, see globals.css), no border, and nothing on it
+          // that was not a shade of neutral. Every task looked like every other task, which is what
+          // "kommunalt" is describing: not ugly, just administrative.
+          //
+          // Three changes, smallest first:
+          //
+          // - An inset hairline along the top edge. This is how a dark interface says "surface"
+          //   without a border: a raised thing catches light on its upper edge. One pixel of white
+          //   at 5% is enough, and it costs no layout. In light mode it does nothing and needs to do
+          //   nothing — that theme separates by shadow instead (.elevated).
+          // - Fill up from /50 to /60. The step against the sheet was doing all of the separating
+          //   on its own, and it was a small step.
+          // - A status-coloured rail down the left edge, which is the part that answers "fargene".
+          //   The status pill already exists, but it sits in the metadata row among four other grey
+          //   things, so it names the status without ever letting you scan for it. At the edge, in
+          //   a fixed position on every card, the same information reads down the whole list at a
+          //   glance — the thing ClickUp's list actually does that this one did not.
+          className={`relative overflow-hidden rounded-xl bg-neutral-800/60 shadow-[inset_0_1px_0_rgba(255,255,255,0.05)] ${
+            isSelected ? 'ring-1 ring-inset ring-blue-500/60' : ''
+          } ${isOver ? 'ring-1 ring-inset ring-neutral-500' : ''} ${isDragging ? 'opacity-40' : ''}`}
         >
+          <span
+            aria-hidden
+            className="absolute left-0 top-0 bottom-0 w-[3px]"
+            style={{ backgroundColor: statusColorOf(task.status) }}
+          />
           <div className="absolute top-2 right-2 flex items-center gap-0.5 z-10">
             <span
               {...attributes}
@@ -459,7 +483,12 @@ function TaskRowImpl({
                 // No truncate — a long title wraps onto a second line instead of being cut off.
                 // Renaming moved into the long-press context menu (already has "Rename") rather
                 // than a permanently-visible pencil icon cluttering the title row.
-                <span className="font-medium text-neutral-200 leading-snug break-words">{task.title}</span>
+                // Up a step in both size and weight. The title was the same 14px/medium as the
+                // metadata under it, so the card had no first thing to read — every line arrived
+                // with equal claim on the eye, which is most of what made the list feel like a
+                // form. Type hierarchy is the cheapest possible fix for that and the one a flat
+                // design most depends on.
+                <span className="text-[15px] font-semibold text-app-strong leading-snug break-words">{task.title}</span>
               )}
             </div>
           </div>

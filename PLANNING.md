@@ -8917,3 +8917,34 @@ noted here rather than changed blind.
 **Also unverified:** all of this is reasoned from the code, not seen on a device. The slant and the
 late jump have a mechanism each that is certainly real; whether they are the *whole* of what was
 reported is a device test.
+
+### 2026-09-24 (continued) — item 1: why the mobile task list looked "kommunalt"
+
+The question asked was "Er den for flat? Eller er det fargene?" — and those are the same answer. The
+card was a translucent grey rectangle on a grey sheet, with no shadow (deliberately: in dark mode a
+shadow on near-black is invisible work — see the elevation note in globals.css), no border, and
+nothing on it that was not a shade of neutral. Every task looked like every other task. That is what
+"kommunalt" is describing: not ugly, administrative.
+
+Three changes, smallest first:
+
+- **An inset hairline along the top edge.** This is how a dark interface says "surface" without
+  drawing a border: a raised thing catches light on its upper edge. One pixel of white at 5%, no
+  layout cost. In light mode it does nothing, and does not need to — that theme separates by shadow.
+- **Fill from `/50` to `/60`.** One translucent step against the sheet was doing all of the
+  separating by itself, and it was a small step.
+- **A status-coloured rail down the left edge**, which is the part that answers "fargene". The status
+  pill already existed, but it sits in the metadata row among four other grey things — it *names* the
+  status without ever letting you scan for it. At the edge, in the same position on every card, the
+  same information reads down the whole list at a glance. This is the thing ClickUp's list does that
+  ours did not.
+- **Title up to 15px/semibold.** It was the same 14px/medium as the metadata beneath it, so the card
+  had no first thing to read: every line arrived with equal claim on the eye, which is most of what
+  made it feel like a form. Type hierarchy is the cheapest fix for flatness and the one a design
+  without chrome depends on most.
+
+Mobile only, matching the report. The desktop row is a table and already carries a status column of
+its own; a rail there would be a second answer to a question already asked.
+
+**Not verified on a device.** This is a visual judgement and it may be one step too far or not far
+enough — the rail in particular is the kind of thing that either reads instantly or reads as stripes.
