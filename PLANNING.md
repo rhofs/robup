@@ -9342,3 +9342,29 @@ differently in the same table. Switching custom fields over would also change th
 (native inputs store `YYYY-MM-DD`; the popover emits a full ISO string), and existing values —
 including everything that arrived in the ClickUp import — are in the native format, so it is a data
 migration rather than a swap. Left alone deliberately.
+
+### 2026-09-24 (continued) — item 8, third time: custom date fields now use the app's own picker
+
+The previous entry's content-sized input did not fix it. The screenshot after it still showed each
+calendar button about as close to the next column's date as to its own. A button that comes *after*
+its value, in a row of dates, will always sit up against the next date. Resizing could not change
+which side it was on. A brief attempt to move a custom button to the left of the value was dropped
+when the user settled it: "De skal se lik ut som Start og Due date, da er det løst."
+
+So the decision left open above is now made: **custom date fields render through
+`DatePickerPopover`**, the same badge and popover as Start/Due. There is no native `<input
+type="date">` left in the table.
+
+**The data migration that entry expected turned out not to be needed.** Storage stays `YYYY-MM-DD`.
+The cell converts on the way in (`${value}T00:00`, which parses as *local* midnight) and on the way
+out (the picked date's local year-month-day). Existing values, including the ClickUp import, are
+untouched, and a string sort on the field still sorts by date. The `T00:00` matters: a bare
+`new Date('2026-08-21')` is UTC midnight. In Norway that shows as 02:00 (the picker would treat it
+as a set time), and in Los Angeles it is the 20th. Checked in node under both timezones.
+
+**Times work too.** A time added in the popover is kept, stored as local `YYYY-MM-DDTHH:mm` (no
+`Z`), which still parses as local time and still sorts correctly next to date-only values. A UTC
+string would not: local midnight in Norway is the previous day in UTC. The round trip was checked
+in node under Oslo and Los Angeles.
+
+**Not verified in a browser.** Typechecked only.

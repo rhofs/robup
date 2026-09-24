@@ -132,30 +132,43 @@ function TaskRowImpl({
       );
     }
 
-    // A date field sizes to its own content; everything else fills the column.
+    // Custom date fields use the same picker and badge as Start and Due, so every date in the table
+    // looks and behaves alike. They used to be a native <input type="date">, whose calendar button
+    // sits after its value — in a row of date columns that put each button up against the NEXT
+    // column's date, and it was reported twice as "kalenderen følger feil column".
     //
-    // A native <input type="date"> puts its value on the left and its calendar button on the right,
-    // hard against the input's own edge. At w-full that edge IS the edge of the column, so the
-    // button ended up sitting against the next column's first character — with a gap of empty input
-    // between it and the date it actually belongs to. It reads as the next column's control, and
-    // clicking it then sets the date one column to the LEFT of where it appeared to be. Reported
-    // with a screenshot: "kalendergreia følger columnen til høyre, selv om den velger for venstre".
-    //
-    // Sizing to content keeps the value and its button together as one object, and the cell's own
-    // `justify-center` then centres that object with space on both sides — so the thing nearest the
-    // boundary is whitespace rather than a control. Text and number fields keep the full width they
-    // need for typing; neither of them draws anything at its far edge.
-    const isDate = field.type === 'date';
+    // Stored as LOCAL wall-clock text, never as a UTC ISO string: `YYYY-MM-DD` for a date (exactly
+    // what the native input wrote and the ClickUp import brought in, so nothing needs migrating) and
+    // `YYYY-MM-DDTHH:mm` once a time is added. Both parse as local time and both sort correctly as
+    // plain strings, which a UTC string would not — local midnight here is the previous day in UTC.
+    // A bare date gets `T00:00` before parsing because `new Date('2026-08-21')` is UTC midnight:
+    // 02:00 in Norway (which the picker would show as a set time), and the 20th west of Greenwich.
+    if (field.type === 'date') {
+      const localValue = /^\d{4}-\d{2}-\d{2}$/.test(value) ? `${value}T00:00` : value || null;
+      return (
+        <DatePickerPopover
+          value={localValue}
+          placeholder="---"
+          onChange={(iso) => {
+            if (!iso) return optimisticSetCustomFieldValue(task.id, field.id, '');
+            const d = new Date(iso);
+            const p2 = (n: number) => String(n).padStart(2, '0');
+            const ymd = `${d.getFullYear()}-${p2(d.getMonth() + 1)}-${p2(d.getDate())}`;
+            const hasTime = d.getHours() !== 0 || d.getMinutes() !== 0;
+            optimisticSetCustomFieldValue(task.id, field.id, hasTime ? `${ymd}T${p2(d.getHours())}:${p2(d.getMinutes())}` : ymd);
+          }}
+        />
+      );
+    }
+
     return (
       <input
-        type={field.type === 'number' ? 'number' : isDate ? 'date' : 'text'}
+        type={field.type === 'number' ? 'number' : 'text'}
         defaultValue={value}
         onClick={(e) => e.stopPropagation()}
         onBlur={(e) => optimisticSetCustomFieldValue(task.id, field.id, e.target.value)}
         placeholder="—"
-        className={`bg-transparent text-[11px] text-neutral-300 focus:outline-none focus:bg-neutral-900 rounded px-1 py-0.5 ${
-          isDate ? 'w-auto max-w-full' : 'w-full'
-        }`}
+        className="w-full bg-transparent text-[11px] text-neutral-300 focus:outline-none focus:bg-neutral-900 rounded px-1 py-0.5"
       />
     );
   };
