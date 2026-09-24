@@ -9336,7 +9336,7 @@ need for typing; neither draws anything at its far edge.
 visually closer to the next container than to its own content. That is a layout fact, not a bug in
 any one component, and it will be true of the next right-aligned affordance added to a table cell.
 
-**Not changed, and worth a decision later:** custom date fields use the browser's native date input
+**Not changed, and worth a decision later** *(decided and built later the same day — see "item 8, third time" below; no migration was needed after all)*: custom date fields use the browser's native date input
 while the built-in Start/Due columns use this app's own `DatePickerPopover`. The two look and behave
 differently in the same table. Switching custom fields over would also change their stored format
 (native inputs store `YYYY-MM-DD`; the popover emits a full ISO string), and existing values —
@@ -9368,3 +9368,23 @@ string would not: local midnight in Norway is the previous day in UTC. The round
 in node under Oslo and Los Angeles.
 
 **Not verified in a browser.** Typechecked only.
+
+**Also noticed, not fixed:** `npx eslint components/TaskRow.tsx` reports one error that predates this
+work: `react-hooks/set-state-in-effect` on the `autoFocusRename` effect (~line 88, `startRename()`
+called inside `useEffect`). The existing `eslint-disable` comment there only covers
+`exhaustive-deps`. It has no known user-visible effect, so it was left alone rather than folded into
+an unrelated fix.
+
+### Checkpoint — end of 2026-09-24
+
+Pushed to `main` (last: `5c0f075`) but **not confirmed deployed**. The next production redeploy
+carries everything from today, including three migrations that `migrate deploy` applies on start:
+`add_list_visible_columns`, `add_list_column_widths`, `add_list_sort`. Web-only, so no new APK.
+
+Still open from the feedback list:
+- **Item 10** (list rows moving on their own): cause unknown. Needs the user to say *when* it
+  happens: right after launch, on workspace switch, or while idle.
+- Mobile changes from today (DM transition, nav pill, keyboard, task cards) and the custom date
+  picker are reasoned or typechecked only, not seen on a device.
+- Pinned-tab pill may have the same remount problem as the nav pill. Not reproduced.
+
