@@ -9019,3 +9019,38 @@ offer an Undo for something that did not happen.
 column on the task itself, not a per-viewer setting, so everyone has always sorted by the same
 numbers. What was wrong was that the numbers often never arrived. They do now, or the move visibly
 fails.
+
+### 2026-09-24 (continued) — a List's columns were never saved anywhere
+
+"Hver gang jeg reinstallerer, så går Fieldsa på en list tilbake til default."
+
+`visibleColumns` was a plain `useState` with no persistence at all — **not even localStorage**. So it
+reset to the default four on every page load. A reinstall is only where it is most obvious; every
+refresh did the same thing, and the custom fields switched on for a List were gone the next time it
+was opened.
+
+**Stored on the List, server-side**, as `visibleColumnsJson` (new nullable column, migration
+`add_list_visible_columns`). Two reasons for that placement over a per-user setting:
+
+- It is how the report was phrased — "Fieldsa på en list" — and it is the only version that survives
+  what prompted it. The app being reinstalled takes every trace of local storage with it, so
+  localStorage would have answered the refresh case and not the one actually reported.
+- A shared setting means a custom field someone adds to a List is visible to the people they added it
+  for, rather than to whoever remembers to switch it on again on each device.
+
+Null means "never configured" and resolves to the default four, which is what every existing List is,
+so the migration changes nothing for anyone until they touch a column.
+
+**Saved only when exactly one List is on screen.** "All tasks" and a multi-List selection are
+aggregates with no single List the choice could belong to; there the columns stay for the session and
+are written nowhere, rather than being written to whichever List happened to be first.
+
+Its own store action rather than a field on `updateList`, because it must not go on the undo stack:
+every other list edit changes the thing itself, and Ctrl+Z after switching a column on should undo
+whatever real edit came before it. (`updateList` also pushes a history entry unconditionally, so an
+untracked field there would have pushed an empty one.)
+
+An empty array is kept as a real choice — every column off — rather than being read back as
+"unconfigured" and silently refilled.
+
+**Needs a migration on production** (`migrate deploy` runs on start, so a redeploy is enough).

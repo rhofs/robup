@@ -27,7 +27,7 @@ export async function GET() {
           },
           lists: {
             where: { deletedAt: null },
-            select: { id: true, name: true, color: true, textColor: true, icon: true, folderId: true, order: true, archived: true, isPrivate: true, accessJson: true },
+            select: { id: true, name: true, color: true, textColor: true, icon: true, folderId: true, order: true, archived: true, isPrivate: true, accessJson: true, visibleColumnsJson: true },
           },
           statuses: { orderBy: { order: 'asc' } },
           customFields: true,

@@ -371,6 +371,16 @@ model List {
   folderId     String?       @map("folder_id")
   folder       Folder?       @relation(fields: [folderId], references: [id], onDelete: Cascade)
   order        Int           @default(0)
+  // Which columns this List's board shows, as a JSON array of column keys ("status", "assignee",
+  // "startDate", "dueDate", and a CustomField id for each custom column). Null means "never
+  // configured" and falls back to the app's default four — which is what every existing List is.
+  //
+  // On the List rather than per user, deliberately. Two reasons: it is how the report was phrased
+  // ("Fieldsa på en list"), and it is the only version that survives what prompted it — the app
+  // being reinstalled, which takes every trace of local storage with it. A shared setting also
+  // means a custom field someone adds to a List is visible to the people they added it for, rather
+  // than to whoever happens to switch it on again on each device.
+  visibleColumnsJson String? @map("visible_columns_json")
   tasks        Task[]
   customFields CustomField[]
   // See Space.isPrivate/accessJson above — same shape, independent at this level.

@@ -178,6 +178,9 @@ export type HierarchyList = {
   archived: boolean;
   isPrivate: boolean;
   accessJson: string;
+  // JSON array of column keys, or null for "never configured" — see the schema for why this lives
+  // on the List rather than per user.
+  visibleColumnsJson: string | null;
 };
 
 export type HierarchySpace = {
@@ -522,6 +525,12 @@ interface TaskStore {
     listId: string,
     patch: { name?: string; color?: string | null; textColor?: string | null; icon?: string | null; isPrivate?: boolean; accessJson?: string }
   ) => Promise<void>;
+  // Which columns a List's board shows. Its own action rather than a field on updateList, because
+  // it must NOT go on the undo stack: every other list edit is a change to the thing itself, and
+  // Ctrl+Z after switching a column on should undo whatever real edit came before it, not the view
+  // setting. (updateList also pushes an entry unconditionally, so an untracked field there would
+  // push an empty one.)
+  setListVisibleColumns: (spaceId: string, listId: string, keys: string[]) => Promise<void>;
   // `targetSpaceId`, when given and different from `spaceId`, moves the list to a different
   // Space entirely (not just a different folder within the same one) — see the comment above
   // the implementation for why that needs a slower refetch-based path instead of a local patch.
@@ -2229,6 +2238,25 @@ export const useTaskStore = create<TaskStore>((set, get) => {
           redo: () => get().updateList(spaceId, listId, patch),
         });
       }
+    },
+
+    setListVisibleColumns: async (spaceId, listId, keys) => {
+      const visibleColumnsJson = JSON.stringify(keys);
+      set((state) => ({
+        workspaces: state.workspaces.map((ws) => ({
+          ...ws,
+          spaces: ws.spaces.map((s) =>
+            s.id === spaceId
+              ? { ...s, lists: s.lists.map((l) => (l.id === listId ? { ...l, visibleColumnsJson } : l)) }
+              : s
+          ),
+        })),
+      }));
+      await fetch(`/api/lists/${listId}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ visibleColumnsJson }),
+      });
     },
 
     archiveList: async (spaceId, listId, archived) => {

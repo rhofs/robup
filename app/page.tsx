@@ -536,6 +536,28 @@ const searchPillLabel = (view: string) =>
 const NAME_WIDTH_RANGE = { min: 140, max: 640 };
 const COLUMN_WIDTH_RANGE = { min: 70, max: 300 };
 const COLUMN_WIDTHS_STORAGE_KEY = 'siqt.columnWidths';
+
+// What a List shows before anyone has said otherwise, and what a List whose stored value is
+// unreadable falls back to. Named rather than written inline twice, because the two copies would
+// eventually disagree about what "default" means and only one of them is the one people see.
+const DEFAULT_VISIBLE_COLUMNS = ['status', 'assignee', 'startDate', 'dueDate'];
+
+// Total: a stored value that is missing, malformed or not an array of strings resolves to the
+// defaults rather than throwing. This is read on every List open, and a board that refuses to render
+// because someone hand-edited a row is a worse failure than a board with the wrong columns.
+function parseVisibleColumns(json: string | null | undefined): string[] {
+  if (!json) return DEFAULT_VISIBLE_COLUMNS;
+  try {
+    const parsed = JSON.parse(json);
+    if (!Array.isArray(parsed)) return DEFAULT_VISIBLE_COLUMNS;
+    const keys = parsed.filter((k): k is string => typeof k === 'string');
+    // An empty array is a real choice — every column switched off — and must survive a reload as
+    // itself rather than being read as "unconfigured" and silently refilled.
+    return keys;
+  } catch {
+    return DEFAULT_VISIBLE_COLUMNS;
+  }
+}
 const ACTIVITY_PANEL_STORAGE_KEY = 'siqt.showActivityPanel';
 const COLLAPSED_SPACES_STORAGE_KEY = 'siqt.collapsedSpaces';
 
@@ -715,6 +737,7 @@ function PageContent() {
     moveList,
     reorderList,
     reorderTaskSiblings,
+    setListVisibleColumns,
     templates,
     fetchTemplates,
     saveTemplate,
@@ -1381,7 +1404,34 @@ function PageContent() {
   // "+ Add Task" pattern.
   const [subtaskAddOpen, setSubtaskAddOpen] = useState(false);
 
-  const [visibleColumns, setVisibleColumns] = useState<string[]>(['status', 'assignee', 'startDate', 'dueDate']);
+  const [visibleColumns, setVisibleColumns] = useState<string[]>(DEFAULT_VISIBLE_COLUMNS);
+
+  // The one List currently on screen, if there is exactly one. Column visibility is stored on the
+  // List (see prisma/schema.prisma), and an aggregate view — "All tasks", or several Lists at once —
+  // has no single List the choice could belong to.
+  const soleActiveList = useMemo(() => {
+    if (activeListIds.size !== 1) return null;
+    const [listId] = [...activeListIds];
+    for (const ws of workspaces) {
+      for (const space of ws.spaces) {
+        const list = space.lists.find((l) => l.id === listId);
+        if (list) return { list, spaceId: space.id };
+      }
+    }
+    return null;
+  }, [activeListIds, workspaces]);
+
+  // Load the List's saved columns when you open it, and the defaults when it has none.
+  //
+  // Keyed on the id AND the stored value: the id alone would miss the first arrival of the data
+  // (the tree loads before the saved JSON is read on a cold start), and the value alone would not
+  // notice a move to a different List that happens to be configured identically.
+  const soleActiveListId = soleActiveList?.list.id ?? null;
+  const soleActiveListColumns = soleActiveList?.list.visibleColumnsJson ?? null;
+  useEffect(() => {
+    if (!soleActiveListId) return;
+    setVisibleColumns(parseVisibleColumns(soleActiveListColumns));
+  }, [soleActiveListId, soleActiveListColumns]);
   const [columnWidths, setColumnWidths] = useState<Record<string, number>>(DEFAULT_COLUMN_WIDTHS);
   const [showActivityPanel, setShowActivityPanel] = useState(true);
 
@@ -3008,12 +3058,32 @@ function PageContent() {
       <span className="text-blue-400 inline-flex">{sortOrder === 'asc' ? <ChevronUp className="w-3 h-3" /> : <ChevronDown className="w-3 h-3" />}</span>
     ) : null;
 
+  // Every write to the visible column set goes through here, so there is exactly one place that
+  // knows the choice is saved. It was previously plain component state with no persistence at all —
+  // not even localStorage — so it reset to the default four on every load, and the custom fields
+  // switched on for a List were gone again the next time it was opened. Reported after an app
+  // reinstall, which is when it is most obvious, but it was true of every refresh.
+  //
+  // Saved only when exactly ONE List is on screen, because that is the only case with a List to
+  // save it against. "All tasks" and a multi-List selection are aggregates: the columns shown there
+  // stay for the session and are not written anywhere, rather than being written to whichever List
+  // happened to be first.
+  const applyVisibleColumns = (update: (cols: string[]) => string[]) => {
+    setVisibleColumns((cols) => {
+      const next = update(cols);
+      if (next !== cols && soleActiveList) {
+        void setListVisibleColumns(soleActiveList.spaceId, soleActiveList.list.id, next);
+      }
+      return next;
+    });
+  };
+
   const toggleColumn = (key: string) => {
-    setVisibleColumns((cols) => (cols.includes(key) ? cols.filter((c) => c !== key) : [...cols, key]));
+    applyVisibleColumns((cols) => (cols.includes(key) ? cols.filter((c) => c !== key) : [...cols, key]));
   };
 
   const reorderColumn = (fromKey: string, toKey: string) => {
-    setVisibleColumns((cols) => {
+    applyVisibleColumns((cols) => {
       const from = cols.indexOf(fromKey);
       const to = cols.indexOf(toKey);
       if (from === -1 || to === -1 || from === to) return cols;
