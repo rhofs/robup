@@ -9377,9 +9377,10 @@ an unrelated fix.
 
 ### Checkpoint — end of 2026-09-24
 
-Pushed to `main` (last: `5c0f075`) but **not confirmed deployed**. The next production redeploy
-carries everything from today, including three migrations that `migrate deploy` applies on start:
-`add_list_visible_columns`, `add_list_column_widths`, `add_list_sort`. Web-only, so no new APK.
+Pushed to `main` but **not confirmed deployed**. The next production redeploy carries everything
+from today, including four migrations that `migrate deploy` applies on start:
+`add_list_visible_columns`, `add_list_column_widths`, `add_list_sort`, and
+`add_custom_field_date_kind`. Web-only, so no new APK.
 
 Still open from the feedback list:
 - **Item 10** (list rows moving on their own): cause unknown. Needs the user to say *when* it
@@ -9388,3 +9389,34 @@ Still open from the feedback list:
   picker are reasoned or typechecked only, not seen on a device.
 - Pinned-tab pill may have the same remount problem as the nav pill. Not reproduced.
 
+
+### 2026-09-24 (continued) — urgency colours for custom date fields: decided per field
+
+Asked for next: custom date fields should also get the grey/yellow/green/red urgency colours Start
+and Due have (`lib/dateBadgeColor.ts`). The open question was what "passed" means. A deadline such as
+"Levering" should turn red, like Due. An event such as "Påsyn" has simply happened and should turn
+green, like Start. Three options were put to the user: always like Due, always like Start, or a
+choice per field. **The user chose per field**: each date field gets a kind, *deadline* (red when
+passed) or *event* (green when passed), defaulting to deadline.
+
+**Built:**
+- `CustomField.dateKind` (nullable text, migration `add_custom_field_date_kind`). Null reads as
+  *deadline*, so every existing date field turns red when passed from the next deploy on, until
+  someone switches it. Migration checked against a scratch SQLite built from all migrations:
+  applied cleanly, and `migrate diff` against the schema afterwards is empty.
+- `customDateColor` / `customDateTooltip` in `lib/dateBadgeColor.ts`. Deadline delegates to the Due
+  functions, so it is identical to Due. Event is Start's grey/yellow/green, but **never turns red
+  because of the task's own Due date** (Start does). A custom event date says nothing about the
+  task's deadline. Tooltip for events: "4 days ago" / "In 19 hours". Checked with tsx for all three
+  kinds (null, deadline, event) at past, within 24h, and far future.
+- Colour is computed from the `T00:00` local value, not the raw stored `YYYY-MM-DD`: a bare date
+  parses as UTC and would flip colour two hours early in Norway.
+- "Edit field" (column header menu → edit) shows a Deadline / Event choice for date fields. The
+  PATCH route rejects any other value. The choice is only sent when it changed, and it is undoable.
+- **Found along the way, fixed:** undoing a field *deletion* recreated it without its `listId`, so
+  a List-scoped field came back Space-wide. The undo now passes `listId` and `dateKind` through
+  (`POST /api/custom-fields` accepts `dateKind`).
+
+**Not built:** choosing the kind at *creation* (the "new field" popover). It is set afterwards via
+Edit field. **Not verified in a browser.** Typechecked, and the colour logic tested in isolation.
+**Needs a migration on production** (`migrate deploy` on start handles it).

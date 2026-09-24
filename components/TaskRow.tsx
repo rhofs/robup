@@ -9,7 +9,7 @@ import { useIsMobile } from '../hooks/useIsMobile';
 import { useLongPress } from '../hooks/useLongPress';
 import DatePickerPopover from './DatePickerPopover';
 import FloatingPopover from './FloatingPopover';
-import { startDateColor, dueDateColor, DATE_BADGE_COLOR_HEX, startDateTooltip, dueDateTooltip } from '../lib/dateBadgeColor';
+import { startDateColor, dueDateColor, DATE_BADGE_COLOR_HEX, startDateTooltip, dueDateTooltip, customDateColor, customDateTooltip } from '../lib/dateBadgeColor';
 
 export type ColumnDef = {
   key: string;
@@ -149,6 +149,14 @@ function TaskRowImpl({
         <DatePickerPopover
           value={localValue}
           placeholder="---"
+          // The same urgency colours as Start/Due, read through the field's own kind: a deadline
+          // turns red once passed, an event turns green. Computed from `localValue`, never from the
+          // raw stored text — see the T00:00 note above.
+          badgeColorHex={(() => {
+            const c = customDateColor(localValue, field.dateKind);
+            return c ? DATE_BADGE_COLOR_HEX[c] : undefined;
+          })()}
+          tooltip={customDateTooltip(localValue, field.dateKind)}
           onChange={(iso) => {
             if (!iso) return optimisticSetCustomFieldValue(task.id, field.id, '');
             const d = new Date(iso);

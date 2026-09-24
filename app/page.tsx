@@ -1899,10 +1899,12 @@ function PageContent() {
   const [statusToDelete, setStatusToDelete] = useState<{ id: string; name: string } | null>(null);
   const [fieldNameDraft, setFieldNameDraft] = useState('');
   const [fieldOptionsDraft, setFieldOptionsDraft] = useState<{ id: string; label: string; color: string }[]>([]);
+  const [fieldDateKindDraft, setFieldDateKindDraft] = useState<'deadline' | 'event'>('deadline');
 
   useEffect(() => {
     if (fieldEditTarget) {
       setFieldNameDraft(fieldEditTarget.name);
+      setFieldDateKindDraft(fieldEditTarget.dateKind ?? 'deadline');
       setFieldOptionsDraft(
         (fieldEditTarget.options ?? []).map((o) => ({ id: o.id || crypto.randomUUID(), label: o.label, color: o.color }))
       );
@@ -1933,6 +1935,11 @@ function PageContent() {
     updateCustomField(currentSpace.id, fieldEditTarget.id, {
       name: fieldNameDraft.trim() || fieldEditTarget.name,
       options: fieldEditTarget.type === 'dropdown' ? fieldOptionsDraft : undefined,
+      // Only sent when it changed, so saving a rename does not also push a no-op dateKind write.
+      dateKind:
+        fieldEditTarget.type === 'date' && fieldDateKindDraft !== (fieldEditTarget.dateKind ?? 'deadline')
+          ? fieldDateKindDraft
+          : undefined,
     });
     setFieldEditTarget(null);
   };
@@ -8113,6 +8120,33 @@ function PageContent() {
                   className="w-full bg-neutral-950 border border-neutral-700 rounded-lg px-3 py-2 text-xs text-app-strong focus:outline-none focus:border-blue-500"
                 />
               </div>
+
+              {fieldEditTarget.type === 'date' && (
+                <div>
+                  <label className="text-[11px] text-neutral-400 mb-1 block">When the date has passed</label>
+                  <div className="grid grid-cols-2 gap-2">
+                    {([
+                      { kind: 'deadline', title: 'Deadline', hint: 'Turns red — it is late', color: DATE_BADGE_COLOR_HEX.red },
+                      { kind: 'event', title: 'Event', hint: 'Turns green — it happened', color: DATE_BADGE_COLOR_HEX.green },
+                    ] as const).map((o) => (
+                      <button
+                        key={o.kind}
+                        type="button"
+                        onClick={() => setFieldDateKindDraft(o.kind)}
+                        className={`text-left rounded-lg border px-3 py-2 cursor-pointer transition ${
+                          fieldDateKindDraft === o.kind ? 'border-blue-500 bg-blue-500/10' : 'border-neutral-700 hover:border-neutral-500'
+                        }`}
+                      >
+                        <span className="flex items-center gap-1.5 text-xs font-medium text-app-strong">
+                          <span className="w-2 h-2 rounded-full" style={{ backgroundColor: o.color }} />
+                          {o.title}
+                        </span>
+                        <span className="block text-[10px] text-neutral-500 mt-0.5">{o.hint}</span>
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
 
               {fieldEditTarget.type === 'dropdown' && (
                 <div>

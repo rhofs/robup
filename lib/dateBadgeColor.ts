@@ -77,3 +77,28 @@ export function startDateTooltip(startDate: Date | string | null, now: Date = ne
   const mag = relativeMagnitude(startDate, now)!;
   return d.getTime() <= now.getTime() ? `Started ${mag} ago` : `Starts in ${mag}`;
 }
+
+// Custom date fields. A field's `dateKind` decides what "passed" means, because a custom date can be
+// either kind of thing: "Levering" is a deadline, and passing it is late (red, exactly like Due);
+// "Påsyn" is an event, and passing it just means it happened (green, like Start). Null is read as
+// deadline. Unlike Start, an event never turns red because of the task's own Due date — the field
+// says nothing about the task's deadline.
+export type CustomDateKind = 'deadline' | 'event';
+
+export function customDateColor(value: Date | string | null, kind: CustomDateKind | null | undefined, now: Date = new Date()): DateBadgeColor | null {
+  if (kind !== 'event') return dueDateColor(value, now);
+  const d = toDate(value);
+  if (!d) return null;
+  const diff = d.getTime() - now.getTime();
+  if (diff <= 0) return 'green';
+  if (diff <= DAY_MS) return 'yellow';
+  return 'white';
+}
+
+export function customDateTooltip(value: Date | string | null, kind: CustomDateKind | null | undefined, now: Date = new Date()): string | undefined {
+  if (kind !== 'event') return dueDateTooltip(value, now);
+  const d = toDate(value);
+  if (!d) return undefined;
+  const mag = relativeMagnitude(value, now)!;
+  return d.getTime() <= now.getTime() ? `${mag} ago` : `In ${mag}`;
+}

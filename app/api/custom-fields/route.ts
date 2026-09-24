@@ -17,6 +17,8 @@ export async function POST(req: Request) {
       name: body.name,
       type: body.type,
       options: JSON.stringify(body.options ?? []),
+      // Only 'event' is ever stored on create; anything else is the null default, which reads as deadline.
+      ...(body.dateKind === 'event' ? { dateKind: 'event' } : {}),
     },
   });
   return NextResponse.json({ ...field, options: JSON.parse(field.options) });

@@ -16,6 +16,12 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
 
   const data: any = {};
   if (body.name !== undefined) data.name = body.name;
+  if (body.dateKind !== undefined) {
+    if (body.dateKind !== 'deadline' && body.dateKind !== 'event') {
+      return NextResponse.json({ error: 'dateKind must be "deadline" or "event"' }, { status: 400 });
+    }
+    data.dateKind = body.dateKind;
+  }
 
   let renamedPairs: { from: string; to: string }[] = [];
   if (body.options !== undefined) {

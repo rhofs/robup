@@ -23,6 +23,8 @@ export type CustomFieldDef = {
   // Null = Space-wide (every field created before this existed, and any created with no single
   // List active). Set = only that List's own task table shows this column.
   listId: string | null;
+  // Date fields only — see customDateColor in lib/dateBadgeColor.ts. Null reads as 'deadline'.
+  dateKind?: 'deadline' | 'event' | null;
 };
 
 export type AppUser = {
@@ -403,12 +405,13 @@ interface TaskStore {
     type: CustomFieldDef['type'],
     options?: { label: string; color: string }[],
     id?: string,
-    listId?: string | null
+    listId?: string | null,
+    dateKind?: CustomFieldDef['dateKind']
   ) => Promise<void>;
   updateCustomField: (
     spaceId: string,
     fieldId: string,
-    patch: { name?: string; options?: { id?: string; label: string; color: string }[] }
+    patch: { name?: string; options?: { id?: string; label: string; color: string }[]; dateKind?: 'deadline' | 'event' }
   ) => Promise<void>;
   deleteCustomField: (spaceId: string, fieldId: string) => Promise<void>;
 
@@ -1532,11 +1535,11 @@ export const useTaskStore = create<TaskStore>((set, get) => {
       }
     },
 
-    createCustomField: async (spaceId, name, type, options = [], id, listId = null) => {
+    createCustomField: async (spaceId, name, type, options = [], id, listId = null, dateKind = null) => {
       const res = await fetch('/api/custom-fields', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ id, spaceId, name, type, options, listId }),
+        body: JSON.stringify({ id, spaceId, name, type, options, listId, dateKind }),
       });
       const newField = await res.json();
       set((state) => ({
@@ -1548,7 +1551,7 @@ export const useTaskStore = create<TaskStore>((set, get) => {
       useHistoryStore.getState().push({
         label: `Create field "${name}"`,
         undo: () => get().deleteCustomField(spaceId, newField.id),
-        redo: () => get().createCustomField(spaceId, name, type, options, newField.id, listId),
+        redo: () => get().createCustomField(spaceId, name, type, options, newField.id, listId, dateKind),
       });
     },
 
@@ -1598,6 +1601,7 @@ export const useTaskStore = create<TaskStore>((set, get) => {
         const oldPatch: typeof patch = {};
         if (patch.name !== undefined) oldPatch.name = oldField.name;
         if (patch.options !== undefined) oldPatch.options = oldField.options;
+        if (patch.dateKind !== undefined) oldPatch.dateKind = oldField.dateKind ?? 'deadline';
         useHistoryStore.getState().push({
           label: 'Update field',
           undo: () => get().updateCustomField(spaceId, fieldId, oldPatch),
@@ -1623,7 +1627,7 @@ export const useTaskStore = create<TaskStore>((set, get) => {
       if (field) {
         useHistoryStore.getState().push({
           label: `Delete field "${field.name}"`,
-          undo: () => get().createCustomField(spaceId, field.name, field.type, field.options, field.id),
+          undo: () => get().createCustomField(spaceId, field.name, field.type, field.options, field.id, field.listId, field.dateKind),
           redo: () => get().deleteCustomField(spaceId, fieldId),
         });
       }

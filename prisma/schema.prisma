@@ -430,6 +430,9 @@ model CustomField {
   // List is active from now on. Deliberately not a backfill/migration of existing rows.
   listId    String?  @map("list_id")
   list      List?    @relation(fields: [listId], references: [id], onDelete: Cascade)
+  // Date fields only: what a date that has passed means. Null / "deadline" = red once passed, like
+  // Due. "event" = green once passed, like Start — the thing has happened, it is not late.
+  dateKind  String?  @map("date_kind")
   createdAt DateTime @default(now()) @map("created_at")
 }
 
