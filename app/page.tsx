@@ -714,7 +714,7 @@ function PageContent() {
     deleteSpace,
     moveList,
     reorderList,
-    reorderTask,
+    reorderTaskSiblings,
     templates,
     fetchTemplates,
     saveTemplate,
@@ -3867,10 +3867,10 @@ function PageContent() {
   // Returns whether it actually reordered anything, and resolves only once the change is recorded.
   //
   // Both halves are why Undo did not work after moving a task. The caller showed an undoable toast
-  // the instant this was called, but this is asynchronous: each reorderTask pushes its history entry
-  // only after its own PATCH resolves, and the transaction groups them only once all of those are
-  // done. So the Undo button existed before there was anything on the stack — press it quickly, or
-  // on a slow connection at all, and it either did nothing or undid whatever happened to be there
+  // the instant this was called, but this is asynchronous: the history entry only exists once the
+  // write has resolved. So the Undo button existed before there was anything on the stack — press
+  // it quickly, or on a slow connection at all, and it either did nothing or undid whatever
+  // happened to be there
   // from before. And several of the early returns below do nothing at all, while the toast still
   // said "Task moved" and offered to undo it.
   const reorderTaskRelativeTo = async (
@@ -3894,14 +3894,11 @@ function PageContent() {
     if (targetIndex === -1) return false;
     const insertAt = position === 'below' ? targetIndex + 1 : targetIndex;
     const next = [...withoutDragged.slice(0, insertAt), dragged, ...withoutDragged.slice(insertAt)];
-    await useHistoryStore.getState().transaction('Reorder tasks', async () => {
-      // Awaited together inside the transaction, never fire-and-forget: transaction() closes the
-      // moment its callback returns, and each reorderTask only pushes its history entry after its
-      // own fetch resolves — un-awaited, they would land outside the group and Ctrl+Z would undo
-      // one task at a time. This exact trap is documented in Known bugs.
-      await Promise.all(next.map((t, index) => (t.order !== index ? reorderTask(t.id, index) : null)));
-    });
-    return true;
+    // One request for the whole set, and its result is actually read. This was N concurrent PATCHes
+    // wrapped in a history transaction, none of whose responses anyone checked — see
+    // reorderTaskSiblings and app/api/tasks/reorder/route.ts. It also returns false now when the
+    // server refuses, so the caller does not offer an Undo for something that did not happen.
+    return await reorderTaskSiblings(next.map((t) => t.id));
   };
 
   // Stops the browser scrolling while a task is actually being dragged.
@@ -4665,7 +4662,23 @@ function PageContent() {
   // top-level tasks (filteredTasks' own `!!task.archived === showArchived` filter) — this list had
   // no such filter at all, so marking a subtask done just left it sitting there, green, forever,
   // instead of disappearing the way checking off a normal task does.
-  const currentSubtasks = activeModalTask ? tasks.filter((t) => t.parentId === activeModalTask.id && !t.archived) : [];
+  // Sorted, which it was not — and that was the whole of "subtasks cannot be reordered".
+  //
+  // Three rounds went into the drag: which rows count as siblings, how wide the drop bands are,
+  // which gap the indicator names. All of that was working. The reorder wrote the new positions to
+  // the server and the store, and then this line rendered the subtasks in whatever order `tasks`
+  // happened to hold — so nothing moved, in a way that survived a refresh and looked exactly like
+  // the drag having failed. An undo toast appeared, correctly, for a move that had really happened
+  // and was simply never displayed.
+  //
+  // The lesson is the expensive one: the board sorts by `order` right here in filteredTasks, and
+  // this list is the board's own rows rendered a second time. A second copy of a list is a second
+  // place the sort has to live, and it was never asked for.
+  const currentSubtasks = activeModalTask
+    ? tasks
+        .filter((t) => t.parentId === activeModalTask.id && !t.archived)
+        .sort((a, b) => a.order - b.order || new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime())
+    : [];
   const activeComments = activeModalTask ? comments[activeModalTask.id] || [] : [];
   const allListsFlat = workspaces.flatMap((ws) => ws.spaces.flatMap((s) => s.lists.map((l) => ({ ...l, spaceName: s.name }))));
 
@@ -8636,6 +8649,11 @@ function PageContent() {
                             columns={activeColumns}
                             gridTemplate={rowGridTemplate}
                             statuses={statuses}
+                            // The insertion line, which the board's rows have always had and these
+                            // never did — so a drag inside a task gave no sign of where the drop
+                            // would land, and there was nothing to tell you the difference between
+                            // reordering and nesting. Reported as "det kommer ingen indikasjon".
+                            dropIndicator={taskDropIndicator?.targetId === sub.id ? taskDropIndicator.position : null}
                             onContextMenu={openTaskMenu}
                             autoFocusRename={renamingTaskId === sub.id}
                             onRenameHandled={() => setRenamingTaskId(null)}

@@ -531,6 +531,9 @@ interface TaskStore {
   // one task, one order value; the caller renumbers a whole run of siblings inside a
   // useHistoryStore transaction so a single Ctrl+Z (or the mobile Undo toast) puts them all back.
   reorderTask: (taskId: string, order: number) => Promise<void>;
+  // Writes a whole sibling set's positions in one atomic request. Returns false if the server
+  // refused, having already put the local order back.
+  reorderTaskSiblings: (orderedIds: string[]) => Promise<boolean>;
   templates: AppTemplate[];
   fetchTemplates: (workspaceId: string) => Promise<void>;
   saveTemplate: (workspaceId: string, name: string, kind: TemplateKind, payload: unknown) => Promise<void>;
@@ -2409,6 +2412,55 @@ export const useTaskStore = create<TaskStore>((set, get) => {
       await fetch(`/api/tasks/${taskId}/attachments?attachmentId=${encodeURIComponent(attachmentId)}`, {
         method: 'DELETE',
       });
+    },
+
+    // The whole sibling set in one request. See app/api/tasks/reorder/route.ts for why: the old
+    // path was one PATCH per task fired with Promise.all, which on an imported list meant hundreds
+    // of concurrent requests, none of whose responses anyone looked at. The optimistic state below
+    // is therefore the ONLY thing that used to make a reorder look successful.
+    //
+    // Undo is one entry for the whole move, holding the order the list was in before it — which is
+    // also the only way to undo this correctly. Per-task entries could be replayed in an order that
+    // never existed.
+    reorderTaskSiblings: async (orderedIds) => {
+      const before = get().tasks.filter((t) => orderedIds.includes(t.id)).map((t) => ({ id: t.id, order: t.order }));
+      const apply = async (ids: string[]) => {
+        set((state) => ({
+          tasks: state.tasks.map((t) => {
+            const index = ids.indexOf(t.id);
+            return index === -1 ? t : { ...t, order: index };
+          }),
+        }));
+        const res = await fetch('/api/tasks/reorder', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ ids }),
+        });
+        return res.ok;
+      };
+      const ok = await apply(orderedIds);
+      if (!ok) {
+        // Put it back. A reorder that silently kept the position it could not save is exactly the
+        // bug this replaced: it looks done until the next refresh disagrees.
+        set((state) => ({
+          tasks: state.tasks.map((t) => {
+            const prev = before.find((b) => b.id === t.id);
+            return prev ? { ...t, order: prev.order } : t;
+          }),
+        }));
+        return false;
+      }
+      const previousIds = [...before].sort((a, b) => a.order - b.order).map((b) => b.id);
+      useHistoryStore.getState().push({
+        label: 'Reorder tasks',
+        undo: async () => {
+          await apply(previousIds);
+        },
+        redo: async () => {
+          await apply(orderedIds);
+        },
+      });
+      return true;
     },
 
     reorderTask: async (taskId, order) => {

@@ -8973,3 +8973,49 @@ paint, with no user action anywhere near it.
 **What would actually settle it** is knowing *when* it happens: within the first seconds after
 launch, on switching workspace, or while genuinely idle. Those three point at three different causes,
 and guessing between them is how the last round was spent. Left open deliberately.
+
+## 2026-09-24 (continued) — subtasks, third time: the list was never sorted
+
+"Kan fortsatt ikke bytte plass på subtasks... det kommer ingen indikasjon, men det kommer en 'undo'
+valg, uten at noe faktisk har skjedd."
+
+That sentence contains the answer, and two rounds went past it. **An Undo offer only appears when the
+reorder reported success** — the caller checks the return value. So the move was happening. It was
+being written to the server and to the store. It was simply never shown.
+
+`currentSubtasks` was `tasks.filter(...)` with **no sort at all**. The board sorts by `order` inside
+`filteredTasks`; this list is the board's own rows rendered a second time, and the sort did not come
+with them. So the subtask list rendered in whatever order the `tasks` array happened to hold, which
+no amount of correct reordering can change.
+
+Everything fixed in the two previous rounds — which rows count as siblings, how wide the drop bands
+are, which gap the indicator names — was real, and none of it was the bug. **The general lesson: a
+second copy of a list is a second place the sort has to live, and nobody asks for it.**
+
+The missing indicator was separate and simpler: the subtask rows were never passed `dropIndicator`,
+so the insertion line the board has always drawn had nothing to draw it. Now passed.
+
+### And the reorder write itself was never checked
+
+Reported alongside as "Listene husker ikke hvilken rekkefølge tasksa ligger i om jeg refresher
+siden". The write was one `PATCH /api/tasks/[id]` per sibling, fired together with `Promise.all`, and
+**`reorderTask` never looked at `res.ok`**. On a list of a dozen that is wasteful; on an imported
+list of several hundred it is several hundred concurrent requests, each also writing an activity row
+and kicking off a calendar sync. Anything the browser dropped or the server refused was treated as
+saved, the optimistic store kept the new order, and it looked right until a refresh read the real one
+back.
+
+Now `POST /api/tasks/reorder` — one request, one transaction, positions written as `order = index`.
+It verifies every id is a true sibling of every other (positions mean nothing across parents, and a
+mixed set would let a caller renumber a list it never named), checks the list's access once and each
+task's own visibility against that context, and rejects duplicate ids. No activity rows and no
+calendar sync: position says nothing about what the work is, and a hundred "moved" entries would bury
+the changes that matter.
+
+The client puts the old order back when the server refuses, and returns false so the caller does not
+offer an Undo for something that did not happen.
+
+**To the question asked** — "jeg antar andre ikke ser samme rekkefølge som meg heller?" — order is a
+column on the task itself, not a per-viewer setting, so everyone has always sorted by the same
+numbers. What was wrong was that the numbers often never arrived. They do now, or the move visibly
+fails.
