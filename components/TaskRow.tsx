@@ -132,14 +132,30 @@ function TaskRowImpl({
       );
     }
 
+    // A date field sizes to its own content; everything else fills the column.
+    //
+    // A native <input type="date"> puts its value on the left and its calendar button on the right,
+    // hard against the input's own edge. At w-full that edge IS the edge of the column, so the
+    // button ended up sitting against the next column's first character — with a gap of empty input
+    // between it and the date it actually belongs to. It reads as the next column's control, and
+    // clicking it then sets the date one column to the LEFT of where it appeared to be. Reported
+    // with a screenshot: "kalendergreia følger columnen til høyre, selv om den velger for venstre".
+    //
+    // Sizing to content keeps the value and its button together as one object, and the cell's own
+    // `justify-center` then centres that object with space on both sides — so the thing nearest the
+    // boundary is whitespace rather than a control. Text and number fields keep the full width they
+    // need for typing; neither of them draws anything at its far edge.
+    const isDate = field.type === 'date';
     return (
       <input
-        type={field.type === 'number' ? 'number' : field.type === 'date' ? 'date' : 'text'}
+        type={field.type === 'number' ? 'number' : isDate ? 'date' : 'text'}
         defaultValue={value}
         onClick={(e) => e.stopPropagation()}
         onBlur={(e) => optimisticSetCustomFieldValue(task.id, field.id, e.target.value)}
         placeholder="—"
-        className="w-full bg-transparent text-[11px] text-neutral-300 focus:outline-none focus:bg-neutral-900 rounded px-1 py-0.5"
+        className={`bg-transparent text-[11px] text-neutral-300 focus:outline-none focus:bg-neutral-900 rounded px-1 py-0.5 ${
+          isDate ? 'w-auto max-w-full' : 'w-full'
+        }`}
       />
     );
   };

@@ -9314,3 +9314,31 @@ displayed sorted as `Alpha Bravo Charlie Delta Echo`, with Echo dragged above Al
 as `Echo Alpha Bravo Charlie Delta`.
 
 **Needs a migration on production.**
+
+### 2026-09-24 (continued) — item 8, properly this time: the calendar button sat in the next column
+
+The earlier fix for this (the structural grid cell, so a null checkbox could not shift every column
+one place left) was a real bug and not this one. The screenshot settled it.
+
+A native `<input type="date">` draws its value on the left and its calendar button hard against its
+own right edge. The input was `w-full`, so that edge **is** the edge of the column — leaving a gap of
+empty input between the date and its own button, and putting the button immediately before the next
+column's first character. It reads as belonging to the column on the right, and clicking it then
+sets a date one column to the left of where it appeared to be. Exactly as reported:
+"kalendergreia følger columnen til høyre, selv om den velger for venstre".
+
+Date fields now size to their content, so the value and its button stay together as one object, and
+the cell's own `justify-center` centres that object with space on both sides — the thing nearest the
+column boundary is whitespace rather than a control. Text and number fields keep the full width they
+need for typing; neither draws anything at its far edge.
+
+**Worth noticing for next time:** a control that is right-aligned inside a full-width container is
+visually closer to the next container than to its own content. That is a layout fact, not a bug in
+any one component, and it will be true of the next right-aligned affordance added to a table cell.
+
+**Not changed, and worth a decision later:** custom date fields use the browser's native date input
+while the built-in Start/Due columns use this app's own `DatePickerPopover`. The two look and behave
+differently in the same table. Switching custom fields over would also change their stored format
+(native inputs store `YYYY-MM-DD`; the popover emits a full ISO string), and existing values —
+including everything that arrived in the ClickUp import — are in the native format, so it is a data
+migration rather than a swap. Left alone deliberately.
