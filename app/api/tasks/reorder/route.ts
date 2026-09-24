@@ -37,7 +37,16 @@ export async function POST(req: Request) {
   const body = await req.json().catch(() => null);
 
   if (typeof body?.draggedId === 'string' && typeof body?.targetId === 'string') {
-    return reorderByGesture(body.draggedId, body.targetId, body.position === 'below' ? 'below' : 'above', userId);
+    // `baseline` is the sequence the list was in ON SCREEN when the drag happened, and it is only
+    // sent when a column sort is active. That is the one thing the client knows and the server
+    // cannot: sorting by name is a re-sequencing that exists nowhere in the database. Dragging
+    // inside it means "make what I am looking at the new manual order, with this one moved", so the
+    // move has to be applied to that sequence rather than to the stored one.
+    const baseline: string[] | undefined =
+      Array.isArray(body.baseline) && body.baseline.every((id: unknown) => typeof id === 'string')
+        ? body.baseline
+        : undefined;
+    return reorderByGesture(body.draggedId, body.targetId, body.position === 'below' ? 'below' : 'above', userId, baseline);
   }
 
   const ids: unknown = body?.ids;
@@ -87,7 +96,8 @@ async function reorderByGesture(
   draggedId: string,
   targetId: string,
   position: 'above' | 'below',
-  userId: string
+  userId: string,
+  baseline?: string[]
 ) {
   if (draggedId === targetId) return NextResponse.json({ error: 'A task cannot be moved relative to itself' }, { status: 400 });
 
@@ -132,7 +142,24 @@ async function reorderByGesture(
     return NextResponse.json({ error: 'Not authorized for this task' }, { status: 403 });
   }
 
-  const without = siblings.filter((t) => t.id !== draggedId).map((t) => t.id);
+  // Stored order by default; the on-screen order when the caller supplied one.
+  //
+  // A baseline can only ever be a re-sequencing of what the caller could SEE, so anything it does
+  // not mention is appended after it, keeping its own stored order. That is the honest answer
+  // rather than a clever one: a task private to someone else has no position in a sort of a list it
+  // is not part of, and inventing one for it would be guessing. It keeps its place relative to the
+  // other tasks nobody moved.
+  const storedIds = siblings.map((t) => t.id);
+  const sequence = baseline
+    ? (() => {
+        const known = new Set(storedIds);
+        const fromBaseline = baseline.filter((id) => known.has(id));
+        const seen = new Set(fromBaseline);
+        return [...fromBaseline, ...storedIds.filter((id) => !seen.has(id))];
+      })()
+    : storedIds;
+
+  const without = sequence.filter((id) => id !== draggedId);
   const targetIndex = without.indexOf(targetId);
   const insertAt = position === 'below' ? targetIndex + 1 : targetIndex;
   const ordered = [...without.slice(0, insertAt), draggedId, ...without.slice(insertAt)];

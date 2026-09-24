@@ -562,6 +562,22 @@ function parseColumnWidths(json: string | null | undefined): Record<string, numb
   }
 }
 
+type ListSort = { by: 'none' | 'dueDate' | 'startDate' | 'name'; order: 'asc' | 'desc' };
+const DEFAULT_LIST_SORT: ListSort = { by: 'none', order: 'asc' };
+const SORT_FIELDS = ['none', 'dueDate', 'startDate', 'name'] as const;
+
+// Total, like the other two parsers here: unreadable resolves to manual order rather than throwing.
+function parseListSort(json: string | null | undefined): ListSort {
+  if (!json) return DEFAULT_LIST_SORT;
+  try {
+    const parsed = JSON.parse(json);
+    const by = (SORT_FIELDS as readonly string[]).includes(parsed?.by) ? parsed.by : 'none';
+    return { by, order: parsed?.order === 'desc' ? 'desc' : 'asc' };
+  } catch {
+    return DEFAULT_LIST_SORT;
+  }
+}
+
 function parseVisibleColumns(json: string | null | undefined): string[] {
   if (!json) return DEFAULT_VISIBLE_COLUMNS;
   try {
@@ -756,6 +772,7 @@ function PageContent() {
     reorderTaskByGesture,
     setListVisibleColumns,
     setListColumnWidths,
+    setListSort,
     templates,
     fetchTemplates,
     saveTemplate,
@@ -1460,11 +1477,15 @@ function PageContent() {
   const soleActiveListId = soleActiveList?.list.id ?? null;
   const soleActiveListColumns = soleActiveList?.list.visibleColumnsJson ?? null;
   const soleActiveListWidths = soleActiveList?.list.columnWidthsJson ?? null;
+  const soleActiveListSort = soleActiveList?.list.sortJson ?? null;
   useEffect(() => {
     if (!soleActiveListId) return;
     setVisibleColumns(parseVisibleColumns(soleActiveListColumns));
     setColumnWidths(parseColumnWidths(soleActiveListWidths));
-  }, [soleActiveListId, soleActiveListColumns, soleActiveListWidths]);
+    const sort = parseListSort(soleActiveListSort);
+    setSortBy(sort.by);
+    setSortOrder(sort.order);
+  }, [soleActiveListId, soleActiveListColumns, soleActiveListWidths, soleActiveListSort]);
 
   // Widths are written on a trailing delay, unlike the column set.
   //
@@ -3102,18 +3123,30 @@ function PageContent() {
     });
   };
 
+  // Clicking a header cycles ascending -> descending -> manual, rather than toggling between two
+  // directions forever. Without the third step there is no way back to the order you arranged by
+  // hand except by knowing that dragging returns you to it, and a sort you cannot leave is a trap.
+  const applySort = (by: 'none' | 'dueDate' | 'startDate' | 'name', order: 'asc' | 'desc') => {
+    setSortBy(by);
+    setSortOrder(order);
+    // Saved on the List, like the columns and their widths — a chosen sort is part of the layout,
+    // and it was the one piece still living in nothing but component state, so it reset on every
+    // load. Reported as exactly that: "nå sorterer jeg basert på navn, men rekkefølgen huskes ikke
+    // om jeg refresher".
+    if (soleActiveList) void setListSort(soleActiveList.spaceId, soleActiveList.list.id, by, order);
+  };
+
   const toggleSort = (field: 'dueDate' | 'startDate' | 'name') => {
-    if (sortBy === field) {
-      setSortOrder(sortOrder === 'asc' ? 'desc' : 'asc');
-    } else {
-      setSortBy(field);
-      setSortOrder('asc');
-    }
+    if (sortBy !== field) applySort(field, 'asc');
+    else if (sortOrder === 'asc') applySort(field, 'desc');
+    else applySort('none', 'asc');
   };
 
   const SortIcon = ({ field }: { field: 'dueDate' | 'startDate' | 'name' }) =>
     sortBy === field ? (
-      <span className="text-blue-400 inline-flex">{sortOrder === 'asc' ? <ChevronUp className="w-3 h-3" /> : <ChevronDown className="w-3 h-3" />}</span>
+      <span className="text-blue-400 inline-flex" title={sortOrder === 'asc' ? 'Ascending — click for descending' : 'Descending — click for manual order'}>
+        {sortOrder === 'asc' ? <ChevronUp className="w-3 h-3" /> : <ChevronDown className="w-3 h-3" />}
+      </span>
     ) : null;
 
   // Every write to the visible column set goes through here, so there is exactly one place that
@@ -4019,7 +4052,23 @@ function PageContent() {
     //
     // Now the server reads its own rows, works out the sequence and returns it, and the store
     // applies what came back. The client no longer has an opinion that can be wrong.
-    return await reorderTaskByGesture(draggedId, targetId, position);
+    //
+    // ...with one exception, and it is the one thing the client knows that the server cannot. While
+    // a column sort is active the list on screen is in an order that exists nowhere in the database,
+    // so "above this task" means a position in a sequence the server has never seen. Dragging there
+    // used to write a position into the stored order and then keep displaying the sorted one, so
+    // nothing moved — reported as not being able to drag at all after sorting.
+    //
+    // A drag inside a sorted list means "make what I am looking at the new order, with this one
+    // moved" — which is exactly what the user said it should mean: "da er det jo bare en ny custom
+    // rekkefølge". So the visible sequence goes along as the baseline, and the sort is dropped
+    // afterwards, because the manual order now IS the sorted order and continuing to sort over the
+    // top of it would immediately undo the move you just watched.
+    const sorted = sortBy !== 'none';
+    const baseline = sorted ? filteredTasks.map((t) => t.id) : undefined;
+    const moved = await reorderTaskByGesture(draggedId, targetId, position, baseline);
+    if (moved && sorted) applySort('none', 'asc');
+    return moved;
   };
 
   // Stops the browser scrolling while a task is actually being dragged.

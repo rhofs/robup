@@ -183,6 +183,8 @@ export type HierarchyList = {
   visibleColumnsJson: string | null;
   // JSON object of column key -> width in pixels, or null for "never resized".
   columnWidthsJson: string | null;
+  // `{"by":"name","order":"asc"}`, or null for manual order.
+  sortJson: string | null;
 };
 
 export type HierarchySpace = {
@@ -536,12 +538,13 @@ interface TaskStore {
   // The other half of a List's view config. Same reasoning, same deliberate absence from the undo
   // stack: dragging a column edge is not an edit to the work.
   setListColumnWidths: (spaceId: string, listId: string, widths: Record<string, number>) => Promise<void>;
+  setListSort: (spaceId: string, listId: string, by: string, order: 'asc' | 'desc') => Promise<void>;
   // Shared body of the two above — one optimistic patch plus one PATCH, so the two halves of a
   // List's view config can never disagree about how they are written.
   patchListViewConfig: (
     spaceId: string,
     listId: string,
-    patch: { visibleColumnsJson?: string; columnWidthsJson?: string }
+    patch: { visibleColumnsJson?: string; columnWidthsJson?: string; sortJson?: string }
   ) => Promise<void>;
   // `targetSpaceId`, when given and different from `spaceId`, moves the list to a different
   // Space entirely (not just a different folder within the same one) — see the comment above
@@ -560,7 +563,9 @@ interface TaskStore {
   reorderTaskByGesture: (
     draggedId: string,
     targetId: string,
-    position: 'above' | 'below'
+    position: 'above' | 'below',
+    // The sequence currently ON SCREEN, passed only when a column sort is active — see the route.
+    baseline?: string[]
   ) => Promise<boolean>;
   templates: AppTemplate[];
   fetchTemplates: (workspaceId: string) => Promise<void>;
@@ -2281,6 +2286,9 @@ export const useTaskStore = create<TaskStore>((set, get) => {
     setListColumnWidths: async (spaceId, listId, widths) =>
       get().patchListViewConfig(spaceId, listId, { columnWidthsJson: JSON.stringify(widths) }),
 
+    setListSort: async (spaceId, listId, by, order) =>
+      get().patchListViewConfig(spaceId, listId, { sortJson: JSON.stringify({ by, order }) }),
+
     patchListViewConfig: async (spaceId, listId, patch) => {
       set((state) => ({
         workspaces: state.workspaces.map((ws) => ({
@@ -2499,7 +2507,7 @@ export const useTaskStore = create<TaskStore>((set, get) => {
     // ago, or one the staged startup fetch has not reached yet. Predicting a sequence from a partial
     // list and storing it is how a reorder can look right on screen and be something else in the
     // database.
-    reorderTaskByGesture: async (draggedId, targetId, position) => {
+    reorderTaskByGesture: async (draggedId, targetId, position, baseline) => {
       const applyOrder = (ids: string[]) =>
         set((state) => ({
           tasks: state.tasks.map((t) => {
@@ -2515,7 +2523,7 @@ export const useTaskStore = create<TaskStore>((set, get) => {
         res = await fetch('/api/tasks/reorder', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ draggedId, targetId, position }),
+          body: JSON.stringify({ draggedId, targetId, position, ...(baseline ? { baseline } : {}) }),
         });
       } catch {
         // A thrown fetch is a dropped connection. Nothing was written, and nothing local changed

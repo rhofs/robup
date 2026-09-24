@@ -9265,3 +9265,52 @@ are stored.
 single List to save against, so its columns and widths last the session only.
 
 **Needs a migration on production.**
+
+## 2026-09-24 (continued) — it was the SORT that was not remembered, not the drag order
+
+"Nå sorterer jeg basert på navn, men rekkefølgen huskes ikke om jeg refresher... Jeg ser at om jeg
+drag and dropper, så huskes rekkefølgen etter refresh. Det er her vi har bomma."
+
+That is the answer to five rounds of "rekkefølgen lagres ikke", and it is worth writing down plainly:
+**the manual drag order was being saved the whole time. The thing that reset on every load was the
+chosen sort.** Every round of this was spent on the half that worked, because the report said
+"rekkefølgen" and the drag order is what that phrase meant to me.
+
+**The lesson is about the diagnosis, not the code.** Three different mechanisms were found and fixed
+along the way — a missing sort on the subtask list, a NaN comparator, a drop handler that consulted
+`over` before the indicator — and every one was real. None of them was what was being reported. When
+several rounds of a fix do not move a report, the thing to question is which words in it mean what,
+not where in the code to look next.
+
+### What was built
+
+**`List.sortJson`** (migration `add_list_sort`), joining `visibleColumnsJson` and `columnWidthsJson`.
+A chosen sort is part of the layout, and it was the last piece still living in nothing but component
+state. Null reads as manual order — what every List is today.
+
+**Header clicks now cycle ascending → descending → manual.** Two directions forever left no way back
+to the order you arranged by hand, short of knowing that dragging returns you to it. A sort you
+cannot leave is a trap.
+
+**And dragging works inside a sorted list**, which it did not. While a sort is active the list on
+screen is in an order that exists nowhere in the database, so "above this task" names a position in a
+sequence the server has never seen. The drag wrote a position into the *stored* order and the view
+carried on showing the sorted one — so nothing moved. Reported as not being able to drag at all after
+sorting.
+
+The fix follows the user's own reading of what the gesture means — "da er det jo bare en ny custom
+rekkefølge": the visible sequence is sent along as a `baseline`, the server applies the move to that,
+and the sort is dropped afterwards. It has to be dropped: the manual order now *is* the sorted order,
+and continuing to sort over the top of it would immediately undo the move you just watched.
+
+This is the one thing the client legitimately knows that the server cannot, which is why the baseline
+exists at all — everything else about a reorder is still derived server-side from its own rows (see
+the previous entry). A baseline can only be a re-sequencing of what the caller could see, so any
+sibling it does not mention is appended after it in stored order rather than having a position
+invented for it.
+
+Verified over HTTP against a scratch database: a list stored as `Delta Alpha Charlie Bravo Echo`,
+displayed sorted as `Alpha Bravo Charlie Delta Echo`, with Echo dragged above Alpha, came back stored
+as `Echo Alpha Bravo Charlie Delta`.
+
+**Needs a migration on production.**

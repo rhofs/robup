@@ -391,6 +391,13 @@ model List {
   // beyond the first, and a second storage mechanism sitting beside visibleColumnsJson would be one
   // more pair of places to drift apart.
   columnWidthsJson String? @map("column_widths_json")
+  // The third part of the same view config: which column this List is sorted by and in which
+  // direction, as `{"by":"name","order":"asc"}`. `by: "none"` is manual order — the sequence set by
+  // dragging — and is what a List has until someone clicks a header.
+  //
+  // Stored for the same reason as the other two: a chosen sort is part of "the layout we chose", and
+  // it was the one piece still living in nothing but component state, so it reset on every load.
+  sortJson String? @map("sort_json")
   tasks        Task[]
   customFields CustomField[]
   // See Space.isPrivate/accessJson above — same shape, independent at this level.
