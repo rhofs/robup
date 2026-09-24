@@ -381,6 +381,16 @@ model List {
   // means a custom field someone adds to a List is visible to the people they added it for, rather
   // than to whoever happens to switch it on again on each device.
   visibleColumnsJson String? @map("visible_columns_json")
+  // The same view config, second half: each column's width in pixels, as a JSON object keyed by
+  // column key ("name" plus the same keys visibleColumnsJson uses). Null falls back to the app's
+  // defaults.
+  //
+  // Here rather than in localStorage — where it used to live, globally rather than per List —
+  // because the requirement is that a chosen layout is the same thing after a refresh, after the
+  // app is reinstalled, and for everyone on every device. localStorage answers none of those three
+  // beyond the first, and a second storage mechanism sitting beside visibleColumnsJson would be one
+  // more pair of places to drift apart.
+  columnWidthsJson String? @map("column_widths_json")
   tasks        Task[]
   customFields CustomField[]
   // See Space.isPrivate/accessJson above — same shape, independent at this level.

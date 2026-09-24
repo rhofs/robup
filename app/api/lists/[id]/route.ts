@@ -51,6 +51,7 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
   if (body.folderId !== undefined) data.folderId = body.folderId;
   if (body.order !== undefined) data.order = body.order;
   if (body.visibleColumnsJson !== undefined) data.visibleColumnsJson = body.visibleColumnsJson;
+  if (body.columnWidthsJson !== undefined) data.columnWidthsJson = body.columnWidthsJson;
   if (body.spaceId !== undefined) data.spaceId = body.spaceId;
 
   // Stricter, separate Owner/Admin-only gate on top of the plain "can you see this" check above.

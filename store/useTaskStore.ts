@@ -181,6 +181,8 @@ export type HierarchyList = {
   // JSON array of column keys, or null for "never configured" — see the schema for why this lives
   // on the List rather than per user.
   visibleColumnsJson: string | null;
+  // JSON object of column key -> width in pixels, or null for "never resized".
+  columnWidthsJson: string | null;
 };
 
 export type HierarchySpace = {
@@ -531,6 +533,16 @@ interface TaskStore {
   // setting. (updateList also pushes an entry unconditionally, so an untracked field there would
   // push an empty one.)
   setListVisibleColumns: (spaceId: string, listId: string, keys: string[]) => Promise<void>;
+  // The other half of a List's view config. Same reasoning, same deliberate absence from the undo
+  // stack: dragging a column edge is not an edit to the work.
+  setListColumnWidths: (spaceId: string, listId: string, widths: Record<string, number>) => Promise<void>;
+  // Shared body of the two above — one optimistic patch plus one PATCH, so the two halves of a
+  // List's view config can never disagree about how they are written.
+  patchListViewConfig: (
+    spaceId: string,
+    listId: string,
+    patch: { visibleColumnsJson?: string; columnWidthsJson?: string }
+  ) => Promise<void>;
   // `targetSpaceId`, when given and different from `spaceId`, moves the list to a different
   // Space entirely (not just a different folder within the same one) — see the comment above
   // the implementation for why that needs a slower refetch-based path instead of a local patch.
@@ -2263,14 +2275,19 @@ export const useTaskStore = create<TaskStore>((set, get) => {
       }
     },
 
-    setListVisibleColumns: async (spaceId, listId, keys) => {
-      const visibleColumnsJson = JSON.stringify(keys);
+    setListVisibleColumns: async (spaceId, listId, keys) =>
+      get().patchListViewConfig(spaceId, listId, { visibleColumnsJson: JSON.stringify(keys) }),
+
+    setListColumnWidths: async (spaceId, listId, widths) =>
+      get().patchListViewConfig(spaceId, listId, { columnWidthsJson: JSON.stringify(widths) }),
+
+    patchListViewConfig: async (spaceId, listId, patch) => {
       set((state) => ({
         workspaces: state.workspaces.map((ws) => ({
           ...ws,
           spaces: ws.spaces.map((s) =>
             s.id === spaceId
-              ? { ...s, lists: s.lists.map((l) => (l.id === listId ? { ...l, visibleColumnsJson } : l)) }
+              ? { ...s, lists: s.lists.map((l) => (l.id === listId ? { ...l, ...patch } : l)) }
               : s
           ),
         })),
@@ -2278,7 +2295,7 @@ export const useTaskStore = create<TaskStore>((set, get) => {
       await fetch(`/api/lists/${listId}`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ visibleColumnsJson }),
+        body: JSON.stringify(patch),
       });
     },
 

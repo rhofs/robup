@@ -535,8 +535,6 @@ const searchPillLabel = (view: string) =>
 
 const NAME_WIDTH_RANGE = { min: 140, max: 640 };
 const COLUMN_WIDTH_RANGE = { min: 70, max: 300 };
-const COLUMN_WIDTHS_STORAGE_KEY = 'siqt.columnWidths';
-
 // What a List shows before anyone has said otherwise, and what a List whose stored value is
 // unreadable falls back to. Named rather than written inline twice, because the two copies would
 // eventually disagree about what "default" means and only one of them is the one people see.
@@ -545,6 +543,25 @@ const DEFAULT_VISIBLE_COLUMNS = ['status', 'assignee', 'startDate', 'dueDate'];
 // Total: a stored value that is missing, malformed or not an array of strings resolves to the
 // defaults rather than throwing. This is read on every List open, and a board that refuses to render
 // because someone hand-edited a row is a worse failure than a board with the wrong columns.
+// Same totality rule as parseVisibleColumns: anything unreadable resolves to the defaults rather
+// than throwing, because this runs on every List open and a board that refuses to render is worse
+// than a board with default widths. Non-numeric entries are dropped individually so one bad value
+// cannot discard a whole layout.
+function parseColumnWidths(json: string | null | undefined): Record<string, number> {
+  if (!json) return DEFAULT_COLUMN_WIDTHS;
+  try {
+    const parsed = JSON.parse(json);
+    if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) return DEFAULT_COLUMN_WIDTHS;
+    const clean: Record<string, number> = {};
+    for (const [key, value] of Object.entries(parsed)) {
+      if (typeof value === 'number' && Number.isFinite(value)) clean[key] = value;
+    }
+    return { ...DEFAULT_COLUMN_WIDTHS, ...clean };
+  } catch {
+    return DEFAULT_COLUMN_WIDTHS;
+  }
+}
+
 function parseVisibleColumns(json: string | null | undefined): string[] {
   if (!json) return DEFAULT_VISIBLE_COLUMNS;
   try {
@@ -738,6 +755,7 @@ function PageContent() {
     reorderList,
     reorderTaskByGesture,
     setListVisibleColumns,
+    setListColumnWidths,
     templates,
     fetchTemplates,
     saveTemplate,
@@ -1417,6 +1435,7 @@ function PageContent() {
   const [subtaskAddOpen, setSubtaskAddOpen] = useState(false);
 
   const [visibleColumns, setVisibleColumns] = useState<string[]>(DEFAULT_VISIBLE_COLUMNS);
+  const [columnWidths, setColumnWidths] = useState<Record<string, number>>(DEFAULT_COLUMN_WIDTHS);
 
   // The one List currently on screen, if there is exactly one. Column visibility is stored on the
   // List (see prisma/schema.prisma), and an aggregate view — "All tasks", or several Lists at once —
@@ -1440,11 +1459,29 @@ function PageContent() {
   // notice a move to a different List that happens to be configured identically.
   const soleActiveListId = soleActiveList?.list.id ?? null;
   const soleActiveListColumns = soleActiveList?.list.visibleColumnsJson ?? null;
+  const soleActiveListWidths = soleActiveList?.list.columnWidthsJson ?? null;
   useEffect(() => {
     if (!soleActiveListId) return;
     setVisibleColumns(parseVisibleColumns(soleActiveListColumns));
-  }, [soleActiveListId, soleActiveListColumns]);
-  const [columnWidths, setColumnWidths] = useState<Record<string, number>>(DEFAULT_COLUMN_WIDTHS);
+    setColumnWidths(parseColumnWidths(soleActiveListWidths));
+  }, [soleActiveListId, soleActiveListColumns, soleActiveListWidths]);
+
+  // Widths are written on a trailing delay, unlike the column set.
+  //
+  // Toggling a column is one decision and one request. Dragging a column edge produces a stream of
+  // them — one per pointer move — and firing a PATCH for each would be a request per pixel. The
+  // delay collapses a drag into the single write it actually is. The JSON comparison then keeps the
+  // effect from writing back what it just loaded, which would otherwise make opening a List a write.
+  useEffect(() => {
+    if (!soleActiveList) return;
+    const next = JSON.stringify(columnWidths);
+    if (next === JSON.stringify(parseColumnWidths(soleActiveListWidths))) return;
+    const timer = window.setTimeout(() => {
+      void setListColumnWidths(soleActiveList.spaceId, soleActiveList.list.id, columnWidths);
+    }, 600);
+    return () => window.clearTimeout(timer);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [columnWidths, soleActiveListId, soleActiveListWidths]);
   const [showActivityPanel, setShowActivityPanel] = useState(true);
 
   const [createTaskOpen, setCreateTaskOpen] = useState(false);
@@ -2168,16 +2205,14 @@ function PageContent() {
   // Restore persisted UI layout prefs once on mount (localStorage isn't available during SSR)
   useEffect(() => {
     try {
-      const storedWidths = localStorage.getItem(COLUMN_WIDTHS_STORAGE_KEY);
-      if (storedWidths) setColumnWidths({ ...DEFAULT_COLUMN_WIDTHS, ...JSON.parse(storedWidths) });
+      // Column widths used to be restored here, from one global localStorage entry shared by every
+      // List. They now live on the List itself, server-side, alongside which columns it shows — see
+      // the schema. A layout has to be the same thing after a refresh, after a reinstall and for
+      // everyone on every device, and localStorage answers only the first of those.
       const storedPanel = localStorage.getItem(ACTIVITY_PANEL_STORAGE_KEY);
       if (storedPanel !== null) setShowActivityPanel(storedPanel === 'true');
     } catch {}
   }, []);
-
-  useEffect(() => {
-    localStorage.setItem(COLUMN_WIDTHS_STORAGE_KEY, JSON.stringify(columnWidths));
-  }, [columnWidths]);
 
   useEffect(() => {
     localStorage.setItem(ACTIVITY_PANEL_STORAGE_KEY, String(showActivityPanel));
@@ -4289,8 +4324,37 @@ function PageContent() {
     setTaskDropIndicator(null);
     taskOverRef.current = null;
     const { active, over } = event;
-    if (!over) return;
     const draggedId = active.id as string;
+
+    // The insertion line decides a task reorder, BEFORE anything looks at dnd-kit's `over`.
+    //
+    // These are two different opinions about the same gesture and they do not always agree. The
+    // line is drawn by this file's own pointer hit test, which deliberately probes 14px above and
+    // below the pointer so that the GAP between two cards is a valid target — the gap being the one
+    // place someone aiming "between two tasks" actually points, and the fix for having to be
+    // absurdly precise. dnd-kit knows nothing about that probe: in the gap there is often no
+    // droppable under the pointer at all, so `over` is null, and `if (!over) return` threw the drop
+    // away one line before the indicator was ever consulted. On a wide board it could instead land
+    // on the list droppable behind the rows, which routed the drop to moveTaskToList — the same
+    // list it was already in, so nothing moved, and it still announced "Task moved" with an Undo.
+    //
+    // That is the "det kommer en undo valg, uten at noe faktisk har skjedd" from two rounds ago,
+    // and it is why the order never survived a refresh: the reorder was never requested. Every
+    // previous round fixed something real downstream of a call that was not being made.
+    //
+    // A non-null taskDropIndicator is itself proof this was a task drag — the effect that sets it
+    // only runs while one is in flight — so no separate check is needed.
+    if (droppedTaskIndicator && droppedTaskIndicator.targetId !== draggedId) {
+      void reorderTaskRelativeTo(draggedId, droppedTaskIndicator.targetId, droppedTaskIndicator.position).then(
+        (moved) => {
+          if (moved) showUndoableToast('Task moved');
+          else showToast('Couldn\u2019t reorder — tasks can only be reordered within the same list.');
+        }
+      );
+      return;
+    }
+
+    if (!over) return;
     const overId = over.id as string;
 
     if (draggedId.startsWith('space-drag:')) {
@@ -4486,21 +4550,8 @@ function PageContent() {
       const targetId = overId.slice('task:'.length);
       // A visible insertion line means the finger was near an edge: reorder. No line means the
       // middle of the row: nest, exactly as before.
-      if (droppedTaskIndicator && droppedTaskIndicator.targetId !== draggedId) {
-        void reorderTaskRelativeTo(draggedId, droppedTaskIndicator.targetId, droppedTaskIndicator.position).then(
-          (moved) => {
-            // Only once the move is on the undo stack, and only if there was one.
-            if (moved) showUndoableToast('Task moved');
-            // And say so when there wasn't. A refused reorder used to end in silence: the rows
-            // snapped back and nothing said why, which is most of the reason this took four rounds
-            // to pin down — every report could only describe the symptom. The two ways it can be
-            // refused are a target in a different List or under a different parent (not a reorder,
-            // a move) and the server rejecting the write.
-            else showToast('Couldn\u2019t reorder — tasks can only be reordered within the same list.');
-          }
-        );
-        return;
-      }
+      // No indicator by this point means the pointer was in the middle band of a row, which is
+      // nesting's territory — see the drop-indicator effect for the split.
       if (targetId !== draggedId) {
         const target = tasks.find((t) => t.id === targetId);
         const nestDone = Promise.resolve(optimisticSetParent(draggedId, targetId));

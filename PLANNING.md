@@ -9209,3 +9209,59 @@ Fixed where the fact belongs: `chatContextOrigin` (state, because the nav has to
 which context the open conversation came from, and Me / Office stay active while a conversation of
 theirs is open. The previous two rounds both tried to stop the pill reacting to a change that should
 never have been a change.
+
+## 2026-09-24 (continued) — the reorder was never being requested
+
+Fifth report. Four rounds were spent fixing things downstream of a call that was not being made.
+
+**`handleTaskDragEnd` opened with `if (!over) return`, one line before the drop indicator was ever
+consulted.**
+
+There are two opinions about a task drag and they do not always agree:
+
+- The **insertion line** is drawn by this file's own pointer hit test, which deliberately probes 14px
+  above and below the pointer so the GAP between two cards is a valid target. That probe was added
+  because the gap is the one place someone aiming "between two tasks" actually points, and having to
+  hit a row edge exactly was reported as needing absurd precision.
+- **dnd-kit's `over`** knows nothing about that probe. In the gap there is often no droppable under
+  the pointer at all, so `over` is null — and the drop was thrown away. On a wide board it could
+  instead resolve to the list droppable behind the rows, which routed the drop to `moveTaskToList`:
+  the same list it was already in, so nothing moved, and it still announced "Task moved" with an
+  Undo.
+
+That second case is word for word the "det kommer en undo valg, uten at noe faktisk har skjedd"
+reported two rounds ago. It was read then as the subtask list's missing sort — which was also real,
+and also not this.
+
+The indicator now decides, before anything looks at `over`. A non-null `taskDropIndicator` is itself
+proof the drag was a task drag, since the effect that sets it only runs while one is in flight.
+
+**The lesson, and it is the expensive one from this whole sequence:** when a feature is made more
+forgiving in one place — the probe that lets the gap count as a target — every other place that
+re-derives the same decision has to learn about it. The indicator and the drop handler answered the
+same question from two different sources for three weeks, and every symptom that produced was
+attributed to whatever code was nearest.
+
+### And the rest of the layout now follows the same rule
+
+"Layouten vi velger må være konsekvent, når vi refresher, skrur av og på, og på tvers av
+brukere/plattformer."
+
+Column **widths** were the half still living in `localStorage`, in one global entry shared by every
+List — so they were per device, reset on reinstall, and different for every person. They now sit on
+the List beside `visibleColumnsJson`, as `columnWidthsJson` (migration `add_list_column_widths`).
+Null means "never resized" and resolves to the defaults, so nothing changes for an existing List
+until someone drags an edge.
+
+Written on a 600ms trailing delay, unlike the column set: toggling a column is one decision and one
+request, but dragging a column edge produces one state change per pointer move, and a PATCH per pixel
+is not a design. A JSON comparison keeps the effect from writing back what it just loaded, which
+would otherwise make *opening* a List a write.
+
+Both halves go through one `patchListViewConfig` action so they can never disagree about how they
+are stored.
+
+**Still true, and deliberate:** an aggregate view ("All tasks", or several Lists selected) has no
+single List to save against, so its columns and widths last the session only.
+
+**Needs a migration on production.**
