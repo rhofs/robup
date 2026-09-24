@@ -8878,3 +8878,42 @@ future caller can shift the grid by leaving a prop out.
 **Worth remembering:** a conditionally-rendered direct child of a CSS grid is a column shift waiting
 for the caller that omits the prop. The container counts children; it does not know one of them was
 supposed to be there.
+
+### 2026-09-24 (continued) — item 2: the DM transition, two of its three parts
+
+Reported as: "det ser ut som det er en rar animasjon når jeg går frem og tilbake på DMs i
+mobilappen. Ser ut som den går litt på skrå opp inn. Og når jeg trykker meg tilbake går den smooth
+ut, men det bak hopper litt. Samme med bobla popper inn, synes den burde være der den sist var."
+
+**The slant was two movements at right angles over the same 520ms.** Opening a conversation from a
+context pushes the whole `<main>` in from the right — header included — and in the same batch
+`chatRowCollapsed` flips, which eases the header's padding from `pb-9` to `pb-2`. So while the pane
+travelled left it also rose by the height of the search pill's slot. Neither movement is wrong on its
+own; together they read as one movement on a slant.
+
+The header's eased padding was itself bought by an earlier report (the search bar "pushed up" on the
+way in, everything "dyttet ned" on the way back) — but that was the *classic* path, where the header
+stays put and only the conversation pane slides. There the ease is right and is untouched. During a
+context push it is not, and the fix is to snap instead: the push holds `<main>` at x:100% for two
+frames before moving it, so the collapse happens where nobody can see it and the pane then travels
+straight. Coming back, the expansion fires from the timeout that clears the channel, by which point
+`<main>` has all but finished leaving — so instead of a full 520ms ease playing out after everything
+else had settled, which is the "det bak hopper litt", it is over before the screen is looked at again.
+
+**"Bobla" is the bottom nav's pill**, and it was unmounting. A DM is not Home, Office or Planner, so
+while a conversation is open no tab is active — `{active && <NavPill/>}` rendered nothing, and coming
+back remounted it, which replays its arrival squash from nowhere. The nav itself never unmounts (it
+animates out), so the pill was the only part of it that did.
+
+It now follows a *held* id: the last tab that was active while the nav was visible. The pill is still
+there when the nav comes back, because it never went anywhere — it was only hidden, which is exactly
+what the user said it should be. The direction calculation reads the held id too, so being hidden is
+not itself a move.
+
+**What is NOT addressed:** the pinned (fourth) slot's own pill has the same shape of problem if a
+hidden nav is left with the pinned tile as the active destination. Not reproduced, not fixed, and
+noted here rather than changed blind.
+
+**Also unverified:** all of this is reasoned from the code, not seen on a device. The slant and the
+late jump have a mechanism each that is certainly real; whether they are the *whole* of what was
+reported is a device test.

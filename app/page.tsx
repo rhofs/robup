@@ -5854,7 +5854,26 @@ function PageContent() {
             // jump — reported as the search bar being "pushed up" on the way in and everything being
             // "dyttet ned" on the way back. Eased over the same duration as the push it happens
             // alongside, so the two read as one movement instead of a movement and a jolt.
-            className={`relative md:h-11 pt-2 md:py-0 px-3 md:px-6 flex items-center gap-2 justify-between border-b-0 md:border-b border-neutral-800/40 transition-[padding] duration-[520ms] ease-[cubic-bezier(0.42,0,0.18,1)] ${
+            //
+            // ...except during a CONTEXT push, where the same easing is what made the conversation
+            // arrive diagonally: there the whole <main> — this header included — slides in from the
+            // right, and easing the padding at the same time moves the pane below it upward while it
+            // travels. Two movements at right angles over one 520ms read as one movement on a slant.
+            // Reported as "den går litt på skrå opp inn".
+            //
+            // Snapping instead is free here precisely because <main> is off-screen when the change
+            // lands: the push holds it at x:100% for two frames before it starts moving, so the
+            // forward collapse happens where nobody can see it and the pane then travels straight.
+            // Coming back, the expansion fires from the timeout that clears the channel, by which
+            // point <main> has all but finished leaving — so instead of a full 520ms ease playing
+            // out after everything else had settled ("det bak hopper litt"), it is over before the
+            // screen is looked at again.
+            //
+            // The classic (non-context) path never sets boardPushing, so its own eased version —
+            // the one the "pushed up"/"dyttet ned" report bought — is untouched.
+            className={`relative md:h-11 pt-2 md:py-0 px-3 md:px-6 flex items-center gap-2 justify-between border-b-0 md:border-b border-neutral-800/40 ${
+              boardPushing ? '' : 'transition-[padding] duration-[520ms] ease-[cubic-bezier(0.42,0,0.18,1)]'
+            } ${
               // pb-9 is the search pill's room — the pill is taller than this row's other contents
               // and the padding was tuned around it. In an open conversation the pill is hidden, so
               // that padding is holding open a band containing nothing but the Back arrow, which is

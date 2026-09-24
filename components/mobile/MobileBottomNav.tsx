@@ -303,12 +303,29 @@ export default function MobileBottomNav({
   // lesson: a useState(false)-then-useEffect correction can visibly paint the wrong frame first).
   const [blurDisabled] = useState(isIosLike);
 
+  // While the nav is hidden, the pill stays on whichever tab it was last on.
+  //
+  // Opening a conversation hides this nav AND leaves no tab active — a DM is not Home, Office or
+  // Planner — so `active` went false everywhere, NavPill unmounted, and coming back remounted it
+  // and played its arrival squash from nothing. Reported as "bobla popper inn, synes den burde være
+  // der den sist var", which is exactly what it is: the pill never went anywhere, it was only
+  // hidden, and a thing that was hidden should be where it was when it comes back rather than
+  // arriving all over again.
+  //
+  // A ref, updated during render: this only ever mirrors a value already derived from props, so it
+  // can never be the reason for a render, and using state for it would add one per navigation.
+  const liveActiveTabId = primaryTabs.find((t) => t.active && !spacesOpen)?.id ?? null;
+  const lastActiveTabIdRef = useRef<string | null>(liveActiveTabId);
+  if (!hidden && liveActiveTabId) lastActiveTabIdRef.current = liveActiveTabId;
+  const heldActiveTabId = hidden ? lastActiveTabIdRef.current : liveActiveTabId;
+
   // Which way the pill is about to travel, so the squash can anchor its leading edge (see NavPill).
   // Derived from the active slot's index against the previous one — a ref rather than state,
   // because reading it must not itself cause a render.
-  const activeSlotIndex = primaryTabs.findIndex((t) =>
-    t.active && !spacesOpen
-  );
+  // Reads the HELD id, so being hidden is not itself a move: without that, the slot index fell to
+  // "none" on the way in and back to the real tab on the way out, and the pill would have had a
+  // direction to travel in even though it never left.
+  const activeSlotIndex = primaryTabs.findIndex((t) => t.id === heldActiveTabId);
   const resolvedSlotIndex = activeSlotIndex === -1 ? primaryTabs.length : activeSlotIndex;
   const prevSlotIndexRef = useRef(resolvedSlotIndex);
   const pillDirection: 'left' | 'right' = resolvedSlotIndex >= prevSlotIndexRef.current ? 'right' : 'left';
@@ -518,6 +535,10 @@ export default function MobileBottomNav({
               // would both light up at once. The Spaces screen visually covers everything while open,
               // so nothing else should read as active at the same time.
               const active = isSpaces ? tab.active || spacesOpen : tab.active && !spacesOpen;
+              // The pill follows the held id rather than `active` — see heldActiveTabId above. The
+              // label and icon still follow `active`, because those are behind the hidden nav and
+              // have nothing to preserve.
+              const pillActive = tab.id === heldActiveTabId;
               return (
                 <button
                   key={tab.id}
@@ -537,7 +558,7 @@ export default function MobileBottomNav({
                       this pill painted behind the *entire nav bar's own opaque background*, rendering
                       correctly in the DOM but completely invisible. z-0 scopes the negative z-index to
                       just this button, putting the pill behind its own icon/label as intended. */}
-                  {active && <NavPill pillKey={tab.id} direction={pillDirection} />}
+                  {pillActive && <NavPill pillKey={tab.id} direction={pillDirection} />}
                   <Icon className="w-5 h-5" />
                   {/* h-3, fixed: matches the pinned button's own label row below exactly (which
                       needs it explicitly since it wraps an icon alongside the text) so both rows
