@@ -442,3 +442,109 @@ body {
   pointer-events: none;
   color: var(--color-neutral-500);
 }
+
+/* Planner, touch: holding a day to create something (components/calendar/WeekRow.tsx).
+   
+   Asked for as "litt mer magisk … hvis det skulle vært et Apple-produkt". The hold has three
+   moments, and each has its own motion:
+   
+   - held: a soft glow spreads out from the fingertip over the length of the hold. It decelerates,
+     so it is visibly working from the first frame and eases into "full" rather than hitting a wall.
+     Duration is set inline from LONG_PRESS_MS so the two can never drift apart.
+   - armed: a bright bloom settles into the steady tint, a ring pulses outward and fades, and one
+     sweep of light crosses the cell. It lands with the stronger haptic, so what you see and what
+     you feel arrive together.
+   - in range: the other days of a drag, a plain tint that fades in.
+   
+   All of it sits above the bars, so a day full of bars lights up just like an empty one. */
+.siqt-hold-fill {
+  background: radial-gradient(
+    circle,
+    rgb(96 165 250 / 0.34) 0%,
+    rgb(59 130 246 / 0.2) 45%,
+    rgb(59 130 246 / 0.12) 62%,
+    transparent 72%
+  );
+  transform: scale(0.08);
+  opacity: 0.5;
+  animation-name: siqt-hold-fill;
+  animation-timing-function: cubic-bezier(0.2, 0.7, 0.2, 1);
+  animation-fill-mode: forwards;
+}
+@keyframes siqt-hold-fill {
+  to {
+    transform: scale(1);
+    opacity: 1;
+  }
+}
+
+.siqt-hold-armed {
+  background: rgb(59 130 246 / 0.25);
+  animation: siqt-hold-bloom 380ms cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+@keyframes siqt-hold-bloom {
+  from {
+    background: rgb(96 165 250 / 0.5);
+  }
+}
+.siqt-hold-armed::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  box-shadow: inset 0 0 0 2px rgb(147 197 253 / 0.95);
+  opacity: 0;
+  animation: siqt-hold-ring 520ms ease-out;
+}
+@keyframes siqt-hold-ring {
+  from {
+    opacity: 1;
+    box-shadow: inset 0 0 0 1px rgb(147 197 253 / 0.95);
+  }
+  35% {
+    opacity: 1;
+    box-shadow: inset 0 0 0 3px rgb(147 197 253 / 0.8);
+  }
+  to {
+    opacity: 0;
+    box-shadow: inset 0 0 0 6px rgb(147 197 253 / 0);
+  }
+}
+.siqt-hold-armed::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(105deg, transparent 25%, rgb(255 255 255 / 0.38) 50%, transparent 75%);
+  transform: translateX(-110%);
+  animation: siqt-hold-sweep 600ms cubic-bezier(0.4, 0, 0.2, 1) 40ms;
+}
+@keyframes siqt-hold-sweep {
+  to {
+    transform: translateX(110%);
+  }
+}
+
+.siqt-hold-range {
+  background: rgb(59 130 246 / 0.25);
+  animation: siqt-hold-range-in 120ms ease-out;
+}
+@keyframes siqt-hold-range-in {
+  from {
+    opacity: 0;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .siqt-hold-fill {
+    animation: none;
+    transform: none;
+    opacity: 1;
+  }
+  .siqt-hold-armed,
+  .siqt-hold-range {
+    animation: none;
+  }
+  .siqt-hold-armed::before,
+  .siqt-hold-armed::after {
+    display: none;
+  }
+}

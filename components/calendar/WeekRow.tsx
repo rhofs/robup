@@ -5,7 +5,7 @@ import { Plus, Pin, CalendarClock } from 'lucide-react';
 import GoogleIcon from '../icons/GoogleIcon';
 import { getISOWeek, isSameDay } from '../../lib/calendarDates';
 import { withAlpha } from '../../lib/colorAlpha';
-import { hapticTap } from '../../lib/haptics';
+import { hapticTap, hapticTapStrong } from '../../lib/haptics';
 import type { ClippedSegment, DragMode, DragState } from '../../lib/ganttLayout';
 import type { Task, Event } from '../../store/useTaskStore';
 
@@ -104,7 +104,7 @@ type WeekRowProps = {
   onDragEnd: (id: string, mode: DragMode) => void;
   onUnpinLane: (taskId: string) => void;
   // Resize/move-drag handles are mouse-cursor-sized hit targets that don't work on touch — on
-  // mobile every bar falls through to a plain tap-to-open instead (see TaskBar/EventBar below).
+  // mobile the bars take no touches at all and every press lands on the day cell underneath.
   isMobile: boolean;
 };
 
@@ -168,6 +168,10 @@ export default function WeekRow({
   // has to render.
   const [pressedKey, setPressedKey] = useState<string | null>(null);
   const [holdArmed, setHoldArmed] = useState(false);
+  // Where in the held cell the finger landed, and how big the fill has to grow to cover the whole
+  // cell from there. The fill spreads outward from the fingertip rather than fading in evenly —
+  // the cell visibly responds to *where* it was touched, which is most of what makes it feel alive.
+  const [pressOrigin, setPressOrigin] = useState<{ x: number; y: number; size: number } | null>(null);
   const LONG_PRESS_MOVE_TOLERANCE = 8;
 
   // Stops the browser from taking the gesture over as a scroll once the hold has armed.
@@ -365,7 +369,13 @@ export default function WeekRow({
             // So the state replaces the resting background rather than layering over it. That also
             // removes the guesswork about what a press should look like on top of an existing tint.
             const isPressed = pressedKey === dayKey(day);
-            const interaction = isDayInRange(day, pendingRange) || (holdArmed && isPressed)
+            const inRange = isDayInRange(day, pendingRange);
+            // On touch the hold and the range are drawn by an overlay ABOVE the bars instead (see
+            // below), so a day covered in bars still visibly lights up. Tinting the cell as well
+            // would show through the gaps between bars as a second, darker shade.
+            const interaction = isMobile
+              ? { className: '', transition: '' }
+              : inRange || (holdArmed && isPressed)
               ? // Armed, or inside the range being drawn. Snaps rather than eases: this is the
                 // moment the gesture changed meaning, and the change should be felt rather than
                 // admired. It lands with the haptic tick.
@@ -415,6 +425,13 @@ export default function WeekRow({
                           // that is working from a tap that missed.
                           setPressedKey(dayKey(day));
                           setHoldArmed(false);
+                          const rect = e.currentTarget.getBoundingClientRect();
+                          const px = e.clientX - rect.left;
+                          const py = e.clientY - rect.top;
+                          // Twice the distance to the farthest corner: the circle's radius has to
+                          // reach it, and its edge is soft, so a little more than that.
+                          const reach = Math.hypot(Math.max(px, rect.width - px), Math.max(py, rect.height - py));
+                          setPressOrigin({ x: px, y: py, size: reach * 2.4 });
                           // Keeps this cell receiving moves once the finger leaves it, which is
                           // what makes dragging across days possible at all — without capture the
                           // events go to whatever is underneath and this handler stops hearing.
@@ -431,7 +448,11 @@ export default function WeekRow({
                             setHoldArmed(true);
                             blockScrollWhileDragging();
                             onPendingRangeChange({ start: day, end: day });
-                            hapticTap();
+                            // The fuller pulse, not the ordinary tick. The finger landing already
+                            // got a light one (GlobalTapFeedback, on pointerdown), so a second
+                            // identical tick said "something again" rather than "ready". This one
+                            // is the "fully charged" moment the fill has been building towards.
+                            hapticTapStrong();
                           }, LONG_PRESS_MS);
                         }
                       : undefined
@@ -527,6 +548,31 @@ export default function WeekRow({
                 >
                   <Plus className="w-2.5 h-2.5" />
                 </button>
+                {/* The hold, drawn over the bars. z-20 puts it above the bar layer (a later sibling
+                    with no z-index of its own); pointer-events-none keeps it out of hit-testing,
+                    which dayUnderPointer relies on. Three states:
+                      - held: a soft glow spreads from the fingertip across the 500ms hold
+                      - armed (the day the hold began): a bloom, a ring and one sweep of light,
+                        landing with the stronger haptic
+                      - in the drawn range: a plain tint */}
+                {isMobile && (isPressed || inRange) && (
+                  <span aria-hidden className="pointer-events-none absolute inset-0 z-20 overflow-hidden">
+                    {isPressed && !holdArmed && pressOrigin && (
+                      <span
+                        className="siqt-hold-fill absolute rounded-full"
+                        style={{
+                          left: pressOrigin.x - pressOrigin.size / 2,
+                          top: pressOrigin.y - pressOrigin.size / 2,
+                          width: pressOrigin.size,
+                          height: pressOrigin.size,
+                          animationDuration: `${LONG_PRESS_MS}ms`,
+                        }}
+                      />
+                    )}
+                    {isPressed && holdArmed && <span className="siqt-hold-armed absolute inset-0" />}
+                    {inRange && !(isPressed && holdArmed) && <span className="siqt-hold-range absolute inset-0" />}
+                  </span>
+                )}
                 {/* Nested inside this day's own cell (not a separate row-wide strip) so it reads
                     as part of that day, not a floating element below the grid. Explicit z-10:
                     this exact chip has previously ended up silently painted over by the day
@@ -538,7 +584,10 @@ export default function WeekRow({
                       e.stopPropagation();
                       onDrillDay(day);
                     }}
-                    className="absolute left-1 right-1 z-10 text-left cursor-pointer"
+                    // Passes touches through on mobile, like the bars: it only drills into this
+                    // same day, which the cell underneath does too, and as a target of its own it
+                    // would swallow a long press started on it.
+                    className={`absolute left-1 right-1 z-10 text-left cursor-pointer ${isMobile ? 'pointer-events-none' : ''}`}
                     style={{ top: overflowTop }}
                   >
                     {/* "+N", not "+N more" — and shrunk again (8px, tighter padding, no leading
@@ -571,25 +620,19 @@ export default function WeekRow({
             };
 
             // Events move and resize exactly like Tasks now (see EventBar's own comment).
-            // On mobile a bar can be only a few pixels tall and a day wide, which makes opening
-            // the task/event straight from it a genuinely awkward target — reported directly
-            // ("siden de barsa er så små på mobil"). Tapping drills into that day's own view
-            // instead, where the same item is a full-width row that's easy to hit. Resolves to
-            // the day actually tapped (not the segment's start) by mapping the tap's position
-            // across the bar onto its own day span, so a multi-day bar behaves predictably.
-            const drillToTappedDay = (e: React.MouseEvent<HTMLElement>) => {
-              const rect = e.currentTarget.getBoundingClientRect();
-              const frac = rect.width > 0 ? (e.clientX - rect.left) / rect.width : 0;
-              const offset = Math.max(0, Math.min(seg.colSpan - 1, Math.floor(frac * seg.colSpan)));
-              onDrillDay(weekDays[seg.colStart + offset]);
-            };
-
+            //
+            // On mobile the bars take no touches at all (see the wrappers' pointer-events). A bar
+            // is only a few pixels tall there, so tapping one used to drill into the day under the
+            // finger instead of opening it ("siden de barsa er så små på mobil"). That is exactly
+            // what tapping the cell does. So the bar's own handler added nothing, but it did cost
+            // something: it covered the cell, and a long press that started on a bar never
+            // reached the cell. A full day could only be held on the sliver of empty space left
+            // under its bars. Reported: "da må du liksom treffe det lille åpne området".
             if (event) {
               return (
                 <EventBar
                   key={seg.taskId}
                   event={event}
-                  onMobileTap={drillToTappedDay}
                   seg={seg}
                   barStyle={barStyle}
                   color={eventColorOf(event)}
@@ -607,7 +650,6 @@ export default function WeekRow({
               <TaskBar
                 key={seg.taskId}
                 task={task!}
-                onMobileTap={drillToTappedDay}
                 seg={seg}
                 barStyle={barStyle}
                 color={taskColorOf(task!)}
@@ -647,7 +689,6 @@ function EventBar({
   color,
   isDraggingThis,
   onOpenEvent,
-  onMobileTap,
   onStartInteraction,
   onMoveInteraction,
   onEndInteraction,
@@ -659,7 +700,6 @@ function EventBar({
   color: string;
   isDraggingThis: boolean;
   onOpenEvent: (id: string) => void;
-  onMobileTap: (e: React.MouseEvent<HTMLElement>) => void;
   onStartInteraction: (e: React.PointerEvent, id: string, mode: DragMode) => void;
   onMoveInteraction: (e: React.PointerEvent, id: string) => void;
   onEndInteraction: (e: React.PointerEvent, id: string, mode: DragMode) => void;
@@ -667,9 +707,8 @@ function EventBar({
 }) {
   const [hovered, setHovered] = useState(false);
   return (
-    <div className="absolute pointer-events-auto" style={{ ...barStyle, opacity: isDraggingThis ? 0.35 : 1 }}>
+    <div className={`absolute ${isMobile ? 'pointer-events-none' : 'pointer-events-auto'}`} style={{ ...barStyle, opacity: isDraggingThis ? 0.35 : 1 }}>
       <button
-        onClick={isMobile ? onMobileTap : undefined}
         onPointerDown={isMobile ? undefined : (e) => onStartInteraction(e, event.id, 'move')}
         onPointerMove={isMobile ? undefined : (e) => onMoveInteraction(e, event.id)}
         onPointerUp={isMobile ? undefined : (e) => onEndInteraction(e, event.id, 'move')}
@@ -697,8 +736,8 @@ function EventBar({
       </button>
       {/* Resizable (stretch/shrink either edge), same as a Task bar — per the user's explicit
           ask to have Events drag/resize exactly like Tasks do, desktop only. Skipped on mobile
-          entirely — a 2px-wide edge strip isn't a workable touch target, and the button above
-          already opens the event on tap there. */}
+          entirely — a 2px-wide edge strip isn't a workable touch target, and on touch the whole
+          bar passes presses through to the day cell anyway. */}
       {!isMobile && seg.isStartEdge && (
         <div
           onPointerDown={(e) => onStartInteraction(e, event.id, 'resize-start')}
@@ -726,7 +765,6 @@ function TaskBar({
   color,
   isDraggingThis,
   onOpenTask,
-  onMobileTap,
   onStartInteraction,
   onMoveInteraction,
   onEndInteraction,
@@ -739,7 +777,6 @@ function TaskBar({
   color: string;
   isDraggingThis: boolean;
   onOpenTask: (id: string) => void;
-  onMobileTap: (e: React.MouseEvent<HTMLElement>) => void;
   onStartInteraction: (e: React.PointerEvent, id: string, mode: DragMode) => void;
   onMoveInteraction: (e: React.PointerEvent, id: string) => void;
   onEndInteraction: (e: React.PointerEvent, id: string, mode: DragMode) => void;
@@ -749,14 +786,13 @@ function TaskBar({
   const [hovered, setHovered] = useState(false);
   const assignees = task.assignees;
   return (
-    <div className="absolute pointer-events-auto group/bar" style={{ ...barStyle, opacity: isDraggingThis ? 0.35 : 1 }}>
+    <div className={`absolute group/bar ${isMobile ? 'pointer-events-none' : 'pointer-events-auto'}`} style={{ ...barStyle, opacity: isDraggingThis ? 0.35 : 1 }}>
       <div
-        // Mobile never wires up the move-drag pointer handlers — a bar tap just opens the task,
-        // same as a plain click does on desktop when no actual drag occurred.
+        // Mobile never wires up the move-drag pointer handlers — on touch the bar lets every
+        // press through to the day cell underneath (see the wrapper above).
         onPointerDown={isMobile ? undefined : (e) => onStartInteraction(e, task.id, 'move')}
         onPointerMove={isMobile ? undefined : (e) => onMoveInteraction(e, task.id)}
         onPointerUp={isMobile ? undefined : (e) => onEndInteraction(e, task.id, 'move')}
-        onClick={isMobile ? onMobileTap : undefined}
         onMouseEnter={() => setHovered(true)}
         onMouseLeave={() => setHovered(false)}
         title={task.title}

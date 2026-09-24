@@ -9420,3 +9420,42 @@ passed) or *event* (green when passed), defaulting to deadline.
 **Not built:** choosing the kind at *creation* (the "new field" popover). It is set afterwards via
 Edit field. **Not verified in a browser.** Typechecked, and the colour logic tested in isolation.
 **Needs a migration on production** (`migrate deploy` on start handles it).
+
+### 2026-09-24 (continued) — Planner on touch: holding a full day, and a hold that feels like more
+
+Two things were reported together. On mobile, a day covered in Gantt bars could only be long-pressed
+on the little empty space left between the bars ("da må du liksom treffe det lille åpne området").
+And the hold itself was nice ("veldig satisfying") but could be "litt mer magisk … hvis det skulle
+vært et Apple-produkt": a haptic the instant the finger lands, another when the hold is "fully
+charged", and something richer to look at than a flat blue fill.
+
+**Bars now let touches through on mobile** (`pointer-events-none` on the TaskBar/EventBar wrappers
+and on the "+N" chip, mobile only). The one thing a bar did on touch was drill into the day under
+the finger, and a tap on the cell already does exactly that. So the bar's handler added nothing,
+but it covered the cell. `drillToTappedDay` and the bars' `onMobileTap` prop are removed. **Side
+effect, and a fix in its own right:** `dayUnderPointer` hit-tests with `elementFromPoint`, and a bar
+has no `[data-day-key]` ancestor. So dragging a range across days that were full of bars must have
+stalled whenever the finger passed over a bar. It should not any more. This was worked out from the
+code, not seen on a device.
+
+**Haptics.** The finger landing already got a light tick: `GlobalTapFeedback` fires on pointerdown
+for any button, and the day cell is a button. What was missing was a *different* feel for "armed".
+It played the same `hapticTap` as the landing, so it read as "something again" rather than "ready".
+The arm now uses `hapticTapStrong` (the composed three-click pulse on native Android). Release
+keeps its light tick.
+
+**Visuals** (`.siqt-hold-*` in `app/globals.css`), drawn in an overlay **above** the bars at z-20.
+Before this, the cell's own background tint sat under the bars, so a full day barely changed colour
+when pressed. On mobile the overlay replaces the cell tint rather than adding to it.
+- held: a radial glow spreads out from the fingertip over the 500ms hold and decelerates as it goes.
+  The duration is set inline from `LONG_PRESS_MS`.
+- armed: a bright bloom settles into the steady tint, a ring pulses outward and fades, and one
+  sweep of light crosses the cell.
+- other days in a dragged range: a plain tint that fades in.
+- `prefers-reduced-motion` turns all of it into static tints.
+
+Desktop is unchanged: bars still drag and resize there, and cells keep their old tints.
+
+**Not verified on a device or in a browser.** Typechecked and linted only. The two lint warnings in
+WeekRow (`onOpenEvent`/`onOpenTask` unused) were there before. The animation timings and the
+strength of the sweep are first guesses and will likely need a round of feedback on a phone.
