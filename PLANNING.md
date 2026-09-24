@@ -9153,3 +9153,59 @@ The Workspace half was fed `currentWorkspace`, which is whichever workspace is a
 the **personal** one whenever you arrive at Docs from My Tasks. So both halves listed the same
 private Spaces, under a toggle whose first option said "Workspace". Now `realSheetWorkspace`, the
 same "last real workspace" fallback every other path in this file uses.
+
+## 2026-09-24 (continued) — the reorder now happens on the server, because the client cannot be trusted to know the list
+
+Fourth report of "rekkefølgen lagres ikke". This round the server was **verified rather than
+reasoned about**: a scratch SQLite database built from the migrations, seeded, the production build
+started against it, a session cookie minted with `@auth/core/jwt`, and the whole cycle driven over
+HTTP. `POST /api/tasks/reorder` returned 200 and a following `GET /api/tasks` read the new order back
+correctly. The server was not the problem, and now that is a fact rather than a belief.
+
+**So the client was told to stop having an opinion.**
+
+`reorderTaskRelativeTo` used to read the sibling set out of the store, sort it, compute the resulting
+sequence and instruct the server to write exactly that. Every one of those steps is a place where the
+client's idea of the list can differ from what is actually in it:
+
+- a task private to someone else, which `GET /api/tasks` never sent
+- a task a colleague added a second ago
+- a task the staged startup fetch has not reached yet
+- and, until this week, a task carrying no `order` at all — which made the sort itself return an
+  *unspecified* result
+
+A sequence computed from a partial or unsortable list can look perfectly right on screen and store
+something else entirely. That is exactly the shape of this bug: nothing visible fails.
+
+The route now accepts the **gesture** — `{ draggedId, targetId, position }` — reads the real sibling
+set from the database, works out the sequence, writes it, and **returns the ordered ids**, which the
+store applies. The client no longer predicts anything.
+
+Two details in the server version that the client version could not have got right:
+
+- Siblings are read **including tasks the caller cannot see**, so renumbering keeps them in place.
+  Reordering in a list containing someone else's private task used to quietly shuffle it. They just
+  cannot be the task being moved.
+- The tie-break for everything still sitting at `order: 0` is `createdAt`, matching the board's own
+  sort, so a list nobody has ever dragged in renumbers in the order it was already displayed.
+
+`{ ids }` stays for undo, which is the one case where the client genuinely knows the answer: that
+exact order was on screen a moment ago.
+
+Verified the same way: the gesture form moved the last task above the first, and a fresh GET read it
+back in the new order.
+
+### The nav pill: a conversation is not a place of its own
+
+"Den burde jo ikke forsvinne, når vi er på Me fanen i meldinger" — and that is the correct reading of
+the layout. A DM opened from Me is a level deeper *inside* Me, not somewhere else.
+
+The nav did not know that. `activeView` becomes `'chat'`, no tab matched, and the tab you were in
+stopped being active — so the pill was not merely hidden along with the nav, it stopped existing.
+Invisible at the time, and then very visible on the way back, where it cut into place rather than
+simply still being there.
+
+Fixed where the fact belongs: `chatContextOrigin` (state, because the nav has to read it) records
+which context the open conversation came from, and Me / Office stay active while a conversation of
+theirs is open. The previous two rounds both tried to stop the pill reacting to a change that should
+never have been a change.

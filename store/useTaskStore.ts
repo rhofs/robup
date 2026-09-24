@@ -543,6 +543,13 @@ interface TaskStore {
   // Writes a whole sibling set's positions in one atomic request. Returns false if the server
   // refused, having already put the local order back.
   reorderTaskSiblings: (orderedIds: string[]) => Promise<boolean>;
+  // A drag: says what the gesture was and lets the server derive the sequence from its own rows.
+  // Returns false if it was refused, having changed nothing.
+  reorderTaskByGesture: (
+    draggedId: string,
+    targetId: string,
+    position: 'above' | 'below'
+  ) => Promise<boolean>;
   templates: AppTemplate[];
   fetchTemplates: (workspaceId: string) => Promise<void>;
   saveTemplate: (workspaceId: string, name: string, kind: TemplateKind, payload: unknown) => Promise<void>;
@@ -2466,6 +2473,59 @@ export const useTaskStore = create<TaskStore>((set, get) => {
     // Undo is one entry for the whole move, holding the order the list was in before it — which is
     // also the only way to undo this correctly. Per-task entries could be replayed in an order that
     // never existed.
+    // A drag, expressed as the gesture rather than as a predicted result.
+    //
+    // The server reads the real sibling set and answers with the sequence it stored, which the
+    // client then applies. The previous version computed the new order locally from its own `tasks`
+    // array and told the server to write that — and the client's array is not guaranteed to be the
+    // whole list. It can be missing a task private to someone else, one a colleague added a moment
+    // ago, or one the staged startup fetch has not reached yet. Predicting a sequence from a partial
+    // list and storing it is how a reorder can look right on screen and be something else in the
+    // database.
+    reorderTaskByGesture: async (draggedId, targetId, position) => {
+      const applyOrder = (ids: string[]) =>
+        set((state) => ({
+          tasks: state.tasks.map((t) => {
+            const index = ids.indexOf(t.id);
+            return index === -1 ? t : { ...t, order: index };
+          }),
+        }));
+      const before = get()
+        .tasks.filter((t) => t.listId === get().tasks.find((x) => x.id === draggedId)?.listId)
+        .map((t) => ({ id: t.id, order: t.order ?? 0 }));
+      let res: Response;
+      try {
+        res = await fetch('/api/tasks/reorder', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ draggedId, targetId, position }),
+        });
+      } catch {
+        // A thrown fetch is a dropped connection. Nothing was written, and nothing local changed
+        // yet, so there is nothing to put back — just say no.
+        return false;
+      }
+      if (!res.ok) return false;
+      const data = await res.json().catch(() => null);
+      const ids: string[] = Array.isArray(data?.ids) ? data.ids : [];
+      if (ids.length === 0) return false;
+      applyOrder(ids);
+
+      const previousIds = [...before].sort((a, b) => a.order - b.order).map((b) => b.id);
+      useHistoryStore.getState().push({
+        label: 'Reorder tasks',
+        // Undo states the sequence outright, which is the one case where the client genuinely knows
+        // it: this exact order was on screen a moment ago.
+        undo: async () => {
+          await get().reorderTaskSiblings(previousIds);
+        },
+        redo: async () => {
+          await get().reorderTaskSiblings(ids);
+        },
+      });
+      return true;
+    },
+
     reorderTaskSiblings: async (orderedIds) => {
       const before = get().tasks.filter((t) => orderedIds.includes(t.id)).map((t) => ({ id: t.id, order: t.order }));
       const apply = async (ids: string[]) => {

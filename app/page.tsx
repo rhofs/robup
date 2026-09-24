@@ -736,7 +736,7 @@ function PageContent() {
     deleteSpace,
     moveList,
     reorderList,
-    reorderTaskSiblings,
+    reorderTaskByGesture,
     setListVisibleColumns,
     templates,
     fetchTemplates,
@@ -1170,6 +1170,17 @@ function PageContent() {
   // openConversationFromContext.
   const [chatFromContext, setChatFromContext] = useState(false);
 
+  // Which context the open conversation belongs to — 'home' for a DM, 'office' for a channel or a
+  // room — as state rather than only as the ref below, because the bottom nav has to read it.
+  //
+  // A conversation is not a place of its own in this layout; it is a level deeper inside Me or
+  // Office. The nav did not know that: `activeView` becomes 'chat' and no tab matched, so the tab
+  // you were in stopped being active and the pill vanished. Invisible while the nav is hidden, and
+  // then very visible the moment it comes back — the pill cut into place instead of simply still
+  // being there. Reported as "den burde jo ikke forsvinne, når vi er på Me fanen i meldinger", which
+  // is exactly right: you are still in Me.
+  const [chatContextOrigin, setChatContextOrigin] = useState<'home' | 'office' | null>(null);
+
   // True for the length of a back push out of a conversation into its context.
   //
   // It exists for one element: the search pill, which is deliberately hidden while a conversation is
@@ -1254,6 +1265,7 @@ function PageContent() {
       // before it moved.
       window.setTimeout(() => {
         setChatFromContext(false);
+        setChatContextOrigin(null);
         setReturningToContext(false);
         setActiveChatChannelId(null);
         if (origin === 'home') {
@@ -2483,6 +2495,7 @@ function PageContent() {
     // slides over the same 520ms, one of them over an area the other had already moved off screen.
     // Opened from a context there should be exactly one: the same forward push a Space uses.
     setChatFromContext(true);
+    setChatContextOrigin(origin);
     startContextPush('forward', origin);
     setActiveChatChannelId(channelId);
     setActiveView('chat');
@@ -2627,7 +2640,10 @@ function PageContent() {
         label: 'Me',
         icon: UserCircle,
         onClick: () => void openHome(),
-        active: !!currentWorkspace?.isPersonal && (activeView === 'board' || mobilePersonalSpacesOpen),
+        active:
+          (!!currentWorkspace?.isPersonal && (activeView === 'board' || mobilePersonalSpacesOpen)) ||
+          // A DM opened from here is still here — see chatContextOrigin.
+          (activeView === 'chat' && chatContextOrigin === 'home'),
         // DMs are yours, so they belong to Home no matter which workspace is active.
         badge: dmUnreadCount,
       });
@@ -2637,7 +2653,9 @@ function PageContent() {
           label: 'Office',
           icon: Building2,
           onClick: openOfficeContext,
-          active: (activeView === 'office' || (activeView === 'board' && !currentWorkspace?.isPersonal)) && !sheetOpen,
+          active:
+            ((activeView === 'office' || (activeView === 'board' && !currentWorkspace?.isPersonal)) && !sheetOpen) ||
+            (activeView === 'chat' && chatContextOrigin === 'office'),
           // Channels only. Rooms carry presence, not messages — there is nothing unread about them.
           badge: channelUnreadCount,
         });
@@ -2725,7 +2743,7 @@ function PageContent() {
     }
     return tabs;
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [hiddenNavTabs, hasRealWorkspace, activeView, currentWorkspace, workspaces, chatUnreadCount, dmUnreadCount, channelUnreadCount, mobileSpacesOpen, mobilePersonalSpacesOpen, useContexts, openHome, isMobile]);
+  }, [hiddenNavTabs, hasRealWorkspace, activeView, currentWorkspace, workspaces, chatUnreadCount, dmUnreadCount, channelUnreadCount, mobileSpacesOpen, mobilePersonalSpacesOpen, useContexts, openHome, isMobile, chatContextOrigin]);
 
   // The desktop sidebar's "Me zone" (My tasks/My assigned tasks/Network/Profile) has no mobile
   // equivalent — it's inside the same hidden-below-md <aside> as the Spaces/Lists tree, and unlike
@@ -3953,30 +3971,20 @@ function PageContent() {
     targetId: string,
     position: 'above' | 'below'
   ): Promise<boolean> => {
-    const dragged = tasks.find((t) => t.id === draggedId);
-    const target = tasks.find((t) => t.id === targetId);
-    if (!dragged || !target) return false;
-    // Reordering only means anything among true siblings. Anything else (a different List, a
-    // different parent) is a move, and is left to the existing move/nest paths rather than
-    // silently doing something the drop did not look like.
-    if (dragged.listId !== target.listId || (dragged.parentId ?? null) !== (target.parentId ?? null)) return false;
-
-    const siblings = tasks
-      .filter((t) => t.listId === dragged.listId && (t.parentId ?? null) === (dragged.parentId ?? null) && !t.archived)
-      // Same NaN guard as filteredTasks, and it matters more here: this sort decides the order that
-      // gets WRITTEN, so an unspecified result is not a display glitch, it is a scrambled list saved
-      // to the database.
-      .sort((a, b) => (a.order ?? 0) - (b.order ?? 0) || new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime());
-    const withoutDragged = siblings.filter((t) => t.id !== draggedId);
-    const targetIndex = withoutDragged.findIndex((t) => t.id === targetId);
-    if (targetIndex === -1) return false;
-    const insertAt = position === 'below' ? targetIndex + 1 : targetIndex;
-    const next = [...withoutDragged.slice(0, insertAt), dragged, ...withoutDragged.slice(insertAt)];
-    // One request for the whole set, and its result is actually read. This was N concurrent PATCHes
-    // wrapped in a history transaction, none of whose responses anyone checked — see
-    // reorderTaskSiblings and app/api/tasks/reorder/route.ts. It also returns false now when the
-    // server refuses, so the caller does not offer an Undo for something that did not happen.
-    return await reorderTaskSiblings(next.map((t) => t.id));
+    // Sends the GESTURE, not a computed result.
+    //
+    // This used to read the sibling set out of the store, sort it, work out the new sequence and
+    // tell the server to write exactly that. Every one of those steps is a place for the client's
+    // idea of the list to differ from what is really in it — a task private to someone else, one a
+    // colleague added a second ago, one the staged startup fetch has not reached yet, or (until this
+    // week) one still carrying no `order` at all, which made the sort itself return an unspecified
+    // result. A reorder computed from a partial or unsortable list can look perfectly right on
+    // screen and store something else entirely, which is precisely the shape of "rekkefølgen lagres
+    // ikke": nothing visible fails.
+    //
+    // Now the server reads its own rows, works out the sequence and returns it, and the store
+    // applies what came back. The client no longer has an opinion that can be wrong.
+    return await reorderTaskByGesture(draggedId, targetId, position);
   };
 
   // Stops the browser scrolling while a task is actually being dragged.
