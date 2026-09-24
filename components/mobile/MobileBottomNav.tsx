@@ -165,7 +165,24 @@ function isIosLike(): boolean {
 // which is what reads as a bubble carrying velocity rather than a box being resized. Requested
 // against ClickUp's own nav: "den skvises litt inn i det den bremser, akkurat som en boble med
 // velocity."
-function NavPill({ pillKey, direction }: { pillKey: string; direction: 'left' | 'right' }) {
+function NavPill({
+  pillKey,
+  direction,
+  // Whether this pill is arriving from somewhere, or merely appearing.
+  //
+  // The squash is impact — it says "this travelled and stopped here". Mounting is not travel, and
+  // this component mounts for two reasons that have nothing to do with a move: the whole nav
+  // remounts every time you leave a full-screen conversation (see the height animation's own
+  // `measured` guard, added for the same remount), and the pill is rendered inside whichever button
+  // is active, so it is a new React instance on every tab change regardless. Without this flag the
+  // keyframes replayed on every one of those, which is the "den popper opp bare" coming back from a
+  // DM: a bubble braking to a halt after a journey it never took.
+  animateArrival,
+}: {
+  pillKey: string;
+  direction: 'left' | 'right';
+  animateArrival: boolean;
+}) {
   // Captured once, at mount. The parent recomputes `direction` on every render — and it re-renders
   // for all sorts of unrelated reasons (a store update, an unread count) — at which point the
   // previous and current slot indexes are equal again and it resolves back to 'right'. A leftward
@@ -173,6 +190,10 @@ function NavPill({ pillKey, direction }: { pillKey: string; direction: 'left' | 
   // through, which is why it looked like the old centre-ish animation in that direction only.
   // Freezing it here ties the value to the life of this pill instead of to render timing.
   const [frozenDirection] = useState(direction);
+  // Frozen for the same reason as the direction above: the parent re-renders for all sorts of
+  // unrelated reasons, and by the next one the move this pill arrived on is no longer the current
+  // one. The value that matters is the one at mount.
+  const [frozenArrival] = useState(animateArrival);
   return (
     <motion.div layoutId="mobileNavPill" className="absolute inset-0 -z-10" transition={PILL_MOVE}>
       <motion.div
@@ -203,8 +224,8 @@ function NavPill({ pillKey, direction }: { pillKey: string; direction: 'left' | 
         // litt for mye... bobler for mye ut i det den kjører mot destinasjonen". The compression on
         // arrival is untouched at 0.88: that half was already right, and it is the half doing the
         // work of suggesting weight.
-        initial={{ scaleX: 1.12, scaleY: 0.96 }}
-        animate={{ scaleX: [1.12, 0.88, 1], scaleY: [0.96, 1.05, 1] }}
+        initial={frozenArrival ? { scaleX: 1.12, scaleY: 0.96 } : false}
+        animate={frozenArrival ? { scaleX: [1.12, 0.88, 1], scaleY: [0.96, 1.05, 1] } : { scaleX: 1, scaleY: 1 }}
         // The settle occupies most of the duration (times 0 → 0.38 → 1): the brake arrives early and
         // the recovery out of it is long and unhurried. A snappy recovery reads as a twitch; a slow
         // one reads as something settling.
@@ -330,6 +351,14 @@ export default function MobileBottomNav({
   const prevSlotIndexRef = useRef(resolvedSlotIndex);
   const pillDirection: 'left' | 'right' = resolvedSlotIndex >= prevSlotIndexRef.current ? 'right' : 'left';
   prevSlotIndexRef.current = resolvedSlotIndex;
+
+  // Did the pill actually move on this render? True only on the single render where the held id
+  // changes, which is the render on which the new NavPill mounts — so it reaches that pill exactly
+  // when there was a real journey to show. On a remount of this whole component the ref initialises
+  // to the current value, so it is false, and nothing squashes.
+  const prevHeldRef = useRef<string | null>(heldActiveTabId);
+  const pillMoved = prevHeldRef.current !== heldActiveTabId;
+  prevHeldRef.current = heldActiveTabId;
 
   // True once the real measured heights have replaced the guesses above. Until then the island's
   // height animation is suppressed (see `transition` on the motion.div below), because the very
@@ -558,7 +587,7 @@ export default function MobileBottomNav({
                       this pill painted behind the *entire nav bar's own opaque background*, rendering
                       correctly in the DOM but completely invisible. z-0 scopes the negative z-index to
                       just this button, putting the pill behind its own icon/label as intended. */}
-                  {pillActive && <NavPill pillKey={tab.id} direction={pillDirection} />}
+                  {pillActive && <NavPill pillKey={tab.id} direction={pillDirection} animateArrival={pillMoved} />}
                   <Icon className="w-5 h-5" />
                   {/* h-3, fixed: matches the pinned button's own label row below exactly (which
                       needs it explicitly since it wraps an icon alongside the text) so both rows
@@ -584,7 +613,9 @@ export default function MobileBottomNav({
               }`}
             >
               <AnimatePresence>
-                {!menuOpen && pinnedActive && <NavPill pillKey={pinnedTile?.id ?? 'pinned'} direction={pillDirection} />}
+                {!menuOpen && pinnedActive && (
+                  <NavPill pillKey={pinnedTile?.id ?? 'pinned'} direction={pillDirection} animateArrival={pillMoved} />
+                )}
               </AnimatePresence>
               <PinnedIcon className="w-5 h-5" />
               {/* h-3, fixed: see the matching comment on the plain tab label above — this row

@@ -358,6 +358,28 @@ export default function ChatPanel() {
   // Gated on stickToBottomRef so it only ever acts when the user is already at the bottom; someone
   // reading history is never moved.
   const contentRef = useRef<HTMLDivElement | null>(null);
+
+  // How tall the composer bar actually is right now, measured rather than assumed.
+  //
+  // The message list's bottom padding has to clear whatever sits over it, and on mobile that is two
+  // things that both change: the composer (one line, or four once a message is long, plus a reply
+  // chip or an attachment preview when either is present) and the keyboard. It was a fixed 92px,
+  // which covered a one-line composer and nothing else — so the last messages sat under the keyboard
+  // the moment it opened. Reported twice.
+  //
+  // Measuring the bar covers the composer half in every one of its states without a list of them,
+  // and keyboardOverlap covers the other. The ResizeObserver above then sees the padding change and
+  // scrolls to the bottom if that is where the reader already was.
+  const composerRef = useRef<HTMLDivElement | null>(null);
+  const [composerHeight, setComposerHeight] = useState(92);
+  useEffect(() => {
+    const el = composerRef.current;
+    if (!el) return;
+    const observer = new ResizeObserver(() => setComposerHeight(el.offsetHeight));
+    observer.observe(el);
+    setComposerHeight(el.offsetHeight);
+    return () => observer.disconnect();
+  }, [isMobile]);
   useEffect(() => {
     const content = contentRef.current;
     const el = scrollRef.current;
@@ -589,12 +611,16 @@ export default function ChatPanel() {
           // px-2. Reported on iPhone, where the rounded display makes the last few pixels of the
           // left edge unusable in a way a flat screenshot does not show.
           isMobile ? 'px-3' : 'px-1'
-        } ${
-          // Clears the floating composer. Padding on the CONTENT, not the viewport: the
-          // ResizeObserver above measures this element, and a scroll container whose content stops
-          // short of its own bottom cannot scroll the last message out from under the bar.
-          isMobile ? 'pb-[calc(env(safe-area-inset-bottom)+92px)]' : 'pb-3'
-        }`}
+        } ${isMobile ? '' : 'pb-3'}`}
+        // Clears the composer AND the keyboard. Padding on the CONTENT, not the viewport: the
+        // ResizeObserver above measures this element, and a scroll container whose content stops
+        // short of its own bottom cannot scroll the last message out from under the bar.
+        //
+        // The composer's own bottom offset is keyboardOverlap (see its style below) and its own
+        // padding already carries the safe-area inset, so its measured height plus that offset is
+        // exactly the band it occupies. 8px on top of it so the last line is clear of the bar rather
+        // than touching it.
+        style={isMobile ? { paddingBottom: composerHeight + keyboardOverlap + 8 } : undefined}
       >
         {/* Only once we actually know. Previously this rendered during the first load of every
             conversation, telling the user it was empty before the messages had arrived — which is
@@ -725,6 +751,7 @@ export default function ChatPanel() {
           continuing. Desktop keeps the plain column — it has the room, and a floating bar over a
           wide panel is just a bar with a gap behind it. */}
       <div
+        ref={composerRef}
         className={
           isMobile
             ? `absolute inset-x-0 z-10 px-3 pt-6 bg-gradient-to-t from-neutral-950 via-neutral-950/95 to-transparent ${

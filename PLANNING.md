@@ -9054,3 +9054,36 @@ An empty array is kept as a real choice — every column off — rather than bei
 "unconfigured" and silently refilled.
 
 **Needs a migration on production** (`migrate deploy` runs on start, so a redeploy is enough).
+
+### 2026-09-24 (continued) — the nav bubble popped because the whole nav remounts
+
+The previous round held the pill on the last active tab so it would not unmount while a conversation
+covers the screen. It still popped, and the reason was already written down two hundred lines above
+it in this same file: **`MobileBottomNav` remounts on every exit from a full-screen conversation** —
+that is why the island's height animation is gated on a `measured` flag.
+
+A remount replays `NavPill`'s arrival keyframes from nothing. The squash is *impact*: it says this
+travelled and stopped here. Mounting is not travel, and this component mounts for two reasons that
+are not a move — the nav remount above, and the fact that the pill lives inside whichever button is
+active, so it is a new React instance on every tab change regardless.
+
+`NavPill` now takes `animateArrival`, frozen at mount like its direction already was. The parent sets
+it true only on the single render where the held tab id actually changes, which is the render on
+which the new pill mounts. On a remount the ref initialises to the current value, so it is false and
+nothing squashes.
+
+### And the keyboard was still over the messages, for a third reason
+
+The composer has been lifted by the measured keyboard overlap for two rounds now. The *message list*
+was not: its bottom padding was a fixed `calc(safe-area + 92px)`, which clears a one-line composer
+and nothing else — not a composer grown to four lines, not a reply chip, not an attachment preview,
+and above all not the keyboard.
+
+Now measured: a `ResizeObserver` on the composer bar gives its real height in whatever state it is
+in, and the padding is that plus `keyboardOverlap` plus 8px. The existing content ResizeObserver then
+sees the padding change and scrolls to the bottom if that is where the reader already was.
+
+**The pattern worth keeping:** this is the third bug from the same family — something is positioned
+correctly against the keyboard and something else that has to make room for it is not. The composer
+was fixed, then the composer's own scroll, and now the list behind it. When one element starts
+tracking a measurement, every element that reserves space for it has to track it too.
