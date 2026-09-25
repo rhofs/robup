@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server';
 import { prisma, publicUserSelect } from '@/lib/prisma';
 import { getCurrentUserId } from '@/lib/auth/session';
-import { getAccessContext } from '@/lib/auth/access';
+import { getAccessContext, keepWorkspaceMembers } from '@/lib/auth/access';
 import { syncEventForAllRelevantUsers } from '@/lib/google/calendarSync';
 
 // No isPrivate/accessJson concept on Event (unlike Task/Space/Folder/List) — not asked for, and
@@ -31,6 +31,8 @@ export async function POST(req: Request) {
   if (!userId) return NextResponse.json({ error: 'Not authenticated' }, { status: 401 });
   const ctx = await getAccessContext(body.workspaceId, userId);
   if (!ctx.isMember) return NextResponse.json({ error: 'Not a workspace member' }, { status: 403 });
+  // Attendees from this workspace only — see keepWorkspaceMembers.
+  const assigneeIds = await keepWorkspaceMembers(body.workspaceId, body.assigneeIds);
 
   const event = await prisma.event.create({
     data: {
@@ -44,7 +46,7 @@ export async function POST(req: Request) {
       color: body.color ?? null,
       spaceId: body.spaceId ?? null,
       workspaceId: body.workspaceId,
-      ...(body.assigneeIds ? { assignees: { connect: body.assigneeIds.map((id: string) => ({ id })) } } : {}),
+      ...(assigneeIds.length ? { assignees: { connect: assigneeIds.map((id) => ({ id })) } } : {}),
     },
     include: { assignees: { select: publicUserSelect } },
   });

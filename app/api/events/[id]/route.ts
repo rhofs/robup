@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import { prisma, publicUserSelect } from '@/lib/prisma';
 import { getCurrentUserId } from '@/lib/auth/session';
 import { ensureEventAccess } from '@/lib/auth/resourceAccess';
+import { keepWorkspaceMembers } from '@/lib/auth/access';
 import { syncEventForAllRelevantUsers, deleteEventGoogleSyncs } from '@/lib/google/calendarSync';
 
 // Event itself has no isPrivate of its own (workspace-scoped only), so a plain membership check
@@ -14,7 +15,8 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
 
   const userId = await getCurrentUserId();
   if (!userId) return NextResponse.json({ error: 'Not authenticated' }, { status: 401 });
-  if (!(await ensureEventAccess(id, userId))) return NextResponse.json({ error: 'Not authorized for this event' }, { status: 403 });
+  const access = await ensureEventAccess(id, userId);
+  if (!access) return NextResponse.json({ error: 'Not authorized for this event' }, { status: 403 });
 
   if (body.restore === true) {
     const event = await prisma.event.update({
@@ -42,6 +44,8 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
   if (body.color !== undefined) data.color = body.color;
   if (body.spaceId !== undefined) data.spaceId = body.spaceId;
   if (body.assigneeIds !== undefined) {
+    // Same workspace-membership rule as a task's assignees — see keepWorkspaceMembers.
+    body.assigneeIds = await keepWorkspaceMembers(access.event.workspaceId, body.assigneeIds, existing?.assignees.map((a) => a.id));
     data.assignees = { set: body.assigneeIds.map((uid: string) => ({ id: uid })) };
   }
 

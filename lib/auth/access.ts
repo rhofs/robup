@@ -165,3 +165,21 @@ export async function getTaskVisibilityContext(userId: string) {
 
   return { workspaceIds, isTaskVisible };
 }
+
+// Assignees and attendees must be members of the workspace the task or event lives in. The pickers
+// only offer members, but the API took any user id it was given, so a stale client or a hand-made
+// request could put someone from another workspace onto a task they cannot even see. Unknown ids
+// are dropped rather than rejected, so one bad id cannot fail a whole edit. `alreadyOn` is kept: a
+// person who has since left the workspace stays assigned until someone removes them, instead of
+// being silently dropped by an unrelated edit.
+export async function keepWorkspaceMembers(workspaceId: string, ids: unknown, alreadyOn: string[] = []): Promise<string[]> {
+  if (!Array.isArray(ids)) return [];
+  const wanted = [...new Set(ids.filter((id): id is string => typeof id === 'string'))];
+  if (wanted.length === 0) return [];
+  const members = await prisma.workspaceMembership.findMany({
+    where: { workspaceId, userId: { in: wanted } },
+    select: { userId: true },
+  });
+  const allowed = new Set([...members.map((m) => m.userId), ...alreadyOn]);
+  return wanted.filter((id) => allowed.has(id));
+}

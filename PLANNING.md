@@ -9530,3 +9530,92 @@ outsider, a muted member with @everyone versus being named, a private channel gr
 group DMs. The picker options were checked per surface with tsx as well. **Not verified in a
 browser or on a device.** Not seen: the chip look, the dropdown with the new rows, the thread
 composer swap (layout and Enter-to-send), and a real push.
+
+## 2026-09-25 (continued) — person pickers were not scoped to the workspace; a new assignee picker
+
+**Reported:** a task in CRRM Media could be assigned to people who are only in the user's other
+workspace (New Game Media). **Cause:** every person picker (task row, task modal, event, quick-create
+attendees, doc owner and contributors, the Office sidebar "Team") listed the store's `users`. That is
+`GET /api/users`: everyone you share *any* workspace with, plus your connections. The server did not
+check either. `PATCH /api/tasks/[id]` and both event routes put any id they were given onto
+`assignees`.
+
+**Fixed:**
+- `lib/workspaceMembers.ts`: `pickableMembers(workspaces, users, workspaceId, keepIds)` and
+  `workspaceIdForList` / `workspaceIdForSpace`. Every picker above now offers only the members of
+  the workspace the thing belongs to. `keepIds` keeps someone already assigned who has since left, so
+  they can still be removed.
+- Server: `keepWorkspaceMembers` in `lib/auth/access.ts`, used in task PATCH, event POST and event
+  PATCH. Non-members are **dropped silently, not rejected**, so one stale id cannot fail a whole edit.
+  People already on the task or event are kept. `body.assigneeIds` is rewritten in place, so the
+  activity log and the "assigned you" notification see what was actually saved. Tested with tsx
+  against the scratch DB.
+- The task comment mention picker is now scoped to the task's workspace too (`workspaceId`). Before,
+  it offered people, tasks and docs from every workspace.
+
+**Still open, asked and not answered:** a *private* task's pickers still offer every workspace member,
+including people who cannot see it. Mentioning them does nothing (the server filters, see the entry
+above), and assigning them works but they cannot open the task. Proposed to the user: show only
+people with access in the mention picker (recommended), or show everyone and mark those without
+access. Waiting on the answer.
+
+**New assignee picker** (`components/AssigneePicker.tsx`), asked for with a ClickUp screenshot:
+"penere, søkebar, ikke gammeldagse checkboxes".
+- Search field on top, focused on open on desktop only. On a phone, focusing it would raise the
+  keyboard over the list.
+- You are first as "Me", then whoever is already assigned, then everyone by name. The order is fixed
+  when the panel opens, so a clicked row does not jump away.
+- No checkboxes. Selected people get a blue ring, a small red × on the avatar (ClickUp's cue for "a
+  click removes them"), bold text and a check at the right. Real profile photos (`avatarUrl`), with
+  initials as the fallback.
+- Arrow keys and Enter work.
+- `AssigneeStack` is the overlapping faces in the list row, with "+N" past three. `PersonPill` is how
+  an assigned person shows in the task modal and the event forms: face and name on a quiet pill with
+  an × to remove. It replaces the name on a slab of the person's colour.
+- Used by the task row, task modal, event modal and quick-create. The doc owner/contributor pickers
+  keep the old look (scoped to the workspace, but not restyled).
+
+**Not verified in a browser.** This server has no Chromium or Playwright installed. A dev server
+against the scratch DB was started to screenshot the picker and then stopped: it bound to the
+public IP, and there was nothing to screenshot with. **Lesson:** start `next dev` here with
+`-H 127.0.0.1`. Typecheck clean. Lint shows only errors that were already there.
+
+### 2026-09-25 (continued) — suggested assignees, online dots, and drag-a-face-to-assign in Planner
+
+Of the four "more modern" ideas proposed, the user picked three: suggested people at the top, the
+online dot, and assigning in the Planner by dragging a face onto a task. **Workload next to each
+name was proposed and not chosen.**
+
+**Suggested** (`lib/assigneeSuggestions.ts`): the people most often assigned among the newest 150
+items in the same List for a task, or in the same workspace for an event. That is up to three people,
+shown under "Suggested" right after "Me". It is computed from the store, with no request. The picker
+freezes the suggestions and the order when it opens, so nothing moves while you click. Typing in the
+search field flattens the sections into one filtered list. Checked with tsx: other lists and deleted
+items are ignored, and the item itself is excluded.
+
+**Online dot:** `MiniAvatar` has a `showPresence` prop and reads `usePresenceStore`, the same source
+Office uses. It is shown in the picker rows and on the team strip.
+
+**Drag a face to assign** (Planner, **desktop only**):
+- `TeamStrip` sits in the Planner toolbar and shows the active workspace's members. You come first,
+  then whoever is online, then by name. Past eight, the rest go behind "+N", which you can also drag
+  from. The strip hides itself when the workspace has only one member.
+- It uses **native HTML drag-and-drop** (`lib/personDrag.ts`), not the pointer handlers the bars use
+  to move and resize, so the two cannot share or steal pointer capture. The dragged person is kept
+  in a module variable, because `dragover` cannot read `dataTransfer`. Every drop target is then able
+  to say "no" *during* the hover (cursor shows no-drop) when the person is already on it or belongs
+  to another workspace.
+- Drop targets: every task and event bar in Month/Week (`WeekRow`), and the time blocks and all-day
+  chips in Day view (`DayTimeline`). Hover shows a blue outline and a slight lift, and the drop gives
+  one pulse and a haptic tick (`.siqt-assign-*` in `globals.css`, static under reduced motion). The
+  drop goes through `optimisticSetAssignees` / `optimisticSetEventAssignees`, so it can be undone
+  like any other assignment.
+- **Not built:** touch. Mobile browsers do not start a native drag from a finger. Doing it on a phone
+  would need a pointer-based drag of its own (long-press a face, then the bars pass touches through
+  to the cell, which is its own problem). Not asked for.
+
+The bar's assignee avatar also uses `MiniAvatar` now, so a profile photo shows instead of initials.
+
+**Not verified in a browser** (no browser on this server, see above). Typecheck clean, and lint
+shows only errors that were already there. **Uncommitted:** the workspace-scoping fix, the new
+picker and this.

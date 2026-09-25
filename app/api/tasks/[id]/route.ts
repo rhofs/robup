@@ -2,7 +2,7 @@ import { NextResponse } from 'next/server';
 import { prisma, publicUserSelect } from '@/lib/prisma';
 import { cascadeTask } from '@/lib/trashCascade';
 import { getCurrentUserId } from '@/lib/auth/session';
-import { getWorkspaceRole, canManageWorkspace } from '@/lib/auth/access';
+import { getWorkspaceRole, canManageWorkspace, keepWorkspaceMembers } from '@/lib/auth/access';
 import { ensureTaskAccess } from '@/lib/auth/resourceAccess';
 import { syncTaskForAllRelevantUsers, deleteTaskGoogleSyncs } from '@/lib/google/calendarSync';
 import { notify } from '@/lib/notifications';
@@ -13,7 +13,8 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
 
   const userId = await getCurrentUserId();
   if (!userId) return NextResponse.json({ error: 'Not authenticated' }, { status: 401 });
-  if (!(await ensureTaskAccess(id, userId))) return NextResponse.json({ error: 'Not authorized for this task' }, { status: 403 });
+  const access = await ensureTaskAccess(id, userId);
+  if (!access) return NextResponse.json({ error: 'Not authorized for this task' }, { status: 403 });
 
   if (body.restore === true) {
     await cascadeTask(id, null);
@@ -43,6 +44,9 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
   }
 
   if (body.assigneeIds !== undefined) {
+    // Rewritten in place, so the activity log and the "assigned you" notification below see the same
+    // list that is actually saved.
+    body.assigneeIds = await keepWorkspaceMembers(access.space.workspaceId, body.assigneeIds, existing?.assignees.map((a) => a.id));
     data.assignees = { set: body.assigneeIds.map((id: string) => ({ id })) };
   }
 

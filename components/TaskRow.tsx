@@ -6,6 +6,10 @@ import { useDraggable, useDroppable } from '@dnd-kit/core';
 import { Check, Pencil, RefreshCw, MoreHorizontal, GripVertical, Calendar } from 'lucide-react';
 import { useTaskStore, StatusDef, CustomFieldDef, Task } from '../store/useTaskStore';
 import { useIsMobile } from '../hooks/useIsMobile';
+import { pickableMembers, workspaceIdForList } from '../lib/workspaceMembers';
+import AssigneePicker, { AssigneeStack } from './AssigneePicker';
+import { suggestTaskAssignees } from '../lib/assigneeSuggestions';
+import { useSessionStore } from '../store/useSessionStore';
 import { useLongPress } from '../hooks/useLongPress';
 import DatePickerPopover from './DatePickerPopover';
 import FloatingPopover from './FloatingPopover';
@@ -56,6 +60,7 @@ function TaskRowImpl({
 }: TaskRowProps) {
   const {
     users,
+    workspaces,
     optimisticMoveTask,
     optimisticSetAssignees,
     optimisticSetCustomFieldValue,
@@ -65,6 +70,9 @@ function TaskRowImpl({
   } = useTaskStore();
 
   const isMobile = useIsMobile();
+  const currentUserId = useSessionStore((s) => s.currentUserId);
+  // Only the members of the workspace this task lives in — see lib/workspaceMembers.ts.
+  const assigneeChoices = pickableMembers(workspaces, users, workspaceIdForList(workspaces, task.listId), task.assignees.map((a) => a.id));
 
   const [statusOpen, setStatusOpen] = useState(false);
   const [assigneeOpen, setAssigneeOpen] = useState(false);
@@ -226,61 +234,28 @@ function TaskRowImpl({
         <FloatingPopover
           open={assigneeOpen}
           onClose={() => setAssigneeOpen(false)}
-          panelClassName={isMobile ? 'w-56 bg-neutral-900 border border-neutral-800 rounded-xl shadow-xl p-1.5' : 'w-44 bg-neutral-900 border border-neutral-800 rounded-xl shadow-xl p-1.5'}
+          panelClassName={`${isMobile ? 'w-72' : 'w-64'} bg-neutral-900 border border-neutral-800 rounded-xl shadow-2xl p-2`}
           anchor={
             <button
               onClick={(e) => {
                 e.stopPropagation();
                 setAssigneeOpen((o) => !o);
               }}
-              className="flex items-center -space-x-1.5 cursor-pointer"
+              className="flex items-center cursor-pointer rounded-full hover:opacity-90 transition"
             >
-              {task.assignees.length === 0 && (
-                <span className="w-5 h-5 rounded-full border border-dashed border-neutral-600 text-neutral-500 text-[9px] flex items-center justify-center">+</span>
-              )}
-              {task.assignees.slice(0, 3).map((a) => (
-                <span
-                  key={a.id}
-                  title={a.name}
-                  className="w-5 h-5 rounded-full border border-neutral-900 text-[9px] font-bold flex items-center justify-center text-white"
-                  style={{ backgroundColor: a.color }}
-                >
-                  {a.initials}
-                </span>
-              ))}
+              <AssigneeStack people={task.assignees} size={isMobile ? 24 : 22} />
             </button>
           }
         >
-          {users.map((u) => {
-            const checked = task.assignees.some((a) => a.id === u.id);
-            return (
-              <button
-                key={u.id}
-                onClick={() => toggleAssignee(u.id)}
-                // Bigger checkbox/row on mobile — this exact list was reported as too fiddly to
-                // tap accurately at the desktop-sized 3.5-unit checkbox.
-                className={`w-full flex items-center gap-2 text-[11px] text-neutral-300 rounded hover:bg-neutral-800/60 cursor-pointer ${
-                  isMobile ? 'px-2 py-2.5' : 'px-2 py-1'
-                }`}
-              >
-                <span
-                  className={`rounded border flex items-center justify-center shrink-0 transition ${isMobile ? 'w-5 h-5' : 'w-3.5 h-3.5'} ${
-                    checked ? 'bg-blue-500 border-blue-500 text-white' : 'border-neutral-600'
-                  }`}
-                >
-                  {checked && <Check className={isMobile ? 'w-3.5 h-3.5' : 'w-2.5 h-2.5'} />}
-                </span>
-                <span
-                  className={`rounded-full font-bold flex items-center justify-center text-white shrink-0 ${isMobile ? 'w-5 h-5 text-[9px]' : 'w-4 h-4 text-[8px]'}`}
-                  style={{ backgroundColor: u.color }}
-                >
-                  {u.initials}
-                </span>
-                {u.name}
-              </button>
-            );
-          })}
-          {users.length === 0 && <p className="text-[10px] text-neutral-500 px-2 py-1">No users yet.</p>}
+          <AssigneePicker
+            people={assigneeChoices}
+            selectedIds={task.assignees.map((a) => a.id)}
+            // Read on open only (the picker freezes it), so the whole-list scan is not paid per row.
+            suggestedIds={assigneeOpen ? suggestTaskAssignees(useTaskStore.getState().tasks, task.listId, task.id) : []}
+            onToggle={toggleAssignee}
+            currentUserId={currentUserId}
+            autoFocus={!isMobile}
+          />
         </FloatingPopover>
       );
     }

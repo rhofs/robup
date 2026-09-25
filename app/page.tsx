@@ -140,6 +140,9 @@ import { useIsMobile } from '../hooks/useIsMobile';
 import AccessControlPanel from '../components/AccessControlPanel';
 import MentionText from '../components/MentionText';
 import MentionTextarea from '../components/MentionTextarea';
+import { pickableMembers, workspaceIdForList, workspaceIdForSpace } from '../lib/workspaceMembers';
+import AssigneePicker, { PersonPill } from '../components/AssigneePicker';
+import { suggestTaskAssignees } from '../lib/assigneeSuggestions';
 
 // Client-only: HocuspocusProvider needs `window.location` and a real WebSocket, neither available
 // during SSR — a live collaborative editor has no reason to render server-side anyway.
@@ -5709,7 +5712,9 @@ function PageContent() {
             {activeView === 'office' ? (
               <div className="space-y-2">
                 <p className="text-[10px] font-bold text-neutral-500 uppercase tracking-wider px-2">Team</p>
-                {users.map((u) => {
+                {/* This workspace's team, not everyone you know from any workspace — the same scoping
+                    OfficePage itself already applies. */}
+                {pickableMembers(workspaces, users, activeWorkspaceId).map((u) => {
                   const count = tasks.filter((t) => !t.archived && t.assignees.some((a) => a.id === u.id)).length;
                   const isActive = activeOfficeUserId === u.id;
                   const navigateToUser = () => {
@@ -6762,7 +6767,7 @@ function PageContent() {
                           }
                         >
                           <div className="text-[10px] uppercase tracking-wide text-neutral-500 px-2 py-1">Owner</div>
-                          {users.map((u) => (
+                          {pickableMembers(workspaces, users, workspaceIdForSpace(workspaces, currentSpace.id)).map((u) => (
                             <button
                               key={u.id}
                               onClick={() => {
@@ -6825,7 +6830,7 @@ function PageContent() {
                           }
                         >
                           <div className="text-[10px] uppercase tracking-wide text-neutral-500 px-2 py-1">Contributors</div>
-                          {users.map((u) => {
+                          {pickableMembers(workspaces, users, workspaceIdForSpace(workspaces, currentSpace.id), activeStandaloneDoc.contributorIds).map((u) => {
                             const checked = activeStandaloneDoc.contributorIds.includes(u.id);
                             return (
                               <button
@@ -8612,14 +8617,12 @@ function PageContent() {
                     const assigneeChips = (
                       <>
                         {activeModalTask.assignees?.map((a: any) => (
-                          <span key={a.id} className="text-[10px] px-2 py-1 rounded text-white font-semibold" style={{ backgroundColor: a.color }}>
-                            {a.name}
-                          </span>
+                          <PersonPill key={a.id} user={a} onRemove={() => toggleAssignee(activeModalTask, a.id)} />
                         ))}
                         <FloatingPopover
                           open={modalAssigneeOpen}
                           onClose={() => setModalAssigneeOpen(false)}
-                          panelClassName="w-44 bg-neutral-900 border border-neutral-800 rounded-xl shadow-xl p-1.5"
+                          panelClassName="w-72 md:w-64 bg-neutral-900 border border-neutral-800 rounded-xl shadow-2xl p-2"
                           anchor={
                             <button
                               onClick={(e) => {
@@ -8633,29 +8636,20 @@ function PageContent() {
                             </button>
                           }
                         >
-                          {users.map((u) => {
-                            const checked = activeModalTask.assignees?.some((a: any) => a.id === u.id) ?? false;
-                            return (
-                              <button
-                                key={u.id}
-                                onClick={() => toggleAssignee(activeModalTask, u.id)}
-                                className="w-full flex items-center gap-2 text-[11px] text-neutral-300 px-2 py-1 rounded hover:bg-neutral-800/60 cursor-pointer"
-                              >
-                                <span
-                                  className={`w-3.5 h-3.5 rounded border flex items-center justify-center shrink-0 transition ${
-                                    checked ? 'bg-blue-500 border-blue-500 text-white' : 'border-neutral-600'
-                                  }`}
-                                >
-                                  {checked && <Check className="w-2.5 h-2.5" />}
-                                </span>
-                                <span className="w-4 h-4 rounded-full text-[8px] font-bold flex items-center justify-center text-white" style={{ backgroundColor: u.color }}>
-                                  {u.initials}
-                                </span>
-                                {u.name}
-                              </button>
-                            );
-                          })}
-                          {users.length === 0 && <p className="text-[10px] text-neutral-500 px-2 py-1">No users yet.</p>}
+                          {/* Only the members of the task's own workspace — see lib/workspaceMembers.ts. */}
+                          <AssigneePicker
+                            people={pickableMembers(
+                              workspaces,
+                              users,
+                              workspaceIdForList(workspaces, activeModalTask.listId),
+                              (activeModalTask.assignees ?? []).map((a: any) => a.id)
+                            )}
+                            selectedIds={(activeModalTask.assignees ?? []).map((a: any) => a.id)}
+                            suggestedIds={suggestTaskAssignees(tasks, activeModalTask.listId, activeModalTask.id)}
+                            onToggle={(uid) => toggleAssignee(activeModalTask, uid)}
+                            currentUserId={currentUserId}
+                            autoFocus={!isMobile}
+                          />
                         </FloatingPopover>
                       </>
                     );
@@ -9008,11 +9002,13 @@ function PageContent() {
                     placeholder="Write a comment... (Enter to send, Shift+Enter for new line, @ to mention)"
                     // A task comment can reach its assignees, everyone who can open the task, or a
                     // role — all from the workspace the task lives in, which is where its roles are.
+                    // Scoped to the task's own workspace: its people, tasks and docs. Unscoped, it offered
+                    // people from every workspace you are in, none of whom could open this task.
+                    workspaceId={workspaceIdForList(workspaces, activeModalTask.listId)}
                     groupMentions={{
                       everyone: true,
                       assignee: true,
-                      rolesWorkspaceId:
-                        workspaces.find((w) => w.spaces.some((sp) => sp.lists.some((l) => l.id === activeModalTask.listId)))?.id ?? null,
+                      rolesWorkspaceId: workspaceIdForList(workspaces, activeModalTask.listId),
                       everyoneHint: 'Everyone who can see this task',
                     }}
                     rows={2}

@@ -2,9 +2,13 @@
 
 import { useEffect, useState } from 'react';
 import { X, Check, MapPin } from 'lucide-react';
-import { HierarchyWorkspace, AppUser } from '../../store/useTaskStore';
+import { HierarchyWorkspace, AppUser, useTaskStore } from '../../store/useTaskStore';
+import { suggestEventAttendees } from '../../lib/assigneeSuggestions';
 import DatePickerPopover from '../DatePickerPopover';
 import FloatingPopover from '../FloatingPopover';
+import { pickableMembers } from '../../lib/workspaceMembers';
+import AssigneePicker, { PersonPill } from '../AssigneePicker';
+import { useSessionStore } from '../../store/useSessionStore';
 import ColorSwatchPicker from '../ColorSwatchPicker';
 import { EVENT_COLOR_CHOICES } from './EventDetailModal';
 import { startDateColor, dueDateColor, DATE_BADGE_COLOR_HEX, startDateTooltip, dueDateTooltip } from '../../lib/dateBadgeColor';
@@ -62,6 +66,7 @@ export default function QuickCreatePopover({
   const [title, setTitle] = useState('');
 
   // Task tab fields
+  const currentUserId = useSessionStore((s) => s.currentUserId);
   const [spaceId, setSpaceId] = useState('');
   const [listId, setListId] = useState('');
   const [startDate, setStartDate] = useState<string | null>(defaultStartDate);
@@ -364,14 +369,12 @@ export default function QuickCreatePopover({
                   {users
                     .filter((u) => assigneeIds.includes(u.id))
                     .map((u) => (
-                      <span key={u.id} className="text-[10px] px-2 py-1 rounded text-white font-semibold" style={{ backgroundColor: u.color }}>
-                        {u.name}
-                      </span>
+                      <PersonPill key={u.id} user={u} onRemove={() => setAssigneeIds((prev) => prev.filter((id) => id !== u.id))} />
                     ))}
                   <FloatingPopover
                     open={assigneePickerOpen}
                     onClose={() => setAssigneePickerOpen(false)}
-                    panelClassName="w-44 bg-neutral-900 border border-neutral-800 rounded-xl shadow-xl p-1.5"
+                    panelClassName="w-72 md:w-64 bg-neutral-900 border border-neutral-800 rounded-xl shadow-2xl p-2"
                     anchor={
                       <button
                         onClick={() => setAssigneePickerOpen((o) => !o)}
@@ -382,25 +385,15 @@ export default function QuickCreatePopover({
                       </button>
                     }
                   >
-                    {users.map((u) => {
-                      const checked = assigneeIds.includes(u.id);
-                      return (
-                        <button
-                          key={u.id}
-                          onClick={() => setAssigneeIds((prev) => (checked ? prev.filter((id) => id !== u.id) : [...prev, u.id]))}
-                          className="w-full flex items-center gap-2 text-[11px] text-neutral-300 px-2 py-1 rounded hover:bg-neutral-800/60 cursor-pointer"
-                        >
-                          <span
-                            className={`w-3.5 h-3.5 rounded border flex items-center justify-center shrink-0 transition ${
-                              checked ? 'bg-blue-500 border-blue-500 text-white' : 'border-neutral-600'
-                            }`}
-                          >
-                            {checked && <Check className="w-2.5 h-2.5" />}
-                          </span>
-                          <span className="truncate">{u.name}</span>
-                        </button>
-                      );
-                    })}
+                    {/* The event is created in the active workspace, so only its members can attend. */}
+                    <AssigneePicker
+                      heading="Attendees"
+                      people={pickableMembers(workspaces, users, activeWorkspaceId)}
+                      selectedIds={assigneeIds}
+                      suggestedIds={suggestEventAttendees(useTaskStore.getState().events, activeWorkspaceId)}
+                      onToggle={(uid) => setAssigneeIds((prev) => (prev.includes(uid) ? prev.filter((id) => id !== uid) : [...prev, uid]))}
+                      currentUserId={currentUserId}
+                    />
                   </FloatingPopover>
                 </div>
               </div>

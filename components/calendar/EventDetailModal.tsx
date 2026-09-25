@@ -1,8 +1,11 @@
 'use client';
 
 import { useState } from 'react';
+import { pickableMembers } from '../../lib/workspaceMembers';
+import AssigneePicker, { PersonPill } from '../AssigneePicker';
+import { suggestEventAttendees } from '../../lib/assigneeSuggestions';
 import { X, Trash2, Check, MapPin } from 'lucide-react';
-import { Event, HierarchyWorkspace, AppUser } from '../../store/useTaskStore';
+import { Event, HierarchyWorkspace, AppUser, useTaskStore } from '../../store/useTaskStore';
 import DatePickerPopover from '../DatePickerPopover';
 import FloatingPopover from '../FloatingPopover';
 import ColorSwatchPicker from '../ColorSwatchPicker';
@@ -210,14 +213,12 @@ export default function EventDetailModal({ event, workspaces, users, currentUser
             <label className="text-[10px] uppercase tracking-wide text-neutral-500 font-semibold">Attendees</label>
             <div className="flex items-center gap-1.5 flex-wrap">
               {event.assignees.map((a) => (
-                <span key={a.id} className="text-[10px] px-2 py-1 rounded text-white font-semibold" style={{ backgroundColor: a.color }}>
-                  {a.name}
-                </span>
+                <PersonPill key={a.id} user={a} onRemove={() => onSetAssignees(event.assignees.map((x) => x.id).filter((id) => id !== a.id))} />
               ))}
               <FloatingPopover
                 open={assigneePickerOpen}
                 onClose={() => setAssigneePickerOpen(false)}
-                panelClassName="w-44 bg-neutral-900 border border-neutral-800 rounded-xl shadow-xl p-1.5"
+                panelClassName="w-72 md:w-64 bg-neutral-900 border border-neutral-800 rounded-xl shadow-2xl p-2"
                 anchor={
                   <button
                     onClick={() => setAssigneePickerOpen((o) => !o)}
@@ -228,28 +229,17 @@ export default function EventDetailModal({ event, workspaces, users, currentUser
                   </button>
                 }
               >
-                {users.map((u) => {
-                  const checked = event.assignees.some((a) => a.id === u.id);
-                  return (
-                    <button
-                      key={u.id}
-                      onClick={() => {
-                        const ids = event.assignees.map((a) => a.id);
-                        onSetAssignees(checked ? ids.filter((id) => id !== u.id) : [...ids, u.id]);
-                      }}
-                      className="w-full flex items-center gap-2 text-[11px] text-neutral-300 px-2 py-1 rounded hover:bg-neutral-800/60 cursor-pointer"
-                    >
-                      <span
-                        className={`w-3.5 h-3.5 rounded border flex items-center justify-center shrink-0 transition ${
-                          checked ? 'bg-blue-500 border-blue-500 text-white' : 'border-neutral-600'
-                        }`}
-                      >
-                        {checked && <Check className="w-2.5 h-2.5" />}
-                      </span>
-                      <span className="truncate">{u.name}</span>
-                    </button>
-                  );
-                })}
+                <AssigneePicker
+                  heading="Attendees"
+                  people={pickableMembers(workspaces, users, event.workspaceId, event.assignees.map((a) => a.id))}
+                  selectedIds={event.assignees.map((a) => a.id)}
+                  suggestedIds={suggestEventAttendees(useTaskStore.getState().events, event.workspaceId, event.id)}
+                  onToggle={(uid) => {
+                    const ids = event.assignees.map((a) => a.id);
+                    onSetAssignees(ids.includes(uid) ? ids.filter((id) => id !== uid) : [...ids, uid]);
+                  }}
+                  currentUserId={currentUserId}
+                />
               </FloatingPopover>
             </div>
           </div>

@@ -1,6 +1,7 @@
 'use client';
 
 import { useLayoutEffect, useRef, useState } from 'react';
+import { useTaskAssignDrop, useEventAssignDrop, assignDropClass } from './useAssignDrop';
 import { CalendarClock } from 'lucide-react';
 import GoogleIcon from '../icons/GoogleIcon';
 import { isSameDay } from '../../lib/calendarDates';
@@ -168,12 +169,12 @@ export default function DayTimeline({
         <div className="shrink-0 border-b border-neutral-800 px-3 py-2 space-y-1 max-h-32 overflow-y-auto">
           <div className="text-[9px] uppercase tracking-wider text-neutral-500 mb-1">All day</div>
           {allDayTasks.map((task) => (
-            <AllDayChip key={task.id} label={task.title} color={taskColorOf(task)} onClick={() => onOpenTask(task.id)} />
+            <TaskAllDayChip key={task.id} task={task} color={taskColorOf(task)} onClick={() => onOpenTask(task.id)} />
           ))}
           {allDayEvents.map((event) => (
-            <AllDayChip
+            <EventAllDayChip
               key={event.id}
-              label={event.title}
+              event={event}
               color={eventColorOf(event)}
               onClick={() => onOpenEvent(event.id)}
               isEvent
@@ -323,16 +324,19 @@ function AllDayChip({
   onClick,
   isEvent,
   fromGoogle,
+  drop,
 }: {
   label: string;
   color: string;
   onClick: () => void;
   isEvent?: boolean;
   fromGoogle?: boolean;
+  drop?: ReturnType<typeof useTaskAssignDrop>;
 }) {
   const [hovered, setHovered] = useState(false);
   return (
     <button
+      {...drop?.dropProps}
       onClick={onClick}
       onMouseEnter={() => setHovered(true)}
       onMouseLeave={() => setHovered(false)}
@@ -341,7 +345,7 @@ function AllDayChip({
       // else in Planner — plain-color alone isn't reliable since either can be any color.
       className={`relative w-full text-left truncate text-[11px] font-medium px-2 py-1 rounded-md border cursor-pointer transition-colors flex items-center gap-1 ${
         isEvent ? 'border-dashed' : ''
-      }`}
+      } ${drop ? assignDropClass(drop.isOver, drop.justAssigned) : ''}`}
       style={{
         backgroundColor: withAlpha(color, hovered ? HOVER_BG_ALPHA : BASE_BG_ALPHA),
         borderColor: withAlpha(color, hovered ? HOVER_BORDER_ALPHA : BASE_BORDER_ALPHA),
@@ -352,6 +356,18 @@ function AllDayChip({
       <span className="truncate">{label}</span>
     </button>
   );
+}
+
+// The all-day chips as drop targets for "drag a face to assign" — thin wrappers because a hook
+// cannot be called per item inside the .map above.
+function TaskAllDayChip({ task, color, onClick }: { task: Task; color: string; onClick: () => void }) {
+  const drop = useTaskAssignDrop(task);
+  return <AllDayChip label={task.title} color={color} onClick={onClick} drop={drop} />;
+}
+
+function EventAllDayChip({ event, color, onClick, isEvent, fromGoogle }: { event: Event; color: string; onClick: () => void; isEvent?: boolean; fromGoogle?: boolean }) {
+  const drop = useEventAssignDrop(event);
+  return <AllDayChip label={event.title} color={color} onClick={onClick} isEvent={isEvent} fromGoogle={fromGoogle} drop={drop} />;
 }
 
 function DayEventBlock({
@@ -380,8 +396,9 @@ function DayEventBlock({
   isMobile: boolean;
 }) {
   const [hovered, setHovered] = useState(false);
+  const { isOver, justAssigned, dropProps } = useEventAssignDrop(event);
   return (
-    <div className="absolute" style={style}>
+    <div {...dropProps} className={`absolute ${assignDropClass(isOver, justAssigned)}`} style={style}>
       <button
         onClick={isMobile ? () => onOpenEvent(event.id) : undefined}
         onPointerDown={isMobile ? undefined : (e) => onStartInteraction(e, event.id, 'move')}
@@ -458,8 +475,9 @@ function DayTaskBlock({
 }) {
   const [hovered, setHovered] = useState(false);
   const height = typeof style.height === 'number' ? style.height : 0;
+  const { isOver, justAssigned, dropProps } = useTaskAssignDrop(task);
   return (
-    <div className="absolute group/block" style={style}>
+    <div {...dropProps} className={`absolute group/block ${assignDropClass(isOver, justAssigned)}`} style={style}>
       <div
         onPointerDown={isMobile ? undefined : (e) => onStartInteraction(e, task.id, 'move')}
         onPointerMove={isMobile ? undefined : (e) => onMoveInteraction(e, task.id)}

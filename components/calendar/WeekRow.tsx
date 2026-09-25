@@ -1,6 +1,8 @@
 'use client';
 
 import { useEffect, useRef, useState } from 'react';
+import { useTaskAssignDrop, useEventAssignDrop, assignDropClass } from './useAssignDrop';
+import { MiniAvatar } from '../AssigneePicker';
 import { Plus, Pin, CalendarClock } from 'lucide-react';
 import GoogleIcon from '../icons/GoogleIcon';
 import { getISOWeek, isSameDay } from '../../lib/calendarDates';
@@ -706,8 +708,13 @@ function EventBar({
   isMobile: boolean;
 }) {
   const [hovered, setHovered] = useState(false);
+  const { isOver, justAssigned, dropProps } = useEventAssignDrop(event);
   return (
-    <div className={`absolute ${isMobile ? 'pointer-events-none' : 'pointer-events-auto'}`} style={{ ...barStyle, opacity: isDraggingThis ? 0.35 : 1 }}>
+    <div
+      {...dropProps}
+      className={`absolute ${isMobile ? 'pointer-events-none' : 'pointer-events-auto'} ${assignDropClass(isOver, justAssigned)}`}
+      style={{ ...barStyle, opacity: isDraggingThis ? 0.35 : 1 }}
+    >
       <button
         onPointerDown={isMobile ? undefined : (e) => onStartInteraction(e, event.id, 'move')}
         onPointerMove={isMobile ? undefined : (e) => onMoveInteraction(e, event.id)}
@@ -785,8 +792,13 @@ function TaskBar({
 }) {
   const [hovered, setHovered] = useState(false);
   const assignees = task.assignees;
+  const { isOver, justAssigned, dropProps } = useTaskAssignDrop(task);
   return (
-    <div className={`absolute group/bar ${isMobile ? 'pointer-events-none' : 'pointer-events-auto'}`} style={{ ...barStyle, opacity: isDraggingThis ? 0.35 : 1 }}>
+    <div
+      {...dropProps}
+      className={`absolute group/bar ${isMobile ? 'pointer-events-none' : 'pointer-events-auto'} ${assignDropClass(isOver, justAssigned)}`}
+      style={{ ...barStyle, opacity: isDraggingThis ? 0.35 : 1 }}
+    >
       <div
         // Mobile never wires up the move-drag pointer handlers — on touch the bar lets every
         // press through to the day cell underneath (see the wrapper above).
@@ -822,14 +834,7 @@ function TaskBar({
         {seg.isEndEdge && assignees.length > 0 && (
           <span className="flex items-center -space-x-1 shrink-0">
             {assignees.slice(0, 1).map((a) => (
-              <span
-                key={a.id}
-                title={a.name}
-                className="w-3.5 h-3.5 rounded-full border border-neutral-900/60 text-[7px] font-bold flex items-center justify-center text-white shrink-0"
-                style={{ backgroundColor: a.color }}
-              >
-                {a.initials}
-              </span>
+              <MiniAvatar key={a.id} user={a} size={14} className="ring-1 ring-neutral-900/60" />
             ))}
             {assignees.length > 1 && (
               <span className="w-3.5 h-3.5 rounded-full border border-neutral-900/60 bg-neutral-700 text-[7px] font-bold flex items-center justify-center text-app-strong shrink-0">

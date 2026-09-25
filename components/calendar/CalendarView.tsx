@@ -20,6 +20,7 @@ import { useIsMobile } from '../../hooks/useIsMobile';
 import WeekRow, { BAR_GAP, BAR_H, DAY_NUM_H, GUTTER_WIDTH } from './WeekRow';
 import { contextMenuPosition } from '../../lib/contextMenuPosition';
 import DayTimeline from './DayTimeline';
+import TeamStrip from './TeamStrip';
 
 type Granularity = 'month' | 'week' | 'day';
 
@@ -608,6 +609,9 @@ export default function CalendarView({ tasks, events, statuses, workspaces, show
         </div>
 
         <div className="flex items-center gap-2">
+          {/* Faces to drag onto a bar — see TeamStrip. Desktop only, and it hides itself there too
+              when the workspace has no one else in it. */}
+          {!isMobile && <TeamStrip />}
           <button
             onClick={() => onRequestCreateTask(focusDate)}
             title="New task (N)"
