@@ -72,6 +72,7 @@ import {
   Copy,
   Users,
   type LucideIcon,
+  BookOpen,
 } from 'lucide-react';
 import { useTaskStore, HierarchySpace, HierarchyFolder, HierarchyList, HierarchyDocFolder, HierarchyRoom, HierarchyWorkspace, StatusDef, CustomFieldDef, Task, TaskDoc, AppUser } from '../store/useTaskStore';
 import { useHistoryStore } from '../store/useHistoryStore';
@@ -140,6 +141,7 @@ import { useIsMobile } from '../hooks/useIsMobile';
 import AccessControlPanel from '../components/AccessControlPanel';
 import MentionText from '../components/MentionText';
 import MentionTextarea from '../components/MentionTextarea';
+import WikiView from '../components/wiki/WikiView';
 import { pickableMembers, taskAudience, taskPickableMembers, workspaceIdForList, workspaceIdForSpace } from '../lib/workspaceMembers';
 import AssigneePicker, { PersonPill } from '../components/AssigneePicker';
 import { suggestTaskAssignees } from '../lib/assigneeSuggestions';
@@ -835,6 +837,9 @@ function PageContent() {
   // the URL and compared by value — the resolved object is derived separately below, and selecting
   // an object literal here is exactly the infinite-render-loop trap documented in Known bugs.
   const activeChatChannelId = useChatStore((s) => s.activeChannelId);
+  // The Wiki page being read, or null for its cover. Page state here rather than in the wiki
+  // component so it lives in the URL with the rest of the navigation (see lib/navUrl.ts).
+  const [activeWikiPageId, setActiveWikiPageId] = useState<string | null>(null);
   const setActiveChatSidebarTab = useChatStore((s) => s.setActiveChatSidebarTab);
 
   // "Send DM" from ManageableAvatar (Office, backlog #9) — jumps straight into the real
@@ -1413,6 +1418,7 @@ function PageContent() {
     mytasks: 'My assigned tasks',
     directMessages: 'Connections',
     profile: 'Profile',
+    wiki: 'Wiki',
   };
   const breadcrumbViewLabel = BREADCRUMB_VIEW_LABEL[activeView];
 
@@ -2048,6 +2054,7 @@ function PageContent() {
       // elsewhere would restore a conversation nobody asked to reopen.
       chatChannelId: activeView === 'chat' ? activeChatChannelId : null,
       sheet: mobileSpacesOpen ? 'spaces' : mobilePersonalSpacesOpen ? 'mytasks' : null,
+      wikiPageId: activeView === 'wiki' ? activeWikiPageId : null,
     });
     if (qs === searchParams.toString()) return;
     pendingPushesRef.current.push(qs);
@@ -2076,6 +2083,7 @@ function PageContent() {
     activeChatChannelId,
     mobileSpacesOpen,
     mobilePersonalSpacesOpen,
+    activeWikiPageId,
   ]);
 
   // Effect 2: URL -> nav state. Runs once real data has loaded (so a deep-linked Space/List/task
@@ -2195,6 +2203,9 @@ function PageContent() {
     // perfectly good id for being early. ChatPanel already renders its own "pick a channel" state
     // for an id that resolves to nothing, so a stale one degrades to that rather than breaking.
     if (parsed.chatChannelId !== activeChatChannelId) setActiveChatChannelId(parsed.chatChannelId);
+    // Not validated against the loaded wiki for the same reason: the wiki is fetched when it opens,
+    // after this runs. An id that matches no page shows the cover.
+    if (parsed.wikiPageId !== activeWikiPageId) setActiveWikiPageId(parsed.wikiPageId);
 
     // Which mobile tree sheet is open. Restoring these is the whole point of encoding them — a
     // reload while browsing the Spaces or My Tasks tree previously dropped the user onto whatever
@@ -2745,6 +2756,17 @@ function PageContent() {
           active: activeView === 'docs' && !sheetOpen,
         });
       }
+      // Beside Docs in the launcher — the other place the company's written knowledge lives. It is
+      // also on Office, which is the company's half of the mobile app (see OfficeContext).
+      if (!hiddenNavTabs.has('wiki') && hasRealWorkspace) {
+        tabs.push({
+          id: 'wiki',
+          label: 'Wiki',
+          icon: BookOpen,
+          onClick: () => setActiveView('wiki'),
+          active: activeView === 'wiki' && !sheetOpen,
+        });
+      }
       // No Chat tile. Conversations are not a place of their own in this layout — they live inside
       // the context they belong to: your DMs under Home's Messages, the team's channels and rooms
       // under Office's Rooms. A launcher entry called "Chat" is a third door to the same two rooms,
@@ -2791,6 +2813,17 @@ function PageContent() {
         icon: FileText,
         onClick: () => setActiveView('docs'),
         active: activeView === 'docs' && !mobileSheetOpen,
+      });
+    }
+    // The workspace's Wiki, its own rail entry right under Docs: somewhere everyone in the company
+    // knows to look, not a page buried inside a Space. The user's request.
+    if (!hiddenNavTabs.has('wiki') && hasRealWorkspace) {
+      tabs.push({
+        id: 'wiki',
+        label: 'Wiki',
+        icon: BookOpen,
+        onClick: () => setActiveView('wiki'),
+        active: activeView === 'wiki' && !mobileSheetOpen,
       });
     }
     // No Office entry. Desktop dropped it by decision — the workspace switcher covers changing
@@ -4983,6 +5016,7 @@ function PageContent() {
 
   const officeContextEl = (
               <OfficeContext
+                onOpenWiki={() => setActiveView('wiki')}
                 tab={officeTab}
                 openSpaceIds={openContextSpaceIds}
                 openFolderIds={openContextFolderIds}
@@ -5508,7 +5542,11 @@ function PageContent() {
       </nav>
 
       {/* ================= LEFT MENU (SIDEBAR) ================= */}
-      <aside className="w-64 bg-neutral-900/90 border-r border-neutral-800/80 hidden md:flex flex-col justify-between shrink-0 select-none">
+      {/* Hidden in the Wiki, which has its own contents column — two trees side by side left the
+          book a narrow strip in the middle of the screen. */}
+      <aside
+        className={`w-64 bg-neutral-900/90 border-r border-neutral-800/80 hidden ${activeView === 'wiki' ? '' : 'md:flex'} flex-col justify-between shrink-0 select-none`}
+      >
         {/* flex-1 min-h-0 overflow-y-auto: this column had none of the three, so once a workspace
             had more Spaces/Lists than fit the viewport the tree simply grew past the bottom of the
             screen with no way to reach the rest — reported on desktop (mobile uses its own sheet,
@@ -6379,6 +6417,10 @@ function PageContent() {
             // treatment Chat's own list wrapper got, right below the search bar there too.
             activeView === 'calendar'
               ? `flex-1 min-h-0 overflow-hidden p-2 ${NAV_TOTAL_HEIGHT_PB_CLASS} md:p-6 flex flex-col bg-neutral-900 md:bg-transparent rounded-t-2xl md:rounded-none`
+              : activeView === 'wiki'
+              ? // Edge to edge: the wiki brings its own contents column and reading width, and
+                // scrolls inside itself (so the contents stay put while a page scrolls).
+                `flex-1 min-h-0 overflow-hidden flex flex-col ${NAV_TOTAL_HEIGHT_PB_CLASS} md:pb-0 bg-neutral-900 md:bg-transparent rounded-t-2xl md:rounded-none`
               : activeView === 'chat'
               ? // The Chat *list* (nothing picked yet) draws its own rounded-top sheet flush
                 // against the screen edges (see the ChatSidebar wrapper below) — this outer
@@ -6417,7 +6459,7 @@ function PageContent() {
         >
           <div
             className={
-              activeView === 'calendar' || activeView === 'chat'
+              activeView === 'calendar' || activeView === 'chat' || activeView === 'wiki'
                 ? 'flex-1 min-h-0 flex flex-col'
                 : (activeView === 'board' || activeView === 'docs') && activeStandaloneDoc?.pageWidth === 'full'
                 ? 'w-full space-y-2'
@@ -6872,6 +6914,19 @@ function PageContent() {
                   />
                 </div>
               </div>
+            ) : activeView === 'wiki' ? (
+              currentWorkspace && !currentWorkspace.isPersonal ? (
+                <WikiView
+                  workspace={currentWorkspace}
+                  pageId={activeWikiPageId}
+                  onOpenPage={setActiveWikiPageId}
+                  onJump={jumpToMention}
+                  onContactUser={(uid) => void handleStartDMFromOffice(uid)}
+                  isMobile={isMobile}
+                />
+              ) : (
+                <p className="p-6 text-sm text-neutral-500">Pick a workspace to open its wiki.</p>
+              )
             ) : activeView === 'mytasks' ? (
               <MyTasksPage
                 currentUser={users.find((u) => u.id === currentUserId) ?? null}
@@ -9301,7 +9356,11 @@ function PageContent() {
         open={commandPaletteOpen}
         onClose={() => setCommandPaletteOpen(false)}
         onOpenTask={(id) => setModalTaskStack([id])}
-        scopeKind={activeView === 'docs' ? 'doc' : activeView === 'chat' ? 'channel' : undefined}
+        scopeKind={activeView === 'docs' ? 'doc' : activeView === 'chat' ? 'channel' : activeView === 'wiki' ? 'wiki' : undefined}
+        onOpenWikiPage={(pageId) => {
+          setActiveView('wiki');
+          setActiveWikiPageId(pageId);
+        }}
       />
 
       {/* The context layer: the screen a push slides away from, and slides back to.

@@ -280,7 +280,7 @@ interface TaskStore {
   eventComments: Record<string, TaskComment[]>;
   docComments: Record<string, DocComment[]>;
   docs: Record<string, TaskDoc[]>;
-  activeView: 'board' | 'calendar' | 'docs' | 'office' | 'mytasks' | 'profile' | 'chat' | 'directMessages';
+  activeView: 'board' | 'calendar' | 'docs' | 'office' | 'mytasks' | 'profile' | 'chat' | 'directMessages' | 'wiki';
   // Which Workspace the sidebar/nav is currently scoped to — null only until the first
   // fetchInitialData() resolves (or if the current identity has no workspaces at all).
   activeWorkspaceId: string | null;
@@ -330,7 +330,7 @@ interface TaskStore {
   refetchWorkspaces: () => Promise<void>;
   refetchTasks: () => Promise<void>;
   refetchEvents: () => Promise<void>;
-  setActiveView: (view: 'board' | 'calendar' | 'docs' | 'office' | 'mytasks' | 'profile' | 'chat' | 'directMessages') => void;
+  setActiveView: (view: 'board' | 'calendar' | 'docs' | 'office' | 'mytasks' | 'profile' | 'chat' | 'directMessages' | 'wiki') => void;
   setActiveWorkspaceId: (id: string) => void;
   setNavigation: (spaceId: string, listIds?: string[]) => void;
   setCalendarGranularity: (g: 'month' | 'week' | 'day') => void;

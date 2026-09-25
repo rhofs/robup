@@ -1,4 +1,9 @@
 @import "tailwindcss";
+/* Tailwind v4 scans every file it finds for class names, markdown included. PLANNING.md quotes
+   class names in prose — `pt-[env(...)]`, with a literal "..." — and the dev server's CSS parser
+   rejected the rule Tailwind generated from it, failing every page with a 500. Notes are not source. */
+@source not "../PLANNING.md";
+@source not "../AGENTS.md";
 
 /* Dark is this app's base, not its alternate — every one of the ~1700 `neutral-*` utility classes
    across the UI was written assuming a dark canvas, so the bare `:root` values here are the dark
@@ -588,4 +593,34 @@ body {
   .siqt-assign-pop {
     animation: none;
   }
+}
+
+/* Wiki (components/wiki/WikiView.tsx) — asked to feel "nesten litt som en bok". Titles in a serif
+   face, the one place in the app that uses one, so the wiki reads as a different kind of place
+   from the task lists around it; body text stays in the app's own face but gets a reading
+   rhythm — longer lines of air, more space between paragraphs — instead of a form's density. */
+.wiki-title {
+  font-family: ui-serif, 'Iowan Old Style', 'Palatino Linotype', Georgia, 'Times New Roman', serif;
+  letter-spacing: -0.01em;
+}
+.wiki-page .collab-doc-editor .ProseMirror {
+  line-height: 1.75;
+}
+.wiki-page .collab-doc-editor .ProseMirror p {
+  margin: 0 0 0.85em;
+}
+.wiki-page .collab-doc-editor .ProseMirror h1,
+.wiki-page .collab-doc-editor .ProseMirror h2 {
+  font-family: ui-serif, 'Iowan Old Style', 'Palatino Linotype', Georgia, 'Times New Roman', serif;
+  color: var(--color-app-strong);
+  margin-top: 1.6em;
+}
+.wiki-page .collab-doc-editor .ProseMirror li p {
+  margin: 0 0 0.3em;
+}
+/* Where a search led the reader: painted with the CSS Custom Highlight API, so nothing is inserted
+   into the live document itself. */
+::highlight(wiki-search) {
+  background-color: rgb(251 191 36 / 0.4);
+  color: inherit;
 }

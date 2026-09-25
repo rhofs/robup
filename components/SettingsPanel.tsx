@@ -180,7 +180,7 @@ function PushUnsupportedNote() {
 
 const HIDDEN_NAV_TABS_STORAGE_KEY = 'siqt.hiddenNavTabs';
 
-export type NavTabId = 'board' | 'calendar' | 'docs' | 'office' | 'chat';
+export type NavTabId = 'board' | 'calendar' | 'docs' | 'office' | 'chat' | 'wiki';
 
 // Kept, unreferenced by this panel's own UI, because readHiddenNavTabs/setNavTabHidden below are
 // still the storage contract the classic layout reads. The "Visible tabs" control that used them was

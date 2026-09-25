@@ -50,6 +50,17 @@ model Workspace {
   // GET /api/tasks etc.
   memberships     WorkspaceMembership[]
   templates       Template[]
+
+  // The workspace's Wiki: its pages are ordinary Doc rows (wikiWorkspaceId below), so they share the
+  // doc editor, live collaboration and the backups. Chapters are the top-level pages (parentId null),
+  // pages sit under a chapter via Doc.parentId, both ordered by Doc.order.
+  wikiPages          Doc[]   @relation("WikiPages")
+  // Who may edit the wiki besides owners and admins (who always can): the same {type:'user'|'role',
+  // id} list accessJson uses everywhere else, read with the same parser (lib/auth/visibility.ts).
+  wikiEditorsJson    String  @default("[]") @map("wiki_editors_json")
+  // Where "Report a bug" / "Request a feature" in the wiki's quick links create their task. Null
+  // until an admin picks one; the buttons say so rather than failing.
+  wikiFeedbackListId String? @map("wiki_feedback_list_id")
   roles           Role[]
   invites         WorkspaceInvite[]
   memberInvites   WorkspaceMemberInvite[]
@@ -866,12 +877,19 @@ model Doc {
   // onAuthenticate) — same JSON-in-String convention as accessJson elsewhere in this schema.
   contributorIdsJson String @default("[]") @map("contributor_ids_json")
 
+  // Set only on Wiki pages — the workspace whose wiki this page belongs to. Such a doc has no
+  // space/task/folder; its visibility is "every member of that workspace", and editing is limited to
+  // the wiki's editors (lib/auth/wikiAccess.ts), enforced in the API and in the collab server.
+  wikiWorkspaceId String?    @map("wiki_workspace_id")
+  wikiWorkspace   Workspace? @relation("WikiPages", fields: [wikiWorkspaceId], references: [id], onDelete: Cascade)
+
   docComments DocComment[]
 
   createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime @updatedAt @map("updated_at")
 
   @@index([spaceId, deletedAt])
+  @@index([wikiWorkspaceId, deletedAt])
   @@index([taskId])
 }
 

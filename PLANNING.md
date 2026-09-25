@@ -9831,3 +9831,121 @@ has to be started. The piping through `tail` also hid the failure's exit code, s
 After the start, `/api/version` showed `4658a30`, `nativePush: true` (the Firebase file survived),
 and a startup snapshot at 13:14 UTC. `lastOffsite` was still null, because the first upload is
 due on the next hourly cron run.
+
+## 2026-09-25 (continued) — Wiki per workspace: proposed, not built yet
+
+**Asked:** a dedicated "Wiki" button for the workspace, where everyone in the company knows the
+information lives. Four content areas: internal guidelines, onboarding, a technical FAQ and quick
+links. It should feel "nesten litt som en bok" and be searchable. The user's reference is NGM's
+ClickUp wiki, one doc with numbered subpages (NGM Google Drive, Guides, Utstyrsliste, Mal-bibliotek,
+Locations, PC Pin-koder/Passord).
+
+**Proposed to the user (awaiting answers, nothing built):**
+- **Placement.** Desktop: a rail icon "Wiki" (BookOpen) under Docs. Mobile: a tile in the launcher
+  grid next to Docs, plus a Wiki card at the top of the Office context. Office is the company half
+  of mobile, and "Me" is the personal half.
+- **Book feel.** A table of contents with chapters (the four areas) and numbered pages. Reading mode
+  by default in a narrow column, with a "Kapittel N · …" kicker and previous/next page at the bottom.
+  A cover page with the workspace name, logo and chapter cards. Editing only through an explicit
+  "Rediger". On mobile, the table of contents is a sheet and pages are swiped.
+- **Search.** Full-text search inside the wiki with highlighted snippets that jump to the paragraph.
+  Wiki pages also show in the global Ctrl+K palette.
+- **Quick links as real actions.** Bug report and feature request open a small form that creates a
+  task in a list an admin picks. "Contact owner" opens a DM.
+- **Build approach.** Wiki pages are ordinary `Doc` rows (same collab editor, ydoc content, so they
+  are in the backups automatically) scoped to a workspace, plus a book view on top. A small schema
+  change, most likely a nullable `Doc.wikiWorkspaceId` plus the existing `parentId`/`order` for
+  chapters and pages.
+- **Open decisions put to the user:** (1) who can edit: owner/admin (recommended) or a dedicated
+  "Wiki-redaktør" role; (2) whether a new wiki starts from the four chapters as templates, and in
+  which language; (3) whether to bring the ClickUp wiki over (copy-paste, or a Markdown import if they
+  can export). Also offered a clickable mockup before building.
+- **Note for whoever builds it:** NGM's ClickUp wiki has a "PC Pin-koder/Passord" page. Secrets in a
+  wiki every member can read are a real risk. Worth raising when that content moves over, since
+  role-restricted pages or a password manager would be the safer home.
+
+### 2026-09-25 (continued) — Wiki built (uncommitted at time of writing)
+
+**Decided by the user:** (1) owners and admins edit, and roles and individual people can be granted
+editing too; (2) start from empty templates with English headings, since the whole app is English;
+(3) they will move the old ClickUp wiki content over themselves, so there is no import.
+
+**Data:** migration `20260925133710_add_workspace_wiki` adds `Doc.wikiWorkspaceId` (FK Workspace,
+cascade, indexed with deletedAt), `Workspace.wikiEditorsJson` (`[{type:'user'|'role',id}]`, the
+accessJson shape) and `Workspace.wikiFeedbackListId`. Chapters are wiki docs with `parentId` null.
+Pages are wiki docs under a chapter. There are only two levels, enforced by the API. SQLite
+rebuilds both the Doc and Workspace tables. That was tested on a DB with a workspace, membership,
+space, list, task and a doc with ydoc bytes: every row survived, `foreign_key_check` was clean, and
+the new column defaulted. (The first test run was invalid: `git stash` does not stash untracked
+files, so the new migration had already been applied. Redone with the migration folder moved aside.)
+
+**Access, enforced in three places that must agree:**
+- `lib/auth/wikiAccess.ts`: every member reads; managers and listed users or roles edit.
+- `/api/docs/[id]` PATCH/DELETE now refuse wiki pages to non-editors. It was a back door, because
+  `ensureDocAccess` has a new wiki branch that grants *read* to every member.
+- `server/collabServer.ts` resolves a wiki doc's workspace and sets
+  **`connectionConfig.readOnly = true`** for non-editors. Such a connection still gets live content,
+  but the server drops its writes. A read-only connection is also not recorded as a doc
+  "contributor". **Not tested live**: it needs a websocket client, and the collab sidecar was not run.
+
+**API** (`app/api/workspaces/[id]/wiki/...`): `GET` returns every page's title, place and text (from
+the `Doc.content` mirror) plus canEdit/isManager/editors/feedbackListId, and seeds the template on
+first open. `PATCH` changes the settings (managers only; editors are filtered to real members and
+roles). `pages` POST (two levels only), `pages/[pageId]` PATCH/DELETE (soft delete with cascade).
+`feedback` POST lets any member create a `[Bug] …`/`[Feature] …` task in the chosen list, with the
+space's first status and an activity line naming the reporter. It is created server-side, because
+the reporter may not have access to that list.
+
+**Template** (`lib/wiki/templates.ts`, seeded by `lib/wiki/seed.ts`): 3 chapters and 9 pages (Getting
+started, How we work, Using Siqt), written as ProseMirror JSON so they arrive as real headings and
+lists (Yjs state plus the plain-text mirror, the same pair `onStoreDocument` writes). Only "Keyboard
+shortcuts" has real content, and it lists only shortcuts that exist (checked in the code: Ctrl/⌘+K,
+Ctrl/⌘+Z and Shift+Z, N in the Planner, / in docs, @ and #, Enter/Shift+Enter, Ctrl/⌘ and Shift
+click on Lists). "Quick links" is a UI panel, not a chapter. The seed is guarded by an in-process
+lock per workspace. Deleted pages count as existing, so a wiki someone emptied on purpose is never
+re-seeded.
+
+**UI** (`components/wiki/`):
+- The desktop rail entry "Wiki" (BookOpen) sits under Docs, and the app's left sidebar is hidden
+  while in the wiki. Mobile has a launcher tile next to Docs and a Wiki card at the top of Office.
+  `NavTabId`, the `activeView` union (store, navUrl, FolderTree) and the breadcrumb label all got
+  `wiki`. The URL carries `view=wiki&wikiPage=<id>`, so refresh and back work.
+- The book: a contents column with numbered chapters and pages (1, 1.1 …), a cover with chapter
+  cards, and reading mode by default in a 720px column. Titles are serif (the only serif in the
+  app). A "Chapter N · …" kicker, "Updated …", an "In this chapter" list on chapter pages, and
+  previous/next at the bottom. Mobile has a Contents sheet and swipe between pages.
+- Editors get Edit/Done, a title input, move up and down, delete, "Add page" and "Add chapter". A new
+  page opens in editing mode. The first version reset that in an effect and switched it straight
+  off again; it is now reset during render.
+- Search in the contents column shows snippets, and opening a result highlights every hit on the page
+  with the **CSS Custom Highlight API** and scrolls to the first. It paints without touching the live
+  Y.Doc. The global Ctrl+K palette also has a "Wiki" category (title, then text), fetches the wiki if
+  it is not loaded, and is scoped to the wiki while in it.
+- Quick links: Report a bug, Request a feature (a dialog, which offers owners and admins the settings
+  when no list is chosen), Contact the owner (a DM, or an admin if you are the owner), and Wiki
+  settings (managers).
+- `CollabDocEditor` got `readOnly`: not editable, and no bubble menu, format panel or comments panel.
+  It toggles through `setEditable`, so switching modes does not reconnect.
+
+**Found along the way and fixed:** the dev server returned **500 on every page**. Tailwind v4 scans
+markdown, and PLANNING.md quotes `pt-[env(...)]` literally, which produced an unparseable rule.
+`globals.css` now has `@source not "../PLANNING.md"` and the same for AGENTS.md. The production build
+had tolerated it, and the site was up.
+
+**Tested:** a local `next dev` bound to **127.0.0.1** against a scratch DB, with four users logged in
+through the credentials flow. Results: member GET seeds 12 pages (canEdit false); owner canEdit and
+isManager; outsider 403. Member create, rename (wiki route *and* `/api/docs`), delete and settings
+all returned 403. The role editor got 403 before the grant and 200 after. Settings drop a
+non-member user and an unknown role. A third level returns 400, and settings from a non-manager 403.
+Feedback created the task with status "Backlog" and the activity line. The pages the server seeded
+decode to headings and paragraphs. The `/?view=wiki` page renders 200. **Not tested:** anything in a
+real browser (no browser on this server): the look, search highlighting, swipe, the Contents sheet,
+editing through the collab editor, and the read-only enforcement over the websocket.
+
+**Observed, not investigated:** "Yjs was already imported" logged once by the dev server while
+rendering `/`. The wiki's own server-seeded content decodes correctly (13/13 pages), so it did not
+hurt that. It most likely predates this, since the chat connection also pulls in Yjs.
+
+**Not built:** a wiki trash or restore UI (deleted pages are soft-deleted and recoverable only from
+the DB or backups), drag-to-reorder in the contents (arrows only), a Markdown import, and per-page
+access control. The "PC Pin-koder/Passord" warning from the proposal still applies.

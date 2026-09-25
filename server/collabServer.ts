@@ -9,6 +9,7 @@ import { docJSONToPlainText } from '../lib/collab/docJSONToPlainText';
 import { isPresenceDocumentName, workspaceIdFromPresenceDocumentName } from '../lib/collab/presenceRoom';
 import { isChatDocumentName, channelIdFromChatDocumentName } from '../lib/collab/chatRoom';
 import { canSee, type AccessContext } from '../lib/auth/access';
+import { canEditWikiWith } from '../lib/auth/wikiAccess';
 
 // Standalone sidecar process (run via `npm run dev:collab` / bundled into `npm run dev` via
 // concurrently — see package.json) — deliberately NOT embedded into the Next server, so `next
@@ -38,12 +39,13 @@ async function resolveWorkspaceId(documentName: string): Promise<string | null> 
   const doc = await prisma.doc.findUnique({
     where: { id: documentName },
     select: {
+      wikiWorkspaceId: true,
       space: { select: { workspaceId: true } },
       task: { select: { list: { select: { space: { select: { workspaceId: true } } } } } },
     },
   });
   if (!doc) return null;
-  return doc.space?.workspaceId ?? doc.task?.list.space.workspaceId ?? null;
+  return doc.wikiWorkspaceId ?? doc.space?.workspaceId ?? doc.task?.list.space.workspaceId ?? null;
 }
 
 const server = new Server({
@@ -64,7 +66,7 @@ const server = new Server({
   // implicitly trusts it. This process previously loaded no env vars at all (SQLite's datasource
   // URL is hardcoded in schema.prisma, so it never needed any) — `AUTH_SECRET` now comes from
   // `--env-file=.env.local` on the npm scripts that start this process (package.json).
-  async onAuthenticate({ documentName, requestHeaders, token: providedToken }) {
+  async onAuthenticate({ documentName, requestHeaders, token: providedToken, connectionConfig }) {
     // Trusted server-to-server bridge, scoped narrowly to chat rooms only — lets the message-POST
     // route (app/api/channels/[id]/messages/route.ts, running in the separate Next.js process)
     // open a short-lived connection here purely to broadcast "something changed," with no real
@@ -156,12 +158,32 @@ const server = new Server({
       }
     }
 
+    // Wiki pages: every member may read, only the wiki's editors may write (lib/auth/wikiAccess.ts).
+    // A read-only connection still receives the live document and every update to it, but the
+    // server drops any change it sends — so hiding the toolbar in the browser is not what protects
+    // the wiki; this is.
+    if (!isPresenceDocumentName(documentName) && !isChatDocumentName(documentName) && membership && resolvedWorkspaceId) {
+      const wikiDoc = await prisma.doc.findUnique({ where: { id: documentName }, select: { wikiWorkspaceId: true } });
+      if (wikiDoc?.wikiWorkspaceId) {
+        const workspaceId = wikiDoc.wikiWorkspaceId;
+        const role = membership.role as AccessContext['role'];
+        const isManager = role === 'owner' || role === 'admin';
+        const [ws, heldRoles] = await Promise.all([
+          prisma.workspace.findUnique({ where: { id: workspaceId }, select: { wikiEditorsJson: true } }),
+          prisma.role.findMany({ where: { workspaceId, members: { some: { id: userId } } }, select: { id: true } }),
+        ]);
+        const ctx: AccessContext = { userId, role, isManager, isMember: true, heldRoleIds: heldRoles.map((r) => r.id) };
+        if (!ws || !canEditWikiWith(ctx, ws.wikiEditorsJson)) connectionConfig.readOnly = true;
+      }
+    }
+
     // Best-effort "contributor" tracking for the Docs Subpages table's avatar column — deliberately
     // approximate (records "has connected to edit this doc," not "has made a specific edit"; see
     // PLANNING.md). A presence or chat room isn't a real Doc row, so skip it the same way the
     // load/store hooks below do. Fire-and-forget: a lost race on this display-only field isn't
     // worth blocking the connection over.
-    if (!isPresenceDocumentName(documentName) && !isChatDocumentName(documentName)) {
+    // Not for a read-only connection: reading a wiki page is not contributing to it.
+    if (!isPresenceDocumentName(documentName) && !isChatDocumentName(documentName) && !connectionConfig.readOnly) {
       prisma.doc
         .findUnique({ where: { id: documentName }, select: { contributorIdsJson: true } })
         .then((doc) => {

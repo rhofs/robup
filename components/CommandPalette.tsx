@@ -2,10 +2,11 @@
 
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
-import { Search, ListChecks, FileText, UserCircle, List as ListIcon, Layers, MessageSquare } from 'lucide-react';
+import { Search, ListChecks, FileText, UserCircle, List as ListIcon, Layers, MessageSquare, BookOpen } from 'lucide-react';
 import { useTaskStore } from '../store/useTaskStore';
 import { useChatStore } from '../store/useChatStore';
 import { useSessionStore } from '../store/useSessionStore';
+import { useWikiStore } from '../store/useWikiStore';
 import { scoreMatch } from '../lib/search';
 
 // Searches everything already loaded eagerly client-side: Task titles, both standalone (Docs-tab)
@@ -30,7 +31,8 @@ type PaletteResult =
   | { kind: 'person'; id: string; label: string; sub?: string; score: number }
   | { kind: 'space'; id: string; label: string; sub?: string; score: number }
   | { kind: 'list'; id: string; label: string; spaceId: string; sub?: string; score: number }
-  | { kind: 'channel'; id: string; label: string; sub?: string; score: number; isDm: boolean };
+  | { kind: 'channel'; id: string; label: string; sub?: string; score: number; isDm: boolean }
+  | { kind: 'wiki'; id: string; label: string; sub?: string; score: number };
 
 const CATEGORY_LABEL: Record<PaletteResult['kind'], string> = {
   task: 'Tasks',
@@ -39,6 +41,7 @@ const CATEGORY_LABEL: Record<PaletteResult['kind'], string> = {
   space: 'Spaces',
   list: 'Lists',
   channel: 'Chats & Channels',
+  wiki: 'Wiki',
 };
 
 const CATEGORY_ICON: Record<PaletteResult['kind'], typeof Search> = {
@@ -48,6 +51,7 @@ const CATEGORY_ICON: Record<PaletteResult['kind'], typeof Search> = {
   space: Layers,
   list: ListIcon,
   channel: MessageSquare,
+  wiki: BookOpen,
 };
 
 const MAX_PER_CATEGORY = 5;
@@ -64,15 +68,27 @@ type CommandPaletteProps = {
   // gets docs-only search instead of the full task/people/space/list index every other screen
   // wants. undefined (the default) searches everything, unchanged.
   scopeKind?: PaletteResult['kind'];
+  // Opens a Wiki page. The page being read is navigation state that lives on the page component
+  // (it is in the URL), so the palette asks for it rather than setting it itself.
+  onOpenWikiPage: (pageId: string) => void;
 };
 
-export default function CommandPalette({ open, onClose, onOpenTask, scopeKind }: CommandPaletteProps) {
+export default function CommandPalette({ open, onClose, onOpenTask, scopeKind, onOpenWikiPage }: CommandPaletteProps) {
   const { tasks, users, workspaces, docs, activeWorkspaceId, setActiveView, setNavigation, setDocsNavigation, setActiveOfficeUserId } = useTaskStore();
   const { channelsByWorkspace, dms, setActiveChannelId, setActiveChatSidebarTab } = useChatStore();
   const currentUserId = useSessionStore((s) => s.currentUserId);
+  const wiki = useWikiStore((s) => (activeWorkspaceId ? s.byWorkspace[activeWorkspaceId] : undefined));
   const [query, setQuery] = useState('');
   const [selectedIndex, setSelectedIndex] = useState(0);
   const inputRef = useRef<HTMLInputElement>(null);
+
+  // The wiki is otherwise loaded only when someone opens it; searching is a reason to load it too,
+  // so its pages are findable from anywhere without a visit first.
+  useEffect(() => {
+    if (open && activeWorkspaceId && !useWikiStore.getState().byWorkspace[activeWorkspaceId]) {
+      useWikiStore.getState().fetchWiki(activeWorkspaceId);
+    }
+  }, [open, activeWorkspaceId]);
 
   useEffect(() => {
     if (open) {
@@ -87,7 +103,17 @@ export default function CommandPalette({ open, onClose, onOpenTask, scopeKind }:
     const q = query.trim().toLowerCase();
     if (!q) return [];
 
-    const byCategory: Record<PaletteResult['kind'], PaletteResult[]> = { task: [], doc: [], person: [], space: [], list: [], channel: [] };
+    const byCategory: Record<PaletteResult['kind'], PaletteResult[]> = { task: [], doc: [], person: [], space: [], list: [], channel: [], wiki: [] };
+
+    // Wiki pages match on their title first, and on their text after — a page that only mentions the
+    // word ranks below every page named for it.
+    for (const p of wiki?.pages ?? []) {
+      const titleScore = scoreMatch(p.title, q);
+      const inText = titleScore === null && q.length >= 3 && p.text.toLowerCase().includes(q);
+      if (titleScore === null && !inText) continue;
+      const chapter = p.parentId ? wiki!.pages.find((c) => c.id === p.parentId)?.title : undefined;
+      byCategory.wiki.push({ kind: 'wiki', id: p.id, label: p.title, sub: chapter ?? 'Chapter', score: titleScore ?? 1000 });
+    }
 
     for (const t of tasks) {
       const score = scoreMatch(t.title, q);
@@ -160,7 +186,7 @@ export default function CommandPalette({ open, onClose, onOpenTask, scopeKind }:
     // scopeKind narrows this to one category — MAX_PER_SCOPED_CATEGORY (not the general
     // MAX_PER_CATEGORY) since there's no longer four other categories' worth of results competing
     // for the same limited list space.
-    const kinds = scopeKind ? [scopeKind] : (['task', 'doc', 'person', 'space', 'list', 'channel'] as const);
+    const kinds = scopeKind ? [scopeKind] : (['task', 'doc', 'wiki', 'person', 'space', 'list', 'channel'] as const);
     const cap = scopeKind ? MAX_PER_SCOPED_CATEGORY : MAX_PER_CATEGORY;
     for (const kind of kinds) {
       byCategory[kind]
@@ -169,7 +195,7 @@ export default function CommandPalette({ open, onClose, onOpenTask, scopeKind }:
         .forEach((r) => flat.push(r));
     }
     return flat;
-  }, [query, tasks, users, workspaces, docs, scopeKind, activeWorkspaceId, channelsByWorkspace, dms, currentUserId]);
+  }, [query, tasks, users, workspaces, docs, scopeKind, activeWorkspaceId, channelsByWorkspace, dms, currentUserId, wiki]);
 
   const activate = (r: PaletteResult) => {
     if (r.kind === 'task') {
@@ -195,6 +221,8 @@ export default function CommandPalette({ open, onClose, onOpenTask, scopeKind }:
     } else if (r.kind === 'list') {
       setActiveView('board');
       setNavigation(r.spaceId, [r.id]);
+    } else if (r.kind === 'wiki') {
+      onOpenWikiPage(r.id);
     } else if (r.kind === 'channel') {
       setActiveView('chat');
       setActiveChatSidebarTab(r.isDm ? 'dms' : 'channels');

@@ -7,7 +7,7 @@ export type NavGranularity = 'month' | 'week' | 'day';
 // Reported live as "når jeg refresher så havner jeg i nytt view". Meaningless on desktop, which
 // never opens these; a desktop load carrying one simply renders nothing extra.
 export type NavSheet = 'spaces' | 'mytasks';
-export type NavView = 'board' | 'calendar' | 'docs' | 'office' | 'mytasks' | 'profile' | 'chat' | 'directMessages';
+export type NavView = 'board' | 'calendar' | 'docs' | 'office' | 'mytasks' | 'profile' | 'chat' | 'directMessages' | 'wiki';
 
 // `workspaceId`/`spaceId`/`listIds` are nullable — null means the URL simply didn't mention them
 // at all, which is distinct from an explicit `space=everything`. That distinction lets a bare
@@ -37,6 +37,9 @@ export type ParsedNavUrl = {
   // conversation navigated whatever came before it instead of just leaving the conversation.
   chatChannelId: string | null;
   sheet: NavSheet | null;
+  // The Wiki page being read; null is the wiki's cover. Same reason as docId: a refresh or a shared
+  // link should land on the page, and back should turn back one page.
+  wikiPageId: string | null;
 };
 
 export type NavState = {
@@ -54,6 +57,9 @@ export type NavState = {
   officeRoomId: string | null;
   chatChannelId: string | null;
   sheet: NavSheet | null;
+  // The Wiki page being read; null is the wiki's cover. Same reason as docId: a refresh or a shared
+  // link should land on the page, and back should turn back one page.
+  wikiPageId: string | null;
 };
 
 // Local-date YYYY-MM-DD — not `toISOString()`, which is UTC and shifts the date near midnight in
@@ -85,7 +91,9 @@ export function parseNavUrl(params: URLSearchParams): ParsedNavUrl {
                   ? 'chat'
                   : viewParam === 'directMessages'
                     ? 'directMessages'
-                    : 'board';
+                    : viewParam === 'wiki'
+                      ? 'wiki'
+                      : 'board';
   const workspaceId = params.get('workspace');
   const spaceId = params.has('space') ? params.get('space') : null;
   const listIds = params.has('lists') ? (params.get('lists') || '').split(',').filter(Boolean) : null;
@@ -102,9 +110,10 @@ export function parseNavUrl(params: URLSearchParams): ParsedNavUrl {
   const chatChannelId = params.get('chat') || null;
   const sheetRaw = params.get('sheet');
   const sheet: NavSheet | null = sheetRaw === 'spaces' || sheetRaw === 'mytasks' ? sheetRaw : null;
+  const wikiPageId = params.get('wikiPage') || null;
   return {
     view, workspaceId, spaceId, listIds, modalStack, eventId, granularity, focusDate,
-    docFolderId, docId, officeUserId, officeRoomId, chatChannelId, sheet,
+    docFolderId, docId, officeUserId, officeRoomId, chatChannelId, sheet, wikiPageId,
   };
 }
 
@@ -126,5 +135,6 @@ export function buildNavQueryString(state: NavState): string {
   if (state.officeRoomId) params.set('officeRoom', state.officeRoomId);
   if (state.chatChannelId) params.set('chat', state.chatChannelId);
   if (state.sheet) params.set('sheet', state.sheet);
+  if (state.wikiPageId) params.set('wikiPage', state.wikiPageId);
   return params.toString();
 }

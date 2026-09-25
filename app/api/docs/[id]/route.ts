@@ -4,6 +4,15 @@ import { cascadeDoc } from '@/lib/trashCascade';
 import { archiveDoc } from '@/lib/archiveCascade';
 import { getCurrentUserId } from '@/lib/auth/session';
 import { ensureDocAccess } from '@/lib/auth/resourceAccess';
+import { canEditWikiWith } from '@/lib/auth/wikiAccess';
+
+// A Wiki page is a Doc too, so this route can reach it — and reading access (every member) is not
+// editing access. Without this check any member could rename, move or delete wiki pages here.
+async function wikiEditBlocked(access: NonNullable<Awaited<ReturnType<typeof ensureDocAccess>>>) {
+  if (!access.doc.wikiWorkspaceId) return false;
+  const ws = await prisma.workspace.findUnique({ where: { id: access.doc.wikiWorkspaceId }, select: { wikiEditorsJson: true } });
+  return !ws || !canEditWikiWith(access.ctx, ws.wikiEditorsJson);
+}
 
 export async function PATCH(req: Request, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
@@ -11,7 +20,9 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
 
   const userId = await getCurrentUserId();
   if (!userId) return NextResponse.json({ error: 'Not authenticated' }, { status: 401 });
-  if (!(await ensureDocAccess(id, userId))) return NextResponse.json({ error: 'Not authorized for this doc' }, { status: 403 });
+  const access = await ensureDocAccess(id, userId);
+  if (!access) return NextResponse.json({ error: 'Not authorized for this doc' }, { status: 403 });
+  if (await wikiEditBlocked(access)) return NextResponse.json({ error: 'Only wiki editors can change wiki pages' }, { status: 403 });
 
   if (body.restore === true) {
     await cascadeDoc(id, null);
@@ -60,7 +71,9 @@ export async function DELETE(req: Request, { params }: { params: Promise<{ id: s
   const { id } = await params;
   const userId = await getCurrentUserId();
   if (!userId) return NextResponse.json({ error: 'Not authenticated' }, { status: 401 });
-  if (!(await ensureDocAccess(id, userId))) return NextResponse.json({ error: 'Not authorized for this doc' }, { status: 403 });
+  const access = await ensureDocAccess(id, userId);
+  if (!access) return NextResponse.json({ error: 'Not authorized for this doc' }, { status: 403 });
+  if (await wikiEditBlocked(access)) return NextResponse.json({ error: 'Only wiki editors can change wiki pages' }, { status: 403 });
 
   const url = new URL(req.url);
   const permanent = url.searchParams.get('permanent') === 'true';

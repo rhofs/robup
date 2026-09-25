@@ -1,7 +1,7 @@
 'use client';
 
 import { useState } from 'react';
-import { ChevronRight, Hash, Users } from 'lucide-react';
+import { BookOpen, ChevronRight, Hash, Users } from 'lucide-react';
 import type { HierarchySpace, HierarchyRoom, HierarchyFolder, HierarchyList } from '../../store/useTaskStore';
 import ContextSpaceList from './ContextSpaceList';
 import { hapticTap } from '../../lib/haptics';
@@ -43,6 +43,9 @@ type Props = {
   onSelectRoom: (roomId: string) => void;
   onSelectChannel: (channelId: string) => void;
   onCreateSpace: (name: string) => void;
+  // The workspace's Wiki. Office is the company's half of the mobile app, so the company's handbook
+  // is reached from here — as well as from the launcher, next to Docs.
+  onOpenWiki?: () => void;
 };
 
 export default function OfficeContext({
@@ -64,6 +67,7 @@ export default function OfficeContext({
   onSelectRoom,
   onSelectChannel,
   onCreateSpace,
+  onOpenWiki,
 }: Props) {
   // Local, because creating a Space is a moment inside this screen and nothing above it needs to
   // know it is happening.
@@ -85,6 +89,24 @@ export default function OfficeContext({
 
   return (
     <div className="flex-1 overflow-y-auto pb-28">
+      {onOpenWiki && (
+        <button
+          onClick={() => {
+            hapticTap();
+            onOpenWiki();
+          }}
+          className="mx-2 mb-2 w-[calc(100%-1rem)] flex items-center gap-3 rounded-2xl bg-neutral-900 px-3 py-3 text-left elevated cursor-pointer active:scale-[0.99] transition"
+        >
+          <span className="w-9 h-9 rounded-xl bg-blue-500/15 text-blue-400 flex items-center justify-center shrink-0">
+            <BookOpen className="w-[18px] h-[18px]" />
+          </span>
+          <span className="flex-1 min-w-0">
+            <span className="block text-[15px] font-semibold text-app-strong">Wiki</span>
+            <span className="block text-[12px] text-neutral-500 truncate">Guides, routines and how we work</span>
+          </span>
+          <ChevronRight className="w-4 h-4 text-neutral-500 shrink-0" />
+        </button>
+      )}
       {/* The switch itself. Two options only — a third would make it a menu, and a menu is what
           this layout exists to get rid of. */}
       <div className="mx-2 mb-2 flex gap-0.5 rounded-full bg-neutral-800/60 p-0.5">

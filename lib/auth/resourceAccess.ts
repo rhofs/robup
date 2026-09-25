@@ -75,6 +75,13 @@ export async function ensureDocAccess(docId: string, userId: string) {
   const doc = await prisma.doc.findUnique({ where: { id: docId } });
   if (!doc) return null;
 
+  // A Wiki page belongs to no Space or Task — every member of its workspace can read it. Editing is
+  // narrower and checked separately (lib/auth/wikiAccess.ts); this answers only "may they see it".
+  if (doc.wikiWorkspaceId) {
+    const ctx = await getAccessContext(doc.wikiWorkspaceId, userId);
+    return ctx.isMember ? { doc, ctx } : null;
+  }
+
   if (doc.taskId) {
     const taskResult = await ensureTaskAccess(doc.taskId, userId);
     if (taskResult) return { doc, ctx: taskResult.ctx };

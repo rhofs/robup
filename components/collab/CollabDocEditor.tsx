@@ -58,6 +58,10 @@ type CollabDocEditorProps = {
   // (see app/page.tsx's commitDocEditActivity for the task-scoped-doc logging that consumes this).
   onEditorFocus?: () => void;
   onEditorBlur?: (text: string) => void;
+  // Reading, not editing: no caret, no selection toolbar, no format or comments panel — the Wiki's
+  // book view, and every wiki page for someone who is not a wiki editor. The collab server also
+  // opens such a connection read-only, so this is the look, not the lock.
+  readOnly?: boolean;
 };
 
 // Rendered only client-side (see the next/dynamic({ssr:false}) wrapper at both app/page.tsx call
@@ -73,6 +77,7 @@ export default function CollabDocEditor({
   onDocContextMenu,
   onEditorFocus,
   onEditorBlur,
+  readOnly = false,
 }: CollabDocEditorProps) {
   const users = useTaskStore((s) => s.users);
   const addDocComment = useTaskStore((s) => s.addDocComment);
@@ -178,13 +183,19 @@ export default function CollabDocEditor({
             }),
           ]
         : [Document, Paragraph, Text],
-      editable: !!provider,
+      editable: !!provider && !readOnly,
       onFocus: () => onEditorFocus?.(),
       onBlur: ({ editor: e }) => onEditorBlur?.(e.getText()),
       immediatelyRender: false,
     },
     [docId, provider, spaceId]
   );
+
+  // useEditor only reads `editable` when it builds the editor; switching the wiki between reading and
+  // editing must not rebuild it (that would reconnect and flash), so the flag is applied here.
+  useEffect(() => {
+    if (editor && !editor.isDestroyed) editor.setEditable(!!provider && !readOnly);
+  }, [editor, provider, readOnly]);
 
   const submitComment = () => {
     if (!editor || !commentDraft?.trim()) return;
@@ -265,7 +276,7 @@ export default function CollabDocEditor({
           </div>
         )}
         {provider && <PresenceBar provider={provider} />}
-        {editor && (
+        {editor && !readOnly && (
           <BubbleMenu editor={editor} shouldShow={({ from, to }) => from !== to}>
             {commentDraft === null && linkDraft === null ? (
               <div className="flex items-center gap-1 bg-neutral-900 border border-neutral-700 rounded-xl shadow-xl p-1">
@@ -373,14 +384,14 @@ export default function CollabDocEditor({
           <EditorContent editor={editor} />
         </div>
       </div>
-      {editor && (
+      {editor && !readOnly && (
         <DocFormatPanel
           editor={editor}
           doc={doc}
           onUpdateDoc={doc && spaceId ? (patch) => updateSpaceDoc(docId, spaceId, patch) : undefined}
         />
       )}
-      {editor && (
+      {editor && !readOnly && (
         <DocCommentsPanel
           editor={editor}
           docId={docId}
