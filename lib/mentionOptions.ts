@@ -1,6 +1,6 @@
 import type { AppUser, HierarchyWorkspace, Task } from '../store/useTaskStore';
 import { scoreMatch } from './search';
-import type { MentionKind } from './mentions';
+import { GROUP_MENTION_IDS, type GroupMentionId, type MentionKind } from './mentions';
 
 export type MentionOption = {
   kind: MentionKind;
@@ -13,6 +13,24 @@ export type MentionOption = {
 };
 
 export const MENTION_MAX_RESULTS = 8;
+
+// Which of the many-people mentions make sense where the text is being written. Passed in by each
+// surface rather than guessed here, because the answer is about the place, not the text: @assignee
+// means something on a task and nothing in a channel; a role belongs to a workspace, so a DM (which
+// belongs to none) has no roles to offer.
+export type GroupMentionScope = {
+  everyone: boolean;
+  assignee: boolean;
+  // Whose roles can be mentioned. Null offers none.
+  rolesWorkspaceId: string | null;
+  // What "everyone" means here, shown under it in the picker — it is not the same set of people in a
+  // task and in a channel, and the picker is the one place to say so before anyone is pinged.
+  everyoneHint: string;
+};
+
+const GROUP_SUB: Record<Exclude<GroupMentionId, 'everyone' | 'all'>, string> = {
+  assignee: 'Everyone assigned to this task',
+};
 
 // The one place that decides what a mention picker offers.
 //
@@ -28,6 +46,7 @@ export function buildMentionOptions({
   tasks,
   users,
   workspaces,
+  groups,
 }: {
   query: string;
   // '@' searches people, tasks and docs together; '#' narrows to tasks.
@@ -38,6 +57,9 @@ export function buildMentionOptions({
   tasks: Task[];
   users: AppUser[];
   workspaces: HierarchyWorkspace[];
+  // Omitted where group mentions do not belong at all, which is every '#' and every surface that
+  // has not opted in.
+  groups?: GroupMentionScope | null;
 }): MentionOption[] {
   const q = query.toLowerCase();
   const results: MentionOption[] = [];
@@ -121,9 +143,27 @@ export function buildMentionOptions({
     }
   }
 
+  if (sigil === '@' && groups) {
+    for (const gid of GROUP_MENTION_IDS) {
+      if (gid === 'assignee' ? !groups.assignee : !groups.everyone) continue;
+      const score = q ? scoreMatch(gid, q) : 1;
+      if (score === null) continue;
+      results.push({ kind: 'group', id: gid, label: gid, sub: gid === 'assignee' ? GROUP_SUB.assignee : groups.everyoneHint, score });
+    }
+    const rolesWs = groups.rolesWorkspaceId ? workspaces.find((w) => w.id === groups.rolesWorkspaceId) : null;
+    for (const role of rolesWs?.roles ?? []) {
+      const score = q ? scoreMatch(role.name, q) : 1;
+      if (score === null) continue;
+      const n = role.memberIds.length;
+      results.push({ kind: 'role', id: role.id, label: role.name, sub: `Role · ${n} ${n === 1 ? 'member' : 'members'}`, score });
+    }
+  }
+
   // People first under '@'. '@' reads as addressing a person in every app that has ever had it, and
   // a task list crowding out the one name you were reaching for is the failure that gets noticed.
-  const kindRank: Record<MentionKind, number> = { user: 0, task: 1, file: 2, doc: 3 };
+  // Groups and roles straight after people: they are people too, several at a time, and someone typing
+  // "@ev" is reaching for @everyone, not for a task that happens to contain "ev".
+  const kindRank: Record<MentionKind, number> = { user: 0, group: 1, role: 2, task: 3, file: 4, doc: 5 };
   return results
     .sort(
       (a, b) =>

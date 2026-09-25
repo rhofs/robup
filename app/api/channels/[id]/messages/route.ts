@@ -5,8 +5,8 @@ import { ensureChannelAccess } from '@/lib/auth/chatAccess';
 import { broadcastChatSignal } from '@/lib/collab/broadcastChatSignal';
 import { validateChatAttachment } from '@/lib/chatAttachment';
 import { sendPushToUser } from '@/lib/push';
-import { notify } from '@/lib/notifications';
-import { MENTION_RE } from '@/lib/mentions';
+import { mentionsToPlainText } from '@/lib/mentions';
+import { notifyChatMentions } from '@/lib/mentionRecipients';
 
 export async function GET(req: Request, { params }: { params: Promise<{ id: string }> }) {
   const { id: channelId } = await params;
@@ -110,6 +110,18 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
   // own comment). The message is already durably committed above regardless of whether this lands.
   broadcastChatSignal(channelId);
 
+  // Being named is not the same as being in the room, so it gets its own record rather than riding
+  // the unread badge: a mention is addressed to you personally, survives being marked read, and is
+  // still findable in the bell tomorrow. Who that reaches — including @everyone and roles — is worked
+  // out server-side in lib/mentionRecipients.ts. Awaited before the ordinary push below so the people
+  // it reached can be left out of that one; a mention is already a push of its own.
+  const mentioned = await notifyChatMentions({
+    channel,
+    body: message.body ?? '',
+    actorId: userId,
+    actorName: message.author?.name ?? 'Someone',
+  }).catch(() => new Set<string>());
+
   // Real push notifications (deferred until HTTPS existed, unblocked by the siqt.no deploy) —
   // every other member of this channel/DM (DMs are ChatChannel rows too, same route), not just
   // whoever's currently looking at ChatPanel. sendPushToUser is a no-op if VAPID isn't configured
@@ -118,39 +130,15 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
     .findMany({ where: { channelId, userId: { not: userId } }, select: { userId: true, muted: true } })
     .then((members) => {
       const title = channel.type === 'dm' || channel.type === 'group_dm' ? (message.author?.name ?? 'Someone') : `#${channel.name}`;
-      const body = message.body?.trim() || (attachment ? '📎 Attachment' : '');
+      const body = mentionsToPlainText(message.body ?? '').trim() || (attachment ? '📎 Attachment' : '');
       for (const m of members) {
         // Muted (backlog #6) — the message still lands and stores normally, this member just
         // doesn't get pinged about it. Matches the unread-badge skip in lib/chatUnread.ts.
-        if (m.muted) continue;
+        if (m.muted || mentioned.has(m.userId)) continue;
         sendPushToUser(m.userId, { title, body, url: '/' }).catch(() => {});
       }
     })
     .catch(() => {});
-
-  // Being named is not the same as being in the room, so it gets its own record rather than riding
-  // the unread badge: a mention is addressed to you personally, survives being marked read, and is
-  // still findable in the bell tomorrow. Muted members are deliberately still notified here — muting
-  // a channel says "stop telling me about the conversation", not "stop telling me when I am asked a
-  // direct question".
-  const mentionedUserIds = [...new Set(
-    [...(message.body ?? '').matchAll(MENTION_RE)].filter((m) => m[2] === 'user').map((m) => m[3])
-  )];
-  if (mentionedUserIds.length > 0) {
-    const members = await prisma.chatChannelMember.findMany({
-      where: { channelId, userId: { in: mentionedUserIds } },
-      select: { userId: true },
-    });
-    // Only people actually on the channel. A token can name anyone — it is text someone typed — and
-    // notifying a person about a conversation they cannot open would be worse than silence.
-    notify({
-      userIds: members.map((m) => m.userId),
-      actorId: userId,
-      type: 'chat_mention',
-      title: `${message.author?.name ?? 'Someone'} mentioned you`,
-      body: message.body?.trim().slice(0, 140) || null,
-    }).catch(() => {});
-  }
 
   return NextResponse.json(message);
 }

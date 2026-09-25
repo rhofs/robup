@@ -1,16 +1,8 @@
 'use client';
 
 import { forwardRef, useEffect, useImperativeHandle, useState } from 'react';
-import { ListChecks, FileText, UserCircle, Paperclip } from 'lucide-react';
-import type { MentionKind } from '../../lib/mentions';
+import { MentionIcon } from '../MentionText';
 import type { MentionSuggestionItem } from './mentionSuggestion';
-
-const KIND_ICON: Record<MentionKind, typeof ListChecks> = {
-  task: ListChecks,
-  doc: FileText,
-  user: UserCircle,
-  file: Paperclip,
-};
 
 type Props = {
   items: MentionSuggestionItem[];
@@ -66,7 +58,6 @@ const MentionSuggestionList = forwardRef<MentionSuggestionListRef, Props>(({ ite
         <p className="text-xs text-neutral-500 px-3 py-2">No matches</p>
       ) : (
         items.map((item, i) => {
-          const Icon = KIND_ICON[item.kind];
           return (
             <button
               key={`${item.kind}-${item.id}`}
@@ -76,11 +67,14 @@ const MentionSuggestionList = forwardRef<MentionSuggestionListRef, Props>(({ ite
                 i === selectedIndex ? 'bg-neutral-800 text-blue-400' : 'text-neutral-300 hover:bg-neutral-800/60'
               }`}
             >
-              <Icon className="w-3.5 h-3.5 shrink-0" />
+              <MentionIcon kind={item.kind} id={item.id} className="w-3.5 h-3.5 shrink-0" />
               {/* Two lines, matching the other dropdown: where a task lives is often longer than its
                   own name, and as a trailing label it pushed the name into an ellipsis. */}
               <span className="min-w-0 flex-1">
-                <span className="block truncate text-xs">{item.label}</span>
+                <span className="block truncate text-xs">
+                  {item.kind === 'group' || item.kind === 'role' ? '@' : ''}
+                  {item.label}
+                </span>
                 {item.sub && <span className="block truncate text-[10px] text-neutral-500">{item.sub}</span>}
               </span>
             </button>

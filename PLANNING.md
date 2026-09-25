@@ -9459,3 +9459,74 @@ Desktop is unchanged: bars still drag and resize there, and cells keep their old
 **Not verified on a device or in a browser.** Typechecked and linted only. The two lint warnings in
 WeekRow (`onOpenEvent`/`onOpenTask` unused) were there before. The animation timings and the
 strength of the sweep are first guesses and will likely need a round of feedback on a phone.
+
+## 2026-09-25 — @everyone, @all, @assignee and @role mentions, in task comments and chat
+
+Asked for: "@all @everyone @assignee og @roller … der det bør funke", in the comment section and in
+chats. Built without asking back; the decisions below were made on the user's behalf and are the
+ones to revisit if they feel wrong.
+
+**Where each one is offered** (the surface decides, not the text — `GroupMentionScope` in
+`lib/mentionOptions.ts`, chat's version in `lib/chatMentionScope.ts`):
+- Task comments: @everyone, @all, @assignee, and the task's workspace's roles.
+- Workspace channels (main feed and threads): @everyone, @all, and the channel's workspace's roles.
+- Group DMs: @everyone and @all only. No roles, because a DM belongs to no workspace.
+- 1:1 DMs: none of them. @everyone there would just be a longer way of writing one name.
+- Doc editor `@`, doc comments and event comments: unchanged, none offered. Doc comments and event
+  comments have no mention picker at all (plain `<input>`s), so nothing there can mention anyone.
+  **Not done, and the obvious next place if asked.**
+
+**@all and @everyone are the same group under two names.** Both are offered, and the chip shows
+whichever one was written. Decided because people arrive with one habit or the other (Slack vs
+Discord). Nobody asked for them to mean different things; if that is wanted later, the split is
+one line in `collect()` in `lib/mentionRecipients.ts`.
+
+**Anyone can use @everyone.** It is not restricted to owner/admin, as Discord does by default.
+Not raised with the user. Worth asking if it gets noisy.
+
+**Storage:** the same plain-text token as every other mention. New kinds are `group`
+(`@[everyone](group:everyone)`, ids `everyone|all|assignee`) and `role` (`@[Designers](role:<id>)`).
+No schema change. A role chip resolves live, so it shows the role's current name and colour. A
+group or role chip is a label, not a button, because there is nowhere to jump to.
+
+**Who actually gets notified** is worked out on the server (`lib/mentionRecipients.ts`), never from
+anything the client sends:
+- Task comment: everyone who can see the task. That means the same Space, Folder chain, List and
+  Task checks the app uses everywhere (`canSee`), computed for every workspace member from two
+  queries (`getWorkspaceAccessContexts` in `lib/auth/access.ts`). @assignee is the task's assignees
+  who can still see it. A role only counts inside the task's own workspace.
+- Channel: every workspace member who can see the channel, not just those with a
+  `ChatChannelMember` row. For a public channel that row only means "has opened it once".
+  **This also widens plain @user mentions in channels:** before, naming someone who had never opened
+  the channel notified nobody.
+- DM / group DM: its members only.
+- Muted members are skipped for @everyone and roles, but still notified when named personally.
+  That keeps the rule chat already had.
+- Named directly wins over any group, so the title says "X mentioned you" rather than
+  "X mentioned @everyone".
+
+**Found and fixed along the way:**
+- **Task comments never notified anyone, even for a plain @user mention.** Only chat did. They now
+  send `comment_mention` notifications with `taskId`, so tapping one in the bell opens the task.
+  Activity rows (`type: 'activity'`) are excluded.
+- **Thread replies had no mention picker at all** (a bare textarea) and no mention notifications.
+  They now use the main feed's `ChatComposerInput` and call the same notifier. No ordinary
+  "new reply" push was added; threads never had one.
+- **The chat composer's workspace scope was frozen to the first conversation opened.** The
+  `getWorkspaceId` getter was captured once by `useEditor`'s extension config, which is exactly the
+  placeholder bug documented in that file, one prop along. Both getters now go through refs.
+- **Chat push bodies showed raw tokens** (`@[Bob](user:uuid)`). They now go through
+  `mentionsToPlainText`.
+- **A mentioned person got two pushes for one message:** the generic "new message" push plus the
+  mention's own. The generic push now skips anyone the mention already reached. Without this,
+  @everyone would double-buzz the whole channel.
+- The chip had three hand-synced copies (`MentionText` inline, `MentionChip` export, and the collab
+  node view). There is now one, `MentionChip` in `components/MentionText.tsx`, and the node view
+  wraps it.
+
+**Verified:** typecheck clean. The recipient resolution was tested with tsx against a scratch SQLite
+built from all migrations, with 20 cases, all passing: public and private task, a foreign role, an
+outsider, a muted member with @everyone versus being named, a private channel granted by role, and
+group DMs. The picker options were checked per surface with tsx as well. **Not verified in a
+browser or on a device.** Not seen: the chip look, the dropdown with the new rows, the thread
+composer swap (layout and Enter-to-send), and a real push.

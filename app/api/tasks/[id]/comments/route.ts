@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import { prisma, publicUserSelect } from '@/lib/prisma';
 import { getCurrentUserId } from '@/lib/auth/session';
 import { ensureTaskAccess } from '@/lib/auth/resourceAccess';
+import { notifyTaskCommentMentions } from '@/lib/mentionRecipients';
 
 export async function GET(_req: Request, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
@@ -43,6 +44,13 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
       },
       include: { author: { select: publicUserSelect } },
     });
+    // Only real comments. An activity row ("Tildelt: …") is written by the app, and a name in one is
+    // a record of what happened, not someone being addressed.
+    if (comment.type === 'comment') {
+      await notifyTaskCommentMentions({ taskId: id, body: comment.body, actorId: userId }).catch((err) =>
+        console.error('Mention notifications failed:', err)
+      );
+    }
     return NextResponse.json(comment);
   } catch (error) {
     console.error('Feil ved oppretting av kommentar:', error);

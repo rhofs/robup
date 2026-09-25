@@ -55,6 +55,29 @@ export async function getAccessContext(workspaceId: string, userId: string): Pro
   return { userId, role, isManager, isMember, heldRoleIds };
 }
 
+// Every member's AccessContext for one workspace, in two queries total. getAccessContext answers
+// "can THIS caller see it"; a mention asks the reverse — "which of everyone here can see it" — and
+// calling that per member would be two queries per person on every message that says @everyone.
+export async function getWorkspaceAccessContexts(workspaceId: string): Promise<Map<string, AccessContext>> {
+  const [memberships, roles] = await Promise.all([
+    prisma.workspaceMembership.findMany({ where: { workspaceId }, select: { userId: true, role: true } }),
+    prisma.role.findMany({ where: { workspaceId }, select: { id: true, members: { select: { id: true } } } }),
+  ]);
+  const heldByUser = new Map<string, string[]>();
+  for (const r of roles) {
+    for (const m of r.members) heldByUser.set(m.id, [...(heldByUser.get(m.id) ?? []), r.id]);
+  }
+  return new Map(
+    memberships.map((m) => {
+      const role = m.role as WorkspaceRole;
+      return [
+        m.userId,
+        { userId: m.userId, role, isManager: canManageWorkspace(role), isMember: true, heldRoleIds: heldByUser.get(m.userId) ?? [] },
+      ] as const;
+    })
+  );
+}
+
 // Space/Folder/List/Task all share this exact isPrivate/accessJson shape (see the schema
 // comments) — one shared, synchronous check for all four rather than four near-identical async
 // DB round-trips per row. Owner/Admin always pass regardless of accessJson, same as how a

@@ -9006,6 +9006,15 @@ function PageContent() {
                       }
                     }}
                     placeholder="Write a comment... (Enter to send, Shift+Enter for new line, @ to mention)"
+                    // A task comment can reach its assignees, everyone who can open the task, or a
+                    // role — all from the workspace the task lives in, which is where its roles are.
+                    groupMentions={{
+                      everyone: true,
+                      assignee: true,
+                      rolesWorkspaceId:
+                        workspaces.find((w) => w.spaces.some((sp) => sp.lists.some((l) => l.id === activeModalTask.listId)))?.id ?? null,
+                      everyoneHint: 'Everyone who can see this task',
+                    }}
                     rows={2}
                     className="w-full bg-neutral-950 border border-neutral-800 rounded-lg px-3 py-2 text-xs text-app-strong focus:outline-none focus:border-blue-500 resize-none"
                   />

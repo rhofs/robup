@@ -11,6 +11,7 @@ import { ClientMentionNode } from './collab/mentionNodeView';
 import { ChatHashMention, chatAtSuggestion } from './collab/chatMentionNode';
 import { chatDocToText, chatTextToDoc } from '../lib/collab/chatDoc';
 import { runMentionJump } from '../lib/mentionJump';
+import type { GroupMentionScope } from '../lib/mentionOptions';
 
 // The chat composer, as a real editor rather than a <textarea>.
 //
@@ -27,6 +28,7 @@ export default function ChatComposerInput({
   onSubmit,
   placeholder,
   getWorkspaceId,
+  getGroupMentions,
   maxHeight,
   insertRef,
 }: {
@@ -35,6 +37,8 @@ export default function ChatComposerInput({
   onSubmit: () => void;
   placeholder: string;
   getWorkspaceId: () => string | null;
+  // Which of @everyone / roles this conversation offers — see lib/chatMentionScope.ts.
+  getGroupMentions?: () => GroupMentionScope | null;
   maxHeight: number;
   // Filled with a function that inserts text at the caret, for callers that put characters in from
   // outside the keyboard (the emoji picker). Going through the editor rather than through `value`
@@ -49,6 +53,16 @@ export default function ChatComposerInput({
   // placeholder was not, and it is the same mistake one prop along.
   const placeholderRef = useRef(placeholder);
   placeholderRef.current = placeholder;
+  // The getters go through refs too. "A getter, not a value" was the intent, but the getter handed to
+  // the extensions was itself the one from the first render — a closure over that render's
+  // conversation — so every later DM was still scoped to the first. Each render now replaces what the
+  // ref points at, and the extensions call through it.
+  const getWorkspaceIdRef = useRef(getWorkspaceId);
+  getWorkspaceIdRef.current = getWorkspaceId;
+  const getGroupMentionsRef = useRef(getGroupMentions);
+  getGroupMentionsRef.current = getGroupMentions;
+  const scopedWorkspaceId = () => getWorkspaceIdRef.current();
+  const scopedGroups = () => getGroupMentionsRef.current?.() ?? null;
 
   const editor = useEditor({
     // Required by Tiptap in React 18+ SSR: without it the first client render can differ from the
@@ -62,8 +76,8 @@ export default function ChatComposerInput({
       Placeholder.configure({ placeholder: () => placeholderRef.current }),
       // The doc editor's own mention node, handed scoped items and its own plugin key. Same node,
       // same renderer, same chip — only what it offers differs.
-      ClientMentionNode.configure({ onJump: runMentionJump, suggestion: chatAtSuggestion(getWorkspaceId) }),
-      ChatHashMention.configure({ getWorkspaceId }),
+      ClientMentionNode.configure({ onJump: runMentionJump, suggestion: chatAtSuggestion(scopedWorkspaceId, scopedGroups) }),
+      ChatHashMention.configure({ getWorkspaceId: scopedWorkspaceId }),
     ],
     content: chatTextToDoc(value),
     editorProps: {

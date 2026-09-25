@@ -1,4 +1,5 @@
 import { NextResponse } from 'next/server';
+import { notifyChatMentions } from '@/lib/mentionRecipients';
 import { prisma, publicUserSelect } from '@/lib/prisma';
 import { getCurrentUserId } from '@/lib/auth/session';
 import { ensureChannelAccess } from '@/lib/auth/chatAccess';
@@ -90,6 +91,16 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
   // root's now-incremented threadReplyCount; an open thread panel for this same root refetches
   // its own reply list on the identical signal.
   broadcastChatSignal(root.channelId);
+
+  // Threads never notified anyone about anything, mentions included — a thread reply had no mention
+  // picker to type one with. It has the main feed's composer now, so it gets the main feed's mention
+  // notifications too. No ordinary "new reply" push is added here: threads have never had one.
+  await notifyChatMentions({
+    channel,
+    body: reply.body ?? '',
+    actorId: userId,
+    actorName: reply.author?.name ?? 'Someone',
+  }).catch(() => {});
 
   return NextResponse.json(reply);
 }

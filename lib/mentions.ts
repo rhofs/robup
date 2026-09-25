@@ -9,9 +9,21 @@ import type { AppUser, HierarchyWorkspace, Task } from '../store/useTaskStore';
 // to carry the URL in the message text, and the URL is an implementation detail that outlives
 // nothing — rename the file, move it, and the link is stale. An id resolves to whatever the file is
 // called now, which is the same reason every other kind here stores an id and not a name.
-export type MentionKind = 'task' | 'doc' | 'user' | 'file';
+//
+// 'group' and 'role' address several people at once rather than naming a thing. A group's id is one
+// of GROUP_MENTION_IDS — who it expands to depends on where it was written (a task's assignees only
+// mean something on a task), and that expansion happens on the server when the text is posted, never
+// from anything the client claims. A role's id is a Role row, resolved live like every other kind.
+export type MentionKind = 'task' | 'doc' | 'user' | 'file' | 'group' | 'role';
 
-export const MENTION_RE = /@\[([^\]]+)\]\((task|doc|user|file):([a-zA-Z0-9_-]+)\)/g;
+export const MENTION_RE = /@\[([^\]]+)\]\((task|doc|user|file|group|role):([a-zA-Z0-9_-]+)\)/g;
+
+// 'all' and 'everyone' are the same group under two names, because people arrive with one habit or
+// the other (Slack says @all/@channel, Discord says @everyone) and a picker that only answers to the
+// word you did not type looks like it is missing the feature.
+export const GROUP_MENTION_IDS = ['everyone', 'all', 'assignee'] as const;
+export type GroupMentionId = (typeof GROUP_MENTION_IDS)[number];
+export const isGroupMentionId = (id: string): id is GroupMentionId => (GROUP_MENTION_IDS as readonly string[]).includes(id);
 
 export type MentionSegment =
   | { type: 'text'; value: string }
@@ -54,6 +66,13 @@ export type ResolvedMention = {
   url?: string;
 };
 
+// Replaces every token with a readable `@Label`, for the places that show a message as plain text —
+// a push notification or the bell. Uses the label baked into the token: the server has no store to
+// resolve against, and a label that is a moment stale is still far better than a raw
+// `@[Label](user:uuid)` on someone's lock screen, which is what the chat push showed before this.
+export const mentionsToPlainText = (text: string): string =>
+  text.replace(MENTION_RE, (_m, label: string) => `@${label}`);
+
 // Live-resolves a mention's current display name from the store; falls back to the label baked
 // into the token (found: false) if the entity has since been deleted.
 export const resolveMentionEntity = (
@@ -62,6 +81,17 @@ export const resolveMentionEntity = (
   fallbackLabel: string,
   { tasks, users, workspaces }: MentionStoreData
 ): ResolvedMention => {
+  if (kind === 'group') {
+    // Never "not found": the group itself always exists, even where it would expand to nobody.
+    return { label: isGroupMentionId(id) ? id : fallbackLabel, found: isGroupMentionId(id) };
+  }
+  if (kind === 'role') {
+    for (const ws of workspaces) {
+      const role = ws.roles.find((r) => r.id === id);
+      if (role) return { label: role.name, found: true, color: role.color };
+    }
+    return { label: fallbackLabel, found: false };
+  }
   if (kind === 'task') {
     const task = tasks.find((t) => t.id === id);
     return task ? { label: task.title, found: true } : { label: fallbackLabel, found: false };

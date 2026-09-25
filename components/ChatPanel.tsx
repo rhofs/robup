@@ -8,6 +8,7 @@ import { dateKey } from '../lib/navUrl';
 import { useTaskStore } from '../store/useTaskStore';
 import { renderChatMessageBody } from '../lib/chatFormat';
 import ChatComposerInput from './ChatComposerInput';
+import { chatMentionScope } from '../lib/chatMentionScope';
 import EmojiPicker from './EmojiPicker';
 import { useChatChannelConnection } from '../lib/collab/useChatChannelConnection';
 import { uploadChatFile } from '../lib/uploadChatFile';
@@ -262,26 +263,9 @@ export default function ChatPanel() {
   const membersById = new Map((activeChannel?.members ?? []).map((m) => [m.userId, m.user]));
   const isDM = activeChannel?.type === 'dm' || activeChannel?.type === 'group_dm';
 
-  // Which workspace's people, tasks and docs this conversation can mention.
-  //
-  // A channel belongs to a workspace, so that is the answer. A DM belongs to none — it exists
-  // between people, not inside a company — so mentioning anything would either be unscoped (offering
-  // work the other person cannot open) or impossible. The rule the user set: only where you share a
-  // workspace, and only from the shared one. Resolved as the first workspace whose membership
-  // contains every participant; with more than one shared workspace the first is picked, which is
-  // the same arbitrary-but-stable choice the rest of the app makes for "a workspace we both have".
-  const mentionWorkspaceId = (() => {
-    if (!activeChannel) return null;
-    if (!isDM) {
-      return Object.entries(channelsByWorkspace).find(([, list]) => list.some((c) => c.id === activeChannel.id))?.[0] ?? null;
-    }
-    const participantIds = (activeChannel.members ?? []).map((m) => m.user.id);
-    if (participantIds.length === 0) return null;
-    const shared = workspaces.find(
-      (w) => !w.isPersonal && participantIds.every((uid) => w.members.some((m) => m.id === uid))
-    );
-    return shared?.id ?? null;
-  })();
+  // Which workspace's people, tasks and docs this conversation can mention, and which of @everyone
+  // and the roles — see lib/chatMentionScope.ts.
+  const mentionScope = chatMentionScope(activeChannel, workspaces);
   // A DM has no stored name (name: null, always) — rendered here from whichever *other* members
   // are on it, same "relative to the viewer" convention Slack/Discord use for DM titles.
   const dmLabel = isDM
@@ -901,7 +885,8 @@ export default function ChatPanel() {
           placeholder={activeChannel ? `Message ${isDM ? activeChannelLabel : `#${activeChannel.name}`}` : 'Message...'}
           // A getter, not the value: this editor is created once and the conversation changes under
           // it, so a captured id would scope every later mention to the first DM you opened.
-          getWorkspaceId={() => mentionWorkspaceId}
+          getWorkspaceId={() => mentionScope.workspaceId}
+          getGroupMentions={() => mentionScope.groups}
           maxHeight={COMPOSER_MAX_HEIGHT_PX}
           insertRef={insertIntoComposer}
         />

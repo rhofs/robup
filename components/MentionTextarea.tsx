@@ -2,18 +2,11 @@
 
 import { forwardRef, useEffect, useImperativeHandle, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
-import { ListChecks, FileText, UserCircle, Paperclip } from 'lucide-react';
 import { useTaskStore } from '../store/useTaskStore';
-import { buildMentionOptions, type MentionOption } from '../lib/mentionOptions';
-import { buildMentionToken, type MentionKind } from '../lib/mentions';
+import { buildMentionOptions, type GroupMentionScope, type MentionOption } from '../lib/mentionOptions';
+import { buildMentionToken } from '../lib/mentions';
+import { MentionIcon } from './MentionText';
 import { getCaretCoordinates, type CaretCoordinates } from '../lib/caretCoordinates';
-
-const KIND_ICON: Record<MentionKind, typeof ListChecks> = {
-  task: ListChecks,
-  doc: FileText,
-  user: UserCircle,
-  file: Paperclip,
-};
 
 // Where the dropdown goes, given where the caret is.
 //
@@ -64,6 +57,9 @@ type MentionTextareaProps = Omit<React.TextareaHTMLAttributes<HTMLTextAreaElemen
   // Limits what can be mentioned to one workspace's people, tasks and docs. Omitted where the text
   // is already inside a workspace and cannot be read from outside it.
   workspaceId?: string | null;
+  // The @everyone / @assignee / @role entries this box offers. Omitted, it offers none — see
+  // GroupMentionScope for why the surface decides and not the text.
+  groupMentions?: GroupMentionScope | null;
 };
 
 // Drop-in <textarea> replacement: forwards every prop transparently, and on top of that watches
@@ -74,7 +70,7 @@ type MentionTextareaProps = Omit<React.TextareaHTMLAttributes<HTMLTextAreaElemen
 // so callers' existing behavior (comment-box Enter-to-submit, doc-editor activity logging on blur)
 // keeps working exactly as before when the user isn't mid-mention.
 function MentionTextareaInner(
-  { value, onChange, workspaceId, onKeyDown, onBlur, ...rest }: MentionTextareaProps,
+  { value, onChange, workspaceId, groupMentions, onKeyDown, onBlur, ...rest }: MentionTextareaProps,
   forwardedRef: React.ForwardedRef<HTMLTextAreaElement>
 ) {
   const { tasks, users, workspaces } = useTaskStore();
@@ -120,6 +116,7 @@ function MentionTextareaInner(
         tasks,
         users,
         workspaces,
+        groups: groupMentions,
       })
     : [];
 
@@ -201,8 +198,7 @@ function MentionTextareaInner(
               <p className="text-xs text-neutral-500 px-3 py-2">No matches</p>
             ) : (
               options.map((opt, i) => {
-                const Icon = KIND_ICON[opt.kind];
-                return (
+                      return (
                   <button
                     key={`${opt.kind}-${opt.id}`}
                     onClick={() => selectOption(opt)}
@@ -211,13 +207,16 @@ function MentionTextareaInner(
                       i === selectedIndex ? 'bg-neutral-800 text-blue-400' : 'text-neutral-300 hover:bg-neutral-800/60'
                     }`}
                   >
-                    <Icon className="w-3.5 h-3.5 shrink-0" />
+                    <MentionIcon kind={opt.kind} id={opt.id} className="w-3.5 h-3.5 shrink-0" />
                     {/* Two lines, not one row with a trailing label. Where a task lives is often
                         longer than its own name ("Innholdsskapelse / Ukens video"), and as a
                         shrink-0 sibling it pushed the name into an ellipsis — the one part that has
                         to stay readable. */}
                     <span className="min-w-0 flex-1">
-                      <span className="block truncate text-xs">{opt.label}</span>
+                      <span className="block truncate text-xs">
+                  {opt.kind === 'group' || opt.kind === 'role' ? '@' : ''}
+                  {opt.label}
+                </span>
                       {opt.sub && <span className="block truncate text-[10px] text-neutral-500">{opt.sub}</span>}
                     </span>
                   </button>

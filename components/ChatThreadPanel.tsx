@@ -10,6 +10,9 @@ import { uploadChatFile } from '../lib/uploadChatFile';
 import { formatBytes } from '../lib/formatBytes';
 import { timeLabel, QuotedPreview, MessageActions, AttachmentGrid, ReactionBar, validatePickedFile, type PickedAttachment } from './ChatPanel';
 import { useIsMobile } from '../hooks/useIsMobile';
+import { useTaskStore } from '../store/useTaskStore';
+import ChatComposerInput from './ChatComposerInput';
+import { chatMentionScope } from '../lib/chatMentionScope';
 
 const COMPOSER_MAX_HEIGHT_PX = 120;
 
@@ -65,24 +68,19 @@ export default function ChatThreadPanel({
   const resolveAuthorName = (authorId: string | null) => (authorId ? membersById.get(authorId)?.name ?? 'Someone' : 'Someone');
   const myProfile = currentUserId ? membersById.get(currentUserId) ?? null : null;
 
+  const workspaces = useTaskStore((s) => s.workspaces);
+  const mentionScope = chatMentionScope(channel, workspaces);
+
   const replies = threadsByRootId[rootMessage.id] || [];
   const [replyTarget, setReplyTarget] = useState<{ id: string; authorName: string; body: string } | null>(null);
   const [draft, setDraft] = useState('');
   const [sending, setSending] = useState(false);
-  const textareaRef = useRef<HTMLTextAreaElement>(null);
   const [pendingAttachment, setPendingAttachment] = useState<PickedAttachment | null>(null);
   const [attachmentError, setAttachmentError] = useState<string | null>(null);
   const [uploadingAttachment, setUploadingAttachment] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [dragActive, setDragActive] = useState(false);
   const dragCounterRef = useRef(0);
-
-  useEffect(() => {
-    const el = textareaRef.current;
-    if (!el) return;
-    el.style.height = 'auto';
-    el.style.height = `${Math.min(el.scrollHeight, COMPOSER_MAX_HEIGHT_PX)}px`;
-  }, [draft]);
 
   useEffect(() => {
     fetchThread(rootMessage.id);
@@ -340,20 +338,17 @@ export default function ChatThreadPanel({
         >
           <Paperclip className="w-3.5 h-3.5" />
         </button>
-        <textarea
-          ref={textareaRef}
+        {/* The same composer as the main feed, so a thread reply can mention — including @everyone
+            and roles — exactly as the conversation it belongs to can. It was a bare textarea, so
+            mentions simply did not exist in threads. */}
+        <ChatComposerInput
           value={draft}
-          onChange={(e) => setDraft(e.target.value)}
-          onKeyDown={(e) => {
-            if (e.key === 'Enter' && !e.shiftKey) {
-              e.preventDefault();
-              handleSend();
-            }
-          }}
+          onChange={setDraft}
+          onSubmit={handleSend}
           placeholder="Reply in thread..."
-          rows={1}
-          style={{ maxHeight: COMPOSER_MAX_HEIGHT_PX }}
-          className="flex-1 bg-transparent text-[15px] md:text-[12px] text-app-strong placeholder:text-neutral-500 resize-none focus:outline-none py-1 overflow-y-auto"
+          getWorkspaceId={() => mentionScope.workspaceId}
+          getGroupMentions={() => mentionScope.groups}
+          maxHeight={COMPOSER_MAX_HEIGHT_PX}
         />
         <button
           onClick={handleSend}

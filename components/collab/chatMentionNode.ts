@@ -3,7 +3,7 @@
 import { Extension } from '@tiptap/core';
 import { Suggestion } from '@tiptap/suggestion';
 import { PluginKey } from '@tiptap/pm/state';
-import { buildMentionOptions } from '../../lib/mentionOptions';
+import { buildMentionOptions, type GroupMentionScope } from '../../lib/mentionOptions';
 import { useTaskStore } from '../../store/useTaskStore';
 import { mentionSuggestionOptions, type MentionSuggestionItem } from './mentionSuggestion';
 
@@ -19,7 +19,7 @@ import { mentionSuggestionOptions, type MentionSuggestionItem } from './mentionS
 // The node itself is ClientMentionNode (components/collab/mentionNodeView.tsx), unchanged and shared.
 // There is one mention node in this app and there should stay one.
 
-function scopedItems(char: '@' | '#', getWorkspaceId: () => string | null) {
+function scopedItems(char: '@' | '#', getWorkspaceId: () => string | null, getGroups?: () => GroupMentionScope | null) {
   return ({ query }: { query: string }): MentionSuggestionItem[] => {
     const { tasks, users, workspaces } = useTaskStore.getState();
     return buildMentionOptions({
@@ -29,6 +29,7 @@ function scopedItems(char: '@' | '#', getWorkspaceId: () => string | null) {
       tasks,
       users,
       workspaces,
+      groups: getGroups?.() ?? null,
     });
   };
 }
@@ -65,9 +66,9 @@ export const ChatHashMention = Extension.create<ChatMentionTriggerOptions>({
 
 // The '@' side is the doc editor's own node, handed scoped items and its own key through the
 // `suggestion` override it already supports.
-export function chatAtSuggestion(getWorkspaceId: () => string | null) {
+export function chatAtSuggestion(getWorkspaceId: () => string | null, getGroups?: () => GroupMentionScope | null) {
   return {
     pluginKey: new PluginKey('chatMentionAt'),
-    items: scopedItems('@', getWorkspaceId),
+    items: scopedItems('@', getWorkspaceId, getGroups),
   };
 }
