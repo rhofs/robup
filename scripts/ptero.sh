@@ -81,6 +81,33 @@ wait_up() {
   return 1
 }
 
+installing() {
+  api GET "" | python3 -c 'import json,sys; a=json.load(sys.stdin)["attributes"]; print("yes" if a.get("is_installing") or a.get("status") == "installing" else ("failed" if a.get("status") == "install_failed" else "no"))'
+}
+
+# The install script (git sync, npm install, build) runs before the server can be started. Wait for
+# it to begin and then to end, up to 20 minutes.
+wait_installed() {
+  local deadline=$((SECONDS + 1200)) seen=no state
+  while ((SECONDS < deadline)); do
+    state=$(installing)
+    [[ "$state" == failed ]] && { echo "Install FAILED — see the panel's console." >&2; return 1; }
+    [[ "$state" == yes ]] && seen=yes
+    if [[ "$seen" == yes && "$state" == no ]]; then
+      echo "Install finished."
+      return 0
+    fi
+    # If it never showed as installing within the first minute, it was quicker than the first poll.
+    if [[ "$seen" == no && "$state" == no ]] && ((SECONDS > 60)); then
+      echo "Install finished (never observed running)."
+      return 0
+    fi
+    sleep 10
+  done
+  echo "Install still running after 20 minutes." >&2
+  return 1
+}
+
 case "${1:-status}" in
   status) status ;;
   start | stop | restart | kill)
@@ -90,7 +117,12 @@ case "${1:-status}" in
   reinstall)
     api POST /settings/reinstall >/dev/null
     echo "Reinstall started."
-    sleep 20
+    wait_installed
+    # Pterodactyl leaves the server OFFLINE after a reinstall — it does not start it again. The first
+    # version of this script only waited for the site, which never came back on its own: 15 minutes
+    # of 521 on 2026-09-25 before anyone pressed Start.
+    api POST /power '{"signal":"start"}' >/dev/null
+    echo "Started."
     wait_up "${2:-}"
     ;;
   wait) wait_up "${2:-}" ;;

@@ -9821,3 +9821,13 @@ not hold server data. He wants the backups on New Game Media's Google Workspace 
   passphrase generated with `openssl rand`, never printed, plus the service account path and
   `BACKUP_DRIVE_FOLDER_ID`. The user still has to copy the passphrase into a password manager from
   the panel's file manager. **Not confirmed done.**
+
+**Deployed 2026-09-25 as `4658a30`, with a 15-minute outage that was avoidable.** `scripts/ptero.sh
+reinstall` waited for the site, but **Pterodactyl leaves a server offline after a reinstall**. It
+never came back until Claude sent `start` by hand. The script now waits for the install to finish
+(`is_installing`, `install_failed`), then sends `start`, then waits for the commit. The
+install-status check was tested against the live panel. **Lesson:** after any reinstall, the server
+has to be started. The piping through `tail` also hid the failure's exit code, so do not pipe it.
+After the start, `/api/version` showed `4658a30`, `nativePush: true` (the Firebase file survived),
+and a startup snapshot at 13:14 UTC. `lastOffsite` was still null, because the first upload is
+due on the next hourly cron run.
