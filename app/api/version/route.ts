@@ -1,7 +1,8 @@
 import { NextResponse } from 'next/server';
 import { execFile } from 'child_process';
 import { promisify } from 'util';
-import { existsSync } from 'fs';
+import { existsSync, readdirSync, readFileSync } from 'fs';
+import path from 'path';
 
 const run = promisify(execFile);
 
@@ -34,11 +35,12 @@ export async function GET() {
       committedAt: date.stdout.trim(),
       startedAt: startedAt.toISOString(),
       ...notificationConfig(),
+      backup: backupStatus(),
     });
   } catch {
     // No git in the container, or not a checkout — say so plainly rather than 500ing, since the
     // whole point of this route is to be readable when things are wrong.
-    return NextResponse.json({ commit: null, startedAt: startedAt.toISOString(), ...notificationConfig() });
+    return NextResponse.json({ commit: null, startedAt: startedAt.toISOString(), ...notificationConfig(), backup: backupStatus() });
   }
 }
 
@@ -63,5 +65,32 @@ function notificationConfig() {
   return {
     webPush: Boolean(process.env.VAPID_PUBLIC_KEY && process.env.VAPID_PRIVATE_KEY),
     nativePush: existsSync(process.env.FIREBASE_SERVICE_ACCOUNT_PATH || './firebase-service-account.json'),
+  };
+}
+
+// When the last backups happened — the hourly local snapshot and the daily encrypted upload to
+// Google Drive (scripts/backupDb.ts, lib/backup/offsite.ts). A backup that quietly stopped is found
+// out on the day it is needed, which is the worst day to find out; this makes it one request away
+// (`scripts/ptero.sh status` prints it).
+//
+// Timestamps and a boolean only. The last error's text stays in backups/offsite-state.json on the
+// server: it can name the Google account the upload runs as, which has no business on a public URL.
+function backupStatus() {
+  const dir = path.join(process.cwd(), 'backups');
+  let lastSnapshot: string | null = null;
+  try {
+    const newest = readdirSync(dir).filter((f) => f.startsWith('siqt-backup-') && f.endsWith('.db')).sort().pop();
+    // Filenames are ISO timestamps with ':' and '.' swapped for '-' — undo that for a real date.
+    const m = newest?.match(/^siqt-backup-(\d{4}-\d{2}-\d{2})T(\d{2})-(\d{2})-(\d{2})-(\d{3})Z\.db$/);
+    lastSnapshot = m ? `${m[1]}T${m[2]}:${m[3]}:${m[4]}.${m[5]}Z` : null;
+  } catch {}
+  let offsite: { lastSuccessAt?: string; lastAttemptAt?: string; lastError?: string | null } = {};
+  try {
+    offsite = JSON.parse(readFileSync(path.join(dir, 'offsite-state.json'), 'utf8'));
+  } catch {}
+  return {
+    lastSnapshot,
+    lastOffsite: offsite.lastSuccessAt ?? null,
+    offsiteFailing: Boolean(offsite.lastError),
   };
 }

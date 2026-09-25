@@ -9648,3 +9648,176 @@ turned down.
 - **Edge case not handled:** a PATCH that moves a task to a private list *and* changes its assignees
   in the same request checks the assignees against the old list. The UI never sends both together.
 - **Not verified in a browser.**
+
+## 2026-09-25 (continued) — Claude can now control the production server through Pterodactyl's API
+
+**Infrastructure outside the repo, set up by the user today:**
+- **Panel:** `https://server.gaminglivet.no` (Pebblehost-branded Pterodactyl). siqt's server id
+  there is `86c7263c`.
+- **A client API key** (`ptlc_…`, made under Account → API Credentials, description
+  "Claude siqt-deploy"). The user was told to restrict it to `213.170.135.134` and `127.0.0.1` under
+  Allowed IPs. **Not verified that the restriction was actually set.** It is stored in
+  `~/.config/siqt/pterodactyl.env` (`PTERO_URL`, `PTERO_KEY`, `PTERO_SERVER`), `chmod 600`, outside
+  the repo. The key was never pasted into chat.
+- On the first try, `PTERO_URL` held the whole `/server/…` address pasted in front of the
+  placeholder text, and the file was world-readable. Both were fixed. **A wrong `PTERO_URL` still
+  returns HTTP 200:** the panel serves its HTML login page for any unknown path. `scripts/ptero.sh`
+  therefore only trusts JSON replies.
+
+**`scripts/ptero.sh`** (committed, no secrets in it): `status`, `restart|start|stop|kill`,
+`reinstall [commit]`, `wait [commit]`. `status` also reads `https://siqt.no/api/version`, so one
+command shows both what the panel says and which commit is actually live. `reinstall` and `wait`
+poll `/api/version` for up to 15 minutes until the site answers, optionally with a given commit.
+**Only `status` has been run.** Restart and reinstall are untested.
+
+**Agreed policy:** restart and status on request. **Ask before every reinstall** unless the user says
+otherwise. It takes the site down while it builds (a 521 was seen during an earlier one) and runs
+`git clean -fd` on production.
+
+**What a client key cannot do, discussed and not set up:** change the startup command, the Docker
+image or resource limits (those need an Application API key `ptla_…`, admin-only), and change the egg
+or mounts (not in the API at all, only in the admin UI). Recommended against creating an admin key
+for now. It controls the whole panel, not just siqt, and startup changes are rare enough to do by
+hand. Also proposed and **not done yet**: committing the egg's install script and startup command
+to the repo as documentation, because today they exist only in the panel.
+
+**Observed and not investigated:** the panel reports the server as `starting` after more than two
+hours of uptime. Most likely the egg's "done" line never matches Next's startup output, so the panel
+never flips to `running`. The site itself was up and serving `22c9ef6`. Harmless, but it means the
+panel's state cannot be trusted as a health signal. Use `/api/version`.
+
+**Now possible with this key, and still open from earlier notes:** Pterodactyl **Schedules** for
+`npm run backup:db:prod` and `npm run sync:calendar:prod` (see "Next steps" #7 and #9 near the top,
+open since 2026-08-21). A client key can create them. Not done without asking.
+
+### 2026-09-25 (continued) — the backup state, checked through the new API key: less than it looks
+
+Asked: "Er det satt opp backups … så om noe skulle skje, så kan vi reversere?" Checked read-only
+through the Pterodactyl client API rather than answered from memory.
+
+**What exists:** the hourly root-cron `VACUUM INTO` snapshot documented on 2026-09-01. It is still
+running, with files landing on the hour. There is also one snapshot per container start, from
+`deploy:prod`. All of them sit in `/home/container/backups` on the same disk as the live DB
+(about 3.8 MB each).
+
+**Bug found: the history is about 16 hours, not about 8 days.** The cron job passes
+`BACKUP_RETENTION_COUNT=200`. `deploy:prod` runs the same script *without* it, so it falls back to
+the script's default of **14**, and **every deploy prunes the directory down to 14 files**. With
+several deploys a day, the 200-snapshot history never builds up. Observed: 17 files, the oldest
+2026-09-24 22:00, after the 09:37 deploy today. Nobody noticed, because the directory always looks
+healthy. **Proposed fix, not applied yet:** make 200 the script's default, so both triggers agree
+without depending on an env var that only one of them sets.
+
+**What does not exist:**
+- **Pterodactyl Backups:** 0 taken, limit 10. There are no Schedules. Where a Pterodactyl backup
+  would even be stored (wings local disk or S3) cannot be read with a client key.
+  `/var/www/pterodactyl/.env` (`APP_BACKUP_DRIVER`) is not readable as robin. The node is named
+  "Dedicated Server", so it is most likely the same machine.
+- **Uploaded files** (`public/uploads/chat`, `public/uploads/task`): not backed up by anything.
+  They are gitignored, so they survive a reinstall, but they are not in any snapshot. The DB
+  snapshots reference them by URL.
+- **Anything off this machine.** Code is safe on GitHub. The database, the uploads and the
+  production `.env` exist only here.
+
+**The 2026-09-01 deferral's own trigger has now fired.** It said off-box backup stops being optional
+"the first time this database holds something nobody can retype from memory". CRRM Media now shows
+944 tasks in "Everything". Raised with the user again. Options put to them: fix the retention bug
+(trivial); a nightly Pterodactyl Backup through a Schedule (a Schedule *backup* task works, unlike
+the *command* task the 2026-09-01 note warned about), though it probably lands on the same disk; and
+a real off-box copy (for example rclone of the newest snapshot and the uploads to Google Drive or
+Backblaze B2 nightly), which needs the user to pick a destination.
+
+### 2026-09-25 (continued) — full backups: everything covered, and an encrypted daily copy to Google Drive
+
+Asked: "Beskyttes alt av dokumenter, filer, det som er lasta opp, tasks, planner events … Alt må ha en
+backup … og lastes opp til Google Drive eller noe tilsvarende."
+
+**Where each kind of data actually lives** (checked, not assumed):
+- Tasks, subtasks, comments, events, chat, spaces, lists, folders, custom fields and users are all
+  in the SQLite DB.
+- **Doc content** is also in the DB: `Doc.ydoc` (Bytes), written by the collab sidecar's
+  `onStoreDocument`. The hourly snapshots already covered it.
+- **Uploaded files** (chat files, task attachments, images in docs) are in `public/uploads/<context>`
+  and were **not covered by anything**.
+- Secrets are in the egg's variables (not visible to a client key), plus
+  `firebase-service-account.json` in the container. Deliberately **not** in the off-site backup:
+  they can be re-issued, and they should not travel.
+
+**Built:**
+- **Retention fix:** `BACKUP_RETENTION_COUNT` now defaults to 200 in `scripts/backupDb.ts`, and
+  `deploy:prod` runs it with `--snapshot-only`. See the entry above for the bug.
+- **`lib/backup/offsite.ts`:** once a day, the newest snapshot plus `public/uploads` plus a
+  `manifest.json` (time, commit, row counts) go into one tar.gz. It is encrypted and uploaded to a
+  Google Drive folder called **"Siqt backups"**. The newest 30 are kept (`BACKUP_DRIVE_KEEP`).
+  - **Trigger:** the existing hourly root cron. No new cron line is needed (and none could be added:
+    no root here). The upload runs when the last success is more than 20 hours old, so a failure is
+    retried the next hour.
+  - **Upload:** through the app's own Google connection. `drive.file` is already granted for the Docs
+    export and only reaches files the app created, so it can create and prune its own archives and
+    sees nothing else. It uses the refresh token of the user named in `BACKUP_GOOGLE_EMAIL`.
+  - **Encryption:** AES-256-GCM, key from scrypt (`lib/backup/crypto.ts`), file extension
+    `.siqtbak`. The reason: the DB holds password hashes, Google refresh tokens, calendar feed tokens
+    and push tokens.
+  - **Config:** `/home/container/.env.backup` holds `BACKUP_PASSPHRASE` and `BACKUP_GOOGLE_EMAIL`.
+    It is ignored by `.env*` (checked with `git check-ignore`), so reinstalls spare it.
+- **`scripts/restoreBackup.ts`** (`npm run backup:restore -- file.siqtbak [dir]`): decrypts and
+  unpacks to a folder and never touches the live DB. The file comments explain the difference
+  between a whole-site rollback and copying back only one lost item.
+- **`npm run backup:offsite:prod`** forces an upload now. It can only be run from inside the
+  container: a client key cannot run shell commands, and the console only writes to Node's stdin.
+- **`/api/version`** now includes `backup: { lastSnapshot, lastOffsite, offsiteFailing }` as
+  timestamps and a boolean only. The error text stays in `backups/offsite-state.json`, because it
+  can contain the Google e-mail.
+
+**Tested:** a crypto round trip (5 MB, with a wrong passphrase and a changed byte both rejected).
+The whole chain was run on the scratch DB: archive, encrypt, `restoreBackup.ts`. The restored DB has
+the right rows, and a random 200 KB "PDF" came back byte-identical. **Not tested:** the actual Drive
+upload and prune, since that needs production's Google credentials. It first runs on the hour after
+deploy plus configuration.
+
+**Deploys need a reinstall.** Read from the panel: the startup command is `npm run deploy:prod`, with
+no `git pull`, so new code only lands through the install script. Every earlier "redeploy" in this
+file was a reinstall.
+
+**Still to do before the off-site copy runs:** (1) commit, push and reinstall. (2) Create
+`.env.backup` on the server with a passphrase. The plan is for Claude to generate it and write it
+through the Files API without printing it, and for the user to copy it into a password manager from
+the panel's file manager. (3) Make sure the Google account in `BACKUP_GOOGLE_EMAIL` has connected
+Google in the app. **Not done yet, waiting on the user.**
+
+**Changed the same day: the target is a company Shared Drive, not a person's Drive.** Robin's in-app
+Google connection is his private `rhofseth@gmail.com`. His words: that is "min bruker" and should
+not hold server data. He wants the backups on New Game Media's Google Workspace (14 TB). So:
+- `lib/backup/offsite.ts` now prefers a **service account**: `BACKUP_DRIVE_SERVICE_ACCOUNT`
+  (path to the JSON key, `./backup-service-account.json`, added to `.gitignore` by name so a
+  reinstall's `git clean -fd` spares it) plus `BACKUP_DRIVE_FOLDER_ID` (a Shared Drive or a folder
+  in one). It uses the full `drive` scope, `supportsAllDrives` on every call, and never creates its
+  own folder. `BACKUP_GOOGLE_EMAIL` (a person's in-app connection) stays as a fallback.
+- **Order matters on the server:** upload the key file only *after* the reinstall that brings the new
+  `.gitignore`. Uploaded before it, the install script's `git clean -fd` could delete it as untracked.
+- **Possible blockers on the Workspace side, not yet hit:** Google Cloud orgs created since 2024 often
+  enforce `iam.disableServiceAccountKeyCreation`, which blocks the JSON key. A Workspace admin has to
+  lift it for the project. And a Shared Drive may refuse members from outside the domain (a service
+  account is `…iam.gserviceaccount.com`). Both were told to the user in advance.
+- Still waiting on: the user creating the service account and the Shared Drive, then
+  commit/push/reinstall, then the key upload and `.env.backup`.
+- **Done by the user:** a GCP project `siqt-backup` under the newgamemedia.no organization, and a
+  service account `siqt-backup` with no roles. A Shared Drive "Siqt backup" with the service account as
+  **Innholdsansvarlig** (Content manager: can upload and delete, cannot manage members). The Shared
+  Drive id, which is `BACKUP_DRIVE_FOLDER_ID`, is `0ABSRa0Qk4dihUk9PVA` (not a secret). Whether the
+  JSON key was created successfully (the org-policy risk above) is not confirmed yet.
+- **Server config done (2026-09-25):** the user uploaded the key as `backup-service-account.json`
+  *before* the reinstall that would have added it to `.gitignore`. Claude renamed it through the
+  Files API to **`.env.backup-service-account.json`**, which the live checkout's existing `.env*`
+  rule already protects. The explicit `.gitignore` entry was dropped as redundant. Service account:
+  `siqt-backup@steadfast-mason-502711-h1.iam.gserviceaccount.com` (the project id is an
+  auto-generated one, not `siqt-backup`).
+- **Tested from this machine against the real Shared Drive:** upload and list work. **Permanent
+  delete does not** ("File not found"): a Content manager may only *trash* on a Shared Drive. So
+  pruning now trashes (`files.update trashed:true`), and Drive empties a Shared Drive's trash after
+  30 days. The test file was trashed, and the local copy of the key was removed right after
+  (`shred`).
+- **`/home/container/.env.backup` written through the Files API:** a 40-character alphanumeric
+  passphrase generated with `openssl rand`, never printed, plus the service account path and
+  `BACKUP_DRIVE_FOLDER_ID`. The user still has to copy the passphrase into a password manager from
+  the panel's file manager. **Not confirmed done.**

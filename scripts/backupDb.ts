@@ -1,6 +1,7 @@
 import { PrismaClient } from '@prisma/client';
 import fs from 'fs';
 import path from 'path';
+import { maybeUploadOffsite } from '../lib/backup/offsite';
 
 const prisma = new PrismaClient();
 
@@ -10,7 +11,17 @@ const prisma = new PrismaClient();
 // VPS/volume — that needs Pterodactyl's own server-level Backups feature (or a remote copy)
 // configured on top of this, see PLANNING.md.
 const BACKUP_DIR = path.join(process.cwd(), 'backups');
-const RETENTION_COUNT = Number(process.env.BACKUP_RETENTION_COUNT ?? 14);
+// 200 (≈ 8 days of hourly snapshots) as the default, not only as the cron job's override. It was 14
+// here while the hourly cron passed 200 — and `deploy:prod` runs this same script with no override,
+// so every deploy pruned the history back to 14 files. With several deploys a day that left about
+// 16 hours of history instead of 8 days, and nothing looked wrong: the folder was always full.
+const RETENTION_COUNT = Number(process.env.BACKUP_RETENTION_COUNT ?? 200);
+
+// --snapshot-only: the snapshot and nothing else. Used by deploy:prod, which runs on every start
+// and should not hold the server's startup up on an upload.
+// --offsite-now: upload off-site now even if one was made in the last day (to test the setup).
+const SNAPSHOT_ONLY = process.argv.includes('--snapshot-only');
+const OFFSITE_NOW = process.argv.includes('--offsite-now');
 const FILE_PREFIX = 'siqt-backup-';
 
 function timestamp(): string {
@@ -46,6 +57,10 @@ async function main() {
   }
 
   console.log(`Done — ${existing.length - toDelete.length} backup(s) retained.`);
+
+  // Once a day, the off-site copy (lib/backup/offsite.ts). This script already runs every hour from
+  // the host's cron, which is what drives it.
+  if (!SNAPSHOT_ONLY) await maybeUploadOffsite({ prisma, snapshotPath: backupPath, backupDir: BACKUP_DIR, force: OFFSITE_NOW });
 }
 
 main()
