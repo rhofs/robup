@@ -9949,3 +9949,10 @@ hurt that. It most likely predates this, since the chat connection also pulls in
 **Not built:** a wiki trash or restore UI (deleted pages are soft-deleted and recoverable only from
 the DB or backups), drag-to-reorder in the contents (arrows only), a Markdown import, and per-page
 access control. The "PC Pin-koder/Passord" warning from the proposal still applies.
+
+**Deployed 2026-09-25 as `4411caf`** with `scripts/ptero.sh reinstall`. The fixed script
+waited for the install, started the server itself and saw the commit live, so there was no extra
+downtime this time. The site is up, and a snapshot was taken at startup (13:55 UTC).
+`/api/workspaces/x/wiki` answers 401 when logged out, so the route exists. The migration must have
+applied, because `deploy:prod` runs `migrate deploy` before `start` and the app started. **Not yet
+opened in a browser by anyone.**
