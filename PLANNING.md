@@ -9956,3 +9956,11 @@ downtime this time. The site is up, and a snapshot was taken at startup (13:55 U
 `/api/workspaces/x/wiki` answers 401 when logged out, so the route exists. The migration must have
 applied, because `deploy:prod` runs `migrate deploy` before `start` and the app started. **Not yet
 opened in a browser by anyone.**
+
+**First off-site backup confirmed, 2026-09-25 14:00 UTC.** The hourly cron's run right after the
+Wiki deploy uploaded `siqt-2026-09-25T14-00-02-497Z.siqtbak` (3.2 MB, encrypted) to the "Siqt backup"
+Shared Drive. `backups/offsite-state.json` shows `lastError: null`, and `/api/version` reports
+`lastOffsite`. The whole chain works in production: cron, the backup script, archive, encrypt and
+upload through the service account. **Still unverified:** a real restore of a *downloaded* archive
+with the production passphrase (only tested locally with a test passphrase), and whether the user
+has saved the passphrase in a password manager.
