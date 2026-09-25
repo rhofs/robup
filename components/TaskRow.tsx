@@ -6,7 +6,7 @@ import { useDraggable, useDroppable } from '@dnd-kit/core';
 import { Check, Pencil, RefreshCw, MoreHorizontal, GripVertical, Calendar } from 'lucide-react';
 import { useTaskStore, StatusDef, CustomFieldDef, Task } from '../store/useTaskStore';
 import { useIsMobile } from '../hooks/useIsMobile';
-import { pickableMembers, workspaceIdForList } from '../lib/workspaceMembers';
+import { taskPickableMembers } from '../lib/workspaceMembers';
 import AssigneePicker, { AssigneeStack } from './AssigneePicker';
 import { suggestTaskAssignees } from '../lib/assigneeSuggestions';
 import { useSessionStore } from '../store/useSessionStore';
@@ -71,8 +71,8 @@ function TaskRowImpl({
 
   const isMobile = useIsMobile();
   const currentUserId = useSessionStore((s) => s.currentUserId);
-  // Only the members of the workspace this task lives in — see lib/workspaceMembers.ts.
-  const assigneeChoices = pickableMembers(workspaces, users, workspaceIdForList(workspaces, task.listId), task.assignees.map((a) => a.id));
+  // Only the members of the workspace this task lives in who can open it — see lib/workspaceMembers.ts.
+  const assigneeChoices = taskPickableMembers(workspaces, users, task, task.assignees.map((a) => a.id));
 
   const [statusOpen, setStatusOpen] = useState(false);
   const [assigneeOpen, setAssigneeOpen] = useState(false);

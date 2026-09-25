@@ -1,6 +1,7 @@
 import { prisma } from '@/lib/prisma';
+import { buildFolderChainVisibility, canManageWorkspace, canSee, type AccessContext, type WorkspaceRole } from './visibility';
 
-export type WorkspaceRole = 'owner' | 'admin' | 'member';
+export * from './visibility';
 
 // null = not a member of this workspace at all (distinct from 'member', the lowest real tier).
 export async function getWorkspaceRole(workspaceId: string, userId: string): Promise<WorkspaceRole | null> {
@@ -10,32 +11,6 @@ export async function getWorkspaceRole(workspaceId: string, userId: string): Pro
   });
   return (membership?.role as WorkspaceRole | undefined) ?? null;
 }
-
-// Owner or Admin — the two tiers that can create Roles, mark things private, manage other
-// members' Admin status. Only 'owner' can delete the workspace itself (checked separately,
-// inline, wherever that route lives — it's the one capability Admin deliberately doesn't get).
-export function canManageWorkspace(role: WorkspaceRole | null): boolean {
-  return role === 'owner' || role === 'admin';
-}
-
-export type AccessJsonEntry = { type: 'user' | 'role'; id: string };
-
-export function parseAccessJson(accessJson: string): AccessJsonEntry[] {
-  try {
-    const parsed = JSON.parse(accessJson);
-    return Array.isArray(parsed) ? parsed : [];
-  } catch {
-    return [];
-  }
-}
-
-export type AccessContext = {
-  userId: string;
-  role: WorkspaceRole | null;
-  isManager: boolean; // owner or admin
-  isMember: boolean;
-  heldRoleIds: string[]; // Role ids this user belongs to, within this one workspace
-};
 
 // One-time, per-request lookup — two small queries total (role tier + held Role ids), regardless
 // of how many Space/Folder/List/Task rows get checked against it afterward via canSee(). Avoids
@@ -78,22 +53,6 @@ export async function getWorkspaceAccessContexts(workspaceId: string): Promise<M
   );
 }
 
-// Space/Folder/List/Task all share this exact isPrivate/accessJson shape (see the schema
-// comments) — one shared, synchronous check for all four rather than four near-identical async
-// DB round-trips per row. Owner/Admin always pass regardless of accessJson, same as how a
-// Discord server admin sees every channel regardless of that channel's own permission
-// overwrites. Filtering a *string* JSON column directly in a Prisma `where` (SQLite has no
-// native JSON column type here) would mean fragile substring matching that can't express
-// role-based grants correctly — this in-memory check after a normal fetch is the practical,
-// correct alternative, and cheap at this app's scale (one workspace's tree, not a global scan).
-export function canSee(resource: { isPrivate: boolean; accessJson: string }, ctx: AccessContext): boolean {
-  if (!resource.isPrivate) return true;
-  if (ctx.isManager) return true;
-  if (!ctx.isMember) return false;
-  const entries = parseAccessJson(resource.accessJson);
-  return entries.some((e) => (e.type === 'user' && e.id === ctx.userId) || (e.type === 'role' && ctx.heldRoleIds.includes(e.id)));
-}
-
 // Convenience wrapper for the single-row case (a resource's own mutation route checking "can
 // this caller even see the thing they're trying to edit") — does its own getAccessContext lookup
 // rather than making every call site build one by hand.
@@ -105,29 +64,6 @@ export async function canAccessResource(
   if (!resource.isPrivate) return true;
   const ctx = await getAccessContext(workspaceId, userId);
   return canSee(resource, ctx);
-}
-
-type FolderLike = { id: string; parentId: string | null; isPrivate: boolean; accessJson: string };
-
-// Folders nest arbitrarily deep, and any one of them could independently be private (see the
-// "each level independent" design decision in PLANNING.md) — a List or child Folder isn't
-// private itself, but if it sits *inside* a private-and-inaccessible ancestor Folder, it must
-// still be hidden. `folders` should be the FULL, unfiltered set for whatever scope is being
-// checked (one Space's folders, or every Folder across a user's workspaces) — the returned
-// function walks parentId chains against that map, entirely in memory, so checking N rows costs
-// one query total instead of an N+1 walk.
-export function buildFolderChainVisibility(folders: FolderLike[]) {
-  const folderById = new Map(folders.map((f) => [f.id, f]));
-  return (folderId: string | null, ctx: AccessContext): boolean => {
-    let current = folderId;
-    while (current) {
-      const f = folderById.get(current);
-      if (!f) break;
-      if (!canSee(f, ctx)) return false;
-      current = f.parentId;
-    }
-    return true;
-  };
 }
 
 // Shared setup for the two flat, cross-workspace task-scoped GET routes (app/api/tasks,
@@ -182,4 +118,40 @@ export async function keepWorkspaceMembers(workspaceId: string, ids: unknown, al
   });
   const allowed = new Set([...members.map((m) => m.userId), ...alreadyOn]);
   return wanted.filter((id) => allowed.has(id));
+}
+
+// Everyone who can open one task: the Space, the whole Folder chain, the List and the Task itself,
+// each checked with canSee for every member of the task's workspace. Three queries however large the
+// workspace. Used where the question is "who may this task reach" — mention recipients, and which
+// people can be assigned to it.
+export async function getTaskAudience(taskId: string): Promise<{ workspaceId: string; userIds: Set<string>; assigneeIds: string[] } | null> {
+  const task = await prisma.task.findUnique({
+    where: { id: taskId },
+    select: {
+      isPrivate: true,
+      accessJson: true,
+      assignees: { select: { id: true } },
+      list: {
+        select: {
+          isPrivate: true,
+          accessJson: true,
+          folderId: true,
+          space: { select: { id: true, isPrivate: true, accessJson: true, workspaceId: true } },
+        },
+      },
+    },
+  });
+  if (!task) return null;
+  const { space } = task.list;
+  const [contexts, folders] = await Promise.all([
+    getWorkspaceAccessContexts(space.workspaceId),
+    prisma.folder.findMany({ where: { spaceId: space.id }, select: { id: true, parentId: true, isPrivate: true, accessJson: true } }),
+  ]);
+  const folderChainVisible = buildFolderChainVisibility(folders);
+  const userIds = new Set(
+    [...contexts.values()]
+      .filter((ctx) => canSee(space, ctx) && folderChainVisible(task.list.folderId, ctx) && canSee(task.list, ctx) && canSee(task, ctx))
+      .map((ctx) => ctx.userId)
+  );
+  return { workspaceId: space.workspaceId, userIds, assigneeIds: task.assignees.map((a) => a.id) };
 }

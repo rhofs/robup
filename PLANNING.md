@@ -9619,3 +9619,32 @@ The bar's assignee avatar also uses `MiniAvatar` now, so a profile photo shows i
 **Not verified in a browser** (no browser on this server, see above). Typecheck clean, and lint
 shows only errors that were already there. **Uncommitted:** the workspace-scoping fix, the new
 picker and this.
+
+### 2026-09-25 (continued) — private tasks: pickers offer only people who can open the task
+
+**Decided by the user:** on a private task, show only people with access ("vis bare folk med
+tilgang på private tasks"). The other option, show everyone and mark those without access, was
+turned down.
+
+- **One rule, not two copies.** The pure half of the access rules (`canSee`, `parseAccessJson`,
+  `buildFolderChainVisibility`, `canManageWorkspace`, the types) moved from `lib/auth/access.ts` to
+  `lib/auth/visibility.ts`, which has no Prisma import. `access.ts` re-exports all of it, so every
+  server import is unchanged. The client now runs the exact functions the server does.
+- **Client:** `taskAudience(workspaces, task)` in `lib/workspaceMembers.ts` checks every workspace
+  member against the Space, the Folder chain, the List and the Task, using the store's hierarchy and
+  `ws.roles[].memberIds`. `taskPickableMembers` narrows the task pickers with it. Used by the task
+  row and task modal assignee pickers, by the Planner drop targets (a face over a private task it
+  cannot open shows the no-drop cursor), and by the task comment mention picker (`allowedUserIds`
+  on `MentionTextarea` / `buildMentionOptions`). Someone already assigned stays listed so they can be
+  removed.
+- **Server:** `getTaskAudience(taskId)` in `lib/auth/access.ts` is now the one place that answers
+  "who can open this task". `resolveTaskMentionRecipients` uses it (it had its own copy of that
+  query), and `PATCH /api/tasks/[id]` drops new assignees outside it. People already assigned are kept
+  here too.
+- Tested: the 20 mention cases still pass against a freshly migrated scratch DB, `getTaskAudience`
+  returns the right people for a public and a private list, and `taskAudience` on the client was
+  checked for a private list, a private folder granted by role, a private task, owner/admin, and an
+  unknown list (null, meaning no filter).
+- **Edge case not handled:** a PATCH that moves a task to a private list *and* changes its assignees
+  in the same request checks the assignees against the old list. The UI never sends both together.
+- **Not verified in a browser.**

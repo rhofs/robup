@@ -1,7 +1,7 @@
 import { prisma } from '@/lib/prisma';
 import { MENTION_RE, isGroupMentionId, mentionsToPlainText } from '@/lib/mentions';
 import { notify } from '@/lib/notifications';
-import { buildFolderChainVisibility, canSee, getWorkspaceAccessContexts } from '@/lib/auth/access';
+import { canSee, getTaskAudience, getWorkspaceAccessContexts } from '@/lib/auth/access';
 
 // Who a posted text actually pings.
 //
@@ -80,38 +80,11 @@ export async function resolveTaskMentionRecipients(taskId: string, body: string)
   const t = parseMentionTargets(body);
   if (!hasTargets(t)) return out;
 
-  const task = await prisma.task.findUnique({
-    where: { id: taskId },
-    select: {
-      isPrivate: true,
-      accessJson: true,
-      assignees: { select: { id: true } },
-      list: {
-        select: {
-          isPrivate: true,
-          accessJson: true,
-          folderId: true,
-          space: { select: { id: true, isPrivate: true, accessJson: true, workspaceId: true } },
-        },
-      },
-    },
-  });
-  if (!task) return out;
-  const { space } = task.list;
+  const audience = await getTaskAudience(taskId);
+  if (!audience) return out;
+  const roles = await roleNames(audience.workspaceId, t.roleIds);
 
-  const [contexts, folders, roles] = await Promise.all([
-    getWorkspaceAccessContexts(space.workspaceId),
-    prisma.folder.findMany({ where: { spaceId: space.id }, select: { id: true, parentId: true, isPrivate: true, accessJson: true } }),
-    roleNames(space.workspaceId, t.roleIds),
-  ]);
-  const folderChainVisible = buildFolderChainVisibility(folders);
-  const eligible = new Set(
-    [...contexts.values()]
-      .filter((ctx) => canSee(space, ctx) && folderChainVisible(task.list.folderId, ctx) && canSee(task.list, ctx) && canSee(task, ctx))
-      .map((ctx) => ctx.userId)
-  );
-
-  collect(out, eligible, t, task.assignees.map((a) => a.id), roles);
+  collect(out, audience.userIds, t, audience.assigneeIds, roles);
   return out;
 }
 

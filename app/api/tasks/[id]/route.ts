@@ -2,7 +2,7 @@ import { NextResponse } from 'next/server';
 import { prisma, publicUserSelect } from '@/lib/prisma';
 import { cascadeTask } from '@/lib/trashCascade';
 import { getCurrentUserId } from '@/lib/auth/session';
-import { getWorkspaceRole, canManageWorkspace, keepWorkspaceMembers } from '@/lib/auth/access';
+import { getWorkspaceRole, canManageWorkspace, keepWorkspaceMembers, getTaskAudience } from '@/lib/auth/access';
 import { ensureTaskAccess } from '@/lib/auth/resourceAccess';
 import { syncTaskForAllRelevantUsers, deleteTaskGoogleSyncs } from '@/lib/google/calendarSync';
 import { notify } from '@/lib/notifications';
@@ -47,6 +47,14 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
     // Rewritten in place, so the activity log and the "assigned you" notification below see the same
     // list that is actually saved.
     body.assigneeIds = await keepWorkspaceMembers(access.space.workspaceId, body.assigneeIds, existing?.assignees.map((a) => a.id));
+    // And only people who can open the task: on a private one, assigning someone without access
+    // would hand them work they cannot see. People already on it are kept, as above, so an edit
+    // never quietly drops someone who lost access — that is for a person to decide.
+    const audience = await getTaskAudience(id);
+    if (audience) {
+      const alreadyOn = new Set(existing?.assignees.map((a) => a.id) ?? []);
+      body.assigneeIds = body.assigneeIds.filter((uid: string) => audience.userIds.has(uid) || alreadyOn.has(uid));
+    }
     data.assignees = { set: body.assigneeIds.map((id: string) => ({ id })) };
   }
 

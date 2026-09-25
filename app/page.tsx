@@ -140,7 +140,7 @@ import { useIsMobile } from '../hooks/useIsMobile';
 import AccessControlPanel from '../components/AccessControlPanel';
 import MentionText from '../components/MentionText';
 import MentionTextarea from '../components/MentionTextarea';
-import { pickableMembers, workspaceIdForList, workspaceIdForSpace } from '../lib/workspaceMembers';
+import { pickableMembers, taskAudience, taskPickableMembers, workspaceIdForList, workspaceIdForSpace } from '../lib/workspaceMembers';
 import AssigneePicker, { PersonPill } from '../components/AssigneePicker';
 import { suggestTaskAssignees } from '../lib/assigneeSuggestions';
 
@@ -8636,14 +8636,9 @@ function PageContent() {
                             </button>
                           }
                         >
-                          {/* Only the members of the task's own workspace — see lib/workspaceMembers.ts. */}
+                          {/* Only the members of the task's own workspace who can open it — see lib/workspaceMembers.ts. */}
                           <AssigneePicker
-                            people={pickableMembers(
-                              workspaces,
-                              users,
-                              workspaceIdForList(workspaces, activeModalTask.listId),
-                              (activeModalTask.assignees ?? []).map((a: any) => a.id)
-                            )}
+                            people={taskPickableMembers(workspaces, users, activeModalTask, (activeModalTask.assignees ?? []).map((a: any) => a.id))}
                             selectedIds={(activeModalTask.assignees ?? []).map((a: any) => a.id)}
                             suggestedIds={suggestTaskAssignees(tasks, activeModalTask.listId, activeModalTask.id)}
                             onToggle={(uid) => toggleAssignee(activeModalTask, uid)}
@@ -9005,6 +9000,9 @@ function PageContent() {
                     // Scoped to the task's own workspace: its people, tasks and docs. Unscoped, it offered
                     // people from every workspace you are in, none of whom could open this task.
                     workspaceId={workspaceIdForList(workspaces, activeModalTask.listId)}
+                    // On a private task, only people who can open it: naming anyone else notifies
+                    // no one (the server filters too), so offering them only looks like it worked.
+                    allowedUserIds={taskAudience(workspaces, activeModalTask)}
                     groupMentions={{
                       everyone: true,
                       assignee: true,

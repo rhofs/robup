@@ -47,6 +47,7 @@ export function buildMentionOptions({
   users,
   workspaces,
   groups,
+  allowedUserIds,
 }: {
   query: string;
   // '@' searches people, tasks and docs together; '#' narrows to tasks.
@@ -60,6 +61,9 @@ export function buildMentionOptions({
   // Omitted where group mentions do not belong at all, which is every '#' and every surface that
   // has not opted in.
   groups?: GroupMentionScope | null;
+  // When set, the only people offered — a private task passes who can open it. Null or omitted means
+  // no narrowing beyond the workspace.
+  allowedUserIds?: Set<string> | null;
 }): MentionOption[] {
   const q = query.toLowerCase();
   const results: MentionOption[] = [];
@@ -119,6 +123,7 @@ export function buildMentionOptions({
   if (sigil === '@') {
     for (const u of users) {
       if (memberIds && !memberIds.has(u.id)) continue;
+      if (allowedUserIds && !allowedUserIds.has(u.id)) continue;
       const score = q ? scoreMatch(u.name, q) : 1;
       if (score !== null) results.push({ kind: 'user', id: u.id, label: u.name, score });
     }

@@ -60,6 +60,8 @@ type MentionTextareaProps = Omit<React.TextareaHTMLAttributes<HTMLTextAreaElemen
   // The @everyone / @assignee / @role entries this box offers. Omitted, it offers none — see
   // GroupMentionScope for why the surface decides and not the text.
   groupMentions?: GroupMentionScope | null;
+  // Narrows the people offered further than the workspace — see buildMentionOptions.
+  allowedUserIds?: Set<string> | null;
 };
 
 // Drop-in <textarea> replacement: forwards every prop transparently, and on top of that watches
@@ -70,7 +72,7 @@ type MentionTextareaProps = Omit<React.TextareaHTMLAttributes<HTMLTextAreaElemen
 // so callers' existing behavior (comment-box Enter-to-submit, doc-editor activity logging on blur)
 // keeps working exactly as before when the user isn't mid-mention.
 function MentionTextareaInner(
-  { value, onChange, workspaceId, groupMentions, onKeyDown, onBlur, ...rest }: MentionTextareaProps,
+  { value, onChange, workspaceId, groupMentions, allowedUserIds, onKeyDown, onBlur, ...rest }: MentionTextareaProps,
   forwardedRef: React.ForwardedRef<HTMLTextAreaElement>
 ) {
   const { tasks, users, workspaces } = useTaskStore();
@@ -117,6 +119,7 @@ function MentionTextareaInner(
         users,
         workspaces,
         groups: groupMentions,
+        allowedUserIds,
       })
     : [];
 
