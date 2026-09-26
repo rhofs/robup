@@ -9964,3 +9964,31 @@ Shared Drive. `backups/offsite-state.json` shows `lastError: null`, and `/api/ve
 upload through the service account. **Still unverified:** a real restore of a *downloaded* archive
 with the production passphrase (only tested locally with a test passphrase), and whether the user
 has saved the passphrase in a password manager.
+
+### 2026-09-25 (continued) — the Wiki can be switched on and off per workspace, off by default
+
+Asked right after the Wiki shipped: "kan vi gjøre så workspaces har mulighet til å skru av/på wikien
+i settings? Kanskje default av, for ikke alle vil ha det?"
+
+- `Workspace.wikiEnabled` (Boolean, default **false**), migration
+  `20260925182043_add_workspace_wiki_enabled`. It uses the same table-rebuild shape as the wiki
+  migration (tested earlier with data). Applied to the e2e DB: the 13 wiki docs survived.
+- **Consequence of the default:** after this deploys, **every existing workspace has the wiki off,
+  including the one the user was just using.** An owner or admin must switch it on. The pages
+  that already exist are kept and come back.
+- It is switched in workspace settings, as a "Wiki: Off / On" row under Type and Work email (the same
+  two-button switch as Type, because the app has no toggle component). Only owners and admins can
+  change it; others see On or Off. `PATCH /api/workspaces/[id]` accepts `wikiEnabled` in its
+  manager-only block.
+- **Off means gone everywhere, but kept:** `getWikiAccess` returns null, so every wiki route 404s
+  or 403s. `ensureDocAccess`'s wiki branch refuses, so the generic doc routes are closed too. The
+  collab server rejects the connection. The rail entry, the mobile launcher tile, the Office card and
+  the Ctrl+K "Wiki" results are hidden, and search ignores wiki data loaded before it was switched
+  off. Opening `?view=wiki` directly says the workspace does not use the wiki and who can turn it on.
+- Tested through the API on the local server: off gives a 404 for the wiki GET and 403 for doc
+  comments and feedback. A member switching it on gets 403, the owner gets 200. On gives 200 for
+  both. `GET /api/workspaces` carries `wikiEnabled`. Switching it off again gives 404, with the pages
+  still in the DB. **Not seen in a browser.**
+- **Lesson (tooling):** `pkill -f "<pattern>"` inside a compound Bash command kills that command's
+  own shell too, because the pattern also matches the shell's command line (exit 144). Anything after
+  it in the same command never runs. Stop a server in a command of its own.

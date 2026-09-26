@@ -55,6 +55,10 @@ model Workspace {
   // doc editor, live collaboration and the backups. Chapters are the top-level pages (parentId null),
   // pages sit under a chapter via Doc.parentId, both ordered by Doc.order.
   wikiPages          Doc[]   @relation("WikiPages")
+  // Whether this workspace uses the Wiki at all. Off by default — "ikke alle vil ha det" — and
+  // switched on by an owner or admin in workspace settings. Off hides it everywhere and closes its
+  // API, but keeps any pages: turning it back on brings the wiki back as it was.
+  wikiEnabled        Boolean @default(false) @map("wiki_enabled")
   // Who may edit the wiki besides owners and admins (who always can): the same {type:'user'|'role',
   // id} list accessJson uses everywhere else, read with the same parser (lib/auth/visibility.ts).
   wikiEditorsJson    String  @default("[]") @map("wiki_editors_json")

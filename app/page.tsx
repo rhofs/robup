@@ -2758,7 +2758,7 @@ function PageContent() {
       }
       // Beside Docs in the launcher — the other place the company's written knowledge lives. It is
       // also on Office, which is the company's half of the mobile app (see OfficeContext).
-      if (!hiddenNavTabs.has('wiki') && hasRealWorkspace) {
+      if (!hiddenNavTabs.has('wiki') && hasRealWorkspace && currentWorkspace?.wikiEnabled) {
         tabs.push({
           id: 'wiki',
           label: 'Wiki',
@@ -2817,7 +2817,7 @@ function PageContent() {
     }
     // The workspace's Wiki, its own rail entry right under Docs: somewhere everyone in the company
     // knows to look, not a page buried inside a Space. The user's request.
-    if (!hiddenNavTabs.has('wiki') && hasRealWorkspace) {
+    if (!hiddenNavTabs.has('wiki') && hasRealWorkspace && currentWorkspace?.wikiEnabled) {
       tabs.push({
         id: 'wiki',
         label: 'Wiki',
@@ -5016,7 +5016,7 @@ function PageContent() {
 
   const officeContextEl = (
               <OfficeContext
-                onOpenWiki={() => setActiveView('wiki')}
+                onOpenWiki={currentWorkspace?.wikiEnabled ? () => setActiveView('wiki') : undefined}
                 tab={officeTab}
                 openSpaceIds={openContextSpaceIds}
                 openFolderIds={openContextFolderIds}
@@ -6915,7 +6915,7 @@ function PageContent() {
                 </div>
               </div>
             ) : activeView === 'wiki' ? (
-              currentWorkspace && !currentWorkspace.isPersonal ? (
+              currentWorkspace && !currentWorkspace.isPersonal && currentWorkspace.wikiEnabled ? (
                 <WikiView
                   workspace={currentWorkspace}
                   pageId={activeWikiPageId}
@@ -6925,7 +6925,13 @@ function PageContent() {
                   isMobile={isMobile}
                 />
               ) : (
-                <p className="p-6 text-sm text-neutral-500">Pick a workspace to open its wiki.</p>
+                // Reached only through an old link or a URL — the nav hides the entry when the wiki is
+                // off. Says what to do rather than showing an empty book.
+                <p className="p-6 text-sm text-neutral-500">
+                  {currentWorkspace && !currentWorkspace.isPersonal
+                    ? 'This workspace does not use the wiki. An owner or admin can turn it on in Workspace settings.'
+                    : 'Pick a workspace to open its wiki.'}
+                </p>
               )
             ) : activeView === 'mytasks' ? (
               <MyTasksPage

@@ -169,11 +169,12 @@ const server = new Server({
         const role = membership.role as AccessContext['role'];
         const isManager = role === 'owner' || role === 'admin';
         const [ws, heldRoles] = await Promise.all([
-          prisma.workspace.findUnique({ where: { id: workspaceId }, select: { wikiEditorsJson: true } }),
+          prisma.workspace.findUnique({ where: { id: workspaceId }, select: { wikiEditorsJson: true, wikiEnabled: true } }),
           prisma.role.findMany({ where: { workspaceId, members: { some: { id: userId } } }, select: { id: true } }),
         ]);
+        if (!ws?.wikiEnabled) throw new Error('Unauthorized: this workspace has its wiki turned off');
         const ctx: AccessContext = { userId, role, isManager, isMember: true, heldRoleIds: heldRoles.map((r) => r.id) };
-        if (!ws || !canEditWikiWith(ctx, ws.wikiEditorsJson)) connectionConfig.readOnly = true;
+        if (!canEditWikiWith(ctx, ws.wikiEditorsJson)) connectionConfig.readOnly = true;
       }
     }
 

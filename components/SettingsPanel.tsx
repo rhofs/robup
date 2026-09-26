@@ -798,6 +798,33 @@ export default function SettingsPanel({
                       </button>
                     )}
                   </div>
+                  {/* Optional features, off by default — not every workspace wants a wiki. Same
+                      two-button switch as Type above, so it reads as a choice, not a hidden toggle. */}
+                  <div className="flex items-center gap-2">
+                    <span className="text-[10px] text-neutral-500 w-16 shrink-0">Wiki</span>
+                    {canManage ? (
+                      <div className="flex items-center gap-1 bg-neutral-950 border border-neutral-800 rounded-lg p-0.5 flex-1">
+                        {([false, true] as const).map((on) => (
+                          <button
+                            key={String(on)}
+                            onClick={() => workspace.wikiEnabled !== on && updateWorkspaceDetails(workspace.id, { wikiEnabled: on })}
+                            className={`flex-1 text-[10px] py-1 rounded cursor-pointer transition ${
+                              !!workspace.wikiEnabled === on ? 'bg-neutral-800 text-app-strong' : 'text-neutral-500 hover:text-neutral-300'
+                            }`}
+                          >
+                            {on ? 'On' : 'Off'}
+                          </button>
+                        ))}
+                      </div>
+                    ) : (
+                      <span className="text-xs text-neutral-300">{workspace.wikiEnabled ? 'On' : 'Off'}</span>
+                    )}
+                  </div>
+                  {canManage && (
+                    <p className="text-[10px] text-neutral-600 pl-[4.5rem] -mt-1">
+                      A shared handbook for the workspace. Turning it off hides it and keeps its pages.
+                    </p>
+                  )}
                 </div>
               </>
             )}

@@ -252,6 +252,8 @@ export type HierarchyWorkspace = {
   // into the row.
   color: string | null;
   avatarUrl: string | null;
+  // Whether the Wiki is switched on for this workspace (off by default). Gates the nav entries.
+  wikiEnabled: boolean;
   spaces: HierarchySpace[];
   rooms: HierarchyRoom[];
   // Each member's own tier (owner/admin/member) is attached directly onto their entry rather
@@ -469,7 +471,14 @@ interface TaskStore {
   ) => Promise<{ ok: true } | { ok: false; error: string }>;
   updateWorkspaceDetails: (
     workspaceId: string,
-    patch: { name?: string; orgType?: 'company' | 'personal_project'; workEmail?: string | null; color?: string | null; avatarUrl?: string | null }
+    patch: {
+      name?: string;
+      orgType?: 'company' | 'personal_project';
+      workEmail?: string | null;
+      color?: string | null;
+      avatarUrl?: string | null;
+      wikiEnabled?: boolean;
+    }
   ) => Promise<void>;
   addWorkspaceMember: (workspaceId: string, userId: string) => Promise<void>;
   removeWorkspaceMember: (workspaceId: string, userId: string) => Promise<void>;

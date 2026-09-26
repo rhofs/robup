@@ -24,7 +24,8 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
     body.orgType !== undefined ||
     body.workEmail !== undefined ||
     body.color !== undefined ||
-    body.avatarUrl !== undefined
+    body.avatarUrl !== undefined ||
+    body.wikiEnabled !== undefined
   ) {
     if (!canManageWorkspace(role)) {
       return NextResponse.json({ error: 'Only the workspace owner/admins can change this' }, { status: 403 });
@@ -41,6 +42,8 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
     if (body.avatarUrl !== undefined) {
       data.avatarUrl = typeof body.avatarUrl === 'string' && body.avatarUrl.trim() ? body.avatarUrl.trim() : null;
     }
+    // Which optional features the workspace uses is the owner's or an admin's call, like its name.
+    if (body.wikiEnabled !== undefined) data.wikiEnabled = body.wikiEnabled === true;
   }
 
   const workspace = await prisma.workspace.update({ where: { id }, data });

@@ -78,8 +78,12 @@ export async function ensureDocAccess(docId: string, userId: string) {
   // A Wiki page belongs to no Space or Task — every member of its workspace can read it. Editing is
   // narrower and checked separately (lib/auth/wikiAccess.ts); this answers only "may they see it".
   if (doc.wikiWorkspaceId) {
-    const ctx = await getAccessContext(doc.wikiWorkspaceId, userId);
-    return ctx.isMember ? { doc, ctx } : null;
+    const [ctx, ws] = await Promise.all([
+      getAccessContext(doc.wikiWorkspaceId, userId),
+      prisma.workspace.findUnique({ where: { id: doc.wikiWorkspaceId }, select: { wikiEnabled: true } }),
+    ]);
+    // Switched off means switched off here too — not readable through the generic doc routes.
+    return ctx.isMember && ws?.wikiEnabled ? { doc, ctx } : null;
   }
 
   if (doc.taskId) {

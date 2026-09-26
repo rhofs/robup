@@ -14,7 +14,7 @@ export async function GET(_req: Request, { params }: { params: Promise<{ id: str
   const userId = await getCurrentUserId();
   if (!userId) return NextResponse.json({ error: 'Not authenticated' }, { status: 401 });
   const access = await getWikiAccess(workspaceId, userId);
-  if (!access) return NextResponse.json({ error: 'Not a member of this workspace' }, { status: 403 });
+  if (!access) return NextResponse.json({ error: 'No wiki here — it is turned off, or you are not a member' }, { status: 404 });
 
   await ensureWikiSeeded(workspaceId);
   const pages = await prisma.doc.findMany({

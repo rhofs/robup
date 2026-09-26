@@ -77,7 +77,10 @@ export default function CommandPalette({ open, onClose, onOpenTask, scopeKind, o
   const { tasks, users, workspaces, docs, activeWorkspaceId, setActiveView, setNavigation, setDocsNavigation, setActiveOfficeUserId } = useTaskStore();
   const { channelsByWorkspace, dms, setActiveChannelId, setActiveChatSidebarTab } = useChatStore();
   const currentUserId = useSessionStore((s) => s.currentUserId);
-  const wiki = useWikiStore((s) => (activeWorkspaceId ? s.byWorkspace[activeWorkspaceId] : undefined));
+  const wikiEnabled = !!workspaces.find((w) => w.id === activeWorkspaceId)?.wikiEnabled;
+  const wikiState = useWikiStore((s) => (activeWorkspaceId ? s.byWorkspace[activeWorkspaceId] : undefined));
+  // Loaded state from before the wiki was switched off must not keep showing up in search.
+  const wiki = wikiEnabled ? wikiState : undefined;
   const [query, setQuery] = useState('');
   const [selectedIndex, setSelectedIndex] = useState(0);
   const inputRef = useRef<HTMLInputElement>(null);
@@ -85,10 +88,10 @@ export default function CommandPalette({ open, onClose, onOpenTask, scopeKind, o
   // The wiki is otherwise loaded only when someone opens it; searching is a reason to load it too,
   // so its pages are findable from anywhere without a visit first.
   useEffect(() => {
-    if (open && activeWorkspaceId && !useWikiStore.getState().byWorkspace[activeWorkspaceId]) {
+    if (open && activeWorkspaceId && wikiEnabled && !useWikiStore.getState().byWorkspace[activeWorkspaceId]) {
       useWikiStore.getState().fetchWiki(activeWorkspaceId);
     }
-  }, [open, activeWorkspaceId]);
+  }, [open, activeWorkspaceId, wikiEnabled]);
 
   useEffect(() => {
     if (open) {

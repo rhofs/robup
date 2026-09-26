@@ -26,9 +26,14 @@ export function canEditWikiWith(ctx: AccessContext, editorsJson: string): boolea
 export async function getWikiAccess(workspaceId: string, userId: string) {
   const [ctx, ws] = await Promise.all([
     getAccessContext(workspaceId, userId),
-    prisma.workspace.findUnique({ where: { id: workspaceId }, select: { wikiEditorsJson: true, wikiFeedbackListId: true, isPersonal: true } }),
+    prisma.workspace.findUnique({
+      where: { id: workspaceId },
+      select: { wikiEditorsJson: true, wikiFeedbackListId: true, isPersonal: true, wikiEnabled: true },
+    }),
   ]);
-  if (!ws || !ctx.isMember) return null;
+  // A workspace that has the wiki switched off has no wiki as far as anyone can tell — every wiki
+  // route answers as if it did not exist. The pages are kept, and come back when it is switched on.
+  if (!ws || !ctx.isMember || !ws.wikiEnabled) return null;
   return { ctx, ws, canEdit: canEditWikiWith(ctx, ws.wikiEditorsJson) };
 }
 
