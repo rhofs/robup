@@ -9992,3 +9992,8 @@ i settings? Kanskje default av, for ikke alle vil ha det?"
 - **Lesson (tooling):** `pkill -f "<pattern>"` inside a compound Bash command kills that command's
   own shell too, because the pattern also matches the shell's command line (exit 144). Anything after
   it in the same command never runs. Stop a server in a command of its own.
+
+**Deployed 2026-09-26 as `0296a37`** (the wiki on/off switch). The reinstall script ran clean:
+install, start, commit live. Every workspace now has the wiki **off** until an owner or admin
+switches it on. `/api/version` also showed the second daily off-site backup at 2026-09-26 11:00 UTC
+(`offsiteFailing: false`), so the daily upload is repeating on schedule.
