@@ -10014,3 +10014,5 @@ owners and admins can flip it. The row was removed from the work profile.
 way to do the same thing. Both are removed, along with the `UserCircle`/`Building2` imports that only
 they used. **Not seen in a browser.** Typechecked. Lint shows no new issues (the unused `Settings`
 import and `NAV_TABS` were already there).
+
+**Deployed 2026-09-26 as `6a981cf`** (the wiki switch on the Workspace tab, cross-links removed). The reinstall ran clean.
