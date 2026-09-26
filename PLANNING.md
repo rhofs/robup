@@ -9997,3 +9997,20 @@ i settings? Kanskje default av, for ikke alle vil ha det?"
 install, start, commit live. Every workspace now has the wiki **off** until an owner or admin
 switches it on. `/api/version` also showed the second daily off-site backup at 2026-09-26 11:00 UTC
 (`offsiteFailing: false`), so the daily upload is repeating on schedule.
+
+### 2026-09-26 — the wiki switch was in the wrong place, and the Settings cross-links are gone
+
+**Reported:** "Jeg ser ikke hvor den wiki-knappen er." Cause: yesterday's On/Off row was put in
+the *Edit work profile* sub-screen (with Type and Work email), one level deeper than anyone looks
+for a feature switch. The switch now sits on the **Workspace tab's own list**, in a "Features" group
+under Roles/Invite/Import, as a real on/off switch. It is the first `role="switch"` control in the
+app (a local `Switch` at the bottom of SettingsPanel.tsx). The two-button segment reads as choosing
+between two things; a feature being on or off is one thing with a state. Members see it disabled;
+owners and admins can flip it. The row was removed from the work profile.
+
+**Also asked:** remove the "Workspace settings — roles, invites, import" button at the bottom of
+*You* and the "Your settings — profile, appearance, notifications" button at the bottom of
+*Workspace*. The You/Workspace pill at the top of the panel is always visible, so they were a second
+way to do the same thing. Both are removed, along with the `UserCircle`/`Building2` imports that only
+they used. **Not seen in a browser.** Typechecked. Lint shows no new issues (the unused `Settings`
+import and `NAV_TABS` were already there).

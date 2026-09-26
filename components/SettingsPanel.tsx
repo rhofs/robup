@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState } from 'react';
 import Papa from 'papaparse';
-import { X, Settings, Check, Trash2, Plus, Link2, Upload, Share2, Download, Monitor, Sun, Moon, Smartphone, ArrowLeft, ChevronRight, Pencil, Shield, UserPlus, UserCircle, Building2, Users } from 'lucide-react';
+import { X, Settings, Check, Trash2, Plus, Link2, Upload, Share2, Download, Monitor, Sun, Moon, Smartphone, ArrowLeft, ChevronRight, Pencil, Shield, UserPlus, Users, BookOpen } from 'lucide-react';
 import { readThemePreference, setThemePreference, type ThemePreference } from '../lib/theme';
 import {
   readHapticStrength,
@@ -798,33 +798,6 @@ export default function SettingsPanel({
                       </button>
                     )}
                   </div>
-                  {/* Optional features, off by default — not every workspace wants a wiki. Same
-                      two-button switch as Type above, so it reads as a choice, not a hidden toggle. */}
-                  <div className="flex items-center gap-2">
-                    <span className="text-[10px] text-neutral-500 w-16 shrink-0">Wiki</span>
-                    {canManage ? (
-                      <div className="flex items-center gap-1 bg-neutral-950 border border-neutral-800 rounded-lg p-0.5 flex-1">
-                        {([false, true] as const).map((on) => (
-                          <button
-                            key={String(on)}
-                            onClick={() => workspace.wikiEnabled !== on && updateWorkspaceDetails(workspace.id, { wikiEnabled: on })}
-                            className={`flex-1 text-[10px] py-1 rounded cursor-pointer transition ${
-                              !!workspace.wikiEnabled === on ? 'bg-neutral-800 text-app-strong' : 'text-neutral-500 hover:text-neutral-300'
-                            }`}
-                          >
-                            {on ? 'On' : 'Off'}
-                          </button>
-                        ))}
-                      </div>
-                    ) : (
-                      <span className="text-xs text-neutral-300">{workspace.wikiEnabled ? 'On' : 'Off'}</span>
-                    )}
-                  </div>
-                  {canManage && (
-                    <p className="text-[10px] text-neutral-600 pl-[4.5rem] -mt-1">
-                      A shared handbook for the workspace. Turning it off hides it and keeps its pages.
-                    </p>
-                  )}
                 </div>
               </>
             )}
@@ -1361,19 +1334,6 @@ export default function SettingsPanel({
             ) : (
               <p className="text-xs text-neutral-500 px-1 py-1">Signed-out session — try reloading the page.</p>
             )}
-            <button
-              onClick={() => {
-                setSection('workspace');
-                setSub(null);
-              }}
-              className="w-full mt-2 flex items-center gap-2.5 px-3 py-3 rounded-xl border border-neutral-800 bg-neutral-950/40 hover:bg-neutral-800/50 active:bg-neutral-800 cursor-pointer text-left transition"
-            >
-              <Building2 className="w-4 h-4 text-neutral-500 shrink-0" />
-              <span className="min-w-0 flex-1">
-                <span className="block text-xs text-neutral-300">Workspace settings — roles, invites, import</span>
-              </span>
-              <ChevronRight className="w-4 h-4 text-neutral-600 shrink-0" />
-            </button>
           </div>
         ) : (
           <div className="px-4 pb-4 space-y-1 h-[26rem] overflow-y-auto">
@@ -1474,28 +1434,64 @@ export default function SettingsPanel({
                 Only workspace admins can change roles, invite people or import.
               </p>
             )}
+            {/* Optional parts of the app a workspace can switch on. On the Workspace list itself,
+                one tap from opening Settings: it was first put inside "Edit work profile", where
+                the user looked for it and did not find it. Off by default — "ikke alle vil ha det". */}
+            {!workspace.isPersonal && (
+              <div className="pt-2">
+                <div className="text-[10px] uppercase tracking-wide text-neutral-500 px-3 pb-1">Features</div>
+                <div className="flex items-center gap-2.5 px-3 py-3 rounded-xl">
+                  <BookOpen className="w-4 h-4 text-neutral-500 shrink-0" />
+                  <span className="min-w-0 flex-1">
+                    <span className="block text-xs text-neutral-200">Wiki</span>
+                    <span className="block text-[11px] text-neutral-500">
+                      A shared handbook for the workspace. Turning it off hides it and keeps its pages.
+                    </span>
+                  </span>
+                  <Switch
+                    checked={!!workspace.wikiEnabled}
+                    disabled={!canManage}
+                    label="Wiki"
+                    onChange={(on) => updateWorkspaceDetails(workspace.id, { wikiEnabled: on })}
+                  />
+                </div>
+              </div>
+            )}
             {workspace.isPersonal && (
               <p className="px-1 py-2 text-[11px] text-neutral-500">
                 This is your personal workspace — it has no members, so there is nothing to manage
                 here. Switch to a team workspace to see its settings.
               </p>
             )}
-            <button
-              onClick={() => {
-                setSection('you');
-                setSub(null);
-              }}
-              className="w-full mt-2 flex items-center gap-2.5 px-3 py-3 rounded-xl border border-neutral-800 bg-neutral-950/40 hover:bg-neutral-800/50 active:bg-neutral-800 cursor-pointer text-left transition"
-            >
-              <UserCircle className="w-4 h-4 text-neutral-500 shrink-0" />
-              <span className="min-w-0 flex-1">
-                <span className="block text-xs text-neutral-300">Your settings — profile, appearance, notifications</span>
-              </span>
-              <ChevronRight className="w-4 h-4 text-neutral-600 shrink-0" />
-            </button>
           </div>
         )}
       </div>
     </div>
+  );
+}
+
+// An on/off switch. The first one in the app — until now every choice here was a two-button
+// segment (Type: Company / Personal project), which reads as picking between two things. A feature
+// being on or off is one thing with a state, and that is what a switch says.
+function Switch({ checked, onChange, disabled, label }: { checked: boolean; onChange: (on: boolean) => void; disabled?: boolean; label: string }) {
+  return (
+    <button
+      type="button"
+      role="switch"
+      aria-checked={checked}
+      aria-label={label}
+      disabled={disabled}
+      title={disabled ? 'Only workspace owners and admins can change this' : undefined}
+      onClick={() => onChange(!checked)}
+      className={`relative shrink-0 w-10 h-6 rounded-full transition-colors duration-200 ${
+        checked ? 'bg-blue-600' : 'bg-neutral-700'
+      } ${disabled ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'}`}
+    >
+      <span
+        className={`absolute top-0.5 left-0.5 w-5 h-5 rounded-full bg-white shadow transition-transform duration-200 ${
+          checked ? 'translate-x-4' : 'translate-x-0'
+        }`}
+      />
+    </button>
   );
 }
