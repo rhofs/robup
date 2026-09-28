@@ -10041,3 +10041,5 @@ import and `NAV_TABS` were already there).
 chapter is needed. It is a quick link at the bottom of the wiki's contents column. It opens a form,
 and the result becomes a task in the list chosen under *Wiki settings → Bug reports and feature
 requests*. Until a list is chosen, the form says so (and offers owners and admins the settings).
+
+**Deployed 2026-09-28 as `929a28a`** (link styling and click-to-open). The reinstall ran clean.
