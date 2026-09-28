@@ -10016,3 +10016,28 @@ they used. **Not seen in a browser.** Typechecked. Lint shows no new issues (the
 import and `NAV_TABS` were already there).
 
 **Deployed 2026-09-26 as `6a981cf`** (the wiki switch on the Workspace tab, cross-links removed). The reinstall ran clean.
+
+### 2026-09-28 — links in docs and the wiki: invisible and dead
+
+**Reported:** "Jeg ser at linker, ikke linker." Two causes, both in every doc, not only the wiki:
+- **No styling.** There was no CSS rule for `a` inside the editor, and Tailwind's preflight resets
+  links to inherit colour and drop the underline. A link looked exactly like the text around it.
+  It now has a `.collab-doc-editor .ProseMirror a` rule: blue-400, a soft underline that gets
+  stronger on hover, pointer cursor.
+- **Not clickable.** `Link.configure({ openOnClick: false })` in `CollabDocEditor` (and the schema).
+  Tiptap's option is fixed when the editor is built, and the wiki switches between reading and
+  editing *without* rebuilding it. So there is now a click handler on the editor wrapper
+  (`openLinkOnClick`): it opens in a new tab **always while reading** (the wiki, and read-only
+  connections), and **with Ctrl/⌘ held while editing**, so a plain click still puts the caret in the
+  link text. Only `http(s):`, `mailto:` and `tel:` are followed. It uses `window.open(…, '_blank',
+  'noopener,noreferrer')`, the same way the rest of the app opens external links.
+- **Consequence not solved:** in an *editable* doc on a phone there is no Ctrl/⌘, so a link can still
+  only be opened through the bubble menu's link field (or by reading the page in the wiki). Not
+  raised by the user.
+- **Not verified in a browser or in the Android app.** Whether `window.open` from the Capacitor
+  WebView opens the system browser is untested here; other links in the app use the same call.
+
+**Also asked:** "Hvordan funker Request feature? Må jeg ha en egen wiki chapter for det?" No
+chapter is needed. It is a quick link at the bottom of the wiki's contents column. It opens a form,
+and the result becomes a task in the list chosen under *Wiki settings → Bug reports and feature
+requests*. Until a list is chosen, the form says so (and offers owners and admins the settings).

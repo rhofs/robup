@@ -191,6 +191,23 @@ export default function CollabDocEditor({
     [docId, provider, spaceId]
   );
 
+  // Links open in a new tab: always while reading (the Wiki, or a page you cannot edit), and with
+  // Ctrl/⌘ held while editing — a plain click there has to stay free for putting the caret inside the
+  // link's text to change it. Tiptap's own openOnClick is configured once when the editor is built,
+  // and this editor switches between reading and editing without being rebuilt, so the rule lives
+  // here instead. Only web, mail and phone links: anything else in an href is not followed.
+  const openLinkOnClick = (e: React.MouseEvent) => {
+    const a = (e.target as HTMLElement).closest('a[href]') as HTMLAnchorElement | null;
+    if (!a) return;
+    const reading = readOnly || !editor?.isEditable;
+    if (!reading && !(e.metaKey || e.ctrlKey)) return;
+    const href = a.getAttribute('href') ?? '';
+    if (!/^(https?:|mailto:|tel:)/i.test(href)) return;
+    e.preventDefault();
+    e.stopPropagation();
+    window.open(href, '_blank', 'noopener,noreferrer');
+  };
+
   // useEditor only reads `editable` when it builds the editor; switching the wiki between reading and
   // editing must not rebuild it (that would reconnect and flash), so the flag is applied here.
   useEffect(() => {
@@ -380,7 +397,7 @@ export default function CollabDocEditor({
             )}
           </BubbleMenu>
         )}
-        <div className="collab-doc-editor mt-1.5">
+        <div className="collab-doc-editor mt-1.5" onClick={openLinkOnClick}>
           <EditorContent editor={editor} />
         </div>
       </div>
