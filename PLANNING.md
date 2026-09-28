@@ -10151,3 +10151,5 @@ wiki was capped at two levels (chapter, page), and the user's ClickUp wiki is th
 - Tested through the API: 3 levels created; moving a page under itself and under its own grandchild
   both give 400; level 7 gives 400; deleting the top of a 5-deep subtree removes all of it.
   **Not seen in a browser.**
+
+**Deployed 2026-09-28 as `d295217`** (Space archiving with its migration, files in docs, wiki subpages). The reinstall ran clean. **Still to verify in production:** that a downloaded doc file keeps its name (`?name=` goes through the uploads route).
