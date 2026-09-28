@@ -10199,3 +10199,5 @@ notification. Tested against the e2e DB: seeded targets render correctly, a memb
 `[]`, logged out gets 401, and no token or endpoint appears in the response. **Not tested:** the
 recording itself, since there are no FCM or VAPID keys locally; it is typechecked only. "Accepted by
 the push service" is not "shown on the phone". It separates "never sent" from "sent and lost".
+
+**Deployed 2026-09-28 as `60f0a85`** (chat catch-up on reconnect, visibility and every 30 s; the push delivery record with its migration). The reinstall ran clean.
