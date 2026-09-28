@@ -10153,3 +10153,49 @@ wiki was capped at two levels (chapter, page), and the user's ClickUp wiki is th
   **Not seen in a browser.**
 
 **Deployed 2026-09-28 as `d295217`** (Space archiving with its migration, files in docs, wiki subpages). The reinstall ran clean. **Still to verify in production:** that a downloaded doc file keeps its name (`?name=` goes through the uploads route).
+
+### 2026-09-28 (continued) — a DM that never appeared in the open app: missed realtime signals were never caught up
+
+**Reported:** Robin and Broonstar "slet med varsler". A message from Broonstar at 16:34 never showed
+up on Robin's phone (the Android app), "selv om jeg er inne i appen". This was before the 16:56
+reinstall.
+
+**Checked in the data** (snapshot downloaded read-only; only timestamps, authors and lengths were
+read, no message text; the copy was shredded after): the message **was stored on the server at
+14:34:34 UTC**. Receiving and saving it worked; delivery did not. The Pterodactyl console only goes
+back to the restart, so there is no log of what the push or the broadcast did at 16:34. The console
+was read over Pterodactyl's websocket with next's bundled `ws`, which gives an `origin` header;
+Node 20 has no global WebSocket.
+
+**Cause found in the code (a real gap, whether or not it is all of this incident):** with realtime
+on (production), `useChatChannelConnection` re-fetched a conversation **only** when a
+`new-message` signal arrived over the socket. The file's own header said a signal missed during a
+disconnect "is only ever caught up to via the next real fetch", and nothing ever triggered that
+fetch. On a phone, a dropped socket is the normal case (background, screen lock, network change),
+so a message arriving meanwhile stayed invisible until the conversation was left and reopened.
+**Fix:** while realtime is on, the conversation also re-fetches when the socket reconnects after
+being down (provider `status`), when the page or app becomes visible or focused again, and every 30
+seconds while visible (a backstop for a socket that looks connected but has stopped delivering). It
+is the same fetch a signal triggers. Both callers pass `useCallback`-stable handlers (checked), so
+the interval is not reset on every render. **Not verified on a device.**
+
+**Push side, not resolved:** Robin has 2 web-push subscriptions and Android device tokens (registered
+09-13 and 09-23). Broonstar has **1 web-push subscription and no app token**. If Broonstar is on an
+iPhone, web push only works from the home-screen-installed PWA (iOS 16.4+). Whether the FCM push to
+Robin at 16:34 failed cannot be seen afterwards: send failures only go to the console, which a
+restart wipes. **Worth doing:** keep the last push error per device somewhere durable (or in
+`/api/version`), so the next "varsler kom ikke" can be answered after the fact.
+
+**Built the same day (the user said yes): a durable push delivery record.** `DeviceToken` and
+`PushSubscription` got `lastSentAt`, `lastError` and `lastErrorAt` (migration
+`20260928151535_add_push_delivery_record`, plain `ADD COLUMN`s, no table rebuild). `lib/fcm.ts`
+and `lib/push.ts` write `lastSentAt` when the push service *accepts* a message (FCM or Web Push),
+and the error code and message on a refusal. Dead tokens are still deleted as before. New
+`GET /api/push/status` returns the caller's own targets (the app by platform, browsers named by
+their push service host: Chrome/Edge, Firefox, Safari) with those three fields, **never the token or
+endpoint**. Settings → Notifications shows a "Where notifications go" list under the test button,
+with "last delivered … ago" and a red line when the latest attempt failed. It re-reads after a test
+notification. Tested against the e2e DB: seeded targets render correctly, a member with none gets
+`[]`, logged out gets 401, and no token or endpoint appears in the response. **Not tested:** the
+recording itself, since there are no FCM or VAPID keys locally; it is typechecked only. "Accepted by
+the push service" is not "shown on the phone". It separates "never sent" from "sent and lost".

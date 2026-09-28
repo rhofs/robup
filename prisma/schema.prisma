@@ -601,6 +601,12 @@ model PushSubscription {
   endpoint  String   @unique
   p256dh    String
   auth      String
+  // Delivery record, so "the notification never came" can be answered after the fact — the console
+  // where send failures used to be written is wiped by every restart. lastSentAt is when the push
+  // service last ACCEPTED one (not that the phone showed it); lastError is the last refusal.
+  lastSentAt  DateTime? @map("last_sent_at")
+  lastError   String?   @map("last_error")
+  lastErrorAt DateTime? @map("last_error_at")
   createdAt DateTime @default(now()) @map("created_at")
 }
 
@@ -624,6 +630,12 @@ model DeviceToken {
   // 'android' today; the column exists so an iOS build does not need a migration, and so a
   // platform-specific delivery bug can be isolated without guessing from the token format.
   platform  String
+  // Delivery record, so "the notification never came" can be answered after the fact — the console
+  // where send failures used to be written is wiped by every restart. lastSentAt is when the push
+  // service last ACCEPTED one (not that the phone showed it); lastError is the last refusal.
+  lastSentAt  DateTime? @map("last_sent_at")
+  lastError   String?   @map("last_error")
+  lastErrorAt DateTime? @map("last_error_at")
   createdAt DateTime @default(now()) @map("created_at")
   @@index([userId])
 }

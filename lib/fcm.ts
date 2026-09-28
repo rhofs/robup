@@ -81,6 +81,10 @@ export async function sendFcmToUser(userId: string, payload: PushPayload): Promi
             },
           },
         });
+        // Accepted by Google — not proof the phone showed it, but the line between "we never sent it"
+        // and "it was sent and got lost". Kept in the database because the console that used to be the
+        // only record is wiped by every restart.
+        await prisma.deviceToken.update({ where: { id: device.id }, data: { lastSentAt: new Date() } }).catch(() => {});
       } catch (err: unknown) {
         const code = (err as { errorInfo?: { code?: string } })?.errorInfo?.code;
         // Google's word that this token is dead — the app was uninstalled, its data cleared, or
@@ -94,6 +98,8 @@ export async function sendFcmToUser(userId: string, payload: PushPayload): Promi
           await prisma.deviceToken.delete({ where: { id: device.id } }).catch(() => {});
         } else {
           console.error('FCM send failed:', code, err);
+          const why = `${code ?? 'error'}: ${String((err as Error)?.message ?? err).slice(0, 300)}`;
+          await prisma.deviceToken.update({ where: { id: device.id }, data: { lastError: why, lastErrorAt: new Date() } }).catch(() => {});
         }
       }
     })

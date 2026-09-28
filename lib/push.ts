@@ -65,11 +65,15 @@ async function sendWebPushToUser(userId: string, payload: PushPayload): Promise<
           { endpoint: sub.endpoint, keys: { p256dh: sub.p256dh, auth: sub.auth } },
           JSON.stringify(payload)
         );
+        // Recorded, not awaited into anything: see the delivery-record comment on the model.
+        await prisma.pushSubscription.update({ where: { id: sub.id }, data: { lastSentAt: new Date() } }).catch(() => {});
       } catch (err: any) {
         if (err?.statusCode === 404 || err?.statusCode === 410) {
           await prisma.pushSubscription.delete({ where: { id: sub.id } }).catch(() => {});
         } else {
           console.error('Push send failed:', err?.statusCode, err?.body || err);
+          const why = `${err?.statusCode ?? 'error'}: ${String(err?.body || err?.message || err).slice(0, 300)}`;
+          await prisma.pushSubscription.update({ where: { id: sub.id }, data: { lastError: why, lastErrorAt: new Date() } }).catch(() => {});
         }
       }
     })

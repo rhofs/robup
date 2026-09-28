@@ -82,6 +82,43 @@ export function useChatChannelConnection(
 
   // Switching channels invalidates any "X is typing" state left over from the previous one —
   // otherwise it'd sit there (up to TYPING_EXPIRY_MS) attributed to the wrong conversation.
+  // Catching up on what the socket missed. A signal sent while the connection was down is gone — the
+  // comment at the top always said so, and nothing ever did the catching up. On a phone that is the
+  // normal case, not an edge: the app goes to the background or the screen locks, the WebView drops
+  // the socket, and a message that arrives meanwhile never showed until the conversation was left
+  // and reopened. Reported 2026-09-28: a DM sent 16:34 was stored on the server but never appeared,
+  // "selv om jeg er inne i appen".
+  //
+  // So, with realtime on, the conversation also re-fetches: when the socket comes back after being
+  // down, when the app becomes visible again, and every 30 seconds while it is visible — a backstop
+  // for a socket that looks connected but has silently stopped delivering. The fetch is the same
+  // one a signal triggers, so doing it once too often costs one request and shows nothing new.
+  useEffect(() => {
+    if (!channelId || !isCollabRealtimeEnabled() || !provider) return;
+    let wasDown = false;
+    const onStatus = ({ status }: { status: string }) => {
+      if (status === 'connected') {
+        if (wasDown) onMessageSignal();
+        wasDown = false;
+      } else if (status === 'disconnected') {
+        wasDown = true;
+      }
+    };
+    const onVisible = () => {
+      if (!document.hidden) onMessageSignal();
+    };
+    provider.on('status', onStatus);
+    document.addEventListener('visibilitychange', onVisible);
+    window.addEventListener('focus', onVisible);
+    const interval = window.setInterval(onVisible, 30000);
+    return () => {
+      provider.off('status', onStatus);
+      document.removeEventListener('visibilitychange', onVisible);
+      window.removeEventListener('focus', onVisible);
+      window.clearInterval(interval);
+    };
+  }, [channelId, provider, onMessageSignal]);
+
   useEffect(() => {
     setTypingUsers([]);
     typingTimersRef.current.forEach((t) => window.clearTimeout(t));

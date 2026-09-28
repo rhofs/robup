@@ -394,6 +394,8 @@ export default function SettingsPanel({
   // separate subscriptions) — see lib/pushClient.ts.
   const [pushStatus, setPushStatus] = useState<'unsupported' | 'subscribed' | 'not-subscribed' | 'loading'>('loading');
   const [pushTest, setPushTest] = useState<string | null>(null);
+  // Bumped after a test notification, so the delivery list below re-reads what just happened.
+  const [pushStatusKey, setPushStatusKey] = useState(0);
   const [pushError, setPushError] = useState<string | null>(null);
   useEffect(() => {
     getPushStatus().then(setPushStatus);
@@ -1293,6 +1295,7 @@ export default function SettingsPanel({
                       if (data?.devices) parts.push(`${data.devices} phone${data.devices === 1 ? '' : 's'}`);
                       if (data?.browsers) parts.push(`${data.browsers} browser${data.browsers === 1 ? '' : 's'}`);
                       setPushTest(`Sent to ${parts.join(' and ')}. Background the app to see it.`);
+                      setPushStatusKey((k) => k + 1);
                     } catch {
                       setPushTest('Could not reach the server');
                     }
@@ -1304,6 +1307,7 @@ export default function SettingsPanel({
               )}
               {pushTest && <p className="text-[11px] text-neutral-400 mt-1">{pushTest}</p>}
               {pushError && <p className="text-[11px] text-red-400 mt-1">{pushError}</p>}
+              <PushDeliveryStatus refreshKey={pushStatusKey} />
             </div>
             <div className="text-[10px] uppercase tracking-wide text-neutral-500 px-1 pt-3 pb-1">Account</div>
             {user ? (
@@ -1493,5 +1497,62 @@ function Switch({ checked, onChange, disabled, label }: { checked: boolean; onCh
         }`}
       />
     </button>
+  );
+}
+
+type PushTarget = {
+  kind: 'app' | 'browser';
+  label: string;
+  registeredAt: string;
+  lastSentAt: string | null;
+  lastError: string | null;
+  lastErrorAt: string | null;
+};
+
+function ago(iso: string | null): string {
+  if (!iso) return 'never';
+  const min = Math.round((Date.now() - new Date(iso).getTime()) / 60000);
+  if (min < 1) return 'just now';
+  if (min < 60) return `${min} min ago`;
+  const h = Math.round(min / 60);
+  if (h < 24) return `${h} h ago`;
+  return new Date(iso).toLocaleDateString(undefined, { day: 'numeric', month: 'short' });
+}
+
+// Where this account's notifications go, and how the last one to each went. The answer to "the
+// notification never came" that used to exist only in a server console a restart wipes: "sent
+// 2 min ago" means the push service took it and the phone is the place to look; "never" means this
+// device is not receiving at all; a red line is the refusal, word for word.
+function PushDeliveryStatus({ refreshKey }: { refreshKey: number }) {
+  const [targets, setTargets] = useState<PushTarget[] | null>(null);
+  useEffect(() => {
+    let cancelled = false;
+    fetch('/api/push/status')
+      .then((r) => (r.ok ? r.json() : null))
+      .then((d) => !cancelled && d && setTargets(d.targets))
+      .catch(() => {});
+    return () => {
+      cancelled = true;
+    };
+  }, [refreshKey]);
+  if (!targets || targets.length === 0) return null;
+  return (
+    <div className="mt-2 space-y-1">
+      <p className="text-[10px] uppercase tracking-wide text-neutral-500">Where notifications go</p>
+      {targets.map((t, i) => {
+        const failing = !!t.lastErrorAt && (!t.lastSentAt || new Date(t.lastErrorAt) > new Date(t.lastSentAt));
+        return (
+          <div key={i} className="text-[11px] leading-snug">
+            <span className="text-neutral-300">{t.label}</span>
+            <span className="text-neutral-500"> · last delivered {ago(t.lastSentAt)}</span>
+            {failing && (
+              <span className="block text-red-400 break-words">
+                Last attempt failed {ago(t.lastErrorAt)}: {t.lastError}
+              </span>
+            )}
+          </div>
+        );
+      })}
+    </div>
   );
 }
