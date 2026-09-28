@@ -10201,3 +10201,57 @@ recording itself, since there are no FCM or VAPID keys locally; it is typechecke
 the push service" is not "shown on the phone". It separates "never sent" from "sent and lost".
 
 **Deployed 2026-09-28 as `60f0a85`** (chat catch-up on reconnect, visibility and every 30 s; the push delivery record with its migration). The reinstall ran clean.
+
+### 2026-09-28 (continued) — "delivered" to the phone, nothing shows: the phone's push token was never refreshed
+
+**Reported after the delivery record went live:** the test notification says delivered to one phone,
+the PC gets it, the phone shows nothing, "Har fått det før da".
+
+**First explanation given, true but not the whole story:** Android does not show a push while the app
+is in the foreground. `@capacitor/push-notifications` only posts it to the tray from the foreground
+when `presentationOptions` includes `'alert'` (checked in the plugin's Java source), and ours has no
+`presentationOptions` and no `pushNotificationReceived` listener. A test sent from inside the app
+therefore shows nothing. Proposed, **not built yet** (waiting for the user): (1) an in-app banner for
+a push that arrives while the app is open, unless you are in that conversation; (2) tapping a
+notification opens the right conversation (there is no `pushNotificationActionPerformed` handling
+today, and chat pushes carry `url: '/'`). Showing system notifications in the foreground was advised
+against: it needs a new APK and is noise for the conversation you are in.
+
+**The likely real cause:** `lib/nativePush.ts` sent the FCM token to the server **only when "Enable push
+notifications" was tapped**, never again. Meanwhile Settings showed "on" whenever the Android
+*permission* was granted (`isNativePushRegistered` checks only the permission). A reinstall (several new
+APKs were installed since the token was registered), a data clear or an FCM rotation gives the install
+a new token, and the server kept sending to the old one. Google can keep accepting a stale token for a
+while, so the delivery record honestly said "delivered".
+**Fix:** `syncNativePushToken()` is called from `app/page.tsx` once a user is known. On a native
+platform with the permission already granted it calls `register()` and POSTs the current token
+(the server upserts), and it keeps listening for token refreshes. It never prompts. Turning
+notifications off in the app now sets `localStorage['siqt.nativePushOff']`, so the sync does not undo
+it at the next launch, and enabling clears it. It is web-only, **no new APK needed**, because the plugin
+is already in the app. **Immediate workaround given to the user:** Disable, then Enable push
+notifications in the app, which re-registers the current token. **Not verified on a device.** Old dead
+tokens stay until Google rejects them (then `lib/fcm.ts` deletes them), so the delivery list can show
+two Android entries for a while.
+
+**In-app banner, built (the user said yes: "Så vi får varsel mens vi er inne"):**
+- **Pushes now say where they lead** (`lib/pushTargets.ts`): chat pushes and chat-mention
+  notifications carry `/?view=chat&chat=<channelId>`, and `notify()` defaults to `/?modal=<taskId>` for
+  anything with a task (comment mentions, assignments). Chat pushes used to carry `/`. These are the
+  app's own nav URLs (lib/navUrl.ts), so opening one needs no special handling.
+- **`components/InAppBanner.tsx`**, mounted in `app/page.tsx`: a banner that springs in at the top
+  (safe-area aware), icon, title, two lines of body, auto-dismissed after 6 s, swipe up or × to
+  dismiss, and a light haptic. Tapping it opens the URL. It is **not shown when that conversation is
+  already open and visible** (view `chat` plus the same `activeChannelId`).
+  - Native: `pushNotificationReceived` (the app on screen, where Android shows no tray notification)
+    feeds the banner. `pushNotificationActionPerformed` (a tap on a tray notification) opens its URL.
+    The plugin retains a launch tap until a listener exists, so a cold start from a notification should
+    still land in the right place. **Unverified on a device.**
+  - Browser: `public/sw.js` now hands a push to a **focused, visible** Siqt tab via `postMessage`
+    (`siqt-push`) instead of showing an OS notification. Browsers only allow skipping the notification
+    while a page of the site is focused, which is this case; otherwise the OS notification shows as
+    before. A click on an OS notification now also tells the tab where to go (`siqt-open`); it used
+    to only focus the tab.
+  - Opening uses `history.pushState` only. A synthetic `popstate` was tried and removed before commit,
+    because Next's router can treat a `popstate` without its own history state as an outside
+    navigation and reload.
+- **Not verified in a browser or on a phone.** Typechecked and linted clean.

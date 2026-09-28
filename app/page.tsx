@@ -143,6 +143,7 @@ import MentionText from '../components/MentionText';
 import MentionTextarea from '../components/MentionTextarea';
 import WikiView from '../components/wiki/WikiView';
 import ArchivedSpacesToggle, { archivedLast } from '../components/ArchivedSpacesToggle';
+import InAppBanner from '../components/InAppBanner';
 import { pickableMembers, taskAudience, taskPickableMembers, workspaceIdForList, workspaceIdForSpace } from '../lib/workspaceMembers';
 import AssigneePicker, { PersonPill } from '../components/AssigneePicker';
 import { suggestTaskAssignees } from '../lib/assigneeSuggestions';
@@ -816,6 +817,12 @@ function PageContent() {
   } = useTaskStore();
 
   const { currentUserId } = useSessionStore();
+  // Keep this phone's push token current with the server at every launch (lib/nativePush.ts's
+  // syncNativePushToken has why). A no-op in a browser; never prompts for permission.
+  useEffect(() => {
+    if (!currentUserId) return;
+    void import('../lib/nativePush').then((m) => m.syncNativePushToken());
+  }, [currentUserId]);
   usePresenceConnection(activeWorkspaceId ?? null);
   const isMobile = useIsMobile();
 
@@ -9379,6 +9386,9 @@ function PageContent() {
           Docs or Chat tab it should search only that ("search bar should be specific to search
           for docs within the docs tab... the same goes for chat, that you search chats and
           channels"), not the full task/people/space/list index every other screen wants. */}
+      {/* Notifications that arrive while the app is open, and taps on system notifications. */}
+      <InAppBanner />
+
       <CommandPalette
         open={commandPaletteOpen}
         onClose={() => setCommandPaletteOpen(false)}

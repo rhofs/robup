@@ -57,7 +57,7 @@ export async function enableNativePush(): Promise<NativePushResult> {
       body: JSON.stringify({ token, platform: Capacitor.getPlatform() }),
     });
     if (!res.ok) return { ok: false, error: 'Could not register this device with the server' };
-
+    setNativePushOff(false);
     return { ok: true };
   } catch (err) {
     return { ok: false, error: err instanceof Error ? err.message : 'Could not enable notifications' };
@@ -79,6 +79,9 @@ export async function disableNativePush(): Promise<void> {
       });
       void PushNotifications.register();
     });
+    // Remembered on the device, so syncNativePushToken does not quietly register it again at the
+    // next launch — the OS permission stays granted when notifications are turned off in the app.
+    setNativePushOff(true);
     if (!token) return;
     await fetch('/api/push/device-token', {
       method: 'DELETE',
@@ -101,5 +104,60 @@ export async function isNativePushRegistered(): Promise<boolean> {
     return permission.receive === 'granted';
   } catch {
     return false;
+  }
+}
+
+const NATIVE_PUSH_OFF_KEY = 'siqt.nativePushOff';
+
+function setNativePushOff(off: boolean) {
+  try {
+    if (off) localStorage.setItem(NATIVE_PUSH_OFF_KEY, '1');
+    else localStorage.removeItem(NATIVE_PUSH_OFF_KEY);
+  } catch {}
+}
+
+function isNativePushOff(): boolean {
+  try {
+    return localStorage.getItem(NATIVE_PUSH_OFF_KEY) === '1';
+  } catch {
+    return false;
+  }
+}
+
+// Registers this install's CURRENT token with the server, at every launch — without asking anything.
+//
+// The token used to be sent once, when "Enable push notifications" was tapped, and never again, while
+// Settings showed "on" for as long as the Android permission was granted. But the token is not
+// permanent: reinstalling the app (which a new APK can require), clearing its data, or Firebase
+// rotating it gives the install a new one, and the server kept sending to the old. Google can accept
+// messages for a stale token for a while, so the new delivery record said "delivered" while the
+// phone received nothing. Reported 2026-09-28: "jeg får varslet på pcn, men ingenting kommer opp på
+// mobilen."
+//
+// Only when the permission is already granted (never prompts) and notifications have not been
+// turned off in the app. Also listens for later token refreshes for as long as the app runs. Safe to
+// call repeatedly: the server upserts on the token.
+let syncStarted = false;
+export async function syncNativePushToken(): Promise<void> {
+  if (!Capacitor.isNativePlatform() || syncStarted || isNativePushOff()) return;
+  syncStarted = true;
+  try {
+    const { PushNotifications } = await import('@capacitor/push-notifications');
+    const permission = await PushNotifications.checkPermissions();
+    if (permission.receive !== 'granted') {
+      syncStarted = false;
+      return;
+    }
+    void PushNotifications.addListener('registration', (t) => {
+      if (isNativePushOff()) return;
+      void fetch('/api/push/device-token', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ token: t.value, platform: Capacitor.getPlatform() }),
+      }).catch(() => {});
+    });
+    await PushNotifications.register();
+  } catch {
+    syncStarted = false;
   }
 }

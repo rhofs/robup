@@ -1,6 +1,7 @@
 import { prisma } from '@/lib/prisma';
 import { MENTION_RE, isGroupMentionId, mentionsToPlainText } from '@/lib/mentions';
 import { notify } from '@/lib/notifications';
+import { chatUrl } from '@/lib/pushTargets';
 import { canSee, getTaskAudience, getWorkspaceAccessContexts } from '@/lib/auth/access';
 
 // Who a posted text actually pings.
@@ -146,7 +147,14 @@ export async function notifyChatMentions(params: {
   const where = params.channel.type === 'channel' && params.channel.name ? ` in #${params.channel.name}` : '';
   const text = mentionsToPlainText(params.body).trim().slice(0, 140) || null;
   for (const [reason, userIds] of groupByReason(recipients)) {
-    await notify({ userIds, actorId: params.actorId, type: 'chat_mention', title: mentionTitle(params.actorName, reason, where), body: text });
+    await notify({
+      userIds,
+      actorId: params.actorId,
+      type: 'chat_mention',
+      title: mentionTitle(params.actorName, reason, where),
+      body: text,
+      url: chatUrl(params.channel.id),
+    });
   }
   return new Set(recipients.keys());
 }

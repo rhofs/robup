@@ -7,6 +7,7 @@ import { validateChatAttachment } from '@/lib/chatAttachment';
 import { sendPushToUser } from '@/lib/push';
 import { mentionsToPlainText } from '@/lib/mentions';
 import { notifyChatMentions } from '@/lib/mentionRecipients';
+import { chatUrl } from '@/lib/pushTargets';
 
 export async function GET(req: Request, { params }: { params: Promise<{ id: string }> }) {
   const { id: channelId } = await params;
@@ -135,7 +136,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
         // Muted (backlog #6) — the message still lands and stores normally, this member just
         // doesn't get pinged about it. Matches the unread-badge skip in lib/chatUnread.ts.
         if (m.muted || mentioned.has(m.userId)) continue;
-        sendPushToUser(m.userId, { title, body, url: '/' }).catch(() => {});
+        sendPushToUser(m.userId, { title, body, url: chatUrl(channelId) }).catch(() => {});
       }
     })
     .catch(() => {});

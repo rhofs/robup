@@ -1,5 +1,6 @@
 import { prisma } from '@/lib/prisma';
 import { sendPushToUser } from '@/lib/push';
+import { taskUrl } from '@/lib/pushTargets';
 
 // One place that creates a notification and sends the matching push.
 //
@@ -41,7 +42,8 @@ export async function notify(params: {
     sendPushToUser(userId, {
       title: params.title,
       body: params.body ?? '',
-      url: params.url ?? '/',
+      // A task notification opens the task (lib/pushTargets.ts), unless the caller named a place.
+      url: params.url ?? (params.taskId ? taskUrl(params.taskId) : '/'),
     }).catch(() => {});
   }
 }
