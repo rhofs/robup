@@ -47,11 +47,11 @@ const ALLOWED_FILE_TYPES: Record<string, string> = {
 // filesystem directory under public/uploads/, so anything not in this list is rejected outright
 // rather than sanitized-and-allowed.
 const ALLOWED_CONTEXTS = new Set(['docs', 'chat', 'task']);
-// Non-image files are for chat and task attachments — Docs' image-insert modal has no "attach a
-// file" concept, so there is no reason to widen its own upload surface. The allowlist of types and
-// the size caps are shared with chat deliberately: a file is a file, and two sets of rules for the
-// same upload is how one of them ends up more permissive by accident.
-const CONTEXTS_ALLOWING_FILES = new Set(['chat', 'task']);
+// Non-image files are for chat, task attachments and — since docs got file chips
+// (lib/collab/fileAttachmentNode.ts) — docs. The allowlist of types and the size caps are shared
+// deliberately: a file is a file, and two sets of rules for the same upload is how one of them ends
+// up more permissive by accident.
+const CONTEXTS_ALLOWING_FILES = new Set(['chat', 'task', 'docs']);
 
 // Local-disk upload, shared by Docs (QA backlog #5, images only) and Chat (Phase 6 images, this
 // pass's generic files). Files land under public/uploads/<context> (served statically by Next,

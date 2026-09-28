@@ -1,4 +1,5 @@
 import { NextResponse } from 'next/server';
+import { includeArchivedSpaces, spaceArchiveFilter } from '@/lib/archivedSpaces';
 import { prisma } from '@/lib/prisma';
 import { getCurrentUserId } from '@/lib/auth/session';
 import { getTaskVisibilityContext } from '@/lib/auth/access';
@@ -7,7 +8,7 @@ import { getTaskVisibilityContext } from '@/lib/auth/access';
 // documented "can't search task-scoped Doc titles" gap, which existed only because those docs
 // previously loaded per-task on modal-open (fetchDocs) and nowhere eagerly. Excludes docs
 // belonging to a soft-deleted (trashed) task, same as the per-task route excludes trashed docs.
-export async function GET() {
+export async function GET(req: Request) {
   const userId = await getCurrentUserId();
   // Same "no identity, no data" rule as GET /api/tasks and /api/workspaces.
   if (!userId) return NextResponse.json([]);
@@ -19,7 +20,10 @@ export async function GET() {
     where: {
       taskId: { not: null },
       deletedAt: null,
-      task: { deletedAt: null, list: { space: { workspace: { memberships: { some: { userId } } } } } },
+      task: {
+        deletedAt: null,
+        list: { space: { ...spaceArchiveFilter(includeArchivedSpaces(req)), workspace: { memberships: { some: { userId } } } } },
+      },
     },
     include: {
       task: {

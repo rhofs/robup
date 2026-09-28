@@ -3,6 +3,7 @@ import { prisma, publicUserSelect } from '@/lib/prisma';
 import { getCurrentUserId } from '@/lib/auth/session';
 import { getTaskVisibilityContext } from '@/lib/auth/access';
 import { ensureListAccess } from '@/lib/auth/resourceAccess';
+import { includeArchivedSpaces, spaceArchiveFilter } from '@/lib/archivedSpaces';
 
 export async function GET(req: Request) {
   const userId = await getCurrentUserId();
@@ -27,6 +28,7 @@ export async function GET(req: Request) {
       deletedAt: null,
       list: {
         space: {
+          ...spaceArchiveFilter(includeArchivedSpaces(req)),
           workspace: {
             memberships: { some: { userId } },
             ...(workspaceId ? { id: workspaceId } : {}),

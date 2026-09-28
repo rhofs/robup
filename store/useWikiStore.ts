@@ -35,18 +35,43 @@ type WikiStore = {
   sendFeedback: (workspaceId: string, kind: 'bug' | 'feature', title: string, details: string) => Promise<{ ok: true } | { error: string }>;
 };
 
-// Chapters in order, each with its pages in order — the book's reading order, which previous/next
-// and the table of contents both follow.
-export function wikiChapters(pages: WikiPage[]) {
-  const byOrder = (a: WikiPage, b: WikiPage) => a.order - b.order;
-  return pages
-    .filter((p) => !p.parentId)
-    .sort(byOrder)
-    .map((chapter) => ({ chapter, pages: pages.filter((p) => p.parentId === chapter.id).sort(byOrder) }));
+// The book as a tree: chapters (no parent), pages under them, subpages under those — any depth.
+const byOrder = (a: WikiPage, b: WikiPage) => a.order - b.order;
+
+export function wikiChildren(pages: WikiPage[], parentId: string | null): WikiPage[] {
+  return pages.filter((p) => p.parentId === parentId).sort(byOrder);
 }
 
+// Chapters in order, each with its direct pages — what the cover shows.
+export function wikiChapters(pages: WikiPage[]) {
+  return wikiChildren(pages, null).map((chapter) => ({ chapter, pages: wikiChildren(pages, chapter.id) }));
+}
+
+// Depth-first: a page, then its subpages, then the next page — the order a reader turns pages in,
+// and what previous/next follows.
 export function wikiReadingOrder(pages: WikiPage[]): WikiPage[] {
-  return wikiChapters(pages).flatMap(({ chapter, pages: ps }) => [chapter, ...ps]);
+  const out: WikiPage[] = [];
+  const walk = (parentId: string | null) => {
+    for (const p of wikiChildren(pages, parentId)) {
+      out.push(p);
+      walk(p.id);
+    }
+  };
+  walk(null);
+  return out;
+}
+
+// Every page below this one, however deep.
+export function wikiDescendantIds(pages: WikiPage[], pageId: string): string[] {
+  const out: string[] = [];
+  const walk = (id: string) => {
+    for (const c of pages.filter((p) => p.parentId === id)) {
+      out.push(c.id);
+      walk(c.id);
+    }
+  };
+  walk(pageId);
+  return out;
 }
 
 const patchPages = (state: WikiState | undefined, fn: (pages: WikiPage[]) => WikiPage[]) => (state ? { ...state, pages: fn(state.pages) } : state);
@@ -100,7 +125,11 @@ export const useWikiStore = create<WikiStore>((set, get) => ({
     set((s) => ({
       byWorkspace: {
         ...s.byWorkspace,
-        [workspaceId]: patchPages(s.byWorkspace[workspaceId], (ps) => ps.filter((p) => p.id !== pageId && p.parentId !== pageId)),
+        [workspaceId]: patchPages(s.byWorkspace[workspaceId], (ps) => {
+          // The whole subtree goes, as it does on the server (cascadeDoc).
+          const gone = new Set([pageId, ...wikiDescendantIds(ps, pageId)]);
+          return ps.filter((p) => !gone.has(p.id));
+        }),
       },
     }));
     const res = await fetch(`/api/workspaces/${workspaceId}/wiki/pages/${pageId}`, { method: 'DELETE' });

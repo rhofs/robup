@@ -22,7 +22,24 @@ export default function WikiSettingsDialog({ workspace, onClose }: { workspace: 
 
   const plainMembers = workspace.members.filter((m) => m.workspaceRole === 'member');
   const userById = new Map(users.map((u) => [u.id, u] as const));
-  const lists = workspace.spaces.flatMap((sp) => sp.lists.filter((l) => !l.archived).map((l) => ({ id: l.id, label: `${sp.name} / ${l.name}` })));
+  // Grouped by Space, each list named with its folder path. Flat "Space / List" left two identical
+  // "Ekstrem Gjemsel / Backup_Materiale" rows — one per season folder — with no way to tell which
+  // was which. Archived lists are left out: they are put away, not somewhere new work should land.
+  const folderPath = (sp: HierarchyWorkspace['spaces'][number], folderId: string | null): string[] => {
+    const out: string[] = [];
+    for (let f = sp.folders.find((x) => x.id === folderId); f; f = sp.folders.find((x) => x.id === f!.parentId)) out.unshift(f.name);
+    return out;
+  };
+  const listGroups = workspace.spaces
+    .filter((sp) => !sp.archived)
+    .map((sp) => ({
+      space: sp.name,
+      lists: sp.lists
+        .filter((l) => !l.archived)
+        .map((l) => ({ id: l.id, label: [...folderPath(sp, l.folderId), l.name].join(' / ') }))
+        .sort((a, b) => a.label.localeCompare(b.label)),
+    }))
+    .filter((g) => g.lists.length > 0);
 
   const save = async () => {
     setSaving(true);
@@ -108,10 +125,14 @@ export default function WikiSettingsDialog({ workspace, onClose }: { workspace: 
               className="mt-2 w-full bg-neutral-950 border border-neutral-800 rounded-lg px-2.5 py-2 text-[13px] text-app-strong focus:outline-none focus:border-blue-500/70"
             >
               <option value="">Not chosen — the buttons will say so</option>
-              {lists.map((l) => (
-                <option key={l.id} value={l.id}>
-                  {l.label}
-                </option>
+              {listGroups.map((g) => (
+                <optgroup key={g.space} label={g.space}>
+                  {g.lists.map((l) => (
+                    <option key={l.id} value={l.id}>
+                      {l.label}
+                    </option>
+                  ))}
+                </optgroup>
               ))}
             </select>
           </section>

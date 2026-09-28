@@ -22,7 +22,7 @@ import {
 } from 'lucide-react';
 import type { HierarchyWorkspace } from '../../store/useTaskStore';
 import { useSessionStore } from '../../store/useSessionStore';
-import { useWikiStore, wikiChapters, wikiReadingOrder, type WikiPage } from '../../store/useWikiStore';
+import { useWikiStore, wikiChapters, wikiChildren, wikiDescendantIds, wikiReadingOrder, type WikiPage } from '../../store/useWikiStore';
 import type { MentionKind } from '../../lib/mentions';
 import WikiSettingsDialog from './WikiSettingsDialog';
 import WikiFeedbackDialog from './WikiFeedbackDialog';
@@ -108,14 +108,36 @@ export default function WikiView({ workspace, pageId, onOpenPage, onJump, onCont
   const page = pageId ? pages.find((p) => p.id === pageId) ?? null : null;
   const canEdit = !!wiki?.canEdit;
 
-  // "2" for a chapter, "2.3" for a page — the numbering a reader uses to say where something is.
-  const numberOf = (p: WikiPage): string => {
-    const ci = chapters.findIndex((c) => c.chapter.id === (p.parentId ?? p.id));
-    if (ci < 0) return '';
-    if (!p.parentId) return `${ci + 1}`;
-    return `${ci + 1}.${chapters[ci].pages.findIndex((x) => x.id === p.id) + 1}`;
+  // "2" for a chapter, "2.3" for a page, "2.3.1" for a subpage — the numbering a reader uses to say
+  // where something is. Worked out once per change to the pages, not per row.
+  const numbers = useMemo(() => {
+    const m = new Map<string, string>();
+    const walk = (parentId: string | null, prefix: string) =>
+      wikiChildren(pages, parentId).forEach((p, i) => {
+        const n = prefix ? `${prefix}.${i + 1}` : `${i + 1}`;
+        m.set(p.id, n);
+        walk(p.id, n);
+      });
+    walk(null, '');
+    return m;
+  }, [pages]);
+  const numberOf = (p: WikiPage): string => numbers.get(p.id) ?? '';
+  // The pages above this one, chapter first — for the kicker over the title.
+  const ancestorsOf = (p: WikiPage): WikiPage[] => {
+    const out: WikiPage[] = [];
+    for (let cur = pages.find((x) => x.id === p.parentId); cur; cur = pages.find((x) => x.id === cur!.parentId)) out.unshift(cur);
+    return out;
   };
-  const chapterOf = (p: WikiPage) => (p.parentId ? pages.find((x) => x.id === p.parentId) ?? null : p);
+  // Every page on the way to the one being read — kept open in the contents.
+  const activePath = useMemo(() => {
+    const ids = new Set<string>();
+    for (let cur = pages.find((x) => x.id === pageId); cur; cur = pages.find((x) => x.id === cur!.parentId)) ids.add(cur.id);
+    return ids;
+  }, [pages, pageId]);
+  // Open/closed branches the reader has chosen. A chapter's pages always show; their subpages start
+  // closed unless the page being read is among them, so a big template library does not unfold into
+  // one endless list.
+  const [branchOpen, setBranchOpen] = useState<Record<string, boolean>>({});
 
   const idx = page ? readingOrder.findIndex((p) => p.id === page.id) : -1;
   const prev = idx > 0 ? readingOrder[idx - 1] : null;
@@ -207,8 +229,8 @@ export default function WikiView({ workspace, pageId, onOpenPage, onJump, onCont
       open(created.id);
     }
   };
-  const addPage = async (chapterId: string) => {
-    const created = await createPage(workspace.id, 'New page', chapterId);
+  const addPage = async (parentId: string) => {
+    const created = await createPage(workspace.id, 'New page', parentId);
     if (created) {
       setEditOnOpen(created.id);
       open(created.id);
@@ -226,13 +248,49 @@ export default function WikiView({ workspace, pageId, onOpenPage, onJump, onCont
     updatePage(workspace.id, other.id, { order: i });
   };
   const remove = (p: WikiPage) => {
-    const childCount = pages.filter((x) => x.parentId === p.id).length;
-    const what = p.parentId ? 'this page' : childCount ? `this chapter and its ${childCount} page${childCount === 1 ? '' : 's'}` : 'this chapter';
+    const below = wikiDescendantIds(pages, p.id).length;
+    const noun = p.parentId ? 'page' : 'chapter';
+    const what = below ? `this ${noun} and the ${below} page${below === 1 ? '' : 's'} under it` : `this ${noun}`;
     if (!window.confirm(`Delete ${what}?`)) return;
     const back = p.parentId ?? null;
     deletePage(workspace.id, p.id);
     open(back);
   };
+
+  // The pages under `parentId`, each with its own subpages nested below — a function returning JSX
+  // rather than a component, so the tree is not remounted (and its open branches forgotten) on every
+  // render of the wiki.
+  const renderBranch = (parentId: string, depth: number): React.ReactNode =>
+    wikiChildren(pages, parentId).map((p) => {
+      const kids = wikiChildren(pages, p.id);
+      const isOpen = branchOpen[p.id] ?? activePath.has(p.id);
+      return (
+        <div key={p.id}>
+          <div
+            className={`flex items-center rounded-md transition ${
+              page?.id === p.id ? 'bg-neutral-800 text-blue-400' : 'text-neutral-400 hover:text-app-strong hover:bg-neutral-800/50'
+            }`}
+          >
+            {kids.length > 0 ? (
+              <button
+                onClick={() => setBranchOpen((o) => ({ ...o, [p.id]: !isOpen }))}
+                title={isOpen ? 'Hide subpages' : 'Show subpages'}
+                className="w-4 h-5 ml-0.5 flex items-center justify-center shrink-0 text-neutral-500 hover:text-app-strong cursor-pointer"
+              >
+                <ChevronRight className={`w-3 h-3 transition-transform ${isOpen ? 'rotate-90' : ''}`} />
+              </button>
+            ) : (
+              <span className="w-4 ml-0.5 shrink-0" />
+            )}
+            <button onClick={() => open(p.id)} className="flex-1 min-w-0 flex items-baseline gap-2 pl-1 pr-2 py-1 text-left cursor-pointer">
+              <span className="text-[10px] text-neutral-600 tabular-nums shrink-0">{numberOf(p)}</span>
+              <span className="text-[12.5px] truncate">{p.title}</span>
+            </button>
+          </div>
+          {kids.length > 0 && isOpen && <div className="ml-3 border-l border-neutral-800/70 pl-1 space-y-px">{renderBranch(p.id, depth + 1)}</div>}
+        </div>
+      );
+    });
 
   const toc = (
     <nav className="flex flex-col min-h-0 h-full">
@@ -294,7 +352,7 @@ export default function WikiView({ workspace, pageId, onOpenPage, onJump, onCont
           </div>
         ) : (
           <div className="space-y-3">
-            {chapters.map(({ chapter, pages: ps }, ci) => (
+            {chapters.map(({ chapter }, ci) => (
               <div key={chapter.id}>
                 <button
                   onClick={() => open(chapter.id)}
@@ -306,20 +364,7 @@ export default function WikiView({ workspace, pageId, onOpenPage, onJump, onCont
                   <span className="text-[13px] font-semibold truncate">{chapter.title}</span>
                 </button>
                 <div className="ml-4 border-l border-neutral-800 pl-1.5 mt-0.5 space-y-px">
-                  {ps.map((p, pi) => (
-                    <button
-                      key={p.id}
-                      onClick={() => open(p.id)}
-                      className={`w-full flex items-baseline gap-2 px-2 py-1 rounded-md text-left cursor-pointer transition ${
-                        page?.id === p.id ? 'bg-neutral-800 text-blue-400' : 'text-neutral-400 hover:text-app-strong hover:bg-neutral-800/50'
-                      }`}
-                    >
-                      <span className="text-[10px] text-neutral-600 tabular-nums w-6 shrink-0">
-                        {ci + 1}.{pi + 1}
-                      </span>
-                      <span className="text-[12.5px] truncate">{p.title}</span>
-                    </button>
-                  ))}
+                  {renderBranch(chapter.id, 1)}
                   {canEdit && (
                     <button
                       onClick={() => addPage(chapter.id)}
@@ -383,7 +428,12 @@ export default function WikiView({ workspace, pageId, onOpenPage, onJump, onCont
             <article className="max-w-[720px] mx-auto px-5 md:px-10 pt-8 md:pt-14 pb-16">
               <div className="flex items-center gap-2 mb-3">
                 <p className="flex-1 min-w-0 text-[11px] uppercase tracking-[0.14em] text-neutral-500 truncate">
-                  {page.parentId ? `Chapter ${numberOf(chapterOf(page)!)} · ${chapterOf(page)?.title}` : `Chapter ${numberOf(page)}`}
+                  {page.parentId
+                    ? (() => {
+                        const up = ancestorsOf(page);
+                        return `Chapter ${numberOf(up[0])} · ${up.map((x) => x.title).join(' / ')}`;
+                      })()
+                    : `Chapter ${numberOf(page)}`}
                 </p>
                 {canEdit &&
                   (editing ? (
@@ -393,6 +443,9 @@ export default function WikiView({ workspace, pageId, onOpenPage, onJump, onCont
                       </IconButton>
                       <IconButton title="Move down" onClick={() => move(page, 1)}>
                         <ArrowDown className="w-3.5 h-3.5" />
+                      </IconButton>
+                      <IconButton title="Add a subpage" onClick={() => addPage(page.id)}>
+                        <Plus className="w-3.5 h-3.5" />
                       </IconButton>
                       <IconButton title="Delete" onClick={() => remove(page)} danger>
                         <Trash2 className="w-3.5 h-3.5" />
@@ -432,13 +485,12 @@ export default function WikiView({ workspace, pageId, onOpenPage, onJump, onCont
                 />
               </div>
 
-              {!page.parentId && (
-                <ChapterContents
-                  pages={chapters.find((c) => c.chapter.id === page.id)?.pages ?? []}
-                  number={numberOf(page)}
-                  onOpen={(id) => open(id)}
-                />
-              )}
+              <ChapterContents
+                pages={wikiChildren(pages, page.id)}
+                number={numberOf(page)}
+                heading={page.parentId ? 'Subpages' : 'In this chapter'}
+                onOpen={(id) => open(id)}
+              />
 
               <div className="mt-14 pt-6 border-t border-neutral-800 grid grid-cols-2 gap-3">
                 <button
@@ -533,11 +585,11 @@ function TitleInput({ value, onCommit }: { value: string; onCommit: (v: string) 
   );
 }
 
-function ChapterContents({ pages, number, onOpen }: { pages: WikiPage[]; number: string; onOpen: (id: string) => void }) {
+function ChapterContents({ pages, number, heading, onOpen }: { pages: WikiPage[]; number: string; heading: string; onOpen: (id: string) => void }) {
   if (pages.length === 0) return null;
   return (
     <div className="mt-10">
-      <p className="text-[11px] uppercase tracking-[0.14em] text-neutral-500 mb-2">In this chapter</p>
+      <p className="text-[11px] uppercase tracking-[0.14em] text-neutral-500 mb-2">{heading}</p>
       <div className="rounded-xl border border-neutral-800 divide-y divide-neutral-800 overflow-hidden">
         {pages.map((p, i) => (
           <button key={p.id} onClick={() => onOpen(p.id)} className="w-full flex items-baseline gap-3 px-4 py-3 text-left hover:bg-neutral-900/60 cursor-pointer">

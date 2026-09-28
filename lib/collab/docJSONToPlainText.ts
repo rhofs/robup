@@ -11,6 +11,8 @@ function inlineToText(nodes: ProseMirrorJSONNode[] = []): string {
   return nodes
     .map((node) => {
       if (node.type === 'text') return node.text ?? '';
+      // A file reads as its name — which is what search should find it by.
+      if (node.type === 'fileAttachment') return `📎 ${(node.attrs as { name?: string } | undefined)?.name ?? 'File'}`;
       if (node.type === 'mention' && node.attrs?.kind && node.attrs.id && node.attrs.label) {
         return buildMentionToken(node.attrs.kind, node.attrs.id, node.attrs.label);
       }

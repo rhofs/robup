@@ -1,4 +1,5 @@
 import { NextResponse } from 'next/server';
+import { includeArchivedSpaces } from '@/lib/archivedSpaces';
 import { prisma, publicUserSelect } from '@/lib/prisma';
 import { getCurrentUserId } from '@/lib/auth/session';
 import { getAccessContext, keepWorkspaceMembers } from '@/lib/auth/access';
@@ -10,12 +11,18 @@ import { syncEventForAllRelevantUsers } from '@/lib/google/calendarSync';
 // from the real session (getCurrentUserId), not a client-supplied query param — same rule
 // GET /api/tasks and GET /api/workspaces already enforce, since trusting a client-passed userId
 // here would let anyone read anyone else's events just by changing the query string.
-export async function GET() {
+export async function GET(req: Request) {
   const userId = await getCurrentUserId();
   if (!userId) return NextResponse.json([]);
 
   const events = await prisma.event.findMany({
-    where: { deletedAt: null, workspace: { memberships: { some: { userId } } } },
+    where: {
+      deletedAt: null,
+      workspace: { memberships: { some: { userId } } },
+      // An event filed under an archived Space is put away with it; one with no Space is the
+      // workspace's own and always shows.
+      ...(includeArchivedSpaces(req) ? {} : { OR: [{ spaceId: null }, { space: { archived: false } }] }),
+    },
     include: { assignees: { select: publicUserSelect }, googleSyncs: { select: { userId: true } } },
     orderBy: { startDate: 'asc' },
   });

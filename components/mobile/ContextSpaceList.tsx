@@ -3,6 +3,7 @@
 import { useRef } from 'react';
 import { ChevronRight, ChevronDown, Folder as FolderIcon, List as ListIcon } from 'lucide-react';
 import type { HierarchySpace, HierarchyFolder, HierarchyList } from '../../store/useTaskStore';
+import ArchivedSpacesToggle, { archivedLast } from '../ArchivedSpacesToggle';
 import { FOLDER_ICON_MAP } from '../FolderTree';
 import { hapticTap } from '../../lib/haptics';
 
@@ -40,6 +41,8 @@ type Props = {
   onToggleSpace: (spaceId: string) => void;
   onToggleFolder: (folderId: string) => void;
   emptyText: string;
+  // The "Archived spaces (N)" row at the foot — for the workspace's Spaces, not Home's personal ones.
+  showArchivedToggle?: boolean;
   onSelectSpace: (spaceId: string) => void;
   onSelectList: (spaceId: string, listId: string) => void;
   onSpaceMenu: (x: number, y: number, space: HierarchySpace) => void;
@@ -53,6 +56,7 @@ type Props = {
 export default function ContextSpaceList({
   spaces,
   emptyText,
+  showArchivedToggle = false,
   openSpaceIds,
   openFolderIds,
   onToggleSpace,
@@ -109,11 +113,11 @@ export default function ContextSpaceList({
   return (
     <>
       {spaces.length === 0 && <p className="px-2 py-3 text-xs text-neutral-500">{emptyText}</p>}
-      {spaces.map((space) => {
+      {[...spaces].sort(archivedLast).map((space) => {
         const Icon = space.icon ? FOLDER_ICON_MAP[space.icon] : null;
         const open = openSpaceIds.has(space.id);
         return (
-          <div key={space.id}>
+          <div key={space.id} className={space.archived ? 'opacity-55' : undefined}>
             {/* Tapping the row OPENS THE SPACE IN PLACE. It used to navigate, with a separate
                 chevron for expanding, and that was reported twice as the same bug — "det ikke åpner
                 seg, det bare kommer inn i en ny". A row that looks like a folder should behave like
@@ -241,6 +245,8 @@ export default function ContextSpaceList({
           </div>
         );
       })}
+      {/* Only in the workspace's own list: Home's personal Spaces have nothing to archive into. */}
+      {showArchivedToggle && <ArchivedSpacesToggle className="mt-1" />}
     </>
   );
 }

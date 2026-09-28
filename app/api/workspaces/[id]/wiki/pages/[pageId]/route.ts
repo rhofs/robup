@@ -19,13 +19,17 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
   if (typeof body.title === 'string') data.title = body.title.trim().slice(0, 200) || 'Untitled';
   if (typeof body.order === 'number') data.order = body.order;
   if (body.parentId !== undefined) {
-    const parentId: string | null = body.parentId;
+    const parentId: string | null = typeof body.parentId === 'string' && body.parentId ? body.parentId : null;
     if (parentId) {
-      const parent = await prisma.doc.findFirst({ where: { id: parentId, wikiWorkspaceId: workspaceId, deletedAt: null }, select: { parentId: true } });
-      if (!parent || parent.parentId) return NextResponse.json({ error: 'Pages can only go inside a chapter' }, { status: 400 });
-      // A chapter with pages of its own cannot become a page — that would make a third level.
-      const hasChildren = await prisma.doc.count({ where: { parentId: pageId, deletedAt: null } });
-      if (hasChildren) return NextResponse.json({ error: 'Move this chapter\'s pages out first' }, { status: 400 });
+      const parent = await prisma.doc.findFirst({ where: { id: parentId, wikiWorkspaceId: workspaceId, deletedAt: null }, select: { id: true } });
+      if (!parent) return NextResponse.json({ error: 'Parent page not found' }, { status: 404 });
+      // Not under itself or anything beneath it — that would cut the page and its subtree off from
+      // the book in a loop.
+      for (let id: string | null = parentId, guard = 0; id && guard < 50; guard++) {
+        if (id === pageId) return NextResponse.json({ error: 'A page cannot go inside its own subpages' }, { status: 400 });
+        const row: { parentId: string | null } | null = await prisma.doc.findUnique({ where: { id }, select: { parentId: true } });
+        id = row?.parentId ?? null;
+      }
     }
     data.parentId = parentId;
   }

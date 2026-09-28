@@ -30,6 +30,7 @@ import { MessageSquare, Link2, X, Upload } from 'lucide-react';
 import { ClientMentionNode } from './mentionNodeView';
 import { ClientSubpagesIndexNode } from './subpagesIndexNodeView';
 import { ClientCommentMark } from './commentMarkView';
+import { ClientFileAttachmentNode } from './fileAttachmentView';
 import { SlashCommand } from './slashCommandExtension';
 import { GapCursor } from './gapCursorExtension';
 import PresenceBar from './PresenceBar';
@@ -105,6 +106,12 @@ export default function CollabDocEditor({
   const [imageUploading, setImageUploading] = useState(false);
   const [imageUploadError, setImageUploadError] = useState<string | null>(null);
   const imageFileInputRef = useRef<HTMLInputElement>(null);
+  const [fileUploading, setFileUploading] = useState(false);
+  const [fileUploadError, setFileUploadError] = useState<string | null>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  // Filled after every render with the current uploadAndInsert (below) — the editor's drop/paste
+  // handlers are fixed when it is built and call through this.
+  const uploadAndInsertRef = useRef<(files: File[], at?: number) => Promise<void>>(async () => {});
 
   // Provider lifecycle lives in an effect, not useMemo — its constructor opens a real WebSocket,
   // a side effect that isn't safe inside useMemo (React's dev-mode Strict Mode double-invokes
@@ -160,6 +167,7 @@ export default function CollabDocEditor({
             CodeBlock,
             GapCursor,
             ClientMentionNode.configure({ onJump }),
+            ClientFileAttachmentNode,
             ClientSubpagesIndexNode.configure({ onOpenDoc: (id: string) => onJump('doc', id), onContextMenu: onDocContextMenu }),
             ClientCommentMark.configure({
               onCommentClick: (commentId: string) => {
@@ -174,6 +182,7 @@ export default function CollabDocEditor({
                 setImageUploadError(null);
                 setImageUrlDraft('');
               },
+              onRequestFile: () => fileInputRef.current?.click(),
             }),
             Placeholder.configure({ placeholder: placeholder ?? 'Write notes, specs, anything...' }),
             Collaboration.configure({ document: provider.document }),
@@ -187,6 +196,26 @@ export default function CollabDocEditor({
       onFocus: () => onEditorFocus?.(),
       onBlur: ({ editor: e }) => onEditorBlur?.(e.getText()),
       immediatelyRender: false,
+      editorProps: {
+        // Files dropped or pasted into the doc are uploaded and placed where they landed: images as
+        // images, anything else as a file chip. Through a ref, because these handlers are fixed when
+        // the editor is built while the upload function belongs to the current render.
+        handleDrop: (view, event, _slice, moved) => {
+          const files = Array.from((event as DragEvent).dataTransfer?.files ?? []);
+          if (moved || files.length === 0 || !view.editable) return false;
+          event.preventDefault();
+          const at = view.posAtCoords({ left: (event as DragEvent).clientX, top: (event as DragEvent).clientY });
+          void uploadAndInsertRef.current(files, at?.pos);
+          return true;
+        },
+        handlePaste: (view, event) => {
+          const files = Array.from(event.clipboardData?.files ?? []);
+          if (files.length === 0 || !view.editable) return false;
+          event.preventDefault();
+          void uploadAndInsertRef.current(files);
+          return true;
+        },
+      },
     },
     [docId, provider, spaceId]
   );
@@ -252,6 +281,48 @@ export default function CollabDocEditor({
       .run();
   };
 
+  // Uploads files (from /file, a drop or a paste) and puts each where the caret — or the drop — was.
+  // Images become images, as the image modal already makes them; everything else a file chip that
+  // keeps the name it was uploaded with. One at a time, in order, so several dropped files land in
+  // the order they were picked.
+  const uploadAndInsert = async (files: File[], at?: number) => {
+    if (!editor) return;
+    setFileUploadError(null);
+    setFileUploading(true);
+    try {
+      if (typeof at === 'number') editor.chain().focus().setTextSelection(at).run();
+      for (const file of files) {
+        const formData = new FormData();
+        formData.append('file', file);
+        formData.append('context', 'docs');
+        const res = await fetch('/api/uploads/image', { method: 'POST', body: formData });
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok) throw new Error(`${file.name}: ${data.error || 'upload failed'}`);
+        if (data.kind === 'image') {
+          insertImageAtCursor(data.url);
+        } else {
+          editor
+            .chain()
+            .focus()
+            .insertContent([
+              { type: 'fileAttachment', attrs: { url: data.url, name: file.name, size: file.size, mime: file.type || null } },
+              { type: 'text', text: ' ' },
+            ])
+            .run();
+        }
+      }
+    } catch (err) {
+      setFileUploadError(err instanceof Error ? err.message : 'Upload failed');
+    } finally {
+      setFileUploading(false);
+      if (fileInputRef.current) fileInputRef.current.value = '';
+    }
+  };
+  useEffect(() => {
+    uploadAndInsertRef.current = uploadAndInsert;
+  });
+
+
   const submitImage = () => {
     const url = imageUrlDraft?.trim();
     if (url) insertImageAtCursor(url);
@@ -293,6 +364,34 @@ export default function CollabDocEditor({
           </div>
         )}
         {provider && <PresenceBar provider={provider} />}
+        <input
+          ref={fileInputRef}
+          type="file"
+          multiple
+          className="hidden"
+          onChange={(e) => {
+            const files = Array.from(e.target.files ?? []);
+            if (files.length) void uploadAndInsert(files);
+          }}
+        />
+        {(fileUploading || fileUploadError) && (
+          <div
+            className={`mb-2 px-2.5 py-1.5 rounded border text-[11px] flex items-center gap-1.5 ${
+              fileUploadError ? 'border-red-500/30 bg-red-500/10 text-red-300' : 'border-neutral-700 bg-neutral-800/50 text-neutral-300'
+            }`}
+          >
+            {fileUploadError ? (
+              <>
+                <span className="flex-1">{fileUploadError}</span>
+                <button onClick={() => setFileUploadError(null)} className="cursor-pointer text-red-300 hover:text-red-200">
+                  <X className="w-3 h-3" />
+                </button>
+              </>
+            ) : (
+              'Uploading…'
+            )}
+          </div>
+        )}
         {editor && !readOnly && (
           <BubbleMenu editor={editor} shouldShow={({ from, to }) => from !== to}>
             {commentDraft === null && linkDraft === null ? (

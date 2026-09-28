@@ -142,6 +142,7 @@ import AccessControlPanel from '../components/AccessControlPanel';
 import MentionText from '../components/MentionText';
 import MentionTextarea from '../components/MentionTextarea';
 import WikiView from '../components/wiki/WikiView';
+import ArchivedSpacesToggle, { archivedLast } from '../components/ArchivedSpacesToggle';
 import { pickableMembers, taskAudience, taskPickableMembers, workspaceIdForList, workspaceIdForSpace } from '../lib/workspaceMembers';
 import AssigneePicker, { PersonPill } from '../components/AssigneePicker';
 import { suggestTaskAssignees } from '../lib/assigneeSuggestions';
@@ -5861,7 +5862,9 @@ function PageContent() {
                   className="w-full bg-neutral-950 border border-blue-500 rounded-lg px-2 py-1 text-[11px] text-app-strong focus:outline-none"
                 />
               )}
-              {[...(currentWorkspace?.spaces ?? [])].sort((a, b) => a.order - b.order).map((space: HierarchySpace) => {
+              {[...(currentWorkspace?.spaces ?? [])]
+                .sort(archivedLast)
+                .map((space: HierarchySpace, spaceIndex, sortedSpaces) => {
                 const isSpaceActive = activeView === 'board' && activeSpaceId === space.id && activeListIds.size === 0 && modalTaskStack.length === 0;
                 const spaceListIds = collectListIdsUnder(space, null);
                 const spaceTasksCount = tasks.filter(
@@ -5871,7 +5874,12 @@ function PageContent() {
                 const spaceSomeChecked = spaceListIds.some((id) => calendarVisibleListIds.has(id));
 
                 return (
-                  <div key={space.id} className="space-y-1">
+                  <div key={space.id} className={`space-y-1 ${space.archived ? 'opacity-55' : ''}`}>
+                    {space.archived && !sortedSpaces[spaceIndex - 1]?.archived && (
+                      <div className="px-3 pt-3 pb-1 text-[9px] font-semibold uppercase tracking-wider text-neutral-600 flex items-center gap-1.5">
+                        <Archive className="w-3 h-3" /> Archived
+                      </div>
+                    )}
                     {spaceDropIndicator?.targetId === space.id && spaceDropIndicator.position === 'above' && (
                       <div className="h-0.5 bg-blue-500 rounded-full mx-2" />
                     )}
@@ -6026,6 +6034,7 @@ function PageContent() {
                   </div>
                 );
               })}
+              <ArchivedSpacesToggle className="mt-1" />
             </div>
             )}
           </div>
@@ -7611,6 +7620,18 @@ function PageContent() {
                 <Lock className="w-3.5 h-3.5" /> Manage access
               </button>
             )}
+            {/* Put away without deleting — a finished show, an old season. See Space.archived. */}
+            <button
+              onClick={() => {
+                const { space } = spaceMenu;
+                setSpaceMenu(null);
+                void useTaskStore.getState().archiveSpace(space.id, !space.archived);
+                showToast(space.archived ? `Unarchived ${space.name}` : `Archived ${space.name}`);
+              }}
+              className="w-full text-left px-3 py-1.5 text-xs text-neutral-300 hover:bg-neutral-800/60 cursor-pointer flex items-center gap-2"
+            >
+              <Archive className="w-3.5 h-3.5" /> {spaceMenu.space.archived ? 'Unarchive space' : 'Archive space'}
+            </button>
             <button
               onClick={() => {
                 setSpaceToDelete(spaceMenu.space);

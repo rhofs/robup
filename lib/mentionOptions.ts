@@ -102,6 +102,8 @@ export function buildMentionOptions({
   // under '#' with tasks, because a file belongs to a task and someone reaching for one by name is
   // usually reaching for the work it is attached to.
   for (const t of tasks) {
+    // A file on an archived task is put away with it — an archived list archives its tasks too.
+    if (t.archived) continue;
     if (listIds && !listIds.has(t.listId)) continue;
     for (const a of t.attachments ?? []) {
       const label = a.fileName || 'File';
@@ -131,6 +133,8 @@ export function buildMentionOptions({
       if (workspaceId && ws.id !== workspaceId) continue;
       for (const space of ws.spaces) {
         for (const doc of space.spaceDocs) {
+          // Archived docs are put away, the same as archived tasks above: not offered for new links.
+          if (doc.archived) continue;
           const label = doc.title || 'Untitled';
           const score = q ? scoreMatch(label, q) : 1;
           if (score !== null) {

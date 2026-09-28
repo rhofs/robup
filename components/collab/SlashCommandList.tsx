@@ -1,7 +1,7 @@
 'use client';
 
 import { forwardRef, useEffect, useImperativeHandle, useState } from 'react';
-import { Heading1, Heading2, List, ListOrdered, FileText, Rows3, Image as ImageIcon, Code2 } from 'lucide-react';
+import { Heading1, Heading2, List, ListOrdered, FileText, Rows3, Image as ImageIcon, Code2, Paperclip } from 'lucide-react';
 import type { SlashCommandItem } from './slashCommandSuggestion';
 
 const ICON = {
@@ -13,6 +13,7 @@ const ICON = {
   subpagesIndex: Rows3,
   image: ImageIcon,
   codeBlock: Code2,
+  file: Paperclip,
 } as const;
 
 type Props = {

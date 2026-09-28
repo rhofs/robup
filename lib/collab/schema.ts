@@ -20,6 +20,7 @@ import CodeBlock from '@tiptap/extension-code-block';
 import { MentionNode } from './mentionNode';
 import { SubpagesIndexNode } from './subpagesIndexNode';
 import { CommentMark } from './commentMark';
+import { FileAttachmentNode } from './fileAttachmentNode';
 
 // Paragraphs + mentions + bold/italic/underline/strike/headings(1-2)/bullet+ordered lists/text
 // align/links/font family+size/text+highlight color. Shared by the server (schema/migration) and
@@ -53,6 +54,7 @@ export const collabExtensions = [
   MentionNode,
   SubpagesIndexNode,
   CommentMark,
+  FileAttachmentNode,
 ];
 
 export const collabSchema = getSchema(collabExtensions);

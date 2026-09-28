@@ -30,6 +30,9 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
   if (body.order !== undefined) data.order = body.order;
   if (body.description !== undefined) data.description = body.description;
   if (body.coverImageUrl !== undefined) data.coverImageUrl = body.coverImageUrl;
+  // Archiving is a plain field like the name: anyone who can see the Space can put it away, the same
+  // as archiving a List. Nothing inside it changes, so it is fully reversible.
+  if (body.archived !== undefined) data.archived = body.archived === true;
 
   // Marking something private, or editing who it's shared with, is a stricter, separate
   // Owner/Admin-only gate on top of the plain "can you see this" check above — every other field

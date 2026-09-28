@@ -109,7 +109,9 @@ export default function QuickCreatePopover({
 
   if (!open) return null;
 
-  const spaces = workspaces.flatMap((w) => w.spaces);
+  // Not archived ones, even while they are being shown: new work does not go into a Space that has
+  // been put away.
+  const spaces = workspaces.flatMap((w) => w.spaces).filter((s) => !s.archived);
   const selectedSpace = spaces.find((s) => s.id === spaceId);
   const canCreateTask = title.trim().length > 0 && !!spaceId && !!listId;
   const canCreateEvent = title.trim().length > 0 && !!eventStart && !!eventEnd && !!activeWorkspaceId;

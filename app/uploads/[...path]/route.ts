@@ -41,7 +41,22 @@ const CONTENT_TYPES: Record<string, string> = {
   pptx: 'application/vnd.openxmlformats-officedocument.presentationml.presentation',
 };
 
-export async function GET(_req: Request, { params }: { params: Promise<{ path: string[] }> }) {
+// The name to save a file under, from `?name=`. Files are stored under a uuid, so without this a
+// downloaded "Deltakerkontrakt.docx" arrives as "3f2a….docx". Only the characters that could break
+// the header are taken out; the extension is forced to the stored one, so a name cannot make a file
+// look like a different kind than it is.
+function dispositionFor(req: Request, ext: string): string | undefined {
+  const raw = new URL(req.url).searchParams.get('name');
+  if (!raw) return undefined;
+  const base = raw.replace(/[\r\n"\\/]/g, '').replace(/\.[a-z0-9]{1,5}$/i, '').trim().slice(0, 150) || 'file';
+  const name = `${base}.${ext}`;
+  const ascii = name.replace(/[^\x20-\x7e]/g, '_');
+  // inline, not attachment: a PDF or an image still opens in the browser; the name only matters
+  // once someone saves it, and the browser uses it then.
+  return `inline; filename="${ascii}"; filename*=UTF-8''${encodeURIComponent(name)}`;
+}
+
+export async function GET(req: Request, { params }: { params: Promise<{ path: string[] }> }) {
   // Same bar proxy.ts already applies to this path today (it gates every non-API page route,
   // /uploads included) — restated here because a route handler is not covered by that matcher, and
   // losing the check silently while "only changing how the file is read" would be a real
@@ -71,6 +86,7 @@ export async function GET(_req: Request, { params }: { params: Promise<{ path: s
         'Cache-Control': 'private, max-age=31536000, immutable',
         // Nothing here is ever meant to be interpreted as a document by the browser.
         'X-Content-Type-Options': 'nosniff',
+        ...(dispositionFor(req, ext) ? { 'Content-Disposition': dispositionFor(req, ext)! } : {}),
       },
     });
   } catch {

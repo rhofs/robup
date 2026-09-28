@@ -628,13 +628,13 @@ body {
 /* Links inside docs and the wiki. There was no rule at all, so Tailwind's reset drew them exactly
    like the text around them — "linker, ikke linker": nobody could tell a link was there, and a
    click did nothing (see openLinkOnClick in CollabDocEditor.tsx for the second half). */
-.collab-doc-editor .ProseMirror a {
+.collab-doc-editor .ProseMirror a:not(.siqt-file-chip) {
   color: rgb(96 165 250);
   text-decoration: underline;
   text-decoration-color: rgb(96 165 250 / 0.45);
   text-underline-offset: 2px;
   cursor: pointer;
 }
-.collab-doc-editor .ProseMirror a:hover {
+.collab-doc-editor .ProseMirror a:not(.siqt-file-chip):hover {
   text-decoration-color: currentColor;
 }

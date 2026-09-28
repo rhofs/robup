@@ -35,6 +35,7 @@ function getMentionSuggestionItems(query: string): MentionSuggestionItem[] {
   for (const ws of workspaces) {
     for (const space of ws.spaces) {
       for (const doc of space.spaceDocs) {
+        if (doc.archived) continue;
         const label = doc.title || 'Untitled';
         const score = q ? scoreMatch(label, q) : 1;
         if (score !== null) results.push({ kind: 'doc', id: doc.id, label, sub: space.name, score });

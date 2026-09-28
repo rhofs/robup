@@ -10043,3 +10043,111 @@ and the result becomes a task in the list chosen under *Wiki settings → Bug re
 requests*. Until a list is chosen, the form says so (and offers owners and admins the settings).
 
 **Deployed 2026-09-28 as `929a28a`** (link styling and click-to-open). The reinstall ran clean.
+
+### 2026-09-28 (continued) — "archived lists show up in the feedback list picker": they are not archived
+
+**Reported with a screenshot of Wiki settings' list dropdown:** "Ser ut som også de arkiverte
+space/lister kommer som forslag … det burde heller ikke komme opp når vi bruker # og @ i chat. Er de
+arkivert, så er de 'Disabled'. Enig?" Agreed on the principle.
+
+**Checked in the data, not assumed.** The newest production snapshot was downloaded through the
+Files API, read-only for Space/Folder/List names, `archived` and task counts, and shredded
+right after. **None of the lists in the screenshot are archived** (`List.archived = 0` on all). The
+apparent duplicates ("Ekstrem Gjemsel / Backup_Materiale" and "… / Etterarbeid - Check list", twice
+each) are the same list names in two folders, **Sesong 2** and **Sesong 3**. The dialog already
+excluded archived lists. Only Lists, Tasks and Docs can be archived in this app: **Space and Folder
+have no archive at all.** So what the user thinks of as archived (most likely old seasons, or whole
+Spaces no longer in use) has no way to be marked as such yet.
+
+**Fixed now (uncommitted at time of writing):**
+- The Wiki settings list picker is grouped per Space (`<optgroup>`), and each list is labelled with
+  its folder path ("Sesong 2 / Backup_Materiale"), sorted.
+- Mention pickers: files on archived tasks and archived docs are no longer offered (`mentionOptions`
+  for comments and chat, `mentionSuggestion` for the doc editor). Archived tasks were already
+  skipped. An archived list archives its tasks (`lib/archiveCascade.ts`), so they drop out too.
+
+**Proposed, waiting for the user:** archiving for Spaces and Folders. It would hide them from the
+sidebar (behind the existing Archive toggle), from pickers and from mentions, the same way archived
+lists already work. Asked which ones they meant.
+
+### 2026-09-28 (continued) — archive whole Spaces, with a switch to bring them back
+
+Asked (after the "archived lists" report turned out to be a misreading): "kan vi få en måte å
+arkivere hele spaces på, som også gjør at det er mulig å togle de tilbake om vi vil bla i 'Alt'?"
+
+- `Space.archived` (Boolean, default false), migration `20260928094954_add_space_archived`. It is a
+  SQLite table rebuild. Tested on the e2e DB: Space, List, Status, Task, Doc and Comment counts
+  unchanged, `foreign_key_check` clean.
+- **Filtered where the data is loaded, not on each screen** (`lib/archivedSpaces.ts`). `GET
+  /api/workspaces`, `/api/tasks` (both the scoped and the `excludeWorkspaceId` background fetch),
+  `/api/task-docs` and `/api/events` leave archived Spaces out, along with their tasks, task docs and
+  any event filed under them, unless `?archivedSpaces=1` is sent. Workspace-level events (no Space)
+  always show. Because every screen reads the same store, they disappear from the sidebar,
+  Everything, the Planner, My Tasks, mentions, Ctrl+K and the pickers at once, and a future screen
+  cannot forget to hide them. `GET /api/workspaces` also returns `archivedSpaceCount` (a filtered
+  `_count`), so the row can say how many are hidden.
+- The store has `showArchivedSpaces` (localStorage `siqt.showArchivedSpaces`, per device). The
+  setter reloads through `fetchInitialData`. `archiveSpace(id, archived)` PATCHes; while archived
+  Spaces are shown it only flips the badge, otherwise it reloads (and leaves the Space if it was the
+  active one). All 7 fetch sites append the query through `archivedSpacesQS()`.
+- **UI:** the Space context menu has "Archive space" / "Unarchive space" with a toast.
+  `components/ArchivedSpacesToggle.tsx` renders "Archived spaces (N)" / "Hide archived spaces" at
+  the foot of the desktop sidebar, the mobile Spaces sheet and Office's Spaces list (not Home's
+  personal list). It is there only when there is something archived or while they are shown.
+  Shown archived Spaces sort last, dimmed, and the desktop sidebar has an "Archived" divider. The
+  quick-create Space picker and the Wiki feedback list picker never offer archived Spaces, even
+  while shown, because new work does not go into something put away.
+- **Permission:** anyone who can see the Space may archive it, the same as archiving a List. A
+  non-member gets 403.
+- **Tested through the API** on a local server: archiving as a member returns 200. Hidden: the Space,
+  its task and its event are gone and the count is 1, while the workspace-level event stays. With
+  `archivedSpaces=1` they all come back with `archived: true`. Unarchiving brings them back and the
+  count is 0. `/` renders 200. **Not seen in a browser.**
+- **Not done:** archiving Folders (not asked). Nothing inside a Space is changed by archiving it,
+  so tasks keep their own `archived` flags.
+
+### 2026-09-28 (continued) — files in docs, and subpages in the wiki (uncommitted, together with Space archiving)
+
+**Files in docs.** Asked with a ClickUp screenshot of a `.docx` placed in a doc as a link-like chip
+("I ClickUp kan vi putte filer inn i docs, som en link"). There was no equivalent: docs could only
+take images.
+- `lib/collab/fileAttachmentNode.ts` is a new inline atom `fileAttachment` {url, name, size, mime},
+  added to the shared collab schema so the server knows it. `components/collab/fileAttachmentView.tsx`
+  draws the chip: an icon and colour by extension (pdf red, doc blue, sheet green, slides orange,
+  archive grey, audio/video purple) and the name. A click opens the file in a new tab. It is opened
+  explicitly, because whether a link in an editable area is followed differs between browsers.
+- Files get in through `/file` in the slash menu (a multi-file picker), **dropping** files onto the doc
+  or **pasting** them (`editorProps.handleDrop`/`handlePaste`, which call the current upload function
+  through a ref). Images still become images and everything else becomes a chip. There is an
+  "Uploading…" or error line above the editor.
+- The upload route now allows files in the `docs` context (the same type allowlist and 20 MB cap as
+  chat and task; HTML was checked and is rejected). The serving route takes `?name=` and sends
+  `Content-Disposition: inline; filename=…; filename*=UTF-8''…`, so a download keeps its real name,
+  not the uuid. The extension is forced to the stored one. **Not verified end to end:** `next dev`
+  serves `public/` files statically and never reached the route. In production the route serves
+  them, per the route's own comment. The name sanitising was checked with node.
+- Plain text, PDF and Google exports render the node as its name. The link CSS now skips
+  `.siqt-file-chip`, which is itself an `<a>`.
+- A remaining lint "refs during render" on `onRequestFile: () => fileInputRef.current?.click()` is a
+  false positive (it is a callback). Working around it by clicking from an effect risks the browser
+  refusing the file dialog without a user gesture, so it was left.
+- Files uploaded into docs live in `public/uploads/docs`, which is inside the daily off-site archive.
+
+**Subpages in the wiki.** Asked mid-way: "Kan vi også fikse så vi kan ha 'Sub pages' på Wikien?" The
+wiki was capped at two levels (chapter, page), and the user's ClickUp wiki is three deep (Mal-bibliotek
+→ Ekstrem Gjemsel S3 → Deltakerkontrakt).
+- API: a page can go under any wiki page, **up to 6 levels** (`MAX_DEPTH`). A move is refused if the new
+  parent is the page itself or any of its descendants. An empty `parentId` now means "no parent"
+  (it used to reach the DB as `''` and fail a foreign key with a 500, found while testing). Delete
+  already cascades the whole subtree (`cascadeDoc`).
+- Store: `wikiChildren`, a depth-first `wikiReadingOrder` (previous/next walks into subpages) and
+  `wikiDescendantIds`, which optimistic delete now uses for the whole subtree.
+- View: numbering goes to any depth (4.1.1). The contents column is a tree with a chevron per page
+  that has subpages. Subpages start closed unless the page being read is among them, and the open
+  state is remembered while you stay. The kicker shows the path ("Chapter 4 · Mal-bibliotek /
+  Ekstrem Gjemsel S3"). Editors get an "Add a subpage" (+) button in the page's edit toolbar. Any
+  page with subpages lists them under its text ("Subpages", or "In this chapter" for a chapter). The
+  delete confirmation counts everything under the page.
+- Tested through the API: 3 levels created; moving a page under itself and under its own grandchild
+  both give 400; level 7 gives 400; deleting the top of a 5-deep subtree removes all of it.
+  **Not seen in a browser.**

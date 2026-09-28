@@ -3,7 +3,7 @@ type PMNode = {
   type: string;
   text?: string;
   marks?: Mark[];
-  attrs?: { level?: number; kind?: string; id?: string; label?: string; textAlign?: string; src?: string; alt?: string };
+  attrs?: { level?: number; kind?: string; id?: string; label?: string; name?: string; textAlign?: string; src?: string; alt?: string };
   content?: PMNode[];
 };
 
@@ -61,6 +61,7 @@ function inlineRuns(nodes: PMNode[] = []): Run[] {
       let text = '';
       if (node.type === 'text') text = node.text ?? '';
       else if (node.type === 'mention' && node.attrs?.label) text = node.attrs.label;
+      else if (node.type === 'fileAttachment') text = `📎 ${node.attrs?.name ?? 'File'}`;
       return {
         text,
         bold: marks.some((m) => m.type === 'bold'),

@@ -192,6 +192,9 @@ export type HierarchyList = {
 export type HierarchySpace = {
   id: string;
   name: string;
+  // Put away (see Space.archived). Only ever true on a Space that came back because the viewer has
+  // showArchivedSpaces on — otherwise the server leaves archived Spaces out altogether.
+  archived: boolean;
   color: string;
   textColor: string | null;
   icon: string | null;
@@ -254,6 +257,9 @@ export type HierarchyWorkspace = {
   avatarUrl: string | null;
   // Whether the Wiki is switched on for this workspace (off by default). Gates the nav entries.
   wikiEnabled: boolean;
+  // How many Spaces in this workspace are archived — sent even while they are hidden, for the
+  // sidebar's "Archived spaces (N)" row.
+  archivedSpaceCount: number;
   spaces: HierarchySpace[];
   rooms: HierarchyRoom[];
   // Each member's own tier (owner/admin/member) is attached directly onto their entry rather
@@ -327,6 +333,10 @@ interface TaskStore {
   // fetchInitialData.
   hasLoadedOnce: boolean;
   showArchived: boolean;
+  // Whether archived Spaces (and everything in them) are loaded and shown. Per device, remembered.
+  showArchivedSpaces: boolean;
+  setShowArchivedSpaces: (v: boolean) => Promise<void>;
+  archiveSpace: (spaceId: string, archived: boolean) => Promise<void>;
 
   fetchInitialData: () => Promise<void>;
   refetchWorkspaces: () => Promise<void>;
@@ -681,6 +691,21 @@ interface TaskStore {
   permanentlyDeleteFromTrash: (kind: 'spaces' | 'folders' | 'lists' | 'tasks' | 'doc-folders' | 'docs' | 'events', id: string) => Promise<void>;
 }
 
+const SHOW_ARCHIVED_SPACES_KEY = 'siqt.showArchivedSpaces';
+
+// Remembered per device, like the rest of the view preferences. Wrapped: storage can be missing or
+// throw (private windows, the first server render), and the answer then is simply "off".
+function readShowArchivedSpaces(): boolean {
+  try {
+    return typeof localStorage !== 'undefined' && localStorage.getItem(SHOW_ARCHIVED_SPACES_KEY) === '1';
+  } catch {
+    return false;
+  }
+}
+
+// Appended to every request that loads Spaces or what is in them — see lib/archivedSpaces.ts.
+const archivedSpacesQS = () => (useTaskStore.getState().showArchivedSpaces ? '&archivedSpaces=1' : '');
+
 export const useTaskStore = create<TaskStore>((set, get) => {
   // Delete/restore for Space, Folder, List, Task, DocFolder, and Doc all go through the
   // server's soft-delete (`deletedAt`) + cascade instead of a real destructive delete — see
@@ -722,6 +747,7 @@ export const useTaskStore = create<TaskStore>((set, get) => {
     isLoading: true,
     hasLoadedOnce: false,
     showArchived: false,
+    showArchivedSpaces: readShowArchivedSpaces(),
 
     fetchInitialData: async () => {
       // Only the FIRST load blanks the app.
@@ -742,7 +768,7 @@ export const useTaskStore = create<TaskStore>((set, get) => {
 
         // Workspaces first, alone, because everything below depends on knowing which one is active —
         // and because it is the small request. Only once it lands can the task fetch be scoped.
-        const workspacesRes = await fetch(`/api/workspaces?userId=${userId}`);
+        const workspacesRes = await fetch(`/api/workspaces?userId=${userId}${archivedSpacesQS()}`);
         const workspaces = await workspacesRes.json();
 
         // Which workspace the app is about to show. Same rules as the full resolution further down;
@@ -761,10 +787,10 @@ export const useTaskStore = create<TaskStore>((set, get) => {
         // what it always was; with several it is the difference between waiting for your own work
         // and waiting for the whole company's.
         const [tasksRes, usersRes, taskDocsRes, eventsRes] = await Promise.all([
-          fetch(`/api/tasks?userId=${userId}${scopeWorkspaceId ? `&workspaceId=${scopeWorkspaceId}` : ''}`),
+          fetch(`/api/tasks?userId=${userId}${scopeWorkspaceId ? `&workspaceId=${scopeWorkspaceId}` : ''}${archivedSpacesQS()}`),
           fetch('/api/users'),
-          fetch(`/api/task-docs?userId=${userId}`),
-          fetch(`/api/events?userId=${userId}`),
+          fetch(`/api/task-docs?userId=${userId}${archivedSpacesQS()}`),
+          fetch(`/api/events?userId=${userId}${archivedSpacesQS()}`),
         ]);
         const tasks = await tasksRes.json();
         const users = await usersRes.json();
@@ -865,7 +891,7 @@ export const useTaskStore = create<TaskStore>((set, get) => {
           void (async () => {
             try {
               const restRes = await fetch(
-                `/api/tasks?userId=${userId}&excludeWorkspaceId=${scopeWorkspaceId}`
+                `/api/tasks?userId=${userId}&excludeWorkspaceId=${scopeWorkspaceId}${archivedSpacesQS()}`
               );
               if (!restRes.ok) return;
               const rest: Task[] = await restRes.json();
@@ -896,7 +922,7 @@ export const useTaskStore = create<TaskStore>((set, get) => {
     refetchWorkspaces: async () => {
       try {
         const userId = useSessionStore.getState().currentUserId ?? '';
-        const res = await fetch(`/api/workspaces?userId=${userId}`);
+        const res = await fetch(`/api/workspaces?userId=${userId}${archivedSpacesQS()}`);
         const workspaces = await res.json();
         set({ workspaces });
       } catch (error) {
@@ -909,7 +935,7 @@ export const useTaskStore = create<TaskStore>((set, get) => {
     refetchTasks: async () => {
       try {
         const userId = useSessionStore.getState().currentUserId ?? '';
-        const res = await fetch(`/api/tasks?userId=${userId}`);
+        const res = await fetch(`/api/tasks?userId=${userId}${archivedSpacesQS()}`);
         const tasks = await res.json();
         set({ tasks });
       } catch (error) {
@@ -920,7 +946,7 @@ export const useTaskStore = create<TaskStore>((set, get) => {
     refetchEvents: async () => {
       try {
         const userId = useSessionStore.getState().currentUserId ?? '';
-        const res = await fetch(`/api/events?userId=${userId}`);
+        const res = await fetch(`/api/events?userId=${userId}${archivedSpacesQS()}`);
         const events = await res.json();
         set({ events });
       } catch (error) {
@@ -1006,6 +1032,40 @@ export const useTaskStore = create<TaskStore>((set, get) => {
     setActiveOfficeRoomId: (activeOfficeRoomId) => set({ activeOfficeRoomId }),
 
     setShowArchived: (showArchived) => set({ showArchived }),
+
+    // Archived Spaces are left out by the server, not hidden here (lib/archivedSpaces.ts), so
+    // switching this reloads the data rather than re-filtering it.
+    setShowArchivedSpaces: async (on) => {
+      try {
+        localStorage.setItem(SHOW_ARCHIVED_SPACES_KEY, on ? '1' : '0');
+      } catch {}
+      set({ showArchivedSpaces: on });
+      await get().fetchInitialData();
+    },
+
+    archiveSpace: async (spaceId, archived) => {
+      const res = await fetch(`/api/spaces/${spaceId}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ archived }),
+      });
+      if (!res.ok) return;
+      // While archived Spaces are shown, it only changes its badge. Otherwise it — and all its tasks,
+      // docs and events — has to leave, and coming back (unarchiving) has to bring them back: a reload
+      // does both correctly, where patching every list in the store by hand would miss one.
+      if (get().showArchivedSpaces) {
+        set((state) => ({
+          workspaces: state.workspaces.map((ws) => ({
+            ...ws,
+            archivedSpaceCount: ws.archivedSpaceCount + (ws.spaces.some((sp) => sp.id === spaceId) ? (archived ? 1 : -1) : 0),
+            spaces: ws.spaces.map((sp) => (sp.id === spaceId ? { ...sp, archived } : sp)),
+          })),
+        }));
+      } else {
+        if (archived && get().activeSpaceId === spaceId) get().setNavigation('everything', []);
+        await get().fetchInitialData();
+      }
+    },
 
     optimisticCreateEvent: async (params) => {
       const res = await fetch('/api/events', {

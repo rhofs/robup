@@ -4,12 +4,14 @@ import { NextResponse } from 'next/server';
 import { prisma, publicUserSelect } from '@/lib/prisma';
 import { getCurrentUserId } from '@/lib/auth/session';
 import { getAccessContext, canSee, buildFolderChainVisibility } from '@/lib/auth/access';
+import { includeArchivedSpaces, spaceArchiveFilter } from '@/lib/archivedSpaces';
 
-export async function GET() {
+export async function GET(req: Request) {
   const userId = await getCurrentUserId();
   // No identity asserted -> no workspaces. Real login now backs this identity (see auth.ts) —
   // signed-out requests must not be a way to bypass every private workspace's membership check.
   if (!userId) return NextResponse.json([]);
+  const includeArchived = includeArchivedSpaces(req);
 
   const workspaces = await prisma.workspace.findMany({
     where: { memberships: { some: { userId } } },
@@ -17,8 +19,11 @@ export async function GET() {
       memberships: { include: { user: { select: publicUserSelect } } },
       roles: { orderBy: { createdAt: 'asc' }, include: { members: { select: { id: true } } } },
       rooms: { orderBy: { order: 'asc' } },
+      // How many are put away, so the sidebar can offer "Archived spaces (N)" even while they are
+      // not being sent.
+      _count: { select: { spaces: { where: { deletedAt: null, archived: true } } } },
       spaces: {
-        where: { deletedAt: null },
+        where: { deletedAt: null, ...spaceArchiveFilter(includeArchived) },
         orderBy: { order: 'asc' },
         include: {
           folders: {
@@ -49,6 +54,8 @@ export async function GET() {
         ...ws,
         members: ws.memberships.map((m) => ({ ...m.user, workspaceRole: m.role })),
         memberships: undefined,
+        archivedSpaceCount: ws._count.spaces,
+        _count: undefined,
         roles: ws.roles.map((r) => ({ id: r.id, name: r.name, color: r.color, memberIds: r.members.map((m) => m.id) })),
         // Spaces/Folders/Lists a private-and-inaccessible caller can't see are dropped entirely
         // here, not just visually hidden client-side — matches how GET already returns [] for a

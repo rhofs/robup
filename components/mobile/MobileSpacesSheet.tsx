@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from 'react';
 import { ChevronRight, ChevronDown, Globe, Search, X, Plus, Folder as FolderIconLucide, List as ListIconLucide, FileText } from 'lucide-react';
 import { motion } from 'framer-motion';
 import { useTaskStore, type HierarchySpace } from '../../store/useTaskStore';
+import ArchivedSpacesToggle, { archivedLast } from '../ArchivedSpacesToggle';
 import { FOLDER_ICON_MAP } from '../FolderTree';
 import FloatingPopover from '../FloatingPopover';
 import { hapticTap } from '../../lib/haptics';
@@ -464,11 +465,11 @@ export default function MobileSpacesSheet({
               </div>
             )}
 
-            {spaces.map((space) => {
+            {[...spaces].sort(archivedLast).map((space) => {
               const Icon = space.icon ? FOLDER_ICON_MAP[space.icon] : null;
               const isExpanded = expandedSpaceIds.has(space.id);
               return (
-                <div key={space.id}>
+                <div key={space.id} className={space.archived ? 'opacity-55' : undefined}>
                     {/* No "currently active" highlight, on purpose.
                         This sheet is a place you pass through: open it, pick something, it closes.
                         The highlight therefore never showed where you *are* — only where you were
@@ -535,6 +536,7 @@ export default function MobileSpacesSheet({
                 </div>
               );
             })}
+            <ArchivedSpacesToggle className="mt-2" />
           </div>
           </div>
         </motion.div>

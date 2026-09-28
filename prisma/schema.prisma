@@ -318,6 +318,11 @@ model Space {
   description   String?
   coverImageUrl String?       @map("cover_image_url")
   deletedAt     DateTime?     @map("deleted_at")
+  // Put away, not deleted — a finished show, an old season. An archived Space and everything in it
+  // is left out of what the server sends (sidebar, Everything, Planner, My Tasks, mentions, search,
+  // pickers) unless the viewer has "Archived spaces" switched on, which brings it all back to browse.
+  // Nothing inside is touched, so unarchiving restores it exactly.
+  archived      Boolean       @default(false)
   workspaceId   String        @map("workspace_id")
   workspace     Workspace     @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
   folders       Folder[]

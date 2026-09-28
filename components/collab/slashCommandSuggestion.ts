@@ -10,7 +10,7 @@ import SlashCommandList, { type SlashCommandListRef } from './SlashCommandList';
 export type SlashCommandItem = {
   id: string;
   label: string;
-  icon: 'heading1' | 'heading2' | 'bulletList' | 'orderedList' | 'subpage' | 'subpagesIndex' | 'image' | 'codeBlock';
+  icon: 'heading1' | 'heading2' | 'bulletList' | 'orderedList' | 'subpage' | 'subpagesIndex' | 'image' | 'codeBlock' | 'file';
   run: (editor: Editor, range: Range) => void;
 };
 
@@ -116,9 +116,23 @@ function imageCommand(onRequestImage: () => void): SlashCommandItem {
   };
 }
 
+// "File": clears "/file" and opens the file picker; CollabDocEditor uploads what is picked and puts a
+// file chip (lib/collab/fileAttachmentNode.ts) where the caret was.
+function fileCommand(onRequestFile: () => void): SlashCommandItem {
+  return {
+    id: 'file',
+    label: 'File',
+    icon: 'file',
+    run: (editor, range) => {
+      editor.chain().focus().deleteRange(range).run();
+      onRequestFile();
+    },
+  };
+}
+
 // spaceId/docId come from the extension's own options (see slashCommandExtension.ts), not a
 // closure captured at module scope — this factory is called fresh per editor instance.
-export function createSlashCommandSuggestion(opts: { spaceId?: string; docId: string; onRequestImage?: () => void }): Partial<SuggestionOptions<SlashCommandItem>> {
+export function createSlashCommandSuggestion(opts: { spaceId?: string; docId: string; onRequestImage?: () => void; onRequestFile?: () => void }): Partial<SuggestionOptions<SlashCommandItem>> {
   const items = spaceIdAwareItems(opts);
 
   return {
@@ -164,9 +178,10 @@ export function createSlashCommandSuggestion(opts: { spaceId?: string; docId: st
   };
 }
 
-function spaceIdAwareItems(opts: { spaceId?: string; docId: string; onRequestImage?: () => void }): SlashCommandItem[] {
+function spaceIdAwareItems(opts: { spaceId?: string; docId: string; onRequestImage?: () => void; onRequestFile?: () => void }): SlashCommandItem[] {
   const items = baseCommands();
   if (opts.onRequestImage) items.push(imageCommand(opts.onRequestImage));
+  if (opts.onRequestFile) items.push(fileCommand(opts.onRequestFile));
   if (opts.spaceId) {
     items.push(newSubpageCommand(opts.spaceId, opts.docId));
     items.push(subpagesIndexCommand(opts.docId));

@@ -15,6 +15,7 @@ export type SlashCommandOptions = {
   spaceId?: string;
   docId: string;
   onRequestImage?: () => void;
+  onRequestFile?: () => void;
 };
 
 // No persistent Node needed — every command runs editor operations immediately (or, for New
@@ -25,7 +26,7 @@ export const SlashCommand = Extension.create<SlashCommandOptions>({
   name: 'slashCommand',
 
   addOptions() {
-    return { spaceId: undefined, docId: '', onRequestImage: undefined };
+    return { spaceId: undefined, docId: '', onRequestImage: undefined, onRequestFile: undefined };
   },
 
   addProseMirrorPlugins() {
