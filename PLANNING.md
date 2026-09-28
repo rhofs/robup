@@ -10255,3 +10255,5 @@ two Android entries for a while.
     because Next's router can treat a `popstate` without its own history state as an outside
     navigation and reload.
 - **Not verified in a browser or on a phone.** Typechecked and linted clean.
+
+**Deployed 2026-09-28 as `f87a749`** (in-app banner, notification URLs, push token sync at launch). The reinstall ran clean.
