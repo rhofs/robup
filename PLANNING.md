@@ -10407,3 +10407,5 @@ offered. Waiting for the answer.
 - `archivedSpaceCount` is still returned by `GET /api/workspaces` but nothing reads it now. It is
   harmless and could badge the Archive button later.
 - **Not seen in a browser.** Typechecked; no new lint findings in the changed code.
+
+**Deployed 2026-09-29 as `29b24ae`** (archived Spaces merged into the one Archive mode). The reinstall ran clean. Not yet seen in a browser.
