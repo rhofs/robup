@@ -10293,3 +10293,5 @@ times), Focus/Do Not Disturb, and the web app's notification settings. **Not ver
 **Confirmed by the user 2026-09-29:** after the Xiaomi battery/autostart changes, Robin's Android test
 notification "kom nesten umiddelbart". The app token re-registration and the phone-side settings together
 fixed Android. The iPhone urgency fix above is still to be deployed and confirmed.
+
+**Deployed 2026-09-29 as `4bf9803`** (web push `urgency: high` and a 1-day TTL). The reinstall ran clean. Not yet confirmed on Broonstar's iPhone.
