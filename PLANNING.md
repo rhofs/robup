@@ -10257,3 +10257,24 @@ two Android entries for a while.
 - **Not verified in a browser or on a phone.** Typechecked and linted clean.
 
 **Deployed 2026-09-28 as `f87a749`** (in-app banner, notification URLs, push token sync at launch). The reinstall ran clean.
+
+### 2026-09-29 — a push that took 10 hours: the server was instant, the phone held it
+
+**Reported with screenshots:** Broonstar's "Test" was sent at 21:37 (2026-09-28), and the Android
+notification only appeared at 08:05 the next morning.
+
+**Checked with the delivery record** (newest snapshot read-only, only timestamps; shredded after):
+Robin's app token was re-registered 09-28 16:35 UTC (the Disable/Enable workaround; the old
+token is gone), and **Google accepted the push at 19:37:01 UTC, the same second the message was
+sent**. The web-push subscriptions were accepted at the same moment. So the server side and FCM
+hand-off worked. The ~10.5 h delay was between Google and the phone. The phone runs Xiaomi
+HyperOS (going by the lock screen), which is known to hold notifications back for apps without
+"Autostart" or with battery restrictions. The lock screen also showed "No service" on mobile data, so
+a night without connectivity is the other candidate. The user was given the Xiaomi steps (Autostart on,
+Battery saver: No restrictions, notifications including lock screen allowed, lock the app in recents)
+and a test (lock the phone 10–15 min, then send). **Nothing to fix in code for this.** We already
+send `android.priority: 'high'`.
+
+**Also noticed:** Christer Larsen's app token (09-23) and Yang B's browser subscription (09-14) have
+never had a push accepted, meaning nothing has been sent to them since the record was added. That is
+not a fault by itself.
