@@ -10409,3 +10409,25 @@ offered. Waiting for the answer.
 - **Not seen in a browser.** Typechecked; no new lint findings in the changed code.
 
 **Deployed 2026-09-29 as `29b24ae`** (archived Spaces merged into the one Archive mode). The reinstall ran clean. Not yet seen in a browser.
+
+### 2026-09-29 (continued) — sheets under the status bar, a pastel glow, magic dust, and Archive under the list (uncommitted at time of writing)
+
+- **The × in "New" sat behind the phone's status bar** after a long-press create, reachable only by
+  scrolling. The sheets were capped at 80–94 vh with no regard for the top safe area, and with the
+  title auto-focused the keyboard pushed the top up behind it. The overlay of every new sheet
+  (MobileQuickCreateSheet and its pickers, DateSheet, TimeDialSheet) now has
+  `pt-[calc(env(safe-area-inset-top)+12px)]`, and the sheets are `max-h-full min-h-0`, so they are
+  never taller than what is left and scroll inside. TimeDialSheet had no cap at all and now has one.
+  **Not verified on a device.**
+- **Glow:** "en veldig svak glow rundt dagen/dagene … som går utover dagen". `.siqt-band::before` is a
+  blurred (14 px) copy of the pastel gradient, inset −10 px behind the band, breathing between 0.3
+  and 0.5 opacity. It is static under reduced motion.
+- **Magic dust instead of cartoon clouds:** the particles are now ~30 tiny specks (2.5–6.5 px, white
+  core, a halo in their own pastel via box-shadow, flickering as they fly out 25–120 px) plus 7
+  four-pointed sparkles (`clip-path` star, drop-shadow glow) that swell, turn and wink out. The ring
+  is a thin shimmering pastel ring rather than a disc. The burst lives 1.5 s.
+- **Archive on mobile under the task list:** "under selve arket … under tasksa". There is a
+  pill-shaped "Archive"/"Exit archive" button (amber while in archive mode) below the task list on a
+  phone. Desktop keeps its toolbar button. The archive banner now says "archived tasks, lists and
+  spaces" (it said "tasks only", no longer true since option A).
+- Typechecked. **Not seen on a device.**

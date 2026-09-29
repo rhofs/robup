@@ -15,26 +15,42 @@ import { createPortal } from 'react-dom';
 
 export const PUFF_COLORS = ['#FFB8CF', '#FFD2B8', '#B8D4FF', '#E4CFFF', '#FFE0EA', '#CFE4FF'];
 
-export type PuffParticle = { dx: number; dy: number; size: number; scale: number; delay: number; duration: number; color: string };
+export type PuffParticle = {
+  kind: 'dust' | 'star';
+  dx: number;
+  dy: number;
+  size: number;
+  delay: number;
+  duration: number;
+  color: string;
+  spin: number;
+};
 
 // Random per burst, so no two pops look the same. Made where the burst is started (an event, not a
 // render), because a render has to be able to run twice and give the same result.
+//
+// Magic dust rather than a cloud — the second version's soft blobs read as "tegneserieskyer". Many
+// tiny glowing specks that fly out at different speeds and flicker as they fade, and a handful of
+// four-pointed sparkles that twinkle and turn.
 export function makePuffParticles(): PuffParticle[] {
   const out: PuffParticle[] = [];
-  const count = 16;
-  for (let i = 0; i < count; i++) {
-    // Spread evenly round the circle with some jitter, so the cloud is round rather than clumped.
-    const angle = (i / count) * Math.PI * 2 + (Math.random() - 0.5) * 0.6;
-    const dist = 48 + Math.random() * 52;
+  const dust = 30;
+  const stars = 7;
+  for (let i = 0; i < dust + stars; i++) {
+    const isStar = i >= dust;
+    const angle = Math.random() * Math.PI * 2;
+    // Dust spreads unevenly — most of it close, some flung far — which is what makes it read as a
+    // spray of glitter rather than a ring.
+    const dist = (isStar ? 40 : 25) + Math.pow(Math.random(), 0.7) * (isStar ? 70 : 95);
     out.push({
+      kind: isStar ? 'star' : 'dust',
       dx: Math.cos(angle) * dist,
-      // A little lift, the way a puff of smoke rises.
-      dy: Math.sin(angle) * dist - 10,
-      size: 20 + Math.random() * 18,
-      scale: 1 + Math.random() * 0.7,
-      delay: Math.random() * 60,
-      duration: 650 + Math.random() * 300,
-      color: PUFF_COLORS[i % PUFF_COLORS.length],
+      dy: Math.sin(angle) * dist - (isStar ? 14 : 8),
+      size: isStar ? 9 + Math.random() * 7 : 2.5 + Math.random() * 4,
+      delay: Math.random() * (isStar ? 140 : 90),
+      duration: (isStar ? 900 : 700) + Math.random() * 450,
+      color: PUFF_COLORS[Math.floor(Math.random() * PUFF_COLORS.length)],
+      spin: (Math.random() - 0.5) * 180,
     });
   }
   return out;
@@ -48,7 +64,7 @@ export default function PuffBurst({ x, y, particles, onDone }: { x: number; y: n
     onDoneRef.current = onDone;
   });
   useEffect(() => {
-    const t = window.setTimeout(() => onDoneRef.current(), 1100);
+    const t = window.setTimeout(() => onDoneRef.current(), 1500);
     return () => window.clearTimeout(t);
   }, []);
 
@@ -59,7 +75,7 @@ export default function PuffBurst({ x, y, particles, onDone }: { x: number; y: n
       {particles.map((p, i) => (
         <span
           key={i}
-          className="siqt-puff"
+          className={p.kind === 'star' ? 'siqt-star' : 'siqt-dust'}
           style={
             {
               width: p.size,
@@ -68,8 +84,8 @@ export default function PuffBurst({ x, y, particles, onDone }: { x: number; y: n
               marginTop: -p.size / 2,
               '--dx': `${p.dx}px`,
               '--dy': `${p.dy}px`,
-              '--s': p.scale,
               '--c': p.color,
+              '--r': `${p.spin}deg`,
               animationDelay: `${p.delay}ms`,
               animationDuration: `${p.duration}ms`,
             } as React.CSSProperties

@@ -7213,7 +7213,7 @@ function PageContent() {
               <div className="mb-2 flex items-center justify-between gap-3 rounded-lg border border-amber-500/40 bg-amber-500/10 px-3 py-2">
                 <span className="min-w-0 text-[11px] text-amber-300">
                   <span className="font-semibold">Viewing archive</span>
-                  <span className="text-amber-300/70"> — archived tasks only</span>
+                  <span className="text-amber-300/70"> — archived tasks, lists and spaces</span>
                 </span>
                 <button
                   onClick={() => setShowArchived(false)}
@@ -7368,6 +7368,21 @@ function PageContent() {
               </div>
               </div>
             </div>
+            {/* The archive, on a phone: under the list, where the end of your tasks is — asked for
+                as "under selve arket … under tasksa". It was only in the launcher menu, far from
+                the list it changes. Desktop keeps its toolbar button. */}
+            {isMobile && (
+              <div className="flex justify-center pt-6 pb-2">
+                <button
+                  onClick={() => setShowArchived(!showArchived)}
+                  className={`flex items-center gap-1.5 px-4 py-2 rounded-full text-[13px] font-medium border cursor-pointer transition active:scale-95 ${
+                    showArchived ? 'text-amber-300 border-amber-500/40 bg-amber-500/10' : 'text-neutral-500 border-neutral-800'
+                  }`}
+                >
+                  <Archive className="w-3.5 h-3.5" /> {showArchived ? 'Exit archive' : 'Archive'}
+                </button>
+              </div>
+            )}
             </>
             )}
           </div>

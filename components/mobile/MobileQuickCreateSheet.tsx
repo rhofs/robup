@@ -77,14 +77,14 @@ function Row({ icon: Icon, children, onClick }: { icon: typeof CalendarDays; chi
 // A bottom sheet for a list of choices (the list to create a task in, attendees).
 function PickSheet({ title, onClose, children }: { title: string; onClose: () => void; children: React.ReactNode }) {
   return (
-    <div className="fixed inset-0 z-[90] flex flex-col justify-end bg-scrim/50" onClick={onClose}>
+    <div className="fixed inset-0 z-[90] flex flex-col justify-end bg-scrim/50 pt-[calc(env(safe-area-inset-top)+12px)]" onClick={onClose}>
       <motion.div
         initial={{ y: '100%' }}
         animate={{ y: 0 }}
         exit={{ y: '100%' }}
         transition={{ type: 'spring', stiffness: 380, damping: 38 }}
         onClick={(e) => e.stopPropagation()}
-        className="bg-neutral-900 rounded-t-[28px] max-h-[80vh] flex flex-col pb-[calc(env(safe-area-inset-bottom)+12px)]"
+        className="bg-neutral-900 rounded-t-[28px] max-h-full min-h-0 flex flex-col pb-[calc(env(safe-area-inset-bottom)+12px)]"
       >
         <div className="relative flex items-center justify-center px-5 pt-5 pb-3 shrink-0">
           <h3 className="text-[17px] font-semibold text-app-strong">{title}</h3>
@@ -162,13 +162,13 @@ export default function MobileQuickCreateSheet({
   const summary = datesSummary(start, isTask ? taskDue : end);
 
   return (
-    <div className="fixed inset-0 z-[80] flex flex-col justify-end bg-scrim/60" onClick={onClose}>
+    <div className="fixed inset-0 z-[80] flex flex-col justify-end bg-scrim/60 pt-[calc(env(safe-area-inset-top)+12px)]" onClick={onClose}>
       <motion.div
         initial={{ y: '100%' }}
         animate={{ y: 0 }}
         transition={{ type: 'spring', stiffness: 380, damping: 38 }}
         onClick={(e) => e.stopPropagation()}
-        className="bg-neutral-900 rounded-t-[28px] max-h-[92vh] flex flex-col"
+        className="bg-neutral-900 rounded-t-[28px] max-h-full min-h-0 flex flex-col"
       >
         <div className="flex justify-center pt-2.5 shrink-0">
           <span className="w-10 h-1 rounded-full bg-neutral-700" />

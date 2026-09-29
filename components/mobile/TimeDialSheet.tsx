@@ -70,14 +70,14 @@ export default function TimeDialSheet({
   const selectedLabel = mode === 'hour' ? String(h) : pad(m);
 
   return (
-    <div className="fixed inset-0 z-[95] flex flex-col justify-end bg-scrim/50" onClick={onClose}>
+    <div className="fixed inset-0 z-[95] flex flex-col justify-end bg-scrim/50 pt-[calc(env(safe-area-inset-top)+12px)]" onClick={onClose}>
       <motion.div
         initial={{ y: '100%' }}
         animate={{ y: 0 }}
         exit={{ y: '100%' }}
         transition={{ type: 'spring', stiffness: 380, damping: 38 }}
         onClick={(e) => e.stopPropagation()}
-        className="bg-neutral-900 rounded-t-[28px] pb-[calc(env(safe-area-inset-bottom)+12px)]"
+        className="bg-neutral-900 rounded-t-[28px] max-h-full overflow-y-auto pb-[calc(env(safe-area-inset-bottom)+12px)]"
       >
         <div className="relative flex items-center justify-center px-5 pt-5 pb-3">
           <h3 className="text-[17px] font-semibold text-app-strong">Pick time</h3>

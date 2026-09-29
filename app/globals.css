@@ -484,6 +484,7 @@ body {
   position: absolute;
   top: 0;
   bottom: 0;
+  isolation: isolate;
   background: linear-gradient(115deg, rgb(255 184 207 / 0.5), rgb(255 210 184 / 0.5) 50%, rgb(184 212 255 / 0.55));
   box-shadow: inset 0 0 0 1px rgb(255 255 255 / 0.25);
   transition:
@@ -494,6 +495,28 @@ body {
 @keyframes siqt-band-in {
   from {
     opacity: 0;
+  }
+}
+/* A faint glow in the same pastels, spilling a little past the selected days — asked for as "en
+   veldig svak glow rundt dagen/dagene … som går utover dagen". A blurred copy of the gradient behind
+   the band, breathing slowly while the selection is held. */
+.siqt-band::before {
+  content: '';
+  position: absolute;
+  inset: -10px;
+  z-index: -1;
+  border-radius: 14px;
+  background: linear-gradient(115deg, rgb(255 184 207 / 0.9), rgb(255 210 184 / 0.9) 50%, rgb(184 212 255 / 0.95));
+  filter: blur(14px);
+  opacity: 0.4;
+  animation: siqt-band-glow 2.4s ease-in-out infinite alternate;
+}
+@keyframes siqt-band-glow {
+  from {
+    opacity: 0.3;
+  }
+  to {
+    opacity: 0.5;
   }
 }
 /* On the day the hold began: the pop — out past full size from the pressed-in state, and settle. */
@@ -507,9 +530,10 @@ body {
   }
 }
 
-/* The cloud (components/calendar/PuffBurst.tsx). A zero-size layer at the finger; every particle is
-   centred on it and flies out to its own --dx/--dy, growing and fading — soft blurred dots that
-   overlap into a puff rather than read as confetti. */
+/* The magic dust (components/calendar/PuffBurst.tsx). A zero-size layer at the finger; every
+   particle starts there and flies out to its own --dx/--dy. Dust: tiny specks with a bright core and a
+   soft halo of their own colour, flickering as they fade — glitter, not a cloud. Stars: four-pointed
+   sparkles that swell, turn (--r) and wink out. */
 .siqt-puff-layer {
   position: fixed;
   width: 0;
@@ -517,43 +541,89 @@ body {
   z-index: 200;
   pointer-events: none;
 }
-.siqt-puff {
+.siqt-dust {
   position: absolute;
   left: 0;
   top: 0;
   border-radius: 9999px;
-  background: radial-gradient(circle, var(--c) 0%, var(--c) 38%, transparent 70%);
-  filter: blur(1.5px);
+  background: radial-gradient(circle, #fff 0%, var(--c) 55%);
+  box-shadow:
+    0 0 4px 1px var(--c),
+    0 0 10px 2px color-mix(in srgb, var(--c) 60%, transparent);
   opacity: 0;
-  animation-name: siqt-puff;
-  animation-timing-function: cubic-bezier(0.16, 1, 0.3, 1);
+  animation-name: siqt-dust;
+  animation-timing-function: cubic-bezier(0.12, 0.9, 0.3, 1);
   animation-fill-mode: forwards;
 }
-@keyframes siqt-puff {
+@keyframes siqt-dust {
   0% {
-    opacity: 0.95;
-    transform: translate(0, 0) scale(0.3);
+    opacity: 1;
+    transform: translate(0, 0) scale(0.6);
   }
-  60% {
-    opacity: 0.8;
+  35% {
+    opacity: 1;
+  }
+  55% {
+    opacity: 0.55;
+  }
+  70% {
+    opacity: 0.95;
   }
   100% {
     opacity: 0;
-    transform: translate(var(--dx), var(--dy)) scale(var(--s));
+    transform: translate(var(--dx), var(--dy)) scale(0.4);
+  }
+}
+.siqt-star {
+  position: absolute;
+  left: 0;
+  top: 0;
+  background: radial-gradient(circle, #fff 0%, var(--c) 60%);
+  clip-path: polygon(50% 0%, 60% 40%, 100% 50%, 60% 60%, 50% 100%, 40% 60%, 0% 50%, 40% 40%);
+  filter: drop-shadow(0 0 4px var(--c));
+  opacity: 0;
+  animation-name: siqt-star;
+  animation-timing-function: cubic-bezier(0.16, 1, 0.3, 1);
+  animation-fill-mode: forwards;
+}
+@keyframes siqt-star {
+  0% {
+    opacity: 0;
+    transform: translate(0, 0) scale(0.2) rotate(0deg);
+  }
+  20% {
+    opacity: 1;
+  }
+  50% {
+    transform: translate(calc(var(--dx) * 0.8), calc(var(--dy) * 0.8)) scale(1.15) rotate(calc(var(--r) * 0.6));
+  }
+  65% {
+    opacity: 0.6;
+  }
+  78% {
+    opacity: 1;
+  }
+  100% {
+    opacity: 0;
+    transform: translate(var(--dx), var(--dy)) scale(0.3) rotate(var(--r));
   }
 }
 /* The circle that pops out behind the cloud — in the same pastels, not the old sharp blue. */
 .siqt-puff-ring {
   position: absolute;
-  left: -60px;
-  top: -60px;
-  width: 120px;
-  height: 120px;
+  left: -50px;
+  top: -50px;
+  width: 100px;
+  height: 100px;
   border-radius: 9999px;
-  background: radial-gradient(circle, rgb(255 210 184 / 0) 35%, rgb(255 184 207 / 0.45) 55%, rgb(184 212 255 / 0.35) 68%, transparent 72%);
+  /* A thin shimmer of a ring, not a disc — the moment of the pop, gone as the dust flies. */
+  box-shadow:
+    0 0 0 1.5px rgb(255 214 230 / 0.8),
+    0 0 14px 3px rgb(255 184 207 / 0.45),
+    inset 0 0 12px 2px rgb(184 212 255 / 0.4);
   transform: scale(0.2);
   opacity: 0;
-  animation: siqt-puff-ring 620ms cubic-bezier(0.16, 1, 0.3, 1) forwards;
+  animation: siqt-puff-ring 560ms cubic-bezier(0.16, 1, 0.3, 1) forwards;
 }
 @keyframes siqt-puff-ring {
   0% {
@@ -578,6 +648,9 @@ body {
   }
   .siqt-puff-layer {
     display: none;
+  }
+  .siqt-band::before {
+    animation: none;
   }
 }
 
