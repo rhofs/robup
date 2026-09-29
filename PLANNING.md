@@ -10464,3 +10464,47 @@ Feedback: the dust is good now. Then:
   list above it. The one under the task list stays.
 
 **Deployed 2026-09-29 as `76625bc`** (sheets lifted above the keyboard, outer-only glow, pastel nav bubble, Archive in Office). The reinstall ran clean. Not yet seen on a device.
+
+### 2026-09-29 (continued) — iPhone testing: no haptics, the sheet scrolls away, and Back misbehaves (uncommitted at time of writing)
+
+The user tested on an iPhone (web app added to the home screen):
+1. **"det er ikke haptisk i det hele tatt."** Safari has no Vibration API, in the browser or as a
+   home-screen app. Added a **best-effort iOS 18 trick** in `lib/haptics.ts`: a hidden
+   `<label><input type="checkbox" switch></label>` whose `.click()` from script produces the
+   system switch haptic. It is only used on iOS when `navigator.vibrate` is missing, and it is one
+   intensity whatever the setting. It very likely works only near a real gesture (a tap) and may not
+   fire for the Planner's timer-driven "armed" pulse. The label's click is stopped from bubbling
+   (the only capture click listener is a desktop-only menu anyway). **Not verified on a device.**
+2. **Creating from the Planner: "man må scrolle ned, eller scrolle opp for å komme tilbake".** iOS covers
+   the page with the keyboard *and* scrolls it to reveal the focused field, and leaves it scrolled
+   afterwards. The keyboard-overlap padding from earlier today handled Android's covering but not
+   iOS's scroll. The hook is now `hooks/useVisibleViewport.ts` (renamed from `useKeyboardOverlap.ts`),
+   `useVisibleViewport()` + `overlayStyle()`: the sheet overlays are laid out against
+   visualViewport's own box (`top = offsetTop`, `height`), so the sheet stays in the visible area
+   whatever the keyboard or page scroll does. On unmount it `scrollTo(0,0)` if the page was left
+   scrolled.
+3. **Back on iOS.** Two reports: Back (the edge swipe) with "New" open "går et hakk tilbake, men så
+   popper eventet opp likevel"; and swiping back from a List "havner tilbake i liste igjen".
+   **Cause:** the Android Back button goes through the app's own handler (`setNativeBackHandler`:
+   closes overlays, animates back to Office or the Spaces sheet) and only falls back to
+   `history.back()`. An iOS swipe is a plain history pop and skipped all of it. The "New" sheet was
+   not in history at all, so the swipe navigated the page underneath. A List restored from the URL
+   alone does not undo the context push. And the swipe's own finger, landing on a day, could run
+   the Planner's 500 ms hold and open "New" again.
+   **Fixes** (all in `app/page.tsx`, mobile web only, not in the Android app, where the button already
+   runs the handler first):
+   - The Back handler closes the "New" sheet first (for Android too).
+   - A `popstate` bridge: on a pop, "New" open → close it; otherwise ask `runNativeBackHandler()`.
+     If it handled the Back **and the address actually changed**, the next Effect 2 URL restore is
+     skipped (`swallowUrlRestoreRef`) so it does not undo the handler's work. It is address-gated,
+     because a same-address pop never reaches Effect 2 and a standing flag would eat the next real
+     Back.
+   - "New" gets its own history entry (same URL, `pushState`) while open, so a swipe pops exactly
+     that. Closing it any other way steps back over the entry silently (`ignoreNextPopRef`).
+   - `createTaskOpen` state was moved above this code (hooks order is still fixed). The refs are
+     updated in an effect, not during render (React compiler lint).
+   - `WeekRow`: a hold no longer starts within 20 px of either screen edge (where the iOS Back swipe
+     begins; a tap there still works), and any hold in progress is abandoned on `popstate`.
+   **None of this is verified on an iPhone.** A known edge: if closing "New" coincides with a nav
+   change that pushes a URL, the silent step back could pop that entry instead. It is not expected,
+   since creating does not navigate.

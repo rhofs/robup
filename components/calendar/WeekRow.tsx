@@ -224,6 +224,18 @@ export default function WeekRow({
     setHoldArmed(false);
     onPendingRangeChange(null);
   };
+  // A Back (the iPhone edge swipe is a history pop) ends any hold in progress. The swipe starts with
+  // a finger on the page — often on a day — and without this the hold could run to its 500 ms and
+  // open "New" as the page went back: "den går et hakk tilbake, men så popper eventet opp likevel".
+  const abandonRef = useRef(abandonLongPress);
+  useEffect(() => {
+    abandonRef.current = abandonLongPress;
+  });
+  useEffect(() => {
+    const onPop = () => abandonRef.current();
+    window.addEventListener('popstate', onPop);
+    return () => window.removeEventListener('popstate', onPop);
+  }, []);
 
   // assignLanes (lib/ganttLayout.ts) gives every segment ONE lane for its whole clipped width in
   // this row, chosen so it's free across that *entire* span — a task can land in an overflow lane
@@ -419,6 +431,10 @@ export default function WeekRow({
                       ? (e) => {
                           longPressFiredRef.current = false;
                           longPressReadyRef.current = false;
+                          // Not from the very edge of the screen: that is where the iPhone's Back
+                          // swipe starts, and a hold beginning there is almost always that gesture.
+                          // A tap there still works — this only declines to start a hold.
+                          if (e.clientX < 20 || e.clientX > window.innerWidth - 20) return;
                           longPressStartRef.current = { x: e.clientX, y: e.clientY };
                           fingerRef.current = { x: e.clientX, y: e.clientY };
                           dragOriginRef.current = day;

@@ -82,7 +82,8 @@ import { BOOT_MARK_SRC, BOOT_MARK_WIDTH_SHARE, BOOT_RING_BOX_SHARE } from '../li
 // The boot mark's size on screen. See its own use below for why this is a min() rather than a share.
 const BOOT_MAX_PX = 340;
 const BOOT_RING_BOX = `min(${BOOT_RING_BOX_SHARE * 100}vw, ${BOOT_RING_BOX_SHARE * 100}vh, ${BOOT_MAX_PX}px)`;
-import { setNativeBackHandler } from '../lib/nativeBack';
+import { setNativeBackHandler, runNativeBackHandler } from '../lib/nativeBack';
+import { Capacitor } from '@capacitor/core';
 import { setMentionJumpHandler } from '../lib/mentionJump';
 import { readStartPage } from '../lib/startPage';
 import OfficeContext from '../components/mobile/OfficeContext';
@@ -1337,6 +1338,71 @@ function PageContent() {
     }, CHAT_PUSH_MS);
   };
 
+  // Declared up here because the Back handling below reads it.
+  const [createTaskOpen, setCreateTaskOpen] = useState(false);
+
+  // iPhone Back (the edge swipe) and a mobile browser's Back go through the same handler as the
+  // Android button.
+  //
+  // Android's Back button calls the handler above and only falls back to history.back() when it
+  // declines. A swipe on an iPhone went straight to history instead, skipping everything the handler
+  // knows: it did not close the "New" sheet (which is not in history — the swipe navigated the page
+  // underneath and the sheet stayed), and a List was restored from the URL alone, which does not
+  // undo the context push, so people landed back in the List they had just left. Reported on iOS,
+  // 2026-09-29. So on the web on a phone, a history pop asks the handler first; if it handled the
+  // Back, the URL restore that would follow is skipped once (swallowUrlRestoreRef, read in Effect 2).
+  //
+  // Not in the Android app: its Back button already runs the handler before history, and running it
+  // again on the resulting pop would go back twice.
+  const swallowUrlRestoreRef = useRef(false);
+  const ignoreNextPopRef = useRef(false);
+  const createEntryRef = useRef(false);
+  const createTaskOpenRef = useRef(createTaskOpen);
+  // The address the screen was last drawn from, to tell a pop that changed it from one that did
+  // not. Read from the address bar (useSearchParams is declared further down), after each render.
+  const renderedSearchRef = useRef('');
+  useEffect(() => {
+    createTaskOpenRef.current = createTaskOpen;
+    renderedSearchRef.current = window.location.search.replace(/^\?/, '');
+  });
+  useEffect(() => {
+    if (!isMobile || Capacitor.isNativePlatform()) return;
+    const onPop = () => {
+      // Only a pop that changed the address leads to a URL restore to skip. The "New" sheet's own
+      // entry has the same address as the one under it, and a skip flag left standing would eat the
+      // next real Back instead.
+      const addressChanged = window.location.search.replace(/^\?/, '') !== renderedSearchRef.current;
+      // Our own step back, removing the "New" sheet's entry after it closed some other way.
+      if (ignoreNextPopRef.current) {
+        ignoreNextPopRef.current = false;
+        return;
+      }
+      if (createTaskOpenRef.current) {
+        createEntryRef.current = false;
+        setCreateTaskOpen(false);
+        if (addressChanged) swallowUrlRestoreRef.current = true;
+        return;
+      }
+      if (runNativeBackHandler() && addressChanged) swallowUrlRestoreRef.current = true;
+    };
+    window.addEventListener('popstate', onPop);
+    return () => window.removeEventListener('popstate', onPop);
+  }, [isMobile]);
+  // The "New" sheet gets an entry of its own in history (same URL), so a swipe back pops exactly
+  // that and closes the sheet. When it closes any other way (×, Create), that entry is stepped back
+  // over, silently.
+  useEffect(() => {
+    if (!isMobile || Capacitor.isNativePlatform()) return;
+    if (createTaskOpen && !createEntryRef.current) {
+      createEntryRef.current = true;
+      window.history.pushState(window.history.state, '', window.location.href);
+    } else if (!createTaskOpen && createEntryRef.current) {
+      createEntryRef.current = false;
+      ignoreNextPopRef.current = true;
+      window.history.back();
+    }
+  }, [createTaskOpen, isMobile]);
+
   // What Android's Back gesture should do, registered for components/NativeBackButton.tsx.
   //
   // It mirrors the two visible Back buttons in the header, and it exists because they are not
@@ -1353,6 +1419,11 @@ function PageContent() {
       return;
     }
     setNativeBackHandler(() => {
+      // The "New" sheet is on top of everything: Back closes it, nothing else.
+      if (createTaskOpen) {
+        setCreateTaskOpen(false);
+        return true;
+      }
       // The panel first: it is on top of everything, so Back belongs to it before it belongs to the
       // app underneath. One level at a time — a sub-screen returns to the list, the list closes.
       if (previewFile) {
@@ -1522,7 +1593,6 @@ function PageContent() {
   }, [columnWidths, soleActiveListId, soleActiveListWidths]);
   const [showActivityPanel, setShowActivityPanel] = useState(true);
 
-  const [createTaskOpen, setCreateTaskOpen] = useState(false);
   const [createTaskDefaultDate, setCreateTaskDefaultDate] = useState<string | null>(null);
   // The other end of a range drawn by holding and dragging across the calendar. Null for every
   // other entry point, where a single day means a single-day event.
@@ -2103,6 +2173,13 @@ function PageContent() {
   // any setter so it never fights effect 1 above.
   useEffect(() => {
     if (workspaces.length === 0) return;
+    // A back that the app's own Back already handled (see the popstate bridge below): the screen
+    // has been taken back by that — with its animation — and restoring from the URL on top of it
+    // is what put people back into the list they had just left.
+    if (swallowUrlRestoreRef.current) {
+      swallowUrlRestoreRef.current = false;
+      return;
+    }
 
     // Is this our own push echoing back, rather than a real back/forward navigation? Matching by
     // value, not by counting, because pushes can land out of order or be coalesced. Anything at or

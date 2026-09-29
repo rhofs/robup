@@ -2,7 +2,7 @@
 
 import { useMemo, useState } from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
-import { useKeyboardOverlap } from '../../hooks/useKeyboardOverlap';
+import { overlayStyle, useVisibleViewport } from '../../hooks/useVisibleViewport';
 import { X, CalendarDays, MapPin, Palette, Layers, UserCircle, ChevronDown, Check, ListChecks } from 'lucide-react';
 import type { AppUser, HierarchyWorkspace } from '../../store/useTaskStore';
 import { useTaskStore } from '../../store/useTaskStore';
@@ -77,9 +77,9 @@ function Row({ icon: Icon, children, onClick }: { icon: typeof CalendarDays; chi
 
 // A bottom sheet for a list of choices (the list to create a task in, attendees).
 function PickSheet({ title, onClose, children }: { title: string; onClose: () => void; children: React.ReactNode }) {
-  const keyboardOverlap = useKeyboardOverlap();
+  const visible = useVisibleViewport();
   return (
-    <div className="fixed inset-0 z-[90] flex flex-col justify-end bg-scrim/50 pt-[calc(env(safe-area-inset-top)+12px)]" style={{ paddingBottom: keyboardOverlap }} onClick={onClose}>
+    <div className="fixed inset-x-0 top-0 bottom-0 z-[90] flex flex-col justify-end bg-scrim/50 pt-[calc(env(safe-area-inset-top)+12px)]" style={overlayStyle(visible)} onClick={onClose}>
       <motion.div
         initial={{ y: '100%' }}
         animate={{ y: 0 }}
@@ -110,7 +110,7 @@ export default function MobileQuickCreateSheet({
   onCreateTask,
   onCreateEvent,
 }: Props) {
-  const keyboardOverlap = useKeyboardOverlap();
+  const visible = useVisibleViewport();
   const currentUserId = useSessionStore((s) => s.currentUserId);
   const [tab, setTab] = useState<'event' | 'task'>('event');
   const [title, setTitle] = useState('');
@@ -165,7 +165,7 @@ export default function MobileQuickCreateSheet({
   const summary = datesSummary(start, isTask ? taskDue : end);
 
   return (
-    <div className="fixed inset-0 z-[80] flex flex-col justify-end bg-scrim/60 pt-[calc(env(safe-area-inset-top)+12px)]" style={{ paddingBottom: keyboardOverlap }} onClick={onClose}>
+    <div className="fixed inset-x-0 top-0 bottom-0 z-[80] flex flex-col justify-end bg-scrim/60 pt-[calc(env(safe-area-inset-top)+12px)]" style={overlayStyle(visible)} onClick={onClose}>
       <motion.div
         initial={{ y: '100%' }}
         animate={{ y: 0 }}

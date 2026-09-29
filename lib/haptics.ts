@@ -284,8 +284,50 @@ function nativeImpact(kind: 'tap' | 'strong', strength: Exclude<HapticStrength, 
 }
 
 function vibrate(ms: number): void {
-  if (typeof navigator === 'undefined' || !('vibrate' in navigator)) return;
-  navigator.vibrate(ms);
+  if (typeof navigator === 'undefined') return;
+  if ('vibrate' in navigator) {
+    navigator.vibrate(ms);
+    return;
+  }
+  if (isIOS()) iosHaptic();
+}
+
+// iPhone. Safari has no Vibration API — not in the browser, not as a home-screen app — so for a
+// long time a web page simply could not produce a haptic there. Since iOS 18 a checkbox with the
+// `switch` attribute renders as a native switch, and toggling one gives the system's switch haptic.
+// Clicking a hidden label for such a switch from script produces that haptic without anything being
+// shown. It is the same click whatever the strength setting says (iOS has only the one), and it
+// only works close to a real user gesture: a tap does it; a pulse fired by a timer — the Planner's
+// "armed" pulse half a second into a hold — may well not. Reported as missing entirely on iOS on
+// 2026-09-29; this is a best effort, not verified on a device yet.
+function isIOS(): boolean {
+  if (typeof navigator === 'undefined') return false;
+  return /iPad|iPhone|iPod/.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+}
+
+let iosSwitchLabel: HTMLLabelElement | null = null;
+function iosHaptic(): void {
+  if (typeof document === 'undefined') return;
+  try {
+    if (!iosSwitchLabel || !iosSwitchLabel.isConnected) {
+      const label = document.createElement('label');
+      label.setAttribute('aria-hidden', 'true');
+      label.style.display = 'none';
+      const input = document.createElement('input');
+      input.type = 'checkbox';
+      input.setAttribute('switch', '');
+      input.tabIndex = -1;
+      label.appendChild(input);
+      // The click is only a means to the haptic; nothing else in the page should hear it (an
+      // outside-click listener would take it as a click somewhere and close a menu).
+      label.addEventListener('click', (e) => e.stopPropagation());
+      document.body.appendChild(label);
+      iosSwitchLabel = label;
+    }
+    iosSwitchLabel.click();
+  } catch {
+    // Nothing to fall back to on iOS.
+  }
 }
 
 // Read per call rather than cached at module load — the setting can change mid-session (see
