@@ -10376,3 +10376,16 @@ sammenhengende".
 - The old `.siqt-hold-card/-armed/-range` classes are gone. Desktop is unchanged (desktop still uses
   its cell tints; everything here is `isMobile`).
 - **Not seen on a device.** The cloud's size, distance and colours are first guesses.
+
+**Committed and pushed as `12361a5`; reinstall started.**
+
+**Discussed, not decided yet: the "Archived spaces (N)" row "føles som en ekstra space".** There are
+two archive toggles today: the older "Archive"/"Viewing archive" (`showArchived`: archived tasks and
+lists; a toolbar button on desktop, a launcher tile on mobile) and the newer `ArchivedSpacesToggle` row
+at the foot of the Spaces list, which sits among the Spaces and looks like one. Options put to the user:
+**A (recommended)** merge them, so one archive mode also brings archived Spaces back and the row goes
+away; **B** a small archive icon with a count next to "+" in the Spaces header; **C** Settings →
+Workspace lists archived Spaces with Unarchive and there is nothing in the sidebar; A+C combined also
+offered. Waiting for the answer.
+
+**Deployed 2026-09-29 as `12361a5`** (square press, pastel band, puff cloud). The reinstall ran clean. Not yet seen on a device.
