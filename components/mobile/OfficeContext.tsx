@@ -1,7 +1,7 @@
 'use client';
 
 import { useState } from 'react';
-import { BookOpen, ChevronRight, Hash, Users } from 'lucide-react';
+import { Archive, BookOpen, ChevronRight, Hash, Users } from 'lucide-react';
 import type { HierarchySpace, HierarchyRoom, HierarchyFolder, HierarchyList } from '../../store/useTaskStore';
 import ContextSpaceList from './ContextSpaceList';
 import { hapticTap } from '../../lib/haptics';
@@ -46,6 +46,10 @@ type Props = {
   // The workspace's Wiki. Office is the company's half of the mobile app, so the company's handbook
   // is reached from here — as well as from the launcher, next to Docs.
   onOpenWiki?: () => void;
+  // The one archive (archived tasks, lists and Spaces), switched from under the Space list — the
+  // place a phone shows Spaces, so archived ones appear right above the button that brought them.
+  showArchived?: boolean;
+  onToggleArchive?: () => void;
 };
 
 export default function OfficeContext({
@@ -68,6 +72,8 @@ export default function OfficeContext({
   onSelectChannel,
   onCreateSpace,
   onOpenWiki,
+  showArchived = false,
+  onToggleArchive,
 }: Props) {
   // Local, because creating a Space is a moment inside this screen and nothing above it needs to
   // know it is happening.
@@ -130,6 +136,7 @@ export default function OfficeContext({
       </div>
 
       {tab === 'spaces' ? (
+        <>
         <div className="mx-2 rounded-2xl bg-neutral-900 px-2 py-2 space-y-0.5 elevated">
           <ContextSpaceList
             spaces={spaces}
@@ -182,6 +189,25 @@ export default function OfficeContext({
             </button>
           )}
         </div>
+        {/* The archive, under the Space list: turning it on brings archived Spaces into the list
+            above, dimmed, alongside archived tasks and lists. Asked for as "en liten knapp under
+            selve arket". */}
+        {onToggleArchive && (
+          <div className="flex justify-center pt-3">
+            <button
+              onClick={() => {
+                hapticTap();
+                onToggleArchive();
+              }}
+              className={`flex items-center gap-1.5 px-4 py-2 rounded-full text-[13px] font-medium border cursor-pointer transition active:scale-95 ${
+                showArchived ? 'text-amber-300 border-amber-500/40 bg-amber-500/10' : 'text-neutral-500 border-neutral-800'
+              }`}
+            >
+              <Archive className="w-3.5 h-3.5" /> {showArchived ? 'Exit archive' : 'Archive'}
+            </button>
+          </div>
+        )}
+        </>
       ) : (
         <div className="space-y-2">
           {/* Rooms above channels, and both in one list — the thing this layout is for. A room and

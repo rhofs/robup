@@ -10433,3 +10433,32 @@ offered. Waiting for the answer.
 - Typechecked. **Not seen on a device.**
 
 **Deployed 2026-09-29 as `194f824`** (sheets respect the top safe area, pastel glow, magic dust, mobile Archive under the list). The reinstall ran clean. Not yet seen on a device.
+
+### 2026-09-29 (continued) — feedback round: glow, sheets and the keyboard, nav bubble, Archive in Office (uncommitted at time of writing)
+
+Feedback: the dust is good now. Then:
+- **"reduser glowen inni selve dagen … den ser litt blass ut inni … ikke for mye ut, men litt".** The glow
+  was a blurred copy of the gradient behind the translucent band, so it showed *through* the band
+  and washed it out. It is now an outer box-shadow only, on `.siqt-band::before` (0 0 8px 1px pink +
+  0 0 12px 2px blue), breathing between 0.55 and 0.9 opacity. A box-shadow is never drawn inside its
+  box.
+- **"Selve task vinduet er fortsatt så høyt oppe at den går under statuslinjen".** The safe-area
+  padding from the last round was not the cause: `env(safe-area-inset-top)` works (the app header
+  uses it). The cause is the keyboard. In the Android app it covers the page rather than resizing it,
+  and with the auto-focused title under the keyboard the WebView **pans the whole page up**, top of
+  the sheet included. New `hooks/useKeyboardOverlap.ts` (the measurement ChatPanel already made for
+  its composer, via visualViewport, where anything under 80 px is browser chrome) lifts every new
+  sheet's overlay by the overlap (`paddingBottom`), so the fields sit above the keyboard and there is
+  nothing to pan for. Used in MobileQuickCreateSheet (plus its PickSheet), DateSheet and TimeDialSheet.
+  **Not verified on a device.** If the user meant the *task detail* modal rather than the create
+  sheet, this does not touch it. Asked in the reply.
+- **"Kan bobla i menyen nede på mobil ha samme pastell gradient som vinduene i planner?"** The
+  bottom-nav pill (`layoutId="mobileNavPill"`) now uses the band's gradient (pink → peach → blue, same
+  alphas). The active tab's icon and label use `text-app-strong` instead of blue, which clashed with the
+  pastels.
+- **Archive on mobile "funker fortsatt ikke … den i popup menyen avsluttes i det jeg bytter tilbake til
+  Office".** Cause: an effect ended archive mode whenever `activeView !== 'board'`, and on a phone
+  Office is where the Space list is, so going there to see archived Spaces switched the archive off on
+  arrival. It now survives `office` too. Also added a small "Archive"/"Exit archive" pill **under
+  Office's Space card** ("en liten knapp under selve arket"), which brings archived Spaces into the
+  list above it. The one under the task list stays.

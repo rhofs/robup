@@ -1666,8 +1666,12 @@ function PageContent() {
   // and waiting to confuse you when you come back — which is exactly what happened. Deliberately
   // NOT tied to changing Space or List: browsing several lists' archives in a row is a real thing
   // to want, and the banner is on screen throughout.
+  //
+  // Office too, since archived Spaces joined the archive: on a phone, Office is where the Space list
+  // is, and switching there to look at the archived ones turned the archive off on arrival — "den i
+  // popup menyen avsluttes i det jeg bytter tilbake til Office".
   useEffect(() => {
-    if (activeView !== 'board') setShowArchived(false);
+    if (activeView !== 'board' && activeView !== 'office') setShowArchived(false);
   }, [activeView, setShowArchived]);
   const [hideWeekNumbers, setHideWeekNumbers] = useState(false);
   useEffect(() => {
@@ -5037,6 +5041,8 @@ function PageContent() {
   const officeContextEl = (
               <OfficeContext
                 onOpenWiki={currentWorkspace?.wikiEnabled ? () => setActiveView('wiki') : undefined}
+                showArchived={showArchived}
+                onToggleArchive={() => setShowArchived(!showArchived)}
                 tab={officeTab}
                 openSpaceIds={openContextSpaceIds}
                 openFolderIds={openContextFolderIds}

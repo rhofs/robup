@@ -2,6 +2,7 @@
 
 import { useMemo, useState } from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
+import { useKeyboardOverlap } from '../../hooks/useKeyboardOverlap';
 import { X, ChevronUp, ChevronDown, CalendarDays, Sunrise, CalendarCheck, CalendarArrowUp } from 'lucide-react';
 import TimeDialSheet from './TimeDialSheet';
 import { hapticTap } from '../../lib/haptics';
@@ -66,6 +67,7 @@ export default function DateSheet({
   onSave: (start: string | null, end: string | null) => void;
   onClose: () => void;
 }) {
+  const keyboardOverlap = useKeyboardOverlap();
   const [start, setStart] = useState<Date | null>(() => parse(startIso));
   const [end, setEnd] = useState<Date | null>(() => parse(endIso));
   const [active, setActive] = useState<Field>(start && !end && !single ? 'end' : 'start');
@@ -162,7 +164,7 @@ export default function DateSheet({
   const timeTarget = timeFor === 'start' ? start : timeFor === 'end' ? end : null;
 
   return (
-    <div className="fixed inset-0 z-[90] flex flex-col justify-end bg-scrim/50 pt-[calc(env(safe-area-inset-top)+12px)]" onClick={onClose}>
+    <div className="fixed inset-0 z-[90] flex flex-col justify-end bg-scrim/50 pt-[calc(env(safe-area-inset-top)+12px)]" style={{ paddingBottom: keyboardOverlap }} onClick={onClose}>
       <motion.div
         initial={{ y: '100%' }}
         animate={{ y: 0 }}

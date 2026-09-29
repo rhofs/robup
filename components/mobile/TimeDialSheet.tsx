@@ -2,6 +2,7 @@
 
 import { useRef, useState } from 'react';
 import { motion } from 'framer-motion';
+import { useKeyboardOverlap } from '../../hooks/useKeyboardOverlap';
 import { X } from 'lucide-react';
 import { hapticTap } from '../../lib/haptics';
 
@@ -32,6 +33,7 @@ export default function TimeDialSheet({
   onClear: () => void;
   onClose: () => void;
 }) {
+  const keyboardOverlap = useKeyboardOverlap();
   const [h, setH] = useState(initial?.h ?? 9);
   const [m, setM] = useState(initial?.m ?? 0);
   const [mode, setMode] = useState<'hour' | 'minute'>('hour');
@@ -70,7 +72,7 @@ export default function TimeDialSheet({
   const selectedLabel = mode === 'hour' ? String(h) : pad(m);
 
   return (
-    <div className="fixed inset-0 z-[95] flex flex-col justify-end bg-scrim/50 pt-[calc(env(safe-area-inset-top)+12px)]" onClick={onClose}>
+    <div className="fixed inset-0 z-[95] flex flex-col justify-end bg-scrim/50 pt-[calc(env(safe-area-inset-top)+12px)]" style={{ paddingBottom: keyboardOverlap }} onClick={onClose}>
       <motion.div
         initial={{ y: '100%' }}
         animate={{ y: 0 }}
