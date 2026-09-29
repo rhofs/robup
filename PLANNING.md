@@ -10431,3 +10431,5 @@ offered. Waiting for the answer.
   phone. Desktop keeps its toolbar button. The archive banner now says "archived tasks, lists and
   spaces" (it said "tasks only", no longer true since option A).
 - Typechecked. **Not seen on a device.**
+
+**Deployed 2026-09-29 as `194f824`** (sheets respect the top safe area, pastel glow, magic dust, mobile Archive under the list). The reinstall ran clean. Not yet seen on a device.
