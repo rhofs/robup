@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useRef, useState } from 'react';
+import PuffBurst, { makePuffParticles, type PuffParticle } from './PuffBurst';
 import { useTaskAssignDrop, useEventAssignDrop, assignDropClass } from './useAssignDrop';
 import { MiniAvatar } from '../AssigneePicker';
 import { Plus, Pin, CalendarClock } from 'lucide-react';
@@ -169,6 +170,10 @@ export default function WeekRow({
   // Which cell is being held right now, for the hold animation. State rather than a ref because it
   // has to render.
   const [pressedKey, setPressedKey] = useState<string | null>(null);
+  // Where the finger is, for the puff cloud to come out from under it when the hold takes.
+  const fingerRef = useRef({ x: 0, y: 0 });
+  const [puffs, setPuffs] = useState<{ id: number; x: number; y: number; particles: PuffParticle[] }[]>([]);
+  const puffIdRef = useRef(0);
   const [holdArmed, setHoldArmed] = useState(false);
   const LONG_PRESS_MOVE_TOLERANCE = 8;
 
@@ -415,6 +420,7 @@ export default function WeekRow({
                           longPressFiredRef.current = false;
                           longPressReadyRef.current = false;
                           longPressStartRef.current = { x: e.clientX, y: e.clientY };
+                          fingerRef.current = { x: e.clientX, y: e.clientY };
                           dragOriginRef.current = day;
                           draggingRangeRef.current = false;
                           // The hold animation starts the instant the finger lands, so the cell is
@@ -444,6 +450,9 @@ export default function WeekRow({
                             // identical tick said "something again" rather than "ready". This one
                             // is the "fully charged" moment the fill has been building towards.
                             hapticTapStrong();
+                            // The pop: a pastel cloud from under the thumb, out past the day.
+                            const at = fingerRef.current;
+                            setPuffs((ps) => [...ps, { id: ++puffIdRef.current, x: at.x, y: at.y, particles: makePuffParticles() }]);
                           }, LONG_PRESS_MS);
                         }
                       : undefined
@@ -454,6 +463,7 @@ export default function WeekRow({
                           // Once the hold has armed, moving is no longer a reason to give up — it
                           // is the gesture. Before that it still is: a finger that slides off is
                           // scrolling, not holding.
+                          fingerRef.current = { x: e.clientX, y: e.clientY };
                           if (draggingRangeRef.current) {
                             const origin = dragOriginRef.current;
                             if (!origin) return;
@@ -539,21 +549,14 @@ export default function WeekRow({
                 >
                   <Plus className="w-2.5 h-2.5" />
                 </button>
-                {/* The hold, drawn over the bars — the way an iPhone answers a long press: a rounded
-                    card inside the day that presses in while you hold, then springs out and lifts
-                    when it takes. z-20 puts it above the bar layer; pointer-events-none keeps it
-                    out of hit-testing, which dayUnderPointer relies on. Three states:
-                      - held: the card sinks and greys over the 500ms hold
-                      - armed (the day the hold began): it springs back out in blue with a soft
-                        shadow, landing with the stronger haptic
-                      - in the drawn range: the same blue card, settling in */}
-                {isMobile && (isPressed || inRange) && (
+                {/* The hold, drawn over the bars: the day presses in, square, while the 500ms runs.
+                    Once it takes, the selection is the row's pastel band (below the grid) and the
+                    puff cloud — see the .siqt-hold-press / .siqt-band / .siqt-puff notes in
+                    globals.css. z-20 puts it above the bar layer; pointer-events-none keeps it out
+                    of hit-testing, which dayUnderPointer relies on. */}
+                {isMobile && isPressed && !holdArmed && (
                   <span aria-hidden className="pointer-events-none absolute inset-0 z-20">
-                    {isPressed && !holdArmed && (
-                      <span className="siqt-hold-card siqt-hold-press" style={{ animationDuration: `${LONG_PRESS_MS}ms` }} />
-                    )}
-                    {isPressed && holdArmed && <span className="siqt-hold-card siqt-hold-armed" />}
-                    {inRange && !(isPressed && holdArmed) && <span className="siqt-hold-card siqt-hold-range" />}
+                    <span className="siqt-hold-press" style={{ animationDuration: `${LONG_PRESS_MS}ms` }} />
                   </span>
                 )}
                 {/* Nested inside this day's own cell (not a separate row-wide strip) so it reads
@@ -586,6 +589,31 @@ export default function WeekRow({
             );
           })}
         </div>
+
+        {/* The selection on touch: ONE band across this row's selected days, not a box per day —
+            asked for as "dette må være sammenhengende". The range can run over several rows; each
+            row draws its own part. On the row the hold began in, the band arrives with the pop.
+            Keyed per gesture so it springs in once and then only eases its left/width as the drag
+            grows. Above the bars (z-20) and out of hit-testing, like the press overlay. */}
+        {isMobile &&
+          (() => {
+            const cols = weekDays.map((d, i) => (isDayInRange(d, pendingRange) ? i : -1)).filter((i) => i >= 0);
+            if (cols.length === 0) return null;
+            const first = cols[0];
+            const last = cols[cols.length - 1];
+            const popHere = holdArmed && !!pressedKey && weekDays.some((d) => dayKey(d) === pressedKey);
+            return (
+              <span
+                key={popHere ? `pop-${pressedKey}` : 'range'}
+                aria-hidden
+                className={`siqt-band pointer-events-none z-20 ${popHere ? 'siqt-band-pop' : ''}`}
+                style={{ left: `${(first / 7) * 100}%`, width: `${((last - first + 1) / 7) * 100}%` }}
+              />
+            );
+          })()}
+        {puffs.map((p) => (
+          <PuffBurst key={p.id} x={p.x} y={p.y} particles={p.particles} onDone={() => setPuffs((ps) => ps.filter((q) => q.id !== p.id))} />
+        ))}
 
         <div className="absolute inset-x-0 pointer-events-none" style={{ top: DAY_NUM_H, bottom: 0 }}>
           {visibleSegments.map((seg) => {

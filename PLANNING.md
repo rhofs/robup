@@ -10349,3 +10349,30 @@ now one rounded card, inset 3 px with a 12 px radius, the way a selected iOS cal
 Reduced motion gets static fills. **Not seen on a device**, and the timings are first guesses.
 
 **Deployed 2026-09-29 as `487814d`** (mobile quick-create sheet, DateSheet and TimeDialSheet, mobile DatePickerPopover, iOS-style Planner hold). The reinstall ran clean. Not yet seen on a device.
+
+### 2026-09-29 (continued) — Planner hold, third version: square, a pastel pop with a puff cloud, one continuous band (uncommitted at time of writing)
+
+Feedback on the iOS-card version: better, but (1) "jeg liker ikke at den ender avrunda, når dagen er
+firkanta"; (2) wanted a "pop" that gives off particles like a cloud puffing out, in soft pastel
+pink, blue and peach ("ikke RGB sterke, men myke", i.e. pastels), reaching past the thumb so you
+see where the event is being made, with the popping circle in the same pastels rather than the
+sharp blue; (3) dragging across days looked like separate boxes per day: "dette må være
+sammenhengende".
+
+- **held:** `.siqt-hold-press` is square (inset 0, no radius), scales to 0.94 and greys over
+  `LONG_PRESS_MS`. It is the only per-cell overlay left.
+- **selection:** a single `.siqt-band` per week row, rendered once over the grid (not in each cell),
+  spanning the row's first to last selected column. A pastel gradient (pink → peach → blue) runs
+  across the whole band. `left`/`width` transition as the drag grows, and each row draws its own
+  part of a multi-row range. On the row where the hold began it arrives with `.siqt-band-pop` (an
+  overshooting spring from 0.94). Keyed per gesture so it pops once and then only eases.
+- **pop cloud:** `components/calendar/PuffBurst.tsx` is a portal to `<body>` at the finger's screen
+  position (`fingerRef`, updated on pointerdown/move), so it is never clipped by the row. There are
+  16 soft blurred pastel dots (#FFB8CF, #FFD2B8, #B8D4FF, #E4CFFF …) flying out 48–100 px with a
+  slight lift, growing and fading over 650–950 ms, plus a pastel ring (`.siqt-puff-ring`) expanding
+  behind them. It removes itself after 1.1 s. The particles are generated in the arm timeout
+  (`makePuffParticles`), not in render: the React compiler's purity rule rightly rejects
+  `Math.random` during render. Reduced motion hides the cloud and stills the band.
+- The old `.siqt-hold-card/-armed/-range` classes are gone. Desktop is unchanged (desktop still uses
+  its cell tints; everything here is `isMobile`).
+- **Not seen on a device.** The cloud's size, distance and colours are first guesses.
