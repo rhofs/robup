@@ -10278,3 +10278,18 @@ send `android.priority: 'high'`.
 **Also noticed:** Christer Larsen's app token (09-23) and Yang B's browser subscription (09-14) have
 never had a push accepted, meaning nothing has been sent to them since the record was added. That is
 not a fault by itself.
+
+**Same day: iPhone pushes were sent as "normal" urgency (a real bug, fixed, uncommitted at time
+of writing).** Asked whether iPhones need the same battery changes, since Broonstar also "ikke fikk
+alert med en gang". A snapshot check (push service host only) showed Broonstar and Yang B are on
+**`web.push.apple.com`** (an iPhone home-screen web app), and Robin's two browsers on
+`fcm.googleapis.com`. `lib/push.ts` called `webpush.sendNotification` with **no options**, so every
+web push went out with the default `Urgency: normal`. That lets Apple (and Google, for Chrome) defer
+delivery for battery. The Android app's FCM pushes were already `priority: 'high'`. **Fix:**
+`urgency: 'high'` and `TTL: 86400` on every web push. iOS itself has no per-app battery restrictions
+like Xiaomi's. The iPhone-side things that can still delay or hide web-app notifications are
+*Scheduled Summary* (Notifications → Scheduled Summary; if Siqt is in it, pushes arrive at summary
+times), Focus/Do Not Disturb, and the web app's notification settings. **Not verified on an iPhone.**
+**Confirmed by the user 2026-09-29:** after the Xiaomi battery/autostart changes, Robin's Android test
+notification "kom nesten umiddelbart". The app token re-registration and the phone-side settings together
+fixed Android. The iPhone urgency fix above is still to be deployed and confirmed.

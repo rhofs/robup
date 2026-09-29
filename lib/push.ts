@@ -63,7 +63,18 @@ async function sendWebPushToUser(userId: string, payload: PushPayload): Promise<
       try {
         await webpush.sendNotification(
           { endpoint: sub.endpoint, keys: { p256dh: sub.p256dh, auth: sub.auth } },
-          JSON.stringify(payload)
+          JSON.stringify(payload),
+          {
+            // Without this every web push went out as "normal" urgency, which lets the push service
+            // — Apple's for an iPhone home-screen app, Google's for Chrome — hold it back and hand it
+            // over when it suits the device's battery. A chat message is the opposite of that.
+            // Reported 2026-09-29: an iPhone "fikk ikke alert med en gang". The Android app's pushes
+            // already went as high priority (lib/fcm.ts); these did not.
+            urgency: 'high',
+            // A day. A message nobody could be reached about for 24 hours is better found in the app
+            // than announced a week late when a phone finally comes back online.
+            TTL: 60 * 60 * 24,
+          }
         );
         // Recorded, not awaited into anything: see the delivery-record comment on the model.
         await prisma.pushSubscription.update({ where: { id: sub.id }, data: { lastSentAt: new Date() } }).catch(() => {});
