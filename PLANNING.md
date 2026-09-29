@@ -10508,3 +10508,5 @@ The user tested on an iPhone (web app added to the home screen):
    **None of this is verified on an iPhone.** A known edge: if closing "New" coincides with a nav
    change that pushes a URL, the silent step back could pop that entry instead. It is not expected,
    since creating does not navigate.
+
+**Deployed 2026-09-29 as `1a2bc8e`** (iOS Back bridge, sheets on visualViewport, iOS switch haptic). The reinstall ran clean. Not yet tested on an iPhone.
