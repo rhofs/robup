@@ -14,6 +14,8 @@ import { EVENT_COLOR_CHOICES } from './EventDetailModal';
 import { startDateColor, dueDateColor, DATE_BADGE_COLOR_HEX, startDateTooltip, dueDateTooltip } from '../../lib/dateBadgeColor';
 import { googleMapsSearchUrl } from '../../lib/googleMapsUrl';
 import LocationAutocompleteInput from '../LocationAutocompleteInput';
+import MobileQuickCreateSheet from '../mobile/MobileQuickCreateSheet';
+import { useIsMobile } from '../../hooks/useIsMobile';
 
 type QuickCreatePopoverProps = {
   open: boolean;
@@ -62,6 +64,7 @@ export default function QuickCreatePopover({
   onCreateTask,
   onCreateEvent,
 }: QuickCreatePopoverProps) {
+  const isMobile = useIsMobile();
   const [tab, setTab] = useState<'task' | 'event'>('event');
   const [title, setTitle] = useState('');
 
@@ -108,6 +111,23 @@ export default function QuickCreatePopover({
   }, [open]);
 
   if (!open) return null;
+
+  // A phone gets the bottom sheet built after ClickUp's (MobileQuickCreateSheet) — same props, same
+  // result; this centred form stays for the desktop.
+  if (isMobile) {
+    return (
+      <MobileQuickCreateSheet
+        workspaces={workspaces}
+        users={users}
+        defaultStartDate={defaultStartDate}
+        defaultEndDate={defaultEndDate}
+        activeWorkspaceId={activeWorkspaceId}
+        onClose={onClose}
+        onCreateTask={onCreateTask}
+        onCreateEvent={onCreateEvent}
+      />
+    );
+  }
 
   // Not archived ones, even while they are being shown: new work does not go into a Space that has
   // been put away.

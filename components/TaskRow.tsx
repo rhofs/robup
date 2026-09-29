@@ -156,6 +156,7 @@ function TaskRowImpl({
       return (
         <DatePickerPopover
           value={localValue}
+          label={field.name}
           placeholder="---"
           // The same urgency colours as Start/Due, read through the field's own kind: a deadline
           // turns red once passed, an event turns green. Computed from `localValue`, never from the
@@ -264,6 +265,7 @@ function TaskRowImpl({
       return (
         <DatePickerPopover
           value={task.startDate}
+          label="Start"
           placeholder="---"
           onChange={(iso) => optimisticSetDates(task.id, iso, task.dueDate ? new Date(task.dueDate).toISOString() : null)}
           badgeColorHex={(() => {
@@ -279,6 +281,7 @@ function TaskRowImpl({
       return (
         <DatePickerPopover
           value={task.dueDate}
+          label="Due"
           placeholder="---"
           onChange={(iso) => optimisticSetDates(task.id, task.startDate ? new Date(task.startDate).toISOString() : null, iso)}
           badgeColorHex={(() => {

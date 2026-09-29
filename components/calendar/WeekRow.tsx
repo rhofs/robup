@@ -170,10 +170,6 @@ export default function WeekRow({
   // has to render.
   const [pressedKey, setPressedKey] = useState<string | null>(null);
   const [holdArmed, setHoldArmed] = useState(false);
-  // Where in the held cell the finger landed, and how big the fill has to grow to cover the whole
-  // cell from there. The fill spreads outward from the fingertip rather than fading in evenly —
-  // the cell visibly responds to *where* it was touched, which is most of what makes it feel alive.
-  const [pressOrigin, setPressOrigin] = useState<{ x: number; y: number; size: number } | null>(null);
   const LONG_PRESS_MOVE_TOLERANCE = 8;
 
   // Stops the browser from taking the gesture over as a scroll once the hold has armed.
@@ -427,13 +423,6 @@ export default function WeekRow({
                           // that is working from a tap that missed.
                           setPressedKey(dayKey(day));
                           setHoldArmed(false);
-                          const rect = e.currentTarget.getBoundingClientRect();
-                          const px = e.clientX - rect.left;
-                          const py = e.clientY - rect.top;
-                          // Twice the distance to the farthest corner: the circle's radius has to
-                          // reach it, and its edge is soft, so a little more than that.
-                          const reach = Math.hypot(Math.max(px, rect.width - px), Math.max(py, rect.height - py));
-                          setPressOrigin({ x: px, y: py, size: reach * 2.4 });
                           // Keeps this cell receiving moves once the finger leaves it, which is
                           // what makes dragging across days possible at all — without capture the
                           // events go to whatever is underneath and this handler stops hearing.
@@ -550,29 +539,21 @@ export default function WeekRow({
                 >
                   <Plus className="w-2.5 h-2.5" />
                 </button>
-                {/* The hold, drawn over the bars. z-20 puts it above the bar layer (a later sibling
-                    with no z-index of its own); pointer-events-none keeps it out of hit-testing,
-                    which dayUnderPointer relies on. Three states:
-                      - held: a soft glow spreads from the fingertip across the 500ms hold
-                      - armed (the day the hold began): a bloom, a ring and one sweep of light,
-                        landing with the stronger haptic
-                      - in the drawn range: a plain tint */}
+                {/* The hold, drawn over the bars — the way an iPhone answers a long press: a rounded
+                    card inside the day that presses in while you hold, then springs out and lifts
+                    when it takes. z-20 puts it above the bar layer; pointer-events-none keeps it
+                    out of hit-testing, which dayUnderPointer relies on. Three states:
+                      - held: the card sinks and greys over the 500ms hold
+                      - armed (the day the hold began): it springs back out in blue with a soft
+                        shadow, landing with the stronger haptic
+                      - in the drawn range: the same blue card, settling in */}
                 {isMobile && (isPressed || inRange) && (
-                  <span aria-hidden className="pointer-events-none absolute inset-0 z-20 overflow-hidden">
-                    {isPressed && !holdArmed && pressOrigin && (
-                      <span
-                        className="siqt-hold-fill absolute rounded-full"
-                        style={{
-                          left: pressOrigin.x - pressOrigin.size / 2,
-                          top: pressOrigin.y - pressOrigin.size / 2,
-                          width: pressOrigin.size,
-                          height: pressOrigin.size,
-                          animationDuration: `${LONG_PRESS_MS}ms`,
-                        }}
-                      />
+                  <span aria-hidden className="pointer-events-none absolute inset-0 z-20">
+                    {isPressed && !holdArmed && (
+                      <span className="siqt-hold-card siqt-hold-press" style={{ animationDuration: `${LONG_PRESS_MS}ms` }} />
                     )}
-                    {isPressed && holdArmed && <span className="siqt-hold-armed absolute inset-0" />}
-                    {inRange && !(isPressed && holdArmed) && <span className="siqt-hold-range absolute inset-0" />}
+                    {isPressed && holdArmed && <span className="siqt-hold-card siqt-hold-armed" />}
+                    {inRange && !(isPressed && holdArmed) && <span className="siqt-hold-card siqt-hold-range" />}
                   </span>
                 )}
                 {/* Nested inside this day's own cell (not a separate row-wide strip) so it reads

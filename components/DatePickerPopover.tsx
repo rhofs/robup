@@ -3,6 +3,9 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { ChevronDown, ChevronLeft, ChevronRight, X } from 'lucide-react';
 import FloatingPopover from './FloatingPopover';
+import { AnimatePresence } from 'framer-motion';
+import DateSheet from './mobile/DateSheet';
+import { useIsMobile } from '../hooks/useIsMobile';
 
 type DatePickerPopoverProps = {
   value: string | Date | null;
@@ -16,6 +19,9 @@ type DatePickerPopoverProps = {
   // means, the tooltip removes that guesswork on hover.
   badgeColorHex?: string;
   tooltip?: string;
+  // What the date is, for the phone's "Choose date" sheet ("Start 29/9/26"). The desktop popover
+  // has no field label and does not use it.
+  label?: string;
 };
 
 const WEEKDAY_LABELS = ['Mo', 'Tu', 'We', 'Th', 'Fr', 'Sa', 'Su'];
@@ -60,8 +66,9 @@ const formatShort = (d: Date) => {
 // The text input right next to it still accepts anything (e.g. 14:07), this is just a shortcut.
 const TIME_OPTIONS = Array.from({ length: 96 }, (_, i) => `${pad(Math.floor(i / 4))}:${pad((i % 4) * 15)}`);
 
-export default function DatePickerPopover({ value, onChange, placeholder = 'Not set', align = 'left', badgeColorHex, tooltip }: DatePickerPopoverProps) {
+export default function DatePickerPopover({ value, onChange, placeholder = 'Not set', align = 'left', badgeColorHex, tooltip, label = 'Date' }: DatePickerPopoverProps) {
   const [open, setOpen] = useState(false);
+  const isMobile = useIsMobile();
   const [showTimeInput, setShowTimeInput] = useState(false);
 
   const selected = useMemo(() => {
@@ -106,40 +113,67 @@ export default function DatePickerPopover({ value, onChange, placeholder = 'Not 
     return Array.from({ length: 42 }, (_, i) => addDays(gridStart, i));
   }, [viewMonth]);
 
+  const anchor = (
+    <button
+      type="button"
+      onClick={() => setOpen((o) => !o)}
+      title={selected ? tooltip : undefined}
+      className={`px-2 py-1 rounded cursor-pointer text-xs font-sans transition ${
+        selected
+          ? badgeColorHex
+            ? 'hover:bg-neutral-800/70'
+            : 'text-neutral-300 hover:bg-neutral-800/70 hover:text-app-strong'
+          : 'text-neutral-500 hover:bg-neutral-800/70 hover:text-neutral-300'
+      }`}
+      style={selected && badgeColorHex ? { color: badgeColorHex } : undefined}
+    >
+      {selected ? (
+        <span className="inline-flex items-baseline gap-1.5 tabular-nums">
+          <span>{formatShort(selected)}</span>
+          {hasTime && (
+            <span className="text-[9px] text-neutral-500">
+              {pad(selected.getHours())}:{pad(selected.getMinutes())}
+            </span>
+          )}
+        </span>
+      ) : (
+        placeholder
+      )}
+    </button>
+  );
+
+  // A phone gets the full-width "Choose date" sheet (components/mobile/DateSheet.tsx) — the same one
+  // quick create uses, with its quick picks and clock face — instead of this small popover, which was
+  // built for a mouse. Same value in, same ISO string out.
+  if (isMobile) {
+    return (
+      <>
+        {anchor}
+        <AnimatePresence>
+          {open && (
+            <DateSheet
+              single={label}
+              start={selected ? selected.toISOString() : null}
+              end={null}
+              onClose={() => setOpen(false)}
+              onSave={(iso) => {
+                onChange(iso);
+                setOpen(false);
+              }}
+            />
+          )}
+        </AnimatePresence>
+      </>
+    );
+  }
+
   return (
     <FloatingPopover
       open={open}
       onClose={() => setOpen(false)}
       align={align}
       panelClassName="w-64 bg-neutral-900 border border-neutral-800 rounded-xl shadow-2xl overflow-hidden text-xs"
-      anchor={
-        <button
-          type="button"
-          onClick={() => setOpen((o) => !o)}
-          title={selected ? tooltip : undefined}
-          className={`px-2 py-1 rounded cursor-pointer text-xs font-sans transition ${
-            selected
-              ? badgeColorHex
-                ? 'hover:bg-neutral-800/70'
-                : 'text-neutral-300 hover:bg-neutral-800/70 hover:text-app-strong'
-              : 'text-neutral-500 hover:bg-neutral-800/70 hover:text-neutral-300'
-          }`}
-          style={selected && badgeColorHex ? { color: badgeColorHex } : undefined}
-        >
-          {selected ? (
-            <span className="inline-flex items-baseline gap-1.5 tabular-nums">
-              <span>{formatShort(selected)}</span>
-              {hasTime && (
-                <span className="text-[9px] text-neutral-500">
-                  {pad(selected.getHours())}:{pad(selected.getMinutes())}
-                </span>
-              )}
-            </span>
-          ) : (
-            placeholder
-          )}
-        </button>
-      }
+      anchor={anchor}
     >
       <div className="p-3">
         <div className="flex items-center justify-between mb-2">

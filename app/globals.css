@@ -449,108 +449,77 @@ body {
 }
 
 /* Planner, touch: holding a day to create something (components/calendar/WeekRow.tsx).
-   
-   Asked for as "litt mer magisk … hvis det skulle vært et Apple-produkt". The hold has three
-   moments, and each has its own motion:
-   
-   - held: a soft glow spreads out from the fingertip over the length of the hold. It decelerates,
-     so it is visibly working from the first frame and eases into "full" rather than hitting a wall.
-     Duration is set inline from LONG_PRESS_MS so the two can never drift apart.
-   - armed: a bright bloom settles into the steady tint, a ring pulses outward and fades, and one
-     sweep of light crosses the cell. It lands with the stronger haptic, so what you see and what
-     you feel arrive together.
-   - in range: the other days of a drag, a plain tint that fades in.
-   
-   All of it sits above the bars, so a day full of bars lights up just like an empty one. */
-.siqt-hold-fill {
-  background: radial-gradient(
-    circle,
-    rgb(96 165 250 / 0.34) 0%,
-    rgb(59 130 246 / 0.2) 45%,
-    rgb(59 130 246 / 0.12) 62%,
-    transparent 72%
-  );
-  transform: scale(0.08);
-  opacity: 0.5;
-  animation-name: siqt-hold-fill;
-  animation-timing-function: cubic-bezier(0.2, 0.7, 0.2, 1);
+
+   Modelled on how an iPhone answers a long press (Haptic Touch), replacing a first version with a
+   radial glow, a ring and a sweep of light that the user found "old" and "harry". iOS does almost
+   the opposite of decoration: the thing you hold presses in a little and dims, and when the press is
+   recognised it springs back out — slightly past, then settling — and lifts off the page with a soft
+   shadow. No rings, no gradients; the motion is the whole effect.
+
+   - held: a rounded card inside the day sinks (scale) and fills with iOS's neutral system fill over
+     the length of the hold — set inline from LONG_PRESS_MS so the two cannot drift apart.
+   - armed: the card springs out past full size and settles, in system blue with a soft shadow.
+   - in range: the other days of a drag, the same blue card easing in.
+
+   The card is inset from the cell's edges and rounded, like a selected iOS calendar day, rather than
+   filling the square — the grid lines stay visible around it. */
+.siqt-hold-card {
+  position: absolute;
+  inset: 3px;
+  border-radius: 12px;
+  will-change: transform;
+}
+.siqt-hold-press {
+  background: rgb(120 120 128 / 0);
+  transform: scale(1);
+  animation-name: siqt-hold-press;
+  /* ease-out: the press answers at once and slows as it bottoms out, like a finger into a cushion */
+  animation-timing-function: cubic-bezier(0.22, 1, 0.36, 1);
   animation-fill-mode: forwards;
 }
-@keyframes siqt-hold-fill {
+@keyframes siqt-hold-press {
   to {
-    transform: scale(1);
-    opacity: 1;
+    background: rgb(120 120 128 / 0.2);
+    transform: scale(0.92);
   }
 }
-
 .siqt-hold-armed {
-  background: rgb(59 130 246 / 0.25);
-  animation: siqt-hold-bloom 380ms cubic-bezier(0.2, 0.8, 0.2, 1);
+  background: rgb(10 132 255 / 0.2);
+  box-shadow:
+    0 0 0 1px rgb(10 132 255 / 0.45),
+    0 8px 20px -6px rgb(10 132 255 / 0.4);
+  /* Overshooting spring: out past 1, back to 1 — iOS's "pop" when a long press takes. */
+  animation: siqt-hold-pop 460ms cubic-bezier(0.34, 1.56, 0.64, 1);
 }
-@keyframes siqt-hold-bloom {
+@keyframes siqt-hold-pop {
   from {
-    background: rgb(96 165 250 / 0.5);
+    transform: scale(0.92);
+    background: rgb(120 120 128 / 0.2);
+    box-shadow:
+      0 0 0 0 rgb(10 132 255 / 0),
+      0 0 0 0 rgb(10 132 255 / 0);
   }
 }
-.siqt-hold-armed::before {
-  content: '';
-  position: absolute;
-  inset: 0;
-  box-shadow: inset 0 0 0 2px rgb(147 197 253 / 0.95);
-  opacity: 0;
-  animation: siqt-hold-ring 520ms ease-out;
-}
-@keyframes siqt-hold-ring {
-  from {
-    opacity: 1;
-    box-shadow: inset 0 0 0 1px rgb(147 197 253 / 0.95);
-  }
-  35% {
-    opacity: 1;
-    box-shadow: inset 0 0 0 3px rgb(147 197 253 / 0.8);
-  }
-  to {
-    opacity: 0;
-    box-shadow: inset 0 0 0 6px rgb(147 197 253 / 0);
-  }
-}
-.siqt-hold-armed::after {
-  content: '';
-  position: absolute;
-  inset: 0;
-  background: linear-gradient(105deg, transparent 25%, rgb(255 255 255 / 0.38) 50%, transparent 75%);
-  transform: translateX(-110%);
-  animation: siqt-hold-sweep 600ms cubic-bezier(0.4, 0, 0.2, 1) 40ms;
-}
-@keyframes siqt-hold-sweep {
-  to {
-    transform: translateX(110%);
-  }
-}
-
 .siqt-hold-range {
-  background: rgb(59 130 246 / 0.25);
-  animation: siqt-hold-range-in 120ms ease-out;
+  background: rgb(10 132 255 / 0.16);
+  box-shadow: 0 0 0 1px rgb(10 132 255 / 0.3);
+  animation: siqt-hold-range-in 220ms cubic-bezier(0.34, 1.4, 0.64, 1);
 }
 @keyframes siqt-hold-range-in {
   from {
     opacity: 0;
+    transform: scale(0.88);
   }
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .siqt-hold-fill {
+  .siqt-hold-press {
     animation: none;
-    transform: none;
-    opacity: 1;
+    background: rgb(120 120 128 / 0.2);
   }
   .siqt-hold-armed,
   .siqt-hold-range {
     animation: none;
-  }
-  .siqt-hold-armed::before,
-  .siqt-hold-armed::after {
-    display: none;
   }
 }
 
@@ -637,4 +606,14 @@ body {
 }
 .collab-doc-editor .ProseMirror a:not(.siqt-file-chip):hover {
   text-decoration-color: currentColor;
+}
+
+/* A horizontally scrolling row without a visible scrollbar (the date sheet's quick picks) — on a
+   phone the scrollbar is just a grey line under the chips, and the cut-off last chip already says
+   there is more. */
+.no-scrollbar {
+  scrollbar-width: none;
+}
+.no-scrollbar::-webkit-scrollbar {
+  display: none;
 }

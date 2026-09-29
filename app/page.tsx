@@ -8632,6 +8632,7 @@ function PageContent() {
                       <div className="flex items-center gap-1 text-xs font-mono min-w-0">
                         <DatePickerPopover
                           value={activeModalTask.startDate}
+                          label="Start"
                           onChange={(iso) =>
                             optimisticSetDates(
                               activeModalTask.id,
@@ -8648,6 +8649,7 @@ function PageContent() {
                         <span className="text-neutral-600 shrink-0">–</span>
                         <DatePickerPopover
                           value={activeModalTask.dueDate}
+                          label="Due"
                           onChange={(iso) =>
                             optimisticSetDates(
                               activeModalTask.id,
@@ -8668,6 +8670,7 @@ function PageContent() {
                       <CalendarIcon className="w-3.5 h-3.5 text-neutral-500 shrink-0" />
                       <DatePickerPopover
                         value={activeModalTask.startDate}
+                        label="Start"
                         onChange={(iso) =>
                           optimisticSetDates(
                             activeModalTask.id,
@@ -8684,6 +8687,7 @@ function PageContent() {
                       <span className="text-neutral-600">–</span>
                       <DatePickerPopover
                         value={activeModalTask.dueDate}
+                        label="Due"
                         onChange={(iso) =>
                           optimisticSetDates(
                             activeModalTask.id,

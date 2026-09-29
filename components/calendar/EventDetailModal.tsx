@@ -111,6 +111,7 @@ export default function EventDetailModal({ event, workspaces, users, currentUser
               <div className="bg-neutral-950 border border-neutral-700 rounded-lg px-1 py-0.5 inline-block">
                 <DatePickerPopover
                   value={new Date(event.startDate).toISOString()}
+                  label="Start"
                   onChange={(v) => {
                     if (!v) return;
                     // Dragging start past the current end (or vice versa below) used to leave the
@@ -129,6 +130,7 @@ export default function EventDetailModal({ event, workspaces, users, currentUser
               <div className="bg-neutral-950 border border-neutral-700 rounded-lg px-1 py-0.5 inline-block">
                 <DatePickerPopover
                   value={new Date(event.endDate).toISOString()}
+                  label="End"
                   onChange={(v) => {
                     if (!v) return;
                     onUpdate(new Date(v) < new Date(event.startDate) ? { startDate: v, endDate: v } : { endDate: v });

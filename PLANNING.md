@@ -10295,3 +10295,55 @@ notification "kom nesten umiddelbart". The app token re-registration and the pho
 fixed Android. The iPhone urgency fix above is still to be deployed and confirmed.
 
 **Deployed 2026-09-29 as `4bf9803`** (web push `urgency: high` and a 1-day TTL). The reinstall ran clean. Not yet confirmed on Broonstar's iPhone.
+
+### 2026-09-29 (continued) — mobile "New" (event/task) redone after ClickUp's sheets (uncommitted at time of writing)
+
+Asked with ClickUp screenshots ("Pick time" 24-hour dial, "Choose dates" with Start/Due, quick
+chips and month grid, the task sheet with "In Rob ▾" / big title / rows) and one of ours (the centred
+form with labels and colour dots): "Kan vi få det med streamlined som clickup? Når vi velger tid så
+kommer det et ur opp som det, kalenderen osv."
+
+- **`components/mobile/MobileQuickCreateSheet.tsx`**: `QuickCreatePopover` renders it on a phone
+  (`useIsMobile`), with the same props and callbacks. Desktop is unchanged. It is a bottom sheet with a
+  grabber, an Event/Task pill and ×; for a task "In <List> ▾" (a list picker sheet); a large borderless
+  name; for an event a description line; then icon rows: attendees (AssigneePicker in a sheet, with
+  suggestions), dates (summary such as "Tue 29 Sep, 16:00 → …"), location (inline autocomplete),
+  space for colour (a sheet), and colour swatches. Create sits at the bottom, with a hint for what is
+  missing. There is no "All day" checkbox any more: an event is all-day unless a time was added. Task
+  still has no description or assignees, because `onCreateTask` does not take them (that was already
+  the case).
+- **`components/mobile/DateSheet.tsx`** ("Choose dates"): Start and Due/End fields with the active one
+  outlined. Picking a day fills it and moves on to the next, so a range is two taps. An end picked
+  before the start swaps them. Each field has a clear × and "Add time". Quick chips: Today, Tomorrow,
+  This week (Friday, or Sunday once Friday has passed) and Next week (Monday). The month grid pages
+  with up/down, marks today red and the chosen days blue, and tints the range between. Clear/Save.
+- **`components/mobile/TimeDialSheet.tsx`** ("Pick time"): HH : MM boxes and a 24-hour dial: 1–12 on
+  the outer ring, 0 and 13–23 on the inner, as in ClickUp. Tap or drag with pointer capture, and a
+  haptic on each new hour, or every 5 minutes. Lifting on an hour switches to minutes (0–55 labels,
+  any minute by drag). Clear/Save. Midnight is how "no time" is stored, so a chosen 00:00 is saved as
+  00:01 (a known quirk).
+- Added a `.no-scrollbar` utility to globals.css for the chip row.
+- **Not seen on a device or in a browser at all.** Typechecked and linted only (the one lint error in
+  QuickCreatePopover was already there). The dial geometry was reasoned through (12 and 0 at the top,
+  16 on the inner ring at 4 o'clock) and not measured.
+- **Not done:** the task modal's and the task rows' date pickers on a phone still use the small
+  desktop `DatePickerPopover`. DateSheet could replace them there too.
+
+**Same day, also asked: "Fiks datovelgeren og."** `DatePickerPopover` now opens the same sheet on a
+phone: `DateSheet` got a `single` mode ("Choose date", one field, no auto-advance to a second field,
+returns `(value, null)`). Desktop keeps the popover. There is a new `label` prop, passed as "Start"/"Due"
+from the task row and the task modal (all four pickers there), "Start"/"End" from EventDetailModal,
+and the field's own name for custom date fields. Same ISO-in, ISO-out contract, so the custom date
+field's local-text conversion is untouched. **Not seen on a device.**
+
+**And the Planner hold animation, "ganske 'old' … 'harry'", redone to feel like iOS.** The first
+version (radial glow from the fingertip, bloom, a ring pulse and a light sweep; `.siqt-hold-fill`,
+`::before`/`::after`) is gone, along with `pressOrigin`, which only existed to place that glow. It is
+now one rounded card, inset 3 px with a 12 px radius, the way a selected iOS calendar day looks:
+- **held** (`.siqt-hold-press`): the card presses in to `scale(0.92)` and fills with iOS's neutral
+  system fill, ease-out over `LONG_PRESS_MS`;
+- **armed** (`.siqt-hold-pop`): it springs out past full size and settles (overshooting
+  cubic-bezier), in system blue with a 1 px ring and a soft blue shadow, landing with the strong
+  haptic as before;
+- **range**: the same blue card easing in from 0.88.
+Reduced motion gets static fills. **Not seen on a device**, and the timings are first guesses.
