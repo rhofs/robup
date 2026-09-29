@@ -10347,3 +10347,5 @@ now one rounded card, inset 3 px with a 12 px radius, the way a selected iOS cal
   haptic as before;
 - **range**: the same blue card easing in from 0.88.
 Reduced motion gets static fills. **Not seen on a device**, and the timings are first guesses.
+
+**Deployed 2026-09-29 as `487814d`** (mobile quick-create sheet, DateSheet and TimeDialSheet, mobile DatePickerPopover, iOS-style Planner hold). The reinstall ran clean. Not yet seen on a device.
