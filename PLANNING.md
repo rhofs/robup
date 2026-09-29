@@ -10462,3 +10462,5 @@ Feedback: the dust is good now. Then:
   arrival. It now survives `office` too. Also added a small "Archive"/"Exit archive" pill **under
   Office's Space card** ("en liten knapp under selve arket"), which brings archived Spaces into the
   list above it. The one under the task list stays.
+
+**Deployed 2026-09-29 as `76625bc`** (sheets lifted above the keyboard, outer-only glow, pastel nav bubble, Archive in Office). The reinstall ran clean. Not yet seen on a device.
