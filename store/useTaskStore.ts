@@ -333,7 +333,8 @@ interface TaskStore {
   // fetchInitialData.
   hasLoadedOnce: boolean;
   showArchived: boolean;
-  // Whether archived Spaces (and everything in them) are loaded and shown. Per device, remembered.
+  // Whether archived Spaces (and everything in them) are loaded. Follows showArchived — the one
+  // archive switch — rather than being a switch of its own.
   showArchivedSpaces: boolean;
   setShowArchivedSpaces: (v: boolean) => Promise<void>;
   archiveSpace: (spaceId: string, archived: boolean) => Promise<void>;
@@ -691,18 +692,6 @@ interface TaskStore {
   permanentlyDeleteFromTrash: (kind: 'spaces' | 'folders' | 'lists' | 'tasks' | 'doc-folders' | 'docs' | 'events', id: string) => Promise<void>;
 }
 
-const SHOW_ARCHIVED_SPACES_KEY = 'siqt.showArchivedSpaces';
-
-// Remembered per device, like the rest of the view preferences. Wrapped: storage can be missing or
-// throw (private windows, the first server render), and the answer then is simply "off".
-function readShowArchivedSpaces(): boolean {
-  try {
-    return typeof localStorage !== 'undefined' && localStorage.getItem(SHOW_ARCHIVED_SPACES_KEY) === '1';
-  } catch {
-    return false;
-  }
-}
-
 // Appended to every request that loads Spaces or what is in them — see lib/archivedSpaces.ts.
 const archivedSpacesQS = () => (useTaskStore.getState().showArchivedSpaces ? '&archivedSpaces=1' : '');
 
@@ -747,7 +736,7 @@ export const useTaskStore = create<TaskStore>((set, get) => {
     isLoading: true,
     hasLoadedOnce: false,
     showArchived: false,
-    showArchivedSpaces: readShowArchivedSpaces(),
+    showArchivedSpaces: false,
 
     fetchInitialData: async () => {
       // Only the FIRST load blanks the app.
@@ -1031,14 +1020,18 @@ export const useTaskStore = create<TaskStore>((set, get) => {
     setActiveOfficeUserId: (activeOfficeUserId) => set({ activeOfficeUserId }),
     setActiveOfficeRoomId: (activeOfficeRoomId) => set({ activeOfficeRoomId }),
 
-    setShowArchived: (showArchived) => set({ showArchived }),
+    // The one archive: turning it on also loads archived Spaces (the server leaves them out
+    // otherwise), and they show — dimmed, below the live ones — alongside archived tasks and lists.
+    // It used to be two switches, and the second, an "Archived spaces (N)" row at the foot of the
+    // Space list, read as one more Space. Merged on the user's pick (2026-09-29, option A).
+    setShowArchived: (showArchived) => {
+      set({ showArchived });
+      if (get().showArchivedSpaces !== showArchived) void get().setShowArchivedSpaces(showArchived);
+    },
 
     // Archived Spaces are left out by the server, not hidden here (lib/archivedSpaces.ts), so
-    // switching this reloads the data rather than re-filtering it.
+    // switching this reloads the data rather than re-filtering it. Driven by setShowArchived.
     setShowArchivedSpaces: async (on) => {
-      try {
-        localStorage.setItem(SHOW_ARCHIVED_SPACES_KEY, on ? '1' : '0');
-      } catch {}
       set({ showArchivedSpaces: on });
       await get().fetchInitialData();
     },

@@ -138,7 +138,6 @@ export default function OfficeContext({
             onToggleSpace={onToggleSpace}
             onToggleFolder={onToggleFolder}
             emptyText="No spaces in this workspace yet."
-            showArchivedToggle
             onSelectSpace={onSelectSpace}
             onSelectList={onSelectList}
             onSpaceMenu={onSpaceMenu}

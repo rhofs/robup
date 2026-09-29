@@ -10389,3 +10389,21 @@ Workspace lists archived Spaces with Unarchive and there is nothing in the sideb
 offered. Waiting for the answer.
 
 **Deployed 2026-09-29 as `12361a5`** (square press, pastel band, puff cloud). The reinstall ran clean. Not yet seen on a device.
+
+**Decided: option A, "Kan vi prøve A? Se hvordan det er?"** (built, uncommitted at time of writing).
+- One archive. `setShowArchived` also sets `showArchivedSpaces`, which reloads through
+  `fetchInitialData` with `?archivedSpaces=1`. The separate per-device setting and its localStorage key
+  are gone, so archive mode starts off like it always did.
+- `components/ArchivedSpacesToggle.tsx` is deleted (the row in the desktop sidebar, the mobile Spaces
+  sheet and Office). `archivedLast` moved to `lib/archivedLast.ts`. Archived Spaces still sort last,
+  dimmed, under the "Archived" divider, now only in archive mode.
+- **"Effectively archived":** in `app/page.tsx`, `isArchivedTask(task)` is true for
+  `task.archived` *or* a task whose list is in an archived Space (`archivedSpaceListIds`). It is used
+  by the board filter and the Planner filter. Without it, archive mode would have shown an archived
+  Space with nothing in it, since its tasks are not archived one by one. `FolderTree` gets
+  `showArchived && !space.archived`, so an archived Space lists its ordinary lists in archive mode.
+- The archive toast now says "… — find it under Archive", because the row that showed where it went
+  is gone.
+- `archivedSpaceCount` is still returned by `GET /api/workspaces` but nothing reads it now. It is
+  harmless and could badge the Archive button later.
+- **Not seen in a browser.** Typechecked; no new lint findings in the changed code.

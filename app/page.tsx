@@ -142,7 +142,7 @@ import AccessControlPanel from '../components/AccessControlPanel';
 import MentionText from '../components/MentionText';
 import MentionTextarea from '../components/MentionTextarea';
 import WikiView from '../components/wiki/WikiView';
-import ArchivedSpacesToggle, { archivedLast } from '../components/ArchivedSpacesToggle';
+import { archivedLast } from '../lib/archivedLast';
 import InAppBanner from '../components/InAppBanner';
 import { pickableMembers, taskAudience, taskPickableMembers, workspaceIdForList, workspaceIdForSpace } from '../lib/workspaceMembers';
 import AssigneePicker, { PersonPill } from '../components/AssigneePicker';
@@ -3066,11 +3066,21 @@ function PageContent() {
     return ids;
   }, [currentWorkspace]);
 
+  // Everything in an archived Space counts as archived, whatever its own flag says. There is one
+  // archive in the app (the "Archive" toggle), not one for tasks and another for Spaces: in archive
+  // mode an archived Space's work shows like any other archived work, and outside it none of it does
+  // (outside it the server does not send archived Spaces at all — lib/archivedSpaces.ts).
+  const archivedSpaceListIds = useMemo(
+    () => new Set(workspaces.flatMap((w) => w.spaces.filter((sp) => sp.archived).flatMap((sp) => sp.lists.map((l) => l.id)))),
+    [workspaces]
+  );
+  const isArchivedTask = (task: { archived?: boolean | null; listId: string }) => !!task.archived || archivedSpaceListIds.has(task.listId);
+
   const filteredTasks = useMemo(() => {
     let result = tasks.filter((task) => {
       if (modalTaskStack.length > 0) return false;
       if (task.parentId !== null) return false;
-      if (!!task.archived !== showArchived) return false;
+      if (isArchivedTask(task) !== showArchived) return false;
 
       // Scoped to the current workspace, not literally every task in the store. `tasks` holds
       // everything visible to this person across EVERY workspace they belong to (GET /api/tasks is
@@ -3124,7 +3134,8 @@ function PageContent() {
     }
 
     return result;
-  }, [tasks, activeSpaceId, activeListIds, modalTaskStack, sortBy, sortOrder, showArchived, currentWorkspaceListIds, currentSpace]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- isArchivedTask reads archivedSpaceListIds, listed
+  }, [tasks, activeSpaceId, activeListIds, modalTaskStack, sortBy, sortOrder, showArchived, currentWorkspaceListIds, currentSpace, archivedSpaceListIds]);
 
   // Scoped to whatever's currently visible/filtered in the board (filteredTasks), not the whole
   // workspace — the "Clear overdue" toolbar button below only ever touches what's on screen, so
@@ -3140,9 +3151,10 @@ function PageContent() {
   const calendarFilteredTasks = useMemo(
     () =>
       tasks.filter(
-        (task) => task.parentId === null && !!task.archived === showArchived && calendarVisibleListIds.has(task.listId)
+        (task) => task.parentId === null && isArchivedTask(task) === showArchived && calendarVisibleListIds.has(task.listId)
       ),
-    [tasks, calendarVisibleListIds, showArchived]
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- isArchivedTask reads archivedSpaceListIds, listed
+    [tasks, calendarVisibleListIds, showArchived, archivedSpaceListIds]
   );
 
   const toggleCalendarList = (listId: string) => {
@@ -6032,7 +6044,9 @@ function PageContent() {
                           renameDocId={renameDocId}
                           onRenameDocHandled={() => setRenameDocId(null)}
                           listDropIndicator={listDropIndicator}
-                          showArchived={showArchived}
+                          // An archived Space shows its ordinary lists in archive mode — all of it is
+                          // archived by being inside it; only a live Space narrows to archived lists.
+                          showArchived={showArchived && !space.archived}
                         />
                     )}
                     {spaceDropIndicator?.targetId === space.id && spaceDropIndicator.position === 'below' && (
@@ -6041,7 +6055,6 @@ function PageContent() {
                   </div>
                 );
               })}
-              <ArchivedSpacesToggle className="mt-1" />
             </div>
             )}
           </div>
@@ -7633,7 +7646,9 @@ function PageContent() {
                 const { space } = spaceMenu;
                 setSpaceMenu(null);
                 void useTaskStore.getState().archiveSpace(space.id, !space.archived);
-                showToast(space.archived ? `Unarchived ${space.name}` : `Archived ${space.name}`);
+                // Says where it went: with the "Archived spaces" row gone, the Archive toggle is the
+                // only way back to it.
+                showToast(space.archived ? `Unarchived ${space.name}` : `Archived ${space.name} — find it under Archive`);
               }}
               className="w-full text-left px-3 py-1.5 text-xs text-neutral-300 hover:bg-neutral-800/60 cursor-pointer flex items-center gap-2"
             >

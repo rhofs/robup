@@ -4,7 +4,7 @@ import { useEffect, useRef, useState } from 'react';
 import { ChevronRight, ChevronDown, Globe, Search, X, Plus, Folder as FolderIconLucide, List as ListIconLucide, FileText } from 'lucide-react';
 import { motion } from 'framer-motion';
 import { useTaskStore, type HierarchySpace } from '../../store/useTaskStore';
-import ArchivedSpacesToggle, { archivedLast } from '../ArchivedSpacesToggle';
+import { archivedLast } from '../../lib/archivedLast';
 import { FOLDER_ICON_MAP } from '../FolderTree';
 import FloatingPopover from '../FloatingPopover';
 import { hapticTap } from '../../lib/haptics';
@@ -536,7 +536,6 @@ export default function MobileSpacesSheet({
                 </div>
               );
             })}
-            <ArchivedSpacesToggle className="mt-2" />
           </div>
           </div>
         </motion.div>

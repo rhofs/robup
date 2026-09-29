@@ -3,7 +3,7 @@
 import { useRef } from 'react';
 import { ChevronRight, ChevronDown, Folder as FolderIcon, List as ListIcon } from 'lucide-react';
 import type { HierarchySpace, HierarchyFolder, HierarchyList } from '../../store/useTaskStore';
-import ArchivedSpacesToggle, { archivedLast } from '../ArchivedSpacesToggle';
+import { archivedLast } from '../../lib/archivedLast';
 import { FOLDER_ICON_MAP } from '../FolderTree';
 import { hapticTap } from '../../lib/haptics';
 
@@ -41,8 +41,6 @@ type Props = {
   onToggleSpace: (spaceId: string) => void;
   onToggleFolder: (folderId: string) => void;
   emptyText: string;
-  // The "Archived spaces (N)" row at the foot — for the workspace's Spaces, not Home's personal ones.
-  showArchivedToggle?: boolean;
   onSelectSpace: (spaceId: string) => void;
   onSelectList: (spaceId: string, listId: string) => void;
   onSpaceMenu: (x: number, y: number, space: HierarchySpace) => void;
@@ -56,7 +54,6 @@ type Props = {
 export default function ContextSpaceList({
   spaces,
   emptyText,
-  showArchivedToggle = false,
   openSpaceIds,
   openFolderIds,
   onToggleSpace,
@@ -245,8 +242,7 @@ export default function ContextSpaceList({
           </div>
         );
       })}
-      {/* Only in the workspace's own list: Home's personal Spaces have nothing to archive into. */}
-      {showArchivedToggle && <ArchivedSpacesToggle className="mt-1" />}
+
     </>
   );
 }
