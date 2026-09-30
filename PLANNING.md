@@ -10636,3 +10636,5 @@ tagging worked). Still not seen on a device.
   `overscroll-contain` so its own scroll doesn't chain to the page. Diagnosis is by reasoning, not
   reproduced on an iPhone. If days still stretch, the next suspect is Safari's toolbar resizing
   `dvh` without any scroll; the fix then would be to fit rows once and not on every resize.
+
+**Deployed 2026-09-30 as `04c6255`** (tag `deploy/2026-09-30_1127`).
