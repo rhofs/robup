@@ -547,6 +547,29 @@ body {
   }
 }
 
+/* Locked in (WeekRow): on release, each selected day turns solid blue as its dust pops — "set in
+   stone". Not flat: a lighter top fading into the base blue, a thin highlight along the top edge and
+   a soft inner shade at the bottom, like a pressed key. It lands as a stamp: from slightly large and
+   transparent down to size, with a little overshoot. The delay per day is set inline so the lock
+   runs along the range in the same order as the dust. */
+.siqt-day-lock {
+  background: linear-gradient(180deg, rgb(96 165 250) 0%, rgb(59 130 246) 55%, rgb(37 99 235) 100%);
+  box-shadow:
+    inset 0 1px 0 rgb(255 255 255 / 0.35),
+    inset 0 -8px 14px -10px rgb(15 23 42 / 0.45),
+    0 0 12px 1px rgb(59 130 246 / 0.35);
+  opacity: 0;
+  transform: scale(1.12);
+  animation: siqt-day-lock 260ms cubic-bezier(0.34, 1.56, 0.64, 1) forwards;
+  will-change: transform, opacity;
+}
+@keyframes siqt-day-lock {
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
 /* The magic dust (components/calendar/PuffBurst.tsx). A zero-size layer at the finger; every
    particle starts there and flies out to its own --dx/--dy. Dust: tiny specks with a bright core and a
    soft halo of their own colour, flickering as they fade — glitter, not a cloud. Stars: four-pointed
@@ -564,10 +587,11 @@ body {
   top: 0;
   border-radius: 9999px;
   background: radial-gradient(circle, #fff 0%, var(--c) 55%);
-  box-shadow:
-    0 0 4px 1px var(--c),
-    0 0 10px 2px color-mix(in srgb, var(--c) 60%, transparent);
+  /* One shadow layer, not two: on an iPhone every blurred layer on every speck is repainted per
+     frame, and a dozen bursts at once stuttered. */
+  box-shadow: 0 0 6px 1px var(--c);
   opacity: 0;
+  will-change: transform, opacity;
   animation-name: siqt-dust;
   animation-timing-function: cubic-bezier(0.12, 0.9, 0.3, 1);
   animation-fill-mode: forwards;
@@ -597,8 +621,10 @@ body {
   top: 0;
   background: radial-gradient(circle, #fff 0%, var(--c) 60%);
   clip-path: polygon(50% 0%, 60% 40%, 100% 50%, 60% 60%, 50% 100%, 40% 60%, 0% 50%, 40% 40%);
-  filter: drop-shadow(0 0 4px var(--c));
+  /* No drop-shadow filter: it is by far the most expensive thing here on iOS. The white core of the
+     gradient carries the sparkle on its own. */
   opacity: 0;
+  will-change: transform, opacity;
   animation-name: siqt-star;
   animation-timing-function: cubic-bezier(0.16, 1, 0.3, 1);
   animation-fill-mode: forwards;
@@ -663,6 +689,11 @@ body {
   .siqt-band-release {
     animation: none;
     transition: none;
+  }
+  .siqt-day-lock {
+    animation: none;
+    opacity: 1;
+    transform: none;
   }
   .siqt-puff-layer {
     display: none;

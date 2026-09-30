@@ -39,6 +39,8 @@ function dayUnderPointer(x: number, y: number): Date | null {
 }
 
 // Inclusive, and order-independent — a range drawn backwards is the same range.
+const startOfDayTime = (d: Date) => new Date(d.getFullYear(), d.getMonth(), d.getDate()).getTime();
+
 function isDayInRange(day: Date, range: { start: Date; end: Date } | null): boolean {
   if (!range) return false;
   const t = new Date(day.getFullYear(), day.getMonth(), day.getDate()).getTime();
@@ -176,9 +178,13 @@ export default function WeekRow({
   const puffIdRef = useRef(0);
   const releaseTimerRef = useRef<number | null>(null);
   // A small puff from the middle of every selected day, staggered along the range in date order.
-  const releaseDust = (start: Date, end: Date) => {
+  // Returns how many days it covered. Lighter for longer ranges: a puff per day is the effect, and
+  // on a phone — iOS especially — a dozen full bursts at once is what made it stutter.
+  const releaseDust = (start: Date, end: Date): number => {
     const from = new Date(Math.min(start.getTime(), end.getTime()));
     const to = new Date(Math.max(start.getTime(), end.getTime()));
+    const count = Math.round((to.getTime() - from.getTime()) / 86_400_000) + 1;
+    const amount = count <= 3 ? 0.5 : count <= 7 ? 0.35 : 0.25;
     let i = 0;
     for (let d = new Date(from); d <= to && i < 42; d.setDate(d.getDate() + 1), i++) {
       const cell = document.querySelector(`[data-day-key="${dayKey(d)}"]`);
@@ -186,14 +192,15 @@ export default function WeekRow({
       const r = cell.getBoundingClientRect();
       const at = { x: r.left + r.width / 2, y: r.top + r.height / 2 };
       window.setTimeout(() => {
-        setPuffs((ps) => [...ps, { id: ++puffIdRef.current, x: at.x, y: at.y, particles: makePuffParticles(0.6) }]);
-      }, i * RELEASE_STAGGER_MS);
+        setPuffs((ps) => [...ps, { id: ++puffIdRef.current, x: at.x, y: at.y, particles: makePuffParticles(amount) }]);
+      }, Math.min(i, 8) * RELEASE_STAGGER_MS);
     }
+    return count;
   };
   const [holdArmed, setHoldArmed] = useState(false);
   const LONG_PRESS_MOVE_TOLERANCE = 8;
   // The release pop before "New" opens: long enough to see, short enough not to wait on.
-  const RELEASE_MS = 420;
+  const RELEASE_MS = 500;
   const RELEASE_STAGGER_MS = 45;
 
   // Stops the browser from taking the gesture over as a scroll once the hold has armed.
@@ -234,12 +241,13 @@ export default function WeekRow({
   // Cancels an in-flight hold outright (finger left the cell, gesture interrupted) — distinct
   // from a completed hold, which pointerup consumes.
   const abandonLongPress = () => {
+    // A release in progress is a finished choice, not a gesture to give up. This matters because on
+    // a touch screen the browser sends pointerleave straight AFTER pointerup — which used to land
+    // here, cancel the timer that opens "New" and clear the range, so the release animation played
+    // and then nothing opened ("Event/Task creatoren popper ikke opp etter animasjonen").
+    if (releaseTimerRef.current !== null) return;
     releaseScrollBlock();
     clearLongPressTimer();
-    if (releaseTimerRef.current !== null) {
-      window.clearTimeout(releaseTimerRef.current);
-      releaseTimerRef.current = null;
-    }
     longPressReadyRef.current = false;
     dragOriginRef.current = null;
     draggingRangeRef.current = false;
@@ -255,7 +263,14 @@ export default function WeekRow({
     abandonRef.current = abandonLongPress;
   });
   useEffect(() => {
-    const onPop = () => abandonRef.current();
+    const onPop = () => {
+      // Back during the release: it stops, and "New" does not open.
+      if (releaseTimerRef.current !== null) {
+        window.clearTimeout(releaseTimerRef.current);
+        releaseTimerRef.current = null;
+      }
+      abandonRef.current();
+    };
     window.addEventListener('popstate', onPop);
     return () => window.removeEventListener('popstate', onPop);
   }, []);
@@ -551,12 +566,13 @@ export default function WeekRow({
                           // arket opp". The band switches to its release state in every row
                           // (`releasing`), and the dust is thrown from each day's centre on screen.
                           onPendingRangeChange({ start, end, releasing: true });
-                          releaseDust(start, end);
+                          const days = releaseDust(start, end);
+                          // Long enough for the last day to lock in, then "New".
                           releaseTimerRef.current = window.setTimeout(() => {
                             releaseTimerRef.current = null;
                             onPendingRangeChange(null);
                             onQuickAddDay(start, end);
-                          }, RELEASE_MS);
+                          }, RELEASE_MS + Math.min(days - 1, 8) * RELEASE_STAGGER_MS);
                         }
                       : undefined
                   }
@@ -609,6 +625,30 @@ export default function WeekRow({
                     puff cloud — see the .siqt-hold-press / .siqt-band / .siqt-puff notes in
                     globals.css. z-20 puts it above the bar layer; pointer-events-none keeps it out
                     of hit-testing, which dayUnderPointer relies on. */}
+                {/* Locked in: on release each selected day turns solid blue as its dust pops, in the
+                    same order — "set in stone", the moment each day is decided. The date stays,
+                    white. The delay is this day's place in the range, so the lock runs along the
+                    selection across rows. */}
+                {isMobile && pendingRange?.releasing && inRange && (
+                  <span
+                    aria-hidden
+                    className="siqt-day-lock pointer-events-none absolute inset-0 z-30"
+                    style={{
+                      animationDelay: `${
+                        Math.min(
+                          8,
+                          Math.round(
+                            (startOfDayTime(day) - Math.min(startOfDayTime(pendingRange.start), startOfDayTime(pendingRange.end))) / 86_400_000
+                          )
+                        ) * RELEASE_STAGGER_MS
+                      }ms`,
+                    }}
+                  >
+                    <span className="absolute left-2 top-1 w-5 h-5 inline-flex items-center justify-center text-[11px] font-mono font-semibold text-white">
+                      {day.getDate()}
+                    </span>
+                  </span>
+                )}
                 {isMobile && isPressed && !holdArmed && (
                   <span aria-hidden className="pointer-events-none absolute inset-0 z-20">
                     <span className="siqt-hold-press" style={{ animationDuration: `${LONG_PRESS_MS}ms` }} />

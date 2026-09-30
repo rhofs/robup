@@ -10545,3 +10545,48 @@ Feedback after testing (Chris is on iOS 26.x):
 - **Not seen on a device.**
 
 **Deployed 2026-09-30 as `2af8269`** (release pop, swipe-down sheets, blue pulsing band and nav bubble, iOS haptic on release). The reinstall ran clean. Not yet seen on a device.
+
+### 2026-09-30 (continued) — the release: "New" never opened; days now lock in; lighter dust for iOS
+
+- **Bug: "Event/Task creatoren popper ikke opp etter animasjonen".** On a touch screen the browser fires
+  **pointerleave right after pointerup**, and the cell's `onPointerLeave={abandonLongPress}` then
+  ran during the release: it cleared the timer that opens "New" and the range, so the animation played
+  and nothing followed. `abandonLongPress` now returns early while a release is in progress (it is a
+  finished choice, not a gesture to abandon). Only `popstate` (Back) cancels a release now.
+- **"Locked in":** "i det de blir forløst … de får en solid blåfarge … 'set in stone' … den dagen blir
+  'locked in'". While `pendingRange.releasing`, every selected cell renders `.siqt-day-lock` (z-30),
+  a solid blue key-like fill (lighter top → base → deeper bottom, a 1 px top highlight, a soft inner
+  shade, a faint outer glow). The date stays, in white. It stamps in from 1.12 with an overshoot,
+  delayed by the day's position in the range (`min(8, index) × 45 ms`), so it runs along the selection
+  in step with the dust, across rows. "New" opens after `RELEASE_MS` (now 500) plus the stagger, so
+  the last lock is visible for a moment first.
+- **iOS stutter:** release puffs are lighter the longer the range (0.5 / 0.35 / 0.25 of a full burst for
+  ≤3 / ≤7 / longer), the stagger is capped at 8 steps, dust specks have one box-shadow layer
+  instead of two, the stars lost their `drop-shadow` filter (the costliest thing on iOS), and both
+  have `will-change: transform, opacity`.
+- **iOS haptics still nothing on iOS 26**, even on pointerup with the fresh-switch form. Probably not
+  possible from a home-screen web app. Suggested the user try the same tap in a normal Safari tab to
+  tell "blocked in standalone" from "blocked altogether". The real route is a native iOS build of the
+  Capacitor app (needs a Mac with Xcode and an Apple Developer account, $99/year). Not started.
+- **Not seen on a device.**
+
+### 2026-09-30 (continued) — standing instruction: auto-deploy each round, reversibly
+
+- **Robin's instruction (verbatim):** "etter hver iterering vil jeg at du pusher, comitter og
+  reinstallerer, foreløpig, inntill jeg sier ifra. Men, sørg for at det er mulig å reversere dersom
+  noe skulle skje". So: after each finished round, commit, push `main` and `scripts/ptero.sh reinstall
+  <commit>` without asking. It holds until he revokes it. Destructive things (data deletion,
+  force-push, panel config) are still asked about first.
+- **Reversibility, built for this:**
+  - `scripts/ptero.sh reinstall <commit>` now tags the deployed commit `deploy/<UTC YYYY-MM-DD_HHMM>`
+    and pushes the tag once the site answers with that commit. `git tag -l 'deploy/*'` is the list of
+    what has actually been live, in order.
+  - `scripts/ptero.sh rollback <deploy tag or commit>` makes **one new commit** whose tree equals the
+    target (`git read-tree -u --reset`, tested in a scratch repo: modified files restored, files added
+    since are removed). Nothing is rewritten or force-pushed, so the rolled-back work is still in
+    history and can be restored the same way. It then pushes and reinstalls that commit. It refuses to
+    run with a dirty working tree.
+  - **A code rollback does not undo a migration.** Rolling back past a schema change leaves the new
+    columns/tables in the DB (usually harmless — old code ignores them); getting data back needs a DB
+    snapshot (`backups/` on the server, taken at every start and hourly, or the nightly off-site copy
+    via `scripts/restoreBackup.ts`). Mention it in the reply whenever a round has a migration.

@@ -6,6 +6,13 @@
 #   scripts/ptero.sh restart|start|stop  power signal
 #   scripts/ptero.sh reinstall           runs the egg's install script (git sync + build), then waits
 #   scripts/ptero.sh wait [commit]       waits until siqt.no answers — and, given a commit, runs it
+#   scripts/ptero.sh rollback <ref>      puts main back to <ref> (a deploy/… tag or a commit) with a
+#                                        revert commit — history kept — pushes it, and reinstalls
+#
+# Every successful reinstall tags the deployed commit deploy/<UTC time> and pushes the tag, so there
+# is always a named, known-good point to roll back to (`git tag -l 'deploy/*'`). A rollback reverts
+# CODE only: a database migration that already ran is not undone by it — restore a DB snapshot
+# (backups/, or the daily off-site copy) for that.
 #
 # Credentials are NOT in this repo. They live in ~/.config/siqt/pterodactyl.env (chmod 600):
 #   PTERO_URL=https://server.gaminglivet.no     (the panel, without /server/...)
@@ -81,6 +88,15 @@ wait_up() {
   return 1
 }
 
+# Names the commit that is now live, so it can be found and returned to later.
+tag_deploy() {
+  local commit="${1:-}"
+  [[ -z "$commit" ]] && return 0
+  local tag="deploy/$(date -u +%Y-%m-%d_%H%M)"
+  ( cd "$(git rev-parse --show-toplevel)" && git tag -f "$tag" "$commit" >/dev/null && git push -q -f origin "refs/tags/$tag" ) \
+    && echo "Tagged $commit as $tag." || echo "Could not tag the deploy (it is live regardless)." >&2
+}
+
 installing() {
   api GET "" | python3 -c 'import json,sys; a=json.load(sys.stdin)["attributes"]; print("yes" if a.get("is_installing") or a.get("status") == "installing" else ("failed" if a.get("status") == "install_failed" else "no"))'
 }
@@ -124,6 +140,21 @@ case "${1:-status}" in
     api POST /power '{"signal":"start"}' >/dev/null
     echo "Started."
     wait_up "${2:-}"
+    tag_deploy "${2:-}"
+    ;;
+  rollback)
+    target="${2:?usage: scripts/ptero.sh rollback <deploy tag or commit>}"
+    cd "$(git rev-parse --show-toplevel)"
+    git fetch -q origin main --tags
+    if [[ -n "$(git status --porcelain)" ]]; then echo "Working tree not clean — commit or stash first." >&2; exit 1; fi
+    git checkout -q main && git pull -q --ff-only origin main
+    # One revert commit that makes the tree equal to <target> — no history rewritten, nothing forced.
+    git read-tree -u --reset "$target"
+    git commit -q -m "Roll back to $target" -m "Reverts main to the tree of $target with scripts/ptero.sh rollback; every commit since stays in history."
+    git push -q origin main
+    head=$(git rev-parse --short HEAD)
+    echo "Rolled back to $target as $head; reinstalling."
+    exec "$0" reinstall "$head"
     ;;
   wait) wait_up "${2:-}" ;;
   *)
