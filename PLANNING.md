@@ -10638,3 +10638,18 @@ tagging worked). Still not seen on a device.
   `dvh` without any scroll; the fix then would be to fit rows once and not on every resize.
 
 **Deployed 2026-09-30 as `04c6255`** (tag `deploy/2026-09-30_1127`).
+
+### 2026-09-30 (continued) — the "New" sheet nudges the release dust away
+
+- "kunne de blitt 'dytta' vekk oppover og til siden av det kortet? Trenger ikke å bli dytta hardt,
+  men at de reagerer på den, og fader ut". When the release timer opens "New", every calm puff is
+  marked `pushed`. `PuffBurst` wraps each particle in a `.siqt-push` span, so the nudge adds to the
+  particle's own animated transform instead of replacing it. Under `.siqt-puff-pushed` that span
+  transitions to `translate(--px, --py)` and opacity 0 (850 ms ease-out, 750 ms fade):
+  - it goes up, and sideways away from the screen's middle;
+  - it is stronger for particles lower on screen (strength 0.35–1 by their drifted y);
+  - it starts sooner for lower particles (delay (1−y share)×220 ms plus jitter), so it reads as a wave
+    from the sheet's edge.
+  Per-particle `jitter` is made with the particles, since Math.random is not allowed in render. The
+  burst removes itself 1.1 s after the push. It does not track the sheet's real top edge, only
+  screen position. Not seen on a device.

@@ -1,7 +1,7 @@
-'use client';
+"use client";
 
-import { useEffect, useRef } from 'react';
-import { createPortal } from 'react-dom';
+import { useEffect, useRef } from "react";
+import { createPortal } from "react-dom";
 
 // The "pop" when a long press on a Planner day takes: a soft cloud that puffs out from under the
 // thumb, past the edges of the day, in pastel pink, peach, blue and lilac — asked for as "et 'pop'
@@ -16,10 +16,17 @@ import { createPortal } from 'react-dom';
 // Blues and white — the app's own accent, not a separate palette. The pastel pink/peach/blue of the
 // first versions was pulled back to keep the design continuous ("For å få appen til å være mer
 // kontinuerlig lik i design tror jeg vi må gå tilbake på den pastellfargen").
-export const PUFF_COLORS = ['#BFDBFE', '#93C5FD', '#60A5FA', '#DBEAFE', '#FFFFFF', '#A5C8FF'];
+export const PUFF_COLORS = [
+  "#BFDBFE",
+  "#93C5FD",
+  "#60A5FA",
+  "#DBEAFE",
+  "#FFFFFF",
+  "#A5C8FF",
+];
 
 export type PuffParticle = {
-  kind: 'dust' | 'star';
+  kind: "dust" | "star";
   dx: number;
   dy: number;
   size: number;
@@ -27,6 +34,8 @@ export type PuffParticle = {
   duration: number;
   color: string;
   spin: number;
+  // Per-particle variation for the nudge when "New" comes up (see `pushed` below), 0–1.
+  jitter: number;
 };
 
 // Random per burst, so no two pops look the same. Made where the burst is started (an event, not a
@@ -49,22 +58,53 @@ export function makePuffParticles(amount = 1, calm = false): PuffParticle[] {
     const angle = Math.random() * Math.PI * 2;
     // Dust spreads unevenly — most of it close, some flung far — which is what makes it read as a
     // spray of glitter rather than a ring.
-    const dist = ((isStar ? 40 : 25) + Math.pow(Math.random(), 0.7) * (isStar ? 70 : 95)) * (0.5 + amount / 2) * (calm ? 0.8 : 1);
+    const dist =
+      ((isStar ? 40 : 25) + Math.pow(Math.random(), 0.7) * (isStar ? 70 : 95)) *
+      (0.5 + amount / 2) *
+      (calm ? 0.8 : 1);
     out.push({
-      kind: isStar ? 'star' : 'dust',
+      kind: isStar ? "star" : "dust",
       dx: Math.cos(angle) * dist,
       dy: Math.sin(angle) * dist - (isStar ? 14 : 8),
-      size: calm ? (isStar ? 6 + Math.random() * 4 : 1.5 + Math.random() * 2) : isStar ? 9 + Math.random() * 7 : 2.5 + Math.random() * 4,
+      size: calm
+        ? isStar
+          ? 6 + Math.random() * 4
+          : 1.5 + Math.random() * 2
+        : isStar
+        ? 9 + Math.random() * 7
+        : 2.5 + Math.random() * 4,
       delay: Math.random() * (calm ? 60 : isStar ? 140 : 90),
-      duration: calm ? 1700 + Math.random() * 300 : (isStar ? 900 : 700) + Math.random() * 450,
+      duration: calm
+        ? 1700 + Math.random() * 300
+        : (isStar ? 900 : 700) + Math.random() * 450,
       color: PUFF_COLORS[Math.floor(Math.random() * PUFF_COLORS.length)],
       spin: (Math.random() - 0.5) * 180,
+      jitter: Math.random(),
     });
   }
   return out;
 }
 
-export default function PuffBurst({ x, y, particles, calm = false, onDone }: { x: number; y: number; particles: PuffParticle[]; calm?: boolean; onDone: () => void }) {
+// `pushed`: the "New" sheet is sliding up from the bottom and nudges the dust out of its way — "kunne de
+// blitt 'dytta' vekk oppover og til siden av det kortet? Trenger ikke å bli dytta hardt, men at de
+// reagerer på den, og fader ut". Each particle drifts up and away from the screen's middle, harder and
+// sooner the lower it sits (the sheet reaches those first), and fades as it goes. It sits on a wrapper
+// span so the nudge adds to the particle's own drift instead of fighting its transform.
+export default function PuffBurst({
+  x,
+  y,
+  particles,
+  calm = false,
+  pushed = false,
+  onDone,
+}: {
+  x: number;
+  y: number;
+  particles: PuffParticle[];
+  calm?: boolean;
+  pushed?: boolean;
+  onDone: () => void;
+}) {
   // Through a ref: the caller passes a new function on every render, and restarting the timer with
   // each one would keep a burst on screen for as long as the calendar kept re-rendering.
   const onDoneRef = useRef(onDone);
@@ -73,34 +113,70 @@ export default function PuffBurst({ x, y, particles, calm = false, onDone }: { x
   });
   useEffect(() => {
     // Gone once its last particle is (plus a frame of margin), however long this burst's are.
-    const t = window.setTimeout(() => onDoneRef.current(), Math.max(0, ...particles.map((p) => p.delay + p.duration)) + 50);
+    const t = window.setTimeout(
+      () => onDoneRef.current(),
+      Math.max(0, ...particles.map((p) => p.delay + p.duration)) + 50
+    );
     return () => window.clearTimeout(t);
+    // Once per burst: a burst's particles are made once and never change.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+  useEffect(() => {
+    if (!pushed) return;
+    const t = window.setTimeout(() => onDoneRef.current(), 1100);
+    return () => window.clearTimeout(t);
+  }, [pushed]);
 
-  if (typeof document === 'undefined') return null;
+  if (typeof document === "undefined") return null;
   return createPortal(
-    <div aria-hidden className={`siqt-puff-layer${calm ? ' siqt-puff-calm' : ''}`} style={{ left: x, top: y }}>
+    <div
+      aria-hidden
+      className={`siqt-puff-layer${calm ? " siqt-puff-calm" : ""}${
+        pushed ? " siqt-puff-pushed" : ""
+      }`}
+      style={{ left: x, top: y }}
+    >
       {!calm && <span className="siqt-puff-ring" />}
-      {particles.map((p, i) => (
-        <span
-          key={i}
-          className={p.kind === 'star' ? 'siqt-star' : 'siqt-dust'}
-          style={
-            {
-              width: p.size,
-              height: p.size,
-              marginLeft: -p.size / 2,
-              marginTop: -p.size / 2,
-              '--dx': `${p.dx}px`,
-              '--dy': `${p.dy}px`,
-              '--c': p.color,
-              '--r': `${p.spin}deg`,
-              animationDelay: `${p.delay}ms`,
-              animationDuration: `${p.duration}ms`,
-            } as React.CSSProperties
-          }
-        />
-      ))}
+      {particles.map((p, i) => {
+        // Where the particle has drifted to on screen, as a share of the height (0 top, 1 bottom).
+        const vh = window.innerHeight || 800;
+        const low = Math.min(1, Math.max(0, (y + p.dy) / vh));
+        const strength = 0.35 + 0.65 * low;
+        const side = x + p.dx < window.innerWidth / 2 ? -1 : 1;
+        return (
+          <span
+            key={i}
+            className="siqt-push"
+            style={
+              {
+                "--px": `${side * (18 + p.jitter * 40) * strength}px`,
+                "--py": `${-(45 + p.jitter * 55) * strength}px`,
+                transitionDelay: `${Math.round(
+                  (1 - low) * 220 + p.jitter * 60
+                )}ms`,
+              } as React.CSSProperties
+            }
+          >
+            <span
+              className={p.kind === "star" ? "siqt-star" : "siqt-dust"}
+              style={
+                {
+                  width: p.size,
+                  height: p.size,
+                  marginLeft: -p.size / 2,
+                  marginTop: -p.size / 2,
+                  "--dx": `${p.dx}px`,
+                  "--dy": `${p.dy}px`,
+                  "--c": p.color,
+                  "--r": `${p.spin}deg`,
+                  animationDelay: `${p.delay}ms`,
+                  animationDuration: `${p.duration}ms`,
+                } as React.CSSProperties
+              }
+            />
+          </span>
+        );
+      })}
     </div>,
     document.body
   );

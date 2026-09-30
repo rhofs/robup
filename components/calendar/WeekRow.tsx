@@ -174,7 +174,7 @@ export default function WeekRow({
   const [pressedKey, setPressedKey] = useState<string | null>(null);
   // Where the finger is, for the puff cloud to come out from under it when the hold takes.
   const fingerRef = useRef({ x: 0, y: 0 });
-  const [puffs, setPuffs] = useState<{ id: number; x: number; y: number; particles: PuffParticle[]; calm?: boolean }[]>([]);
+  const [puffs, setPuffs] = useState<{ id: number; x: number; y: number; particles: PuffParticle[]; calm?: boolean; pushed?: boolean }[]>([]);
   const puffIdRef = useRef(0);
   const releaseTimerRef = useRef<number | null>(null);
   // A small puff from the middle of every selected day, staggered along the range in date order.
@@ -570,6 +570,8 @@ export default function WeekRow({
                           // Long enough for the last day to lock in, then "New".
                           releaseTimerRef.current = window.setTimeout(() => {
                             releaseTimerRef.current = null;
+                            // The sheet coming up nudges the release dust out of its way.
+                            setPuffs((ps) => ps.map((p) => (p.calm ? { ...p, pushed: true } : p)));
                             onPendingRangeChange(null);
                             onQuickAddDay(start, end);
                           }, RELEASE_MS + Math.min(days - 1, 8) * RELEASE_STAGGER_MS);
@@ -707,7 +709,7 @@ export default function WeekRow({
             );
           })()}
         {puffs.map((p) => (
-          <PuffBurst key={p.id} x={p.x} y={p.y} particles={p.particles} calm={p.calm} onDone={() => setPuffs((ps) => ps.filter((q) => q.id !== p.id))} />
+          <PuffBurst key={p.id} x={p.x} y={p.y} particles={p.particles} calm={p.calm} pushed={p.pushed} onDone={() => setPuffs((ps) => ps.filter((q) => q.id !== p.id))} />
         ))}
 
         <div className="absolute inset-x-0 pointer-events-none" style={{ top: DAY_NUM_H, bottom: 0 }}>
