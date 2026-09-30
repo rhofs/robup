@@ -10653,3 +10653,5 @@ tagging worked). Still not seen on a device.
   Per-particle `jitter` is made with the particles, since Math.random is not allowed in render. The
   burst removes itself 1.1 s after the push. It does not track the sheet's real top edge, only
   screen position. Not seen on a device.
+
+**Deployed 2026-09-30 as `0e432e6`** (tag `deploy/2026-09-30_1324`).
