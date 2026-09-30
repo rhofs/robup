@@ -10590,3 +10590,6 @@ Feedback after testing (Chris is on iOS 26.x):
     columns/tables in the DB (usually harmless — old code ignores them); getting data back needs a DB
     snapshot (`backups/` on the server, taken at every start and hourly, or the nightly off-site copy
     via `scripts/restoreBackup.ts`). Mention it in the reply whenever a round has a migration.
+
+**Deployed 2026-09-30 as `d1cdf97`** (tag `deploy/2026-09-30_1004` — the first automatic deploy tag;
+tagging worked). Still not seen on a device.
