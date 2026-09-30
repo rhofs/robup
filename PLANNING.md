@@ -10543,3 +10543,5 @@ Feedback after testing (Chris is on iOS 26.x):
   bubble is back to `bg-blue-500/15` plus a faint blue glow (`0 0 12px 1px`), and the active tab is
   blue again.
 - **Not seen on a device.**
+
+**Deployed 2026-09-30 as `2af8269`** (release pop, swipe-down sheets, blue pulsing band and nav bubble, iOS haptic on release). The reinstall ran clean. Not yet seen on a device.
