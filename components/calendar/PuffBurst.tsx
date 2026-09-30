@@ -36,25 +36,27 @@ export type PuffParticle = {
 // tiny glowing specks that fly out at different speeds and flicker as they fade, and a handful of
 // four-pointed sparkles that twinkle and turn.
 // `amount` scales the burst: 1 for the pop when a hold takes, less for the small puff each day gives
-// on release. `quick` is the release puff: shorter-lived and closer in, so it has settled before the
-// "New" sheet opens — "Kan de partiklene … forsvinne før det arket … popper opp? De er litt voldsomme".
-export function makePuffParticles(amount = 1, quick = false): PuffParticle[] {
+// on release. `calm` is the release puff: finer and more of it, gliding out and slowing almost to a
+// standstill, still there while "New" slides up and only fading after — "litt mindre partikler, men
+// flere … roligere og roligere mot slutten … ikke forsvinner … før kortet har dukket helt opp, så det
+// ikke virker så 'hakkete'". (A first try made them vanish before the sheet; that read as abrupt.)
+export function makePuffParticles(amount = 1, calm = false): PuffParticle[] {
   const out: PuffParticle[] = [];
-  const dust = Math.round(30 * amount);
-  const stars = Math.max(2, Math.round(7 * amount));
+  const dust = Math.round((calm ? 70 : 30) * amount);
+  const stars = Math.max(2, Math.round((calm ? 5 : 7) * amount));
   for (let i = 0; i < dust + stars; i++) {
     const isStar = i >= dust;
     const angle = Math.random() * Math.PI * 2;
     // Dust spreads unevenly — most of it close, some flung far — which is what makes it read as a
     // spray of glitter rather than a ring.
-    const dist = ((isStar ? 40 : 25) + Math.pow(Math.random(), 0.7) * (isStar ? 70 : 95)) * (0.5 + amount / 2) * (quick ? 0.6 : 1);
+    const dist = ((isStar ? 40 : 25) + Math.pow(Math.random(), 0.7) * (isStar ? 70 : 95)) * (0.5 + amount / 2) * (calm ? 0.8 : 1);
     out.push({
       kind: isStar ? 'star' : 'dust',
       dx: Math.cos(angle) * dist,
       dy: Math.sin(angle) * dist - (isStar ? 14 : 8),
-      size: isStar ? 9 + Math.random() * 7 : 2.5 + Math.random() * 4,
-      delay: Math.random() * (quick ? 40 : isStar ? 140 : 90),
-      duration: quick ? 320 + Math.random() * 120 : (isStar ? 900 : 700) + Math.random() * 450,
+      size: calm ? (isStar ? 6 + Math.random() * 4 : 1.5 + Math.random() * 2) : isStar ? 9 + Math.random() * 7 : 2.5 + Math.random() * 4,
+      delay: Math.random() * (calm ? 60 : isStar ? 140 : 90),
+      duration: calm ? 1700 + Math.random() * 300 : (isStar ? 900 : 700) + Math.random() * 450,
       color: PUFF_COLORS[Math.floor(Math.random() * PUFF_COLORS.length)],
       spin: (Math.random() - 0.5) * 180,
     });
@@ -62,7 +64,7 @@ export function makePuffParticles(amount = 1, quick = false): PuffParticle[] {
   return out;
 }
 
-export default function PuffBurst({ x, y, particles, onDone }: { x: number; y: number; particles: PuffParticle[]; onDone: () => void }) {
+export default function PuffBurst({ x, y, particles, calm = false, onDone }: { x: number; y: number; particles: PuffParticle[]; calm?: boolean; onDone: () => void }) {
   // Through a ref: the caller passes a new function on every render, and restarting the timer with
   // each one would keep a burst on screen for as long as the calendar kept re-rendering.
   const onDoneRef = useRef(onDone);
@@ -70,14 +72,15 @@ export default function PuffBurst({ x, y, particles, onDone }: { x: number; y: n
     onDoneRef.current = onDone;
   });
   useEffect(() => {
-    const t = window.setTimeout(() => onDoneRef.current(), 1500);
+    // Gone once its last particle is (plus a frame of margin), however long this burst's are.
+    const t = window.setTimeout(() => onDoneRef.current(), Math.max(0, ...particles.map((p) => p.delay + p.duration)) + 50);
     return () => window.clearTimeout(t);
   }, []);
 
   if (typeof document === 'undefined') return null;
   return createPortal(
-    <div aria-hidden className="siqt-puff-layer" style={{ left: x, top: y }}>
-      <span className="siqt-puff-ring" />
+    <div aria-hidden className={`siqt-puff-layer${calm ? ' siqt-puff-calm' : ''}`} style={{ left: x, top: y }}>
+      {!calm && <span className="siqt-puff-ring" />}
       {particles.map((p, i) => (
         <span
           key={i}

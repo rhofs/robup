@@ -10613,3 +10613,26 @@ tagging worked). Still not seen on a device.
   testing. Waiting on Robin's decision.
 
 **Deployed 2026-09-30 as `ec6fb93`** (tag `deploy/2026-09-30_1014`).
+
+### 2026-09-30 (continued) — calmer release dust that outlasts the sheet; iOS Planner no longer scrolls
+
+- **Dust, second take:** "Kanskje partiklene ikke trenger å forsvinne … litt mindre partikler, men
+  flere … roligere og roligere mot slutten nesten helt rolig, men … ikke forsvinner eller stopper før
+  … kortet har dukket helt opp, så det ikke virker så 'hakkete'". The previous round (vanish before
+  the sheet) is replaced. Release puffs are `makePuffParticles(amount, calm=true)` rendered with
+  `calm` → `.siqt-puff-calm`: ~2.3× the dust at 1.5–3.5 px, fewer and smaller stars, no ring, and
+  a 1.7–2.0 s life. Movement and fade are two animations: a steep ease-out that glides almost to a
+  standstill, and an opacity that holds full until 75 % and then fades. There is no flicker in this
+  variant. `PuffBurst` removes itself after its own longest particle, no longer at a fixed 1500 ms.
+  The timer no longer clears puffs. Still layered above the sheet (z 200), because under it the
+  sheet's instant scrim would dim them in one jump. The hold's own pop is unchanged. Watch: a long
+  range is ~180+ animated elements, so check for iOS stutter.
+- **"i planner … er ikke kalenderen statisk i iOS, den kan … scrolles litt, og da utvider dagene seg"**
+  — the document itself could be dragged or bounced on iOS. That let Safari shrink its toolbar,
+  which grows `dvh`, and the Planner re-fits its rows to the new height, so the days stretched.
+  Android never scrolls the document. Fix: `html:has(.siqt-app-shell)` and its body get
+  `height:100%; overflow:hidden; overscroll-behavior:none` (the class is on the root app div; `:has`
+  keeps login and other plain pages scrolling normally), and the calendar grid gets
+  `overscroll-contain` so its own scroll doesn't chain to the page. Diagnosis is by reasoning, not
+  reproduced on an iPhone. If days still stretch, the next suspect is Safari's toolbar resizing
+  `dvh` without any scroll; the fix then would be to fit rows once and not on every resize.

@@ -5200,7 +5200,7 @@ function PageContent() {
         below the actual visible fold, requiring a scroll to reach it. `dvh` tracks the real
         visible viewport and updates as the browser chrome shows/hides — the standard fix for
         exactly this class of "have to scroll to see the bottom bar" mobile-web bug. */}
-    <div className="flex flex-col h-dvh bg-neutral-950 text-neutral-100 font-sans overflow-hidden select-none">
+    <div className="siqt-app-shell flex flex-col h-dvh bg-neutral-950 text-neutral-100 font-sans overflow-hidden select-none">
       {/* ================= TOP BAR — workspace + search, so the icon rail/sidebar below don't
           have to carry that weight themselves (previously both lived stacked at the very top
           of the sidebar, which read as cramped). ================= */}

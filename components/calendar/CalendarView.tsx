@@ -717,7 +717,7 @@ export default function CalendarView({ tasks, events, statuses, workspaces, show
           // scrollbar along the very bottom of the grid.
           <div
             ref={gridContainerCallbackRef}
-            className={`relative h-full overflow-x-hidden ${isFitActive && !gridNeedsScroll ? 'overflow-y-hidden' : 'overflow-y-auto'}`}
+            className={`relative h-full overflow-x-hidden overscroll-contain ${isFitActive && !gridNeedsScroll ? 'overflow-y-hidden' : 'overflow-y-auto'}`}
           >
             {weeks.map((weekDays, i) => (
               <WeekRow

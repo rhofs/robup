@@ -181,6 +181,18 @@ html[data-theme='light'] {
   --cell-tint-weekend: rgb(0 0 0 / 0.022);
 }
 
+/* While the app itself is on screen, the document never scrolls or bounces — everything that scrolls
+   does so inside its own container. On iOS the page could be dragged a little in the Planner, and
+   dragging it let Safari shrink its toolbar, which grows `dvh`, which re-fits the calendar's rows: the
+   days visibly stretched. Android never scrolled the document, so it never showed. Scoped with :has()
+   so the login and other plain pages keep ordinary document scrolling. */
+html:has(.siqt-app-shell),
+html:has(.siqt-app-shell) body {
+  height: 100%;
+  overflow: hidden;
+  overscroll-behavior: none;
+}
+
 body {
   background: var(--background);
   color: var(--foreground);
@@ -651,6 +663,50 @@ body {
     transform: translate(var(--dx), var(--dy)) scale(0.3) rotate(var(--r));
   }
 }
+/* The release dust: glides out and eases almost to a standstill (a steep ease-out on the movement),
+   stays fully lit through the "New" sheet sliding up, and only then fades. Movement and fade are
+   two animations so each gets its own curve; the inline duration and delay apply to both. No
+   flicker in this one — the flicker of the hold pop read as jitter at this pace. */
+.siqt-puff-calm .siqt-dust {
+  animation-name: siqt-calm-move, siqt-calm-fade;
+  animation-timing-function: cubic-bezier(0.05, 0.75, 0.1, 1), linear;
+}
+.siqt-puff-calm .siqt-star {
+  animation-name: siqt-calm-star, siqt-calm-fade;
+  animation-timing-function: cubic-bezier(0.05, 0.75, 0.1, 1), linear;
+}
+@keyframes siqt-calm-move {
+  from {
+    transform: translate(0, 0) scale(0.6);
+  }
+  to {
+    transform: translate(var(--dx), var(--dy)) scale(1);
+  }
+}
+@keyframes siqt-calm-star {
+  from {
+    transform: translate(0, 0) scale(0.3) rotate(0deg);
+  }
+  to {
+    transform: translate(var(--dx), var(--dy)) scale(1) rotate(var(--r));
+  }
+}
+@keyframes siqt-calm-fade {
+  0% {
+    opacity: 0;
+  }
+  6% {
+    opacity: 1;
+  }
+  /* ~1.3 s in for the first days: the sheet is fully up (opens at ~0.5–0.86 s, ~0.4 s spring). */
+  75% {
+    opacity: 1;
+  }
+  100% {
+    opacity: 0;
+  }
+}
+
 /* The circle that pops out behind the cloud — in the same pastels, not the old sharp blue. */
 .siqt-puff-ring {
   position: absolute;

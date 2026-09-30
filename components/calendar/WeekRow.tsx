@@ -174,7 +174,7 @@ export default function WeekRow({
   const [pressedKey, setPressedKey] = useState<string | null>(null);
   // Where the finger is, for the puff cloud to come out from under it when the hold takes.
   const fingerRef = useRef({ x: 0, y: 0 });
-  const [puffs, setPuffs] = useState<{ id: number; x: number; y: number; particles: PuffParticle[] }[]>([]);
+  const [puffs, setPuffs] = useState<{ id: number; x: number; y: number; particles: PuffParticle[]; calm?: boolean }[]>([]);
   const puffIdRef = useRef(0);
   const releaseTimerRef = useRef<number | null>(null);
   // A small puff from the middle of every selected day, staggered along the range in date order.
@@ -192,7 +192,7 @@ export default function WeekRow({
       const r = cell.getBoundingClientRect();
       const at = { x: r.left + r.width / 2, y: r.top + r.height / 2 };
       window.setTimeout(() => {
-        setPuffs((ps) => [...ps, { id: ++puffIdRef.current, x: at.x, y: at.y, particles: makePuffParticles(amount, true) }]);
+        setPuffs((ps) => [...ps, { id: ++puffIdRef.current, x: at.x, y: at.y, particles: makePuffParticles(amount, true), calm: true }]);
       }, Math.min(i, 8) * RELEASE_STAGGER_MS);
     }
     return count;
@@ -570,9 +570,6 @@ export default function WeekRow({
                           // Long enough for the last day to lock in, then "New".
                           releaseTimerRef.current = window.setTimeout(() => {
                             releaseTimerRef.current = null;
-                            // Anything still in the air goes before the sheet comes up — the hold's
-                            // own pop included, if the finger lifted soon after it.
-                            setPuffs([]);
                             onPendingRangeChange(null);
                             onQuickAddDay(start, end);
                           }, RELEASE_MS + Math.min(days - 1, 8) * RELEASE_STAGGER_MS);
@@ -710,7 +707,7 @@ export default function WeekRow({
             );
           })()}
         {puffs.map((p) => (
-          <PuffBurst key={p.id} x={p.x} y={p.y} particles={p.particles} onDone={() => setPuffs((ps) => ps.filter((q) => q.id !== p.id))} />
+          <PuffBurst key={p.id} x={p.x} y={p.y} particles={p.particles} calm={p.calm} onDone={() => setPuffs((ps) => ps.filter((q) => q.id !== p.id))} />
         ))}
 
         <div className="absolute inset-x-0 pointer-events-none" style={{ top: DAY_NUM_H, bottom: 0 }}>
