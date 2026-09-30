@@ -86,7 +86,9 @@ export default function CalendarView({ tasks, events, statuses, workspaces, show
   // The day range currently being drawn by holding a cell and dragging across others. Lives here
   // rather than in WeekRow because a drag that starts at the end of one week and finishes in the
   // next has to highlight cells in both, and each WeekRow only knows its own seven days.
-  const [pendingRange, setPendingRange] = useState<{ start: Date; end: Date } | null>(null);
+  // `releasing` is the short moment after the finger lifts, while the selected days pop before "New"
+  // opens (WeekRow's release) — every row draws its part of the band in that state.
+  const [pendingRange, setPendingRange] = useState<{ start: Date; end: Date; releasing?: boolean } | null>(null);
   const isMobile = useIsMobile();
 
   // The reference spec (a native Google Calendar widget) only ever has month + day — Week has no

@@ -13,7 +13,10 @@ import { createPortal } from 'react-dom';
 // over. Motion lives in CSS (.siqt-puff-* in app/globals.css) with each particle's direction, size
 // and timing passed as custom properties — one keyframe for all of them.
 
-export const PUFF_COLORS = ['#FFB8CF', '#FFD2B8', '#B8D4FF', '#E4CFFF', '#FFE0EA', '#CFE4FF'];
+// Blues and white — the app's own accent, not a separate palette. The pastel pink/peach/blue of the
+// first versions was pulled back to keep the design continuous ("For å få appen til å være mer
+// kontinuerlig lik i design tror jeg vi må gå tilbake på den pastellfargen").
+export const PUFF_COLORS = ['#BFDBFE', '#93C5FD', '#60A5FA', '#DBEAFE', '#FFFFFF', '#A5C8FF'];
 
 export type PuffParticle = {
   kind: 'dust' | 'star';
@@ -32,16 +35,18 @@ export type PuffParticle = {
 // Magic dust rather than a cloud — the second version's soft blobs read as "tegneserieskyer". Many
 // tiny glowing specks that fly out at different speeds and flicker as they fade, and a handful of
 // four-pointed sparkles that twinkle and turn.
-export function makePuffParticles(): PuffParticle[] {
+// `amount` scales the burst: 1 for the pop when a hold takes, less for the small puff each day gives
+// on release.
+export function makePuffParticles(amount = 1): PuffParticle[] {
   const out: PuffParticle[] = [];
-  const dust = 30;
-  const stars = 7;
+  const dust = Math.round(30 * amount);
+  const stars = Math.max(2, Math.round(7 * amount));
   for (let i = 0; i < dust + stars; i++) {
     const isStar = i >= dust;
     const angle = Math.random() * Math.PI * 2;
     // Dust spreads unevenly — most of it close, some flung far — which is what makes it read as a
     // spray of glitter rather than a ring.
-    const dist = (isStar ? 40 : 25) + Math.pow(Math.random(), 0.7) * (isStar ? 70 : 95);
+    const dist = ((isStar ? 40 : 25) + Math.pow(Math.random(), 0.7) * (isStar ? 70 : 95)) * (0.5 + amount / 2);
     out.push({
       kind: isStar ? 'star' : 'dust',
       dx: Math.cos(angle) * dist,

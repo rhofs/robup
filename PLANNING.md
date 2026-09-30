@@ -10510,3 +10510,36 @@ The user tested on an iPhone (web app added to the home screen):
    since creating does not navigate.
 
 **Deployed 2026-09-29 as `1a2bc8e`** (iOS Back bridge, sheets on visualViewport, iOS switch haptic). The reinstall ran clean. Not yet tested on an iPhone.
+
+### 2026-09-30 — iOS haptics second try, swipe-down sheets, a release pop, and back to blue (uncommitted at time of writing)
+
+Feedback after testing (Chris is on iOS 26.x):
+- **"Haptic funker ikke."** Two likely reasons in the first version: (1) the global tap tick fires on
+  **pointerdown**, and Safari only lets script trigger the switch haptic inside a user activation.
+  For touch, that is pointerup/touchend/click, not pointerdown. (2) The known-working form (the
+  "ios-haptics" approach) creates a fresh hidden `<label><input type=checkbox switch>` in
+  `<head>`, clicks it and removes it every time; ours reused one element in `<body>`. Now
+  `GlobalTapFeedback` listens on **pointerup on iOS web** (`isIOSWeb()` exported from
+  lib/haptics.ts) and `iosHaptic()` uses the fresh-element form. The Planner release tick
+  (`hapticTap()` in pointerup) should also qualify. The timer-driven "armed" pulse still very likely
+  cannot. **Still unverified: if this does not work on iOS 26 either, there is no other web route;
+  only a native iOS app would get real haptics.**
+- **Swipe a sheet down to close it** ("den har jo liksom et merke på toppen"): `components/mobile/
+  sheetDrag.ts` `useSheetDrag(onClose)` wraps framer-motion drag controls, started only from the
+  grabber/header (`dragListener: false`), so fields and scrolling lists still take touches. It closes
+  past 110 px or on a flick over 650 px/s, and springs back otherwise. Used in MobileQuickCreateSheet,
+  its PickSheet, DateSheet and TimeDialSheet, which also got a grabber bar.
+- **A release pop:** "når du slipper … en slags forløsning, at alle dagene som er markert i en rekke
+  popper opp med støv, og etter en ikke for lang delay så popper event creator arket opp". On release
+  the range now stays, with `releasing: true` added to `pendingRange` (typed in CalendarView and
+  WeekRow), so every row's band plays `.siqt-band-release` (it flares brighter, lifts to 1.04 and
+  fades over 420 ms). `releaseDust` throws a smaller puff (`makePuffParticles(0.6)`) from the centre
+  of each selected day, found by `[data-day-key]`, staggered 45 ms in date order. After
+  `RELEASE_MS` (420) "New" opens. `abandonLongPress` also cancels a pending release.
+- **Back to blue for continuity:** "gå tilbake på den pastellfargen … blå, ikke gradient, men at
+  rutene som er valgt pulserer svakt fram til vi slipper". The band is flat
+  `rgb(59 130 246 / .24)` pulsing to `rgb(96 165 250 / .36)` (1.3 s alternate) until release, with
+  a faint outer blue glow. The dust and ring are now blues and white (`PUFF_COLORS`). The bottom-nav
+  bubble is back to `bg-blue-500/15` plus a faint blue glow (`0 0 12px 1px`), and the active tab is
+  blue again.
+- **Not seen on a device.**

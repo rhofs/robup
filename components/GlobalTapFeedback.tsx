@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect } from 'react';
-import { hapticTap } from '../lib/haptics';
+import { hapticTap, isIOSWeb } from '../lib/haptics';
 
 // Every button in the app gets a haptic tick, from one listener.
 //
@@ -52,8 +52,14 @@ export default function GlobalTapFeedback() {
 
     // Capture phase: a handler that stops propagation should not also stop the feedback for a press
     // that plainly happened.
-    document.addEventListener('pointerdown', onPointerDown, { capture: true, passive: true });
-    return () => document.removeEventListener('pointerdown', onPointerDown, { capture: true });
+    //
+    // On an iPhone, on release instead of on press. The only haptic a web page can get there is the
+    // switch trick in lib/haptics.ts, and Safari lets script trigger it only inside a user
+    // activation — which a finger landing (pointerdown) is not, and lifting (pointerup) is. On
+    // pointerdown the trick was silently refused: "Haptic funker ikke" (iOS 26, 2026-09-30).
+    const eventName = isIOSWeb() ? 'pointerup' : 'pointerdown';
+    document.addEventListener(eventName, onPointerDown, { capture: true, passive: true });
+    return () => document.removeEventListener(eventName, onPointerDown, { capture: true });
   }, []);
 
   return null;

@@ -14,6 +14,7 @@ import ColorSwatchPicker from '../ColorSwatchPicker';
 import LocationAutocompleteInput from '../LocationAutocompleteInput';
 import { EVENT_COLOR_CHOICES } from '../calendar/EventDetailModal';
 import DateSheet from './DateSheet';
+import { useSheetDrag } from './sheetDrag';
 
 // "New" on a phone — the Planner's quick create, redone after ClickUp's mobile task sheet (the user's
 // screenshots, and theirs of ours: "Kan vi få det med streamlined som clickup?"). A sheet from the
@@ -77,6 +78,7 @@ function Row({ icon: Icon, children, onClick }: { icon: typeof CalendarDays; chi
 
 // A bottom sheet for a list of choices (the list to create a task in, attendees).
 function PickSheet({ title, onClose, children }: { title: string; onClose: () => void; children: React.ReactNode }) {
+  const drag = useSheetDrag(onClose);
   const visible = useVisibleViewport();
   return (
     <div className="fixed inset-x-0 top-0 bottom-0 z-[90] flex flex-col justify-end bg-scrim/50 pt-[calc(env(safe-area-inset-top)+12px)]" style={overlayStyle(visible)} onClick={onClose}>
@@ -86,9 +88,11 @@ function PickSheet({ title, onClose, children }: { title: string; onClose: () =>
         exit={{ y: '100%' }}
         transition={{ type: 'spring', stiffness: 380, damping: 38 }}
         onClick={(e) => e.stopPropagation()}
+        {...drag.sheetProps}
         className="bg-neutral-900 rounded-t-[28px] max-h-full min-h-0 flex flex-col pb-[calc(env(safe-area-inset-bottom)+12px)]"
       >
-        <div className="relative flex items-center justify-center px-5 pt-5 pb-3 shrink-0">
+        <div {...drag.handleProps} className="relative flex items-center justify-center px-5 pt-5 pb-3 shrink-0">
+          <span className="absolute top-2 left-1/2 -translate-x-1/2 w-10 h-1 rounded-full bg-neutral-700" />
           <h3 className="text-[17px] font-semibold text-app-strong">{title}</h3>
           <button onClick={onClose} className="absolute right-4 w-9 h-9 rounded-full bg-neutral-800 flex items-center justify-center text-neutral-400 cursor-pointer">
             <X className="w-4 h-4" />
@@ -128,6 +132,7 @@ export default function MobileQuickCreateSheet({
   const [assigneeIds, setAssigneeIds] = useState<string[]>([]);
 
   const [sheet, setSheet] = useState<'dates' | 'list' | 'people' | 'space' | null>(null);
+  const drag = useSheetDrag(onClose);
 
   // Not archived Spaces: new work does not go into one that has been put away.
   const spaces = useMemo(() => workspaces.flatMap((w) => w.spaces).filter((s) => !s.archived), [workspaces]);
@@ -171,13 +176,16 @@ export default function MobileQuickCreateSheet({
         animate={{ y: 0 }}
         transition={{ type: 'spring', stiffness: 380, damping: 38 }}
         onClick={(e) => e.stopPropagation()}
+        {...drag.sheetProps}
         className="bg-neutral-900 rounded-t-[28px] max-h-full min-h-0 flex flex-col"
       >
-        <div className="flex justify-center pt-2.5 shrink-0">
+        {/* The grabber and the header drag the sheet; pull it down to cancel. */}
+        <div {...drag.handleProps} className="shrink-0">
+        <div className="flex justify-center pt-2.5 pb-1">
           <span className="w-10 h-1 rounded-full bg-neutral-700" />
         </div>
 
-        <div className="flex items-center gap-3 px-5 pt-3 shrink-0">
+        <div className="flex items-center gap-3 px-5 pt-2">
           <div className="flex gap-0.5 rounded-full bg-neutral-800/70 p-0.5">
             {(['event', 'task'] as const).map((t) => (
               <button
@@ -195,6 +203,7 @@ export default function MobileQuickCreateSheet({
           <button onClick={onClose} className="w-9 h-9 rounded-full bg-neutral-800 flex items-center justify-center text-neutral-400 cursor-pointer" title="Close">
             <X className="w-4 h-4" />
           </button>
+        </div>
         </div>
 
         <div className="overflow-y-auto px-5 pt-4">

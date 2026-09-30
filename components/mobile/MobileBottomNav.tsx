@@ -199,10 +199,10 @@ function NavPill({
       <motion.div
         // Keyed on the destination so the keyframes re-run on every move rather than only on mount.
         key={pillKey}
-        // The Planner's pastels (pink → peach → blue), so the bubble you move around the app matches
-        // the selection you draw in the calendar — asked for to match ("samme pastell gradient som
-        // vinduene i planner"). Same soft alphas as .siqt-band in globals.css.
-        className="w-full h-full rounded-full bg-[linear-gradient(115deg,rgb(255_184_207/0.45),rgb(255_210_184/0.45)_50%,rgb(184_212_255/0.5))]"
+        // Flat blue again, like the Planner's selection (the pastel gradient was pulled back to keep the
+        // design continuous), with a faint glow so the flat colour does not read as flat: "må tilbake
+        // til blå, men kan den også få en veldig svak glow".
+        className="w-full h-full rounded-full bg-blue-500/15 shadow-[0_0_12px_1px_rgb(59_130_246/0.28)]"
         // Three keyframes, not two — this is real squash-and-stretch rather than a single settle.
         // In flight it stretches along the direction of travel and thins; on arrival it overshoots
         // the other way, compressing horizontally and bulging taller, before settling round. The
@@ -592,7 +592,7 @@ export default function MobileBottomNav({
                     (isSpaces ? onOpenSpaces : tab.onClick)();
                   }}
                   className={`relative z-0 flex-1 flex flex-col items-center justify-center gap-0.5 px-2 py-2 rounded-full transition cursor-pointer ${
-                    active ? 'text-app-strong' : 'text-neutral-500'
+                    active ? 'text-blue-400' : 'text-neutral-500'
                   }`}
                 >
                   {/* z-0 on the button (above) + -z-10 here is deliberate, not decorative: a negative
@@ -624,7 +624,7 @@ export default function MobileBottomNav({
             <button
               onClick={handlePinnedTap}
               className={`relative z-0 flex-1 flex flex-col items-center justify-center gap-0.5 px-2 py-2 rounded-full transition cursor-pointer ${
-                pinnedActive ? 'text-app-strong' : 'text-neutral-500'
+                pinnedActive ? 'text-blue-400' : 'text-neutral-500'
               }`}
             >
               <AnimatePresence>

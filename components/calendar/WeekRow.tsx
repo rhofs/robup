@@ -97,8 +97,8 @@ type WeekRowProps = {
   onDayContextMenu?: (x: number, y: number, day: Date) => void;
   // The selection currently being drawn, owned by CalendarView so it can be highlighted across week
   // rows — a drag that starts in one week and ends in the next is the normal case, not the edge one.
-  pendingRange: { start: Date; end: Date } | null;
-  onPendingRangeChange: (range: { start: Date; end: Date } | null) => void;
+  pendingRange: { start: Date; end: Date; releasing?: boolean } | null;
+  onPendingRangeChange: (range: { start: Date; end: Date; releasing?: boolean } | null) => void;
   onDragStart: (id: string, mode: DragMode, e: React.PointerEvent) => void;
   onDragMove: (e: React.PointerEvent) => void;
   // Takes the dragged id, not a whole Task — CalendarView.tsx looks up whether it's a Task or an
@@ -174,8 +174,27 @@ export default function WeekRow({
   const fingerRef = useRef({ x: 0, y: 0 });
   const [puffs, setPuffs] = useState<{ id: number; x: number; y: number; particles: PuffParticle[] }[]>([]);
   const puffIdRef = useRef(0);
+  const releaseTimerRef = useRef<number | null>(null);
+  // A small puff from the middle of every selected day, staggered along the range in date order.
+  const releaseDust = (start: Date, end: Date) => {
+    const from = new Date(Math.min(start.getTime(), end.getTime()));
+    const to = new Date(Math.max(start.getTime(), end.getTime()));
+    let i = 0;
+    for (let d = new Date(from); d <= to && i < 42; d.setDate(d.getDate() + 1), i++) {
+      const cell = document.querySelector(`[data-day-key="${dayKey(d)}"]`);
+      if (!cell) continue;
+      const r = cell.getBoundingClientRect();
+      const at = { x: r.left + r.width / 2, y: r.top + r.height / 2 };
+      window.setTimeout(() => {
+        setPuffs((ps) => [...ps, { id: ++puffIdRef.current, x: at.x, y: at.y, particles: makePuffParticles(0.6) }]);
+      }, i * RELEASE_STAGGER_MS);
+    }
+  };
   const [holdArmed, setHoldArmed] = useState(false);
   const LONG_PRESS_MOVE_TOLERANCE = 8;
+  // The release pop before "New" opens: long enough to see, short enough not to wait on.
+  const RELEASE_MS = 420;
+  const RELEASE_STAGGER_MS = 45;
 
   // Stops the browser from taking the gesture over as a scroll once the hold has armed.
   //
@@ -217,6 +236,10 @@ export default function WeekRow({
   const abandonLongPress = () => {
     releaseScrollBlock();
     clearLongPressTimer();
+    if (releaseTimerRef.current !== null) {
+      window.clearTimeout(releaseTimerRef.current);
+      releaseTimerRef.current = null;
+    }
     longPressReadyRef.current = false;
     dragOriginRef.current = null;
     draggingRangeRef.current = false;
@@ -507,8 +530,10 @@ export default function WeekRow({
                           const drawn = pendingRange;
                           draggingRangeRef.current = false;
                           dragOriginRef.current = null;
-                          onPendingRangeChange(null);
-                          if (!longPressReadyRef.current) return;
+                          if (!longPressReadyRef.current) {
+                            onPendingRangeChange(null);
+                            return;
+                          }
                           longPressReadyRef.current = false;
                           // Marks the trailing click for swallowing (below) so releasing doesn't
                           // also drill into Day view behind the popover that's about to open.
@@ -517,7 +542,21 @@ export default function WeekRow({
                           // dragging is a long gesture, and one tick half a second before the
                           // result leaves the release itself unacknowledged.
                           hapticTap();
-                          onQuickAddDay(drawn?.start ?? day, drawn?.end ?? day);
+                          const start = drawn?.start ?? day;
+                          const end = drawn?.end ?? day;
+                          // The release: the selected days stay for a moment and pop, each with a
+                          // puff of dust, one after another along the row — then "New" opens. Asked
+                          // for as "en slags forløsning … alle dagene som er markert i en rekke popper
+                          // opp med støv, og etter en ikke for lang delay så popper event creator
+                          // arket opp". The band switches to its release state in every row
+                          // (`releasing`), and the dust is thrown from each day's centre on screen.
+                          onPendingRangeChange({ start, end, releasing: true });
+                          releaseDust(start, end);
+                          releaseTimerRef.current = window.setTimeout(() => {
+                            releaseTimerRef.current = null;
+                            onPendingRangeChange(null);
+                            onQuickAddDay(start, end);
+                          }, RELEASE_MS);
                         }
                       : undefined
                   }
@@ -622,7 +661,7 @@ export default function WeekRow({
               <span
                 key={popHere ? `pop-${pressedKey}` : 'range'}
                 aria-hidden
-                className={`siqt-band pointer-events-none z-20 ${popHere ? 'siqt-band-pop' : ''}`}
+                className={`siqt-band pointer-events-none z-20 ${pendingRange?.releasing ? 'siqt-band-release' : popHere ? 'siqt-band-pop' : ''}`}
                 style={{ left: `${(first / 7) * 100}%`, width: `${((last - first + 1) / 7) * 100}%` }}
               />
             );

@@ -1,5 +1,6 @@
 'use client';
 
+import { useSheetDrag } from './sheetDrag';
 import { useMemo, useState } from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
 import { overlayStyle, useVisibleViewport } from '../../hooks/useVisibleViewport';
@@ -67,6 +68,7 @@ export default function DateSheet({
   onSave: (start: string | null, end: string | null) => void;
   onClose: () => void;
 }) {
+  const drag = useSheetDrag(onClose);
   const visible = useVisibleViewport();
   const [start, setStart] = useState<Date | null>(() => parse(startIso));
   const [end, setEnd] = useState<Date | null>(() => parse(endIso));
@@ -171,9 +173,11 @@ export default function DateSheet({
         exit={{ y: '100%' }}
         transition={{ type: 'spring', stiffness: 380, damping: 38 }}
         onClick={(e) => e.stopPropagation()}
+        {...drag.sheetProps}
         className="bg-neutral-900 rounded-t-[28px] max-h-full min-h-0 flex flex-col pb-[calc(env(safe-area-inset-bottom)+12px)]"
       >
-        <div className="relative flex items-center justify-center px-5 pt-5 pb-3 shrink-0">
+        <div {...drag.handleProps} className="relative flex items-center justify-center px-5 pt-5 pb-3 shrink-0">
+          <span className="absolute top-2 left-1/2 -translate-x-1/2 w-10 h-1 rounded-full bg-neutral-700" />
           <h3 className="text-[17px] font-semibold text-app-strong">{single ? 'Choose date' : 'Choose dates'}</h3>
           <button onClick={onClose} className="absolute right-4 w-9 h-9 rounded-full bg-neutral-800 flex items-center justify-center text-neutral-400 cursor-pointer">
             <X className="w-4 h-4" />

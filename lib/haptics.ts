@@ -305,29 +305,32 @@ function isIOS(): boolean {
   return /iPad|iPhone|iPod/.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
 }
 
-let iosSwitchLabel: HTMLLabelElement | null = null;
+// A fresh hidden switch every time, clicked and removed at once — the form known to work. A single
+// element kept in the page and re-clicked was the first version, and produced nothing.
 function iosHaptic(): void {
   if (typeof document === 'undefined') return;
   try {
-    if (!iosSwitchLabel || !iosSwitchLabel.isConnected) {
-      const label = document.createElement('label');
-      label.setAttribute('aria-hidden', 'true');
-      label.style.display = 'none';
-      const input = document.createElement('input');
-      input.type = 'checkbox';
-      input.setAttribute('switch', '');
-      input.tabIndex = -1;
-      label.appendChild(input);
-      // The click is only a means to the haptic; nothing else in the page should hear it (an
-      // outside-click listener would take it as a click somewhere and close a menu).
-      label.addEventListener('click', (e) => e.stopPropagation());
-      document.body.appendChild(label);
-      iosSwitchLabel = label;
-    }
-    iosSwitchLabel.click();
+    const label = document.createElement('label');
+    label.setAttribute('aria-hidden', 'true');
+    label.style.display = 'none';
+    const input = document.createElement('input');
+    input.type = 'checkbox';
+    input.setAttribute('switch', '');
+    input.tabIndex = -1;
+    label.appendChild(input);
+    // The click is only a means to the haptic; nothing else in the page should hear it.
+    label.addEventListener('click', (e) => e.stopPropagation());
+    document.head.appendChild(label);
+    label.click();
+    document.head.removeChild(label);
   } catch {
     // Nothing to fall back to on iOS.
   }
+}
+
+// iOS in a browser or as a home-screen app — not the native Android app, which has its own path.
+export function isIOSWeb(): boolean {
+  return !Capacitor.isNativePlatform() && isIOS();
 }
 
 // Read per call rather than cached at module load — the setting can change mid-session (see
