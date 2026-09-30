@@ -36,8 +36,9 @@ export type PuffParticle = {
 // tiny glowing specks that fly out at different speeds and flicker as they fade, and a handful of
 // four-pointed sparkles that twinkle and turn.
 // `amount` scales the burst: 1 for the pop when a hold takes, less for the small puff each day gives
-// on release.
-export function makePuffParticles(amount = 1): PuffParticle[] {
+// on release. `quick` is the release puff: shorter-lived and closer in, so it has settled before the
+// "New" sheet opens — "Kan de partiklene … forsvinne før det arket … popper opp? De er litt voldsomme".
+export function makePuffParticles(amount = 1, quick = false): PuffParticle[] {
   const out: PuffParticle[] = [];
   const dust = Math.round(30 * amount);
   const stars = Math.max(2, Math.round(7 * amount));
@@ -46,14 +47,14 @@ export function makePuffParticles(amount = 1): PuffParticle[] {
     const angle = Math.random() * Math.PI * 2;
     // Dust spreads unevenly — most of it close, some flung far — which is what makes it read as a
     // spray of glitter rather than a ring.
-    const dist = ((isStar ? 40 : 25) + Math.pow(Math.random(), 0.7) * (isStar ? 70 : 95)) * (0.5 + amount / 2);
+    const dist = ((isStar ? 40 : 25) + Math.pow(Math.random(), 0.7) * (isStar ? 70 : 95)) * (0.5 + amount / 2) * (quick ? 0.6 : 1);
     out.push({
       kind: isStar ? 'star' : 'dust',
       dx: Math.cos(angle) * dist,
       dy: Math.sin(angle) * dist - (isStar ? 14 : 8),
       size: isStar ? 9 + Math.random() * 7 : 2.5 + Math.random() * 4,
-      delay: Math.random() * (isStar ? 140 : 90),
-      duration: (isStar ? 900 : 700) + Math.random() * 450,
+      delay: Math.random() * (quick ? 40 : isStar ? 140 : 90),
+      duration: quick ? 320 + Math.random() * 120 : (isStar ? 900 : 700) + Math.random() * 450,
       color: PUFF_COLORS[Math.floor(Math.random() * PUFF_COLORS.length)],
       spin: (Math.random() - 0.5) * 180,
     });

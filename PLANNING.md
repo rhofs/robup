@@ -10593,3 +10593,21 @@ Feedback after testing (Chris is on iOS 26.x):
 
 **Deployed 2026-09-30 as `d1cdf97`** (tag `deploy/2026-09-30_1004` — the first automatic deploy tag;
 tagging worked). Still not seen on a device.
+
+### 2026-09-30 (continued) — release dust gone before "New"; TestFlight asked about
+
+- **"Kan de partiklene fra planner forsvinne før det arket til event/task popper opp? De er litt
+  voldsomme."** Release puffs are now `makePuffParticles(amount, quick=true)`: 320–440 ms life, ≤40 ms
+  delay, 60 % of the distance, and smaller amounts (0.35 / 0.25 / 0.18). The last puff (starting at
+  8 × 45 ms) ends by ~840 ms, before the ~860 ms timer. When the timer fires, `setPuffs([])` clears
+  anything still in the air, including the hold's own full pop if the finger lifted right after it.
+  The pop when a hold *takes* is unchanged. Not seen on a device.
+- **TestFlight (asked, answered, nothing built):** Apple's beta-distribution app for *native* iOS apps.
+  It does not apply to a home-screen web app. The TestFlight app itself costs nothing, but using it
+  requires the Apple Developer Program (99 USD/year) and a native iOS build: a Capacitor `ios/`
+  platform, built with Xcode on a Mac or on a cloud macOS builder (e.g. Codemagic, GitHub Actions
+  macOS runners), so owning a Mac is not strictly required. Internal testers (up to 100 on the team)
+  get no review. External testers (up to 10,000) need a light Beta App Review. Builds expire after
+  90 days. This is the route to real iOS haptics and native push. Caveat for later: the App Store
+  proper may reject a pure web-wrapper under guideline 4.2, and TestFlight avoids that for internal
+  testing. Waiting on Robin's decision.

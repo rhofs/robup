@@ -184,7 +184,7 @@ export default function WeekRow({
     const from = new Date(Math.min(start.getTime(), end.getTime()));
     const to = new Date(Math.max(start.getTime(), end.getTime()));
     const count = Math.round((to.getTime() - from.getTime()) / 86_400_000) + 1;
-    const amount = count <= 3 ? 0.5 : count <= 7 ? 0.35 : 0.25;
+    const amount = count <= 3 ? 0.35 : count <= 7 ? 0.25 : 0.18;
     let i = 0;
     for (let d = new Date(from); d <= to && i < 42; d.setDate(d.getDate() + 1), i++) {
       const cell = document.querySelector(`[data-day-key="${dayKey(d)}"]`);
@@ -192,7 +192,7 @@ export default function WeekRow({
       const r = cell.getBoundingClientRect();
       const at = { x: r.left + r.width / 2, y: r.top + r.height / 2 };
       window.setTimeout(() => {
-        setPuffs((ps) => [...ps, { id: ++puffIdRef.current, x: at.x, y: at.y, particles: makePuffParticles(amount) }]);
+        setPuffs((ps) => [...ps, { id: ++puffIdRef.current, x: at.x, y: at.y, particles: makePuffParticles(amount, true) }]);
       }, Math.min(i, 8) * RELEASE_STAGGER_MS);
     }
     return count;
@@ -570,6 +570,9 @@ export default function WeekRow({
                           // Long enough for the last day to lock in, then "New".
                           releaseTimerRef.current = window.setTimeout(() => {
                             releaseTimerRef.current = null;
+                            // Anything still in the air goes before the sheet comes up — the hold's
+                            // own pop included, if the finger lifted soon after it.
+                            setPuffs([]);
                             onPendingRangeChange(null);
                             onQuickAddDay(start, end);
                           }, RELEASE_MS + Math.min(days - 1, 8) * RELEASE_STAGGER_MS);
