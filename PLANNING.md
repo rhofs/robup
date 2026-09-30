@@ -10611,3 +10611,5 @@ tagging worked). Still not seen on a device.
   90 days. This is the route to real iOS haptics and native push. Caveat for later: the App Store
   proper may reject a pure web-wrapper under guideline 4.2, and TestFlight avoids that for internal
   testing. Waiting on Robin's decision.
+
+**Deployed 2026-09-30 as `ec6fb93`** (tag `deploy/2026-09-30_1014`).
