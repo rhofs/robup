@@ -10799,3 +10799,5 @@ and lint. The remaining lint error at `app/login/page.tsx:39` (setState in effec
   so the Planner, docs and the wiki share one host.
 - Not done: the "Tasks from a List" block has no such effect, since a status change there has no
   "done" meaning to celebrate. Not seen in a browser.
+
+**Deployed 2026-10-01 as `9ab14cb`** (tag `deploy/2026-10-01_1328`).
