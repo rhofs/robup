@@ -251,7 +251,7 @@ export default function QuickCreatePopover({
                     className="w-full bg-neutral-950 border border-neutral-700 rounded-lg px-2 py-2 text-xs text-app-strong focus:outline-none focus:border-blue-500 disabled:opacity-40 disabled:cursor-not-allowed"
                   >
                     <option value="">{selectedSpace ? 'Select a list...' : 'Pick a space first'}</option>
-                    {selectedSpace?.lists.map((l) => (
+                    {selectedSpace?.lists.filter((l) => !l.docId && !l.archived).map((l) => (
                       <option key={l.id} value={l.id}>
                         {l.name}
                       </option>

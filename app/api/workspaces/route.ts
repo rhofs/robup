@@ -32,7 +32,7 @@ export async function GET(req: Request) {
           },
           lists: {
             where: { deletedAt: null },
-            select: { id: true, name: true, color: true, textColor: true, icon: true, folderId: true, order: true, archived: true, isPrivate: true, accessJson: true, visibleColumnsJson: true, columnWidthsJson: true, sortJson: true },
+            select: { id: true, name: true, color: true, textColor: true, icon: true, folderId: true, docId: true, order: true, archived: true, isPrivate: true, accessJson: true, visibleColumnsJson: true, columnWidthsJson: true, sortJson: true },
           },
           statuses: { orderBy: { order: 'asc' } },
           customFields: true,

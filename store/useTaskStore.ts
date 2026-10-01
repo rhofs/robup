@@ -177,6 +177,9 @@ export type HierarchyList = {
   textColor: string | null;
   icon: string | null;
   folderId: string | null;
+  // Set when the List belongs to one Doc's task-list block and lives only there — left out of the
+  // sidebar, Space home and List pickers (see the schema). Optional: older payloads lack it.
+  docId?: string | null;
   order: number;
   archived: boolean;
   isPrivate: boolean;
@@ -546,7 +549,7 @@ interface TaskStore {
   createSpace: (workspaceId: string, name: string, id?: string) => Promise<void>;
   deleteSpace: (spaceId: string) => Promise<void>;
 
-  createList: (spaceId: string, name: string, folderId?: string | null, id?: string) => Promise<void>;
+  createList: (spaceId: string, name: string, folderId?: string | null, id?: string, docId?: string | null) => Promise<void>;
   renameList: (spaceId: string, listId: string, name: string) => Promise<void>;
   updateList: (
     spaceId: string,
@@ -1292,6 +1295,9 @@ export const useTaskStore = create<TaskStore>((set, get) => {
 
     optimisticArchiveTask: (taskId, archived) => {
       const wasArchived = get().tasks.find((t) => t.id === taskId)?.archived;
+      // "Done" in this app is archiving (TaskRow's circle, the doc task block's circle): completing a
+      // task throws star dust where it was ticked (lib/taskDoneDust.ts). Not on restore.
+      if (archived && !wasArchived) celebrateTaskDone();
       set((state) => ({
         tasks: state.tasks.map((t) =>
           t.id === taskId ? { ...t, archived, archivedAt: archived ? new Date() : null } : t
@@ -2273,11 +2279,11 @@ export const useTaskStore = create<TaskStore>((set, get) => {
       }
     },
 
-    createList: async (spaceId, name, folderId = null, id) => {
+    createList: async (spaceId, name, folderId = null, id, docId = null) => {
       const res = await fetch('/api/lists', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ id, spaceId, name, folderId }),
+        body: JSON.stringify({ id, spaceId, name, folderId, docId }),
       });
       const newList = await res.json();
       set((state) => ({
@@ -2289,7 +2295,7 @@ export const useTaskStore = create<TaskStore>((set, get) => {
       useHistoryStore.getState().push({
         label: `Create list "${name}"`,
         undo: () => get().deleteList(spaceId, newList.id),
-        redo: () => get().createList(spaceId, name, folderId, newList.id),
+        redo: () => get().createList(spaceId, name, folderId, newList.id, docId),
       });
     },
 

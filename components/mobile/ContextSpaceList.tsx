@@ -195,10 +195,10 @@ export default function ContextSpaceList({
                       </button>
                       {folderOpen && (
                         <div className="ml-4 pl-3 border-l border-neutral-800 space-y-0.5">
-                          {space.lists.filter((l) => l.folderId === folder.id && !l.archived).length === 0 && (
+                          {space.lists.filter((l) => l.folderId === folder.id && !l.archived && !l.docId).length === 0 && (
                             <p className="px-2 py-1.5 text-[11px] text-neutral-600">No lists.</p>
                           )}
-                          {space.lists.filter((l) => l.folderId === folder.id && !l.archived).map((list) => (
+                          {space.lists.filter((l) => l.folderId === folder.id && !l.archived && !l.docId).map((list) => (
                             <button
                               key={list.id}
                               onClick={() => {
@@ -220,7 +220,7 @@ export default function ContextSpaceList({
                     </div>
                   );
                 })}
-                {space.lists.filter((l) => l.folderId === null && !l.archived).map((list) => (
+                {space.lists.filter((l) => l.folderId === null && !l.archived && !l.docId).map((list) => (
                   <button
                     key={list.id}
                     onClick={() => {

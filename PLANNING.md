@@ -10832,3 +10832,51 @@ and lint. The remaining lint error at `app/login/page.tsx:39` (setState in effec
 - Not seen in a browser.
 
 **Deployed 2026-10-01 as `ba17476`** (tag `deploy/2026-10-01_1342`).
+
+### 2026-10-01 (continued) — fixes: "done" is archiving; doc-owned Lists; done-circle in the doc block; auto-reload after deploys
+
+**Reported:**
+- "Task liste i docs kan ikke trykke på checkmarken i det hele tatt på desktop"
+- "Ikke noe støv … når jeg trykker på task, hverken personlige tasks eller i office"
+- "vises ikke docs på mobil"
+- "når jeg lagde en taskliste i docen, så havna tasklista under i samme folder … den skal jo kun være
+  i docen"
+
+**Fixes:**
+- **Completing a task in this app is ARCHIVING it.** The round circle in front of every task row is
+  TaskRow's `doneToggle` → `optimisticArchiveTask(id, true)`, titled "Mark as done (archive)". The
+  previous round hooked only status changes, so the circle people actually press never threw dust.
+  - `optimisticArchiveTask` now calls `celebrateTaskDone()` when archiving (not when restoring).
+  - The status hook stays as well.
+  - Lesson: check what "done" means in the UI before wiring an effect to it.
+- **Doc task block:** the leading circle was decoration inside the "open task" button, which is
+  what "kan ikke trykke på checkmarken" meant.
+  - It is now its own done button: the status-coloured ring fills emerald with a check on hover,
+    and a click calls `optimisticArchiveTask` → dust.
+  - Rows are framer-motion with AnimatePresence, so a completed row leaves the way TaskRow's does
+    (scale 0.9, blur, height collapses).
+  - The title is a separate button that opens the task.
+- **Doc-owned Lists.** New column `List.docId` (migration `20261001135522_add_list_doc_id`, a plain
+  ADD COLUMN made against a throwaway DB via `DATABASE_URL=file:./migtmp.db`).
+  - "New List" in the block passes the editor's `docId` (extension option) through
+    `createList(…, docId)` → `/api/lists`.
+  - `/api/workspaces` and `/api/lists` select `docId`.
+  - Hidden wherever Lists are navigated or picked: `getListsIn` (desktop FolderTree, mobile
+    MobileSpacesSheet, SpaceHome), `ContextSpaceList`, page.tsx's sidebar ordering helper, the
+    modal's move-to-List select (except the task's current List), QuickCreatePopover,
+    MobileQuickCreateSheet, CommandPalette.
+  - Not hidden from lookup maps (OfficePage's listSpaceById) or from task-level views: their tasks
+    still show in My Tasks, the Planner and the modal.
+  - The block's Existing picker leaves out other Docs' Lists.
+  - **The List the user had already made from the block before this fix has docId null and still
+    shows in its folder.** Not changed in data; the user was asked.
+- **"Docs vises ikke på mobil" — probable cause, not confirmed:** a phone left open across the
+  previous deploy was still running pre-gate code. The collab server now rejects that code
+  (DOC_SCHEMA_VERSION), so the doc stays empty under the old amber warning.
+  - New `components/UpdateReloader.tsx` at the app root: it remembers `/api/version`'s commit at
+    start, and on each return to the foreground (≥ 60 s apart) reloads if production has moved on.
+  - It cannot help a phone still on code older than itself; that needs one manual close/reopen.
+  - If docs are still empty on mobile after a fresh open, the cause is something else, still to be
+    found.
+- The doc *checklist* checkbox (TaskItem) was not changed. I believe the report was about the task
+  block's circle, but the checklist on desktop is unverified in a browser.

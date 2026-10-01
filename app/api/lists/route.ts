@@ -18,12 +18,14 @@ export async function POST(req: Request) {
       spaceId: body.spaceId,
       name: body.name,
       folderId: body.folderId ?? null,
+      // Made from a Doc's task-list block: the List belongs to that Doc only (see schema).
+      docId: typeof body.docId === 'string' ? body.docId : null,
     },
     // Must match GET /api/workspaces's own List select shape field-for-field — the sidebar tree's
     // getListsIn() filters on `list.archived === false`, so a response missing `archived` (as this
     // route's select did until now) makes every freshly created list invisible until a refetch
     // brings back the field it was silently omitting, even though the row was created correctly.
-    select: { id: true, name: true, color: true, textColor: true, icon: true, spaceId: true, folderId: true, order: true, archived: true, isPrivate: true, accessJson: true },
+    select: { id: true, name: true, color: true, textColor: true, icon: true, spaceId: true, folderId: true, docId: true, order: true, archived: true, isPrivate: true, accessJson: true },
   });
   return NextResponse.json(list);
 }

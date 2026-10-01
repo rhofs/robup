@@ -149,6 +149,7 @@ import { pickableMembers, taskAudience, taskPickableMembers, workspaceIdForList,
 import AssigneePicker, { PersonPill } from '../components/AssigneePicker';
 import { suggestTaskAssignees } from '../lib/assigneeSuggestions';
 import { PuffHost } from '../components/calendar/PuffBurst';
+import UpdateReloader from '../components/UpdateReloader';
 
 // Client-only: HocuspocusProvider needs `window.location` and a real WebSocket, neither available
 // during SSR — a live collaborative editor has no reason to render server-side anyway.
@@ -4008,7 +4009,7 @@ function PageContent() {
   // lib/folderTree.ts's getBoardDocsIn), not folderId (the separate Docs-tab/DocFolder axis) —
   // works at every Folder depth now, not just the Space root.
   const combinedSidebarSiblings = (space: HierarchySpace, folderId: string | null): SidebarSibling[] => [
-    ...space.lists.filter((l) => l.folderId === folderId).map((l) => ({ type: 'list' as const, id: l.id, order: l.order })),
+    ...space.lists.filter((l) => l.folderId === folderId && !l.docId).map((l) => ({ type: 'list' as const, id: l.id, order: l.order })),
     ...space.spaceDocs.filter((d) => d.boardFolderId === folderId && d.parentId === null).map((d) => ({ type: 'doc' as const, id: d.id, order: d.order })),
   ];
 
@@ -5017,7 +5018,10 @@ function PageContent() {
         .sort((a, b) => (a.order ?? 0) - (b.order ?? 0) || new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime())
     : [];
   const activeComments = activeModalTask ? comments[activeModalTask.id] || [] : [];
-  const allListsFlat = workspaces.flatMap((ws) => ws.spaces.flatMap((s) => s.lists.map((l) => ({ ...l, spaceName: s.name }))));
+  // A Doc's own Lists are not offered as somewhere to move a task — except the one it is already in.
+  const allListsFlat = workspaces.flatMap((ws) =>
+    ws.spaces.flatMap((s) => s.lists.filter((l) => !l.docId || l.id === activeModalTask?.listId).map((l) => ({ ...l, spaceName: s.name })))
+  );
 
   // The task's own Space (via its List) — scopes the "Link existing doc" picker to standalone
   // docs from the same Space, rather than an overwhelming cross-Space list.
@@ -5204,6 +5208,7 @@ function PageContent() {
     <div className="siqt-app-shell flex flex-col h-dvh bg-neutral-950 text-neutral-100 font-sans overflow-hidden select-none">
       {/* Star dust, drawn once for the whole app: the Planner's long-press and a doc checklist's tick. */}
       <PuffHost />
+      <UpdateReloader />
       {/* ================= TOP BAR — workspace + search, so the icon rail/sidebar below don't
           have to carry that weight themselves (previously both lived stacked at the very top
           of the sidebar, which read as cramped). ================= */}

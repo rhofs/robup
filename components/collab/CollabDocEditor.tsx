@@ -185,7 +185,7 @@ export default function CollabDocEditor({
             HorizontalRule,
             TaskList,
             TaskItem.configure({ nested: true }),
-            ClientTaskListEmbedNode.configure({ onOpenTask: (id: string) => onJump('task', id), spaceId }),
+            ClientTaskListEmbedNode.configure({ onOpenTask: (id: string) => onJump('task', id), spaceId, docId }),
             GapCursor,
             ClientMentionNode.configure({ onJump }),
             ClientFileAttachmentNode,

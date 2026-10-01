@@ -2,9 +2,11 @@ import { addPuff, makePuffParticles } from '../components/calendar/PuffBurst';
 import { hapticTap } from './haptics';
 
 // Star dust when a task is completed, wherever that happens — "Partiklene ved fullført tasks må jo være
-// på alle task fra alle Lister i office, og personlige tasks, samt i docs." Every status change in the
-// app goes through useTaskStore's optimisticMoveTask (task rows in Lists and My Tasks, the task modal,
-// the docs' task-list block), which calls celebrateTaskDone when a task moves into a done status.
+// på alle task fra alle Lister i office, og personlige tasks, samt i docs." Completing a task in this
+// app means ARCHIVING it — the circle in front of every task row (TaskRow's doneToggle, "Mark as done
+// (archive)") and in the doc task block — so useTaskStore's optimisticArchiveTask is the main caller.
+// The first version only hooked status changes and so never fired for the circle people actually
+// press. optimisticMoveTask also calls it when a task moves into a done-looking status.
 //
 // Statuses here are free-form per Space, so "done" is: the Space's last status (the default set ends in
 // "Done"), or any status simply called done/complete/closed/finished/ferdig/fullført.

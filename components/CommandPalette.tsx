@@ -147,6 +147,7 @@ export default function CommandPalette({ open, onClose, onOpenTask, scopeKind, o
         const spaceScore = scoreMatch(space.name, q);
         if (spaceScore !== null) byCategory.space.push({ kind: 'space', id: space.id, label: space.name, score: spaceScore });
         for (const list of space.lists) {
+          if (list.docId) continue; // a Doc's own List is reached through its Doc
           const listScore = scoreMatch(list.name, q);
           if (listScore !== null) {
             byCategory.list.push({ kind: 'list', id: list.id, label: list.name, spaceId: space.id, sub: space.name, score: listScore });

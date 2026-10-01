@@ -390,6 +390,11 @@ model List {
   space        Space         @relation(fields: [spaceId], references: [id], onDelete: Cascade)
   folderId     String?       @map("folder_id")
   folder       Folder?       @relation(fields: [folderId], references: [id], onDelete: Cascade)
+  // Set when the List was made from a Doc's task-list block ("New List" there): it belongs to that
+  // Doc and lives only inside it — the sidebar, Space home and List pickers leave it out ("den skal jo
+  // kun være i docen"). Its tasks are ordinary tasks (My Tasks, Planner, the modal). A plain id, no
+  // relation: deleting the Doc should not take the tasks with it.
+  docId        String?       @map("doc_id")
   order        Int           @default(0)
   // Which columns this List's board shows, as a JSON array of column keys ("status", "assignee",
   // "startDate", "dueDate", and a CustomField id for each custom column). Null means "never

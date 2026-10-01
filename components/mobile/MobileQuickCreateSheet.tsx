@@ -305,7 +305,7 @@ export default function MobileQuickCreateSheet({
               <div key={sp.id} className="pb-2">
                 <p className="px-2 pt-2 pb-1 text-[12px] font-semibold uppercase tracking-wider text-neutral-500">{sp.name}</p>
                 {sp.lists
-                  .filter((l) => !l.archived)
+                  .filter((l) => !l.archived && !l.docId)
                   .map((l) => (
                     <button
                       key={l.id}

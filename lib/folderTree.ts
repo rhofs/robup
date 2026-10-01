@@ -6,8 +6,9 @@ export const getChildFolders = (space: HierarchySpace, parentId: string | null) 
 // `archived` defaults to false (the normal sidebar view) — the "Archive"/"Viewing archive"
 // toggle (app/page.tsx's showArchived) passes true to show only the archived ones instead,
 // mirroring how the task table already flips between the two sets.
+// A Doc's own Lists (docId set — made from a task-list block in that Doc) are never part of the tree.
 export const getListsIn = (space: HierarchySpace, folderId: string | null, archived = false) =>
-  space.lists.filter((l) => l.folderId === folderId && l.archived === archived).sort((a, b) => a.order - b.order);
+  space.lists.filter((l) => l.folderId === folderId && l.archived === archived && !l.docId).sort((a, b) => a.order - b.order);
 
 // Docs filed under a real Folder in the Tasks-tab sidebar — a second, independent axis from
 // lib/docFolderTree.ts's getSpaceDocsIn (which reads folderId/DocFolder, the Docs tab's own

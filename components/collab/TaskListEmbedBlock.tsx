@@ -2,7 +2,8 @@
 
 import { useMemo, useState } from "react";
 import { NodeViewWrapper, type ReactNodeViewProps } from "@tiptap/react";
-import { ListChecks, Plus, Search, ChevronDown, Repeat } from "lucide-react";
+import { ListChecks, Plus, Search, ChevronDown, Repeat, Check } from "lucide-react";
+import { AnimatePresence, motion } from "framer-motion";
 import {
   useTaskStore,
   type Task,
@@ -69,6 +70,7 @@ export default function TaskListEmbedBlock({
   const workspaces = useTaskStore((s) => s.workspaces);
   const allTasks = useTaskStore((s) => s.tasks);
   const moveTask = useTaskStore((s) => s.optimisticMoveTask);
+  const archiveTask = useTaskStore((s) => s.optimisticArchiveTask);
   const createTask = useTaskStore((s) => s.optimisticCreateTask);
   const createList = useTaskStore((s) => s.createList);
   const editable = editor.isEditable;
@@ -94,7 +96,8 @@ export default function TaskListEmbedBlock({
       for (const space of ws.spaces) {
         if (space.archived) continue;
         for (const l of space.lists) {
-          if (l.archived) continue;
+          // Another Doc's own List is not offered; this block's own one still resolves.
+          if (l.archived || (l.docId && l.id !== listId)) continue;
           const folder = l.folderId
             ? space.folders.find((f) => f.id === l.folderId)
             : undefined;
@@ -113,7 +116,7 @@ export default function TaskListEmbedBlock({
       }
     }
     return out;
-  }, [workspaces]);
+  }, [workspaces, listId]);
 
   const spaces = useMemo(() => {
     const several = workspaces.length > 1;
@@ -138,7 +141,8 @@ export default function TaskListEmbedBlock({
     // The id is chosen here so the block can point at the List the moment it exists.
     const id = crypto.randomUUID();
     try {
-      await createList(targetSpaceId, name, null, id);
+      // Owned by this Doc: it lives only here, not in the sidebar or the Space (List.docId).
+      await createList(targetSpaceId, name, null, id, options.docId ?? null);
       updateAttributes({ listId: id });
       setPicking(false);
       setNewName("");
@@ -353,27 +357,41 @@ export default function TaskListEmbedBlock({
               </p>
             )}
             <div className="divide-y divide-neutral-800/50">
+              {/* Done = archived, as everywhere in the app (TaskRow's circle): ticking the circle
+                  completes the task — star dust comes from the store — and the row leaves the
+                  same way a completed row leaves a List, shrinking and blurring out. */}
+              <AnimatePresence initial={false}>
               {tasks.map((t) => {
                 const status = list.statuses.find((s) => s.name === t.status);
                 const color = status?.color ?? "#94A3B8";
                 return (
-                  <div
+                  <motion.div
                     key={t.id}
-                    className="relative grid grid-cols-[minmax(0,1fr)_auto] gap-2 items-center px-3 py-1.5 hover:bg-neutral-800/30 transition sm:[grid-template-columns:var(--g)]"
+                    layout
+                    initial={{ opacity: 0, y: 6 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    exit={{ opacity: 0, scale: 0.9, filter: "blur(6px)", height: 0, paddingTop: 0, paddingBottom: 0 }}
+                    transition={{ duration: 0.3, ease: "easeOut" }}
+                    className="relative grid grid-cols-[minmax(0,1fr)_auto] gap-2 items-center px-3 py-1.5 hover:bg-neutral-800/30 sm:[grid-template-columns:var(--g)] overflow-hidden"
                     style={{ "--g": GRID } as React.CSSProperties}
                   >
-                    <button
-                      onClick={() => options.onOpenTask?.(t.id)}
-                      className="min-w-0 flex items-center gap-2 text-left cursor-pointer"
-                    >
-                      <span
-                        className="w-3.5 h-3.5 rounded-full border-2 shrink-0"
+                    <div className="min-w-0 flex items-center gap-2">
+                      <button
+                        disabled={!editable}
+                        onClick={() => archiveTask(t.id, true)}
+                        title="Mark as done"
+                        className="group/done w-4 h-4 rounded-full border-2 shrink-0 flex items-center justify-center cursor-pointer disabled:cursor-default transition-colors hover:bg-emerald-500 hover:border-emerald-500 active:scale-90"
                         style={{ borderColor: color }}
-                      />
-                      <span className="truncate text-[13px] text-neutral-200 hover:underline">
+                      >
+                        <Check className="w-2.5 h-2.5 text-white opacity-0 group-hover/done:opacity-100" strokeWidth={3} />
+                      </button>
+                      <button
+                        onClick={() => options.onOpenTask?.(t.id)}
+                        className="min-w-0 truncate text-left text-[13px] text-neutral-200 hover:underline cursor-pointer"
+                      >
                         {t.title || "Untitled"}
-                      </span>
-                    </button>
+                      </button>
+                    </div>
                     <div className="relative">
                       <button
                         disabled={!editable}
@@ -432,9 +450,10 @@ export default function TaskListEmbedBlock({
                     <span className="hidden sm:block text-[12px] text-neutral-400">
                       {shortDate(t.dueDate)}
                     </span>
-                  </div>
+                  </motion.div>
                 );
               })}
+              </AnimatePresence>
             </div>
             {editable &&
               (draft === null ? (
