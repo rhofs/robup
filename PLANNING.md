@@ -10830,3 +10830,5 @@ and lint. The remaining lint error at `app/login/page.tsx:39` (setState in effec
     undo/redo and other no-press changes complete quietly.
   - The doc checklist keeps its own effect (celebrateCheck).
 - Not seen in a browser.
+
+**Deployed 2026-10-01 as `ba17476`** (tag `deploy/2026-10-01_1342`).
