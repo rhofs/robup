@@ -7,6 +7,7 @@ import { useHistoryStore } from './useHistoryStore';
 import { uploadChatFile } from '../lib/uploadChatFile';
 import { parseTaskTemplate, type AppTemplate, type TemplateKind } from '../lib/templates';
 import { useSessionStore } from './useSessionStore';
+import { celebrateTaskDone, isDoneStatus } from '../lib/taskDoneDust';
 
 export type StatusDef = {
   id: string;
@@ -1157,7 +1158,14 @@ export const useTaskStore = create<TaskStore>((set, get) => {
     },
 
     optimisticMoveTask: (taskId, newStatus) => {
-      const oldStatus = get().tasks.find((t) => t.id === taskId)?.status;
+      const task = get().tasks.find((t) => t.id === taskId);
+      const oldStatus = task?.status;
+      // Completing a task throws star dust where it was done (lib/taskDoneDust.ts) — only on the way
+      // into a done status, not when moving between two of them or reopening.
+      if (task && oldStatus !== newStatus) {
+        const statuses = get().workspaces.flatMap((w) => w.spaces).find((sp) => sp.lists.some((l) => l.id === task.listId))?.statuses ?? [];
+        if (isDoneStatus(newStatus, statuses) && !(oldStatus && isDoneStatus(oldStatus, statuses))) celebrateTaskDone();
+      }
       set((state) => ({
         tasks: state.tasks.map((t) => (t.id === taskId ? { ...t, status: newStatus } : t)),
       }));

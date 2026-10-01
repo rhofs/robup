@@ -41,7 +41,7 @@ export default function DocBlockGutter({ editor, container }: { editor: Editor; 
       const lineHeight = parseFloat(getComputedStyle(dom).lineHeight) || 24;
       const firstLine = Math.min(r.height, lineHeight);
       setAt((prev) => {
-        const next = { pos, top: r.top + firstLine / 2, left: box.left - 30 };
+        const next = { pos, top: r.top + firstLine / 2, left: box.left - 26 };
         return prev && prev.pos === next.pos && prev.top === next.top && prev.left === next.left ? prev : next;
       });
     };
@@ -81,10 +81,14 @@ export default function DocBlockGutter({ editor, container }: { editor: Editor; 
       title="Add a block"
       onMouseDown={(e) => e.preventDefault()}
       onClick={open}
-      className="fixed z-40 w-6 h-6 -translate-y-1/2 rounded-md flex items-center justify-center text-neutral-500 hover:text-app-strong hover:bg-neutral-800 cursor-pointer transition-colors"
+      // Quiet until wanted ("ikke er sååå 'in your face'"): a thin, small glyph in the faintest grey that
+      // fades in beside the line, and only takes on contrast and a soft round backdrop under the cursor.
+      // Keyed on the block, so moving to another line fades it in again rather than jumping.
+      key={at.pos}
+      className="siqt-gutter-plus fixed z-40 w-5 h-5 -translate-y-1/2 rounded-full flex items-center justify-center text-neutral-600 hover:text-neutral-200 hover:bg-white/[0.07] cursor-pointer transition-colors duration-150"
       style={{ top: at.top, left: at.left }}
     >
-      <Plus className="w-4 h-4" />
+      <Plus className="w-3.5 h-3.5" strokeWidth={1.75} />
     </button>,
     document.body
   );

@@ -296,6 +296,18 @@ body {
   margin: 0;
 }
 
+/* The doc margin's "+" (DocBlockGutter) eases in instead of popping up. */
+.siqt-gutter-plus {
+  animation: siqt-gutter-in 180ms ease-out;
+}
+@keyframes siqt-gutter-in {
+  from {
+    opacity: 0;
+    /* x only: Tailwind v4's -translate-y-1/2 uses the separate `translate` property, which stays. */
+    transform: translateX(-3px);
+  }
+}
+
 /* The blocks added with the ClickUp-style block menu (2026-10-01): Heading 3, quote, divider and the
    checklist. Same reason as everything above — preflight leaves them unstyled. */
 .collab-doc-editor .ProseMirror h3 {

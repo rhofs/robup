@@ -10801,3 +10801,32 @@ and lint. The remaining lint error at `app/login/page.tsx:39` (setState in effec
   "done" meaning to celebrate. Not seen in a browser.
 
 **Deployed 2026-10-01 as `9ab14cb`** (tag `deploy/2026-10-01_1328`).
+
+### 2026-10-01 (continued) — quieter "+", new-or-existing List in the doc task block, dust on every completed task
+
+- **"+" (DocBlockGutter):** "føles mer moderne og ikke er sååå 'in your face'". It is now 20 px round
+  with a 3.5 px icon at stroke 1.75 in neutral-600. It eases in (180 ms, from 3 px left) and gains
+  contrast plus a faint white/7 % backdrop only under the cursor. Keyed per block, so it fades in
+  again on each line. The fade keyframe only moves x: Tailwind v4's `-translate-y-1/2` uses the
+  separate `translate` property, and a `transform` translate-y would have doubled it.
+- **Doc task block:** "det er bedre at man lager en 'Helt ny liste' … egentlig ønsker jeg mulighet
+  til begge deler".
+  - The setup now has a pill switch: **New List** (the default) | **Existing List** (the old picker).
+  - New List takes a name and a Space (defaulting to the doc's own `spaceId`, passed via the
+    extension options). It calls `createList(spaceId, name, null, id)` with a client-chosen
+    `crypto.randomUUID()` (the `/api/lists` POST accepts `id`), then points the block at it and
+    opens the add-task row.
+  - The List is made at the Space's top level; no folder choice.
+  - "Change" opens on Existing List. The menu item is renamed "Task list".
+- **Dust on completed tasks everywhere:** "må jo være på alle task fra alle Lister i office, og
+  personlige tasks, samt i docs".
+  - Every status change goes through `useTaskStore.optimisticMoveTask` (TaskRow in Lists and My
+    Tasks, the task modal, the doc task block), so it is hooked there via `lib/taskDoneDust.ts`.
+  - "Done" means the Space's last status by `order`, or a status named done / complete(d) / closed
+    / finished / ferdig / fullført. That is decided by convention, since the app has no closed flag.
+  - It fires only when moving *into* done from a not-done status.
+  - The dust (calm, lingering, amount 0.45) plus a haptic come out where the person last pressed,
+    tracked by a capture `pointerdown` listener, and only if that press was within 1.5 s. So
+    undo/redo and other no-press changes complete quietly.
+  - The doc checklist keeps its own effect (celebrateCheck).
+- Not seen in a browser.

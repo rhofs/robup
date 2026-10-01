@@ -50,11 +50,11 @@ function baseCommands(): SlashCommandItem[] {
     },
     {
       id: 'task-list',
-      label: 'Tasks from a List',
+      label: 'Task list',
       icon: 'taskList',
       section: 'Suggestions',
-      keywords: 'list table tasks embed clickup',
-      // Inserted without a List: the block opens on its own List picker (TaskListEmbedBlock). A
+      keywords: 'list table tasks embed clickup new existing',
+      // Inserted without a List: the block opens on its own setup — a new List, or an existing one. A
       // paragraph after it so there is always a line to keep writing on.
       run: (editor, range) =>
         editor
