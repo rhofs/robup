@@ -10880,3 +10880,5 @@ and lint. The remaining lint error at `app/login/page.tsx:39` (setState in effec
     found.
 - The doc *checklist* checkbox (TaskItem) was not changed. I believe the report was about the task
   block's circle, but the checklist on desktop is unverified in a browser.
+
+**Deployed 2026-10-01 as `71b12a9`** (tag `deploy/2026-10-01_1358`). The migration ran at start (deploy:prod snapshots the DB first). A code rollback past this leaves the unused `doc_id` column in place, which is harmless.
