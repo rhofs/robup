@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef } from "react";
+import { memo, useEffect, useSyncExternalStore } from "react";
 import { createPortal } from "react-dom";
 
 // The "pop" when a long press on a Planner day takes: a soft cloud that puffs out from under the
@@ -90,31 +90,25 @@ export function makePuffParticles(amount = 1, calm = false): PuffParticle[] {
 // reagerer på den, og fader ut". Each particle drifts up and away from the screen's middle, harder and
 // sooner the lower it sits (the sheet reaches those first), and fades as it goes. It sits on a wrapper
 // span so the nudge adds to the particle's own drift instead of fighting its transform.
-export default function PuffBurst({
+function PuffBurst({
   x,
   y,
   particles,
   calm = false,
   pushed = false,
-  onDone,
+  id,
 }: {
   x: number;
   y: number;
   particles: PuffParticle[];
   calm?: boolean;
   pushed?: boolean;
-  onDone: () => void;
+  id: number;
 }) {
-  // Through a ref: the caller passes a new function on every render, and restarting the timer with
-  // each one would keep a burst on screen for as long as the calendar kept re-rendering.
-  const onDoneRef = useRef(onDone);
-  useEffect(() => {
-    onDoneRef.current = onDone;
-  });
   useEffect(() => {
     // Gone once its last particle is (plus a frame of margin), however long this burst's are.
     const t = window.setTimeout(
-      () => onDoneRef.current(),
+      () => removePuff(id),
       Math.max(0, ...particles.map((p) => p.delay + p.duration)) + 50
     );
     return () => window.clearTimeout(t);
@@ -123,9 +117,9 @@ export default function PuffBurst({
   }, []);
   useEffect(() => {
     if (!pushed) return;
-    const t = window.setTimeout(() => onDoneRef.current(), 1100);
+    const t = window.setTimeout(() => removePuff(id), 1100);
     return () => window.clearTimeout(t);
-  }, [pushed]);
+  }, [pushed, id]);
 
   if (typeof document === "undefined") return null;
   return createPortal(
@@ -179,5 +173,58 @@ export default function PuffBurst({
       })}
     </div>,
     document.body
+  );
+}
+
+// The bursts on screen live here, outside React's tree of the calendar, and are drawn by one
+// <PuffHost /> (mounted once by CalendarView). They used to be state in WeekRow, so every new puff —
+// up to nine in one release, plus the push — re-rendered a whole calendar row with all its events,
+// on the very frames the animation needed. Now adding a burst re-renders only the host, and the
+// memoised bursts already on screen skip even that.
+type Burst = {
+  id: number;
+  x: number;
+  y: number;
+  particles: PuffParticle[];
+  calm?: boolean;
+  pushed?: boolean;
+};
+let bursts: Burst[] = [];
+let nextId = 0;
+const listeners = new Set<() => void>();
+const setBursts = (next: Burst[]) => {
+  bursts = next;
+  listeners.forEach((l) => l());
+};
+const subscribe = (l: () => void) => {
+  listeners.add(l);
+  return () => {
+    listeners.delete(l);
+  };
+};
+const NONE: Burst[] = [];
+
+export function addPuff(burst: Omit<Burst, "id">) {
+  setBursts([...bursts, { ...burst, id: ++nextId }]);
+}
+// The "New" sheet is coming up: nudge the release dust out of its way.
+export function pushCalmPuffs() {
+  setBursts(bursts.map((b) => (b.calm && !b.pushed ? { ...b, pushed: true } : b)));
+}
+const removePuff = (id: number) => setBursts(bursts.filter((b) => b.id !== id));
+
+const MemoBurst = memo(PuffBurst);
+
+export function PuffHost() {
+  const list = useSyncExternalStore(subscribe, () => bursts, () => NONE);
+  // Leaving the Planner mid-animation unmounts the bursts and their removal timers with them; without
+  // this their leftovers would replay the next time the Planner opened.
+  useEffect(() => () => setBursts([]), []);
+  return (
+    <>
+      {list.map((b) => (
+        <MemoBurst key={b.id} id={b.id} x={b.x} y={b.y} particles={b.particles} calm={b.calm} pushed={b.pushed} />
+      ))}
+    </>
   );
 }

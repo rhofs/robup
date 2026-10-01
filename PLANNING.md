@@ -10655,3 +10655,52 @@ tagging worked). Still not seen on a device.
   screen position. Not seen on a device.
 
 **Deployed 2026-09-30 as `0e432e6`** (tag `deploy/2026-09-30_1324`).
+
+### 2026-10-01 — animation performance pass; login page redesigned in the phone app's style
+
+**Performance ("raskt se over optimalisering … så det ikke hakker/lagger unødvendig på eldre enheter").**
+Reviewed, not measured. There is no device or profiler here, and the reasoning is standard
+compositor-vs-paint.
+- `.siqt-band`'s infinite pulse animated `background`, which repaints on the main thread every frame
+  for as long as the finger is down. Changed to a fixed `rgb(96 165 250 / .36)` pulsing `opacity`
+  1 → 0.62 (the same visual range). The pulse starts at 1, so it follows the entry animations without
+  a jump. The `::before` glow now pulses with it. `.siqt-hold-press` (background fade) and
+  `.siqt-band-release` (background flash) became opacity and transform too. The release no longer
+  brightens before fading; the day lock-in carries that moment now.
+- Puffs were `useState` in WeekRow: every new burst (up to 9 per release, plus the push) re-rendered a
+  whole calendar row with its events, on exactly the frames the animation needed. They now live in a
+  module-level store in `PuffBurst.tsx` (`addPuff`, `pushCalmPuffs`) drawn by one `<PuffHost />` in
+  CalendarView via `useSyncExternalStore`. Bursts are `memo`'d, so adding one re-renders only the
+  host. The host clears the store on unmount; otherwise leaving the Planner mid-animation would
+  replay stale bursts on return.
+- Release dust is budgeted over the whole range (≤160 specks total; per-day amount =
+  min(old rate, 160/(70·days))). A month-long drag was several hundred animated elements.
+- `will-change` is removed from `.siqt-dust` / `.siqt-star`: running animations are composited anyway,
+  and a permanent layer for each of hundreds of specks costs memory on old phones. `.siqt-day-lock`
+  keeps it (≤ a few dozen).
+- Considered and not done: a low-end-device switch. `navigator.deviceMemory` only exists on Chromium,
+  and `hardwareConcurrency` on iOS is not a reliable tier signal, so it could have dimmed the effect
+  on every iPhone.
+
+**Login page.** "Kan du får det MYE penere, ryddigere, og i stil med mobilappen … både desktop og
+mobil … føles som samme app." `app/login/page.tsx` markup was rewritten; the auth logic, the inApp
+Google rule and forgot-password flow are unchanged.
+- One centred column (max 400 px) at every size, replacing the old two-column desktop / different
+  phone stack.
+- Blue app-icon "S" with glow, a shorter headline, and the plain "Robins Project management tool"
+  line kept on purpose.
+- A 28 px-radius card holding:
+  - a pill switch for Sign in / Create account (sliding framer-motion pill, the bottom nav's blue
+    tint and glow);
+  - 48 px rounded-2xl fields and buttons;
+  - a Google button with the real G mark;
+  - a blue primary button with a soft glow;
+  - "Signing in…" busy text.
+- Inputs are 16 px text, because iOS zooms into smaller inputs on focus.
+- The four features (Tasks/Planner/Docs/Chat) are launcher-style icon tiles under the card, with the
+  old descriptions as hover titles.
+- Background: a soft top radial glow and a faint fading grid.
+
+**Not seen rendered.** Playwright's Chromium could not run on this host: it needs system libraries,
+which need root (`playwright install-deps`). The temp download was deleted. Verified only with tsc
+and lint. The remaining lint error at `app/login/page.tsx:39` (setState in effect) was there before.

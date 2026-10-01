@@ -5,6 +5,7 @@ import { useRouter, useSearchParams } from 'next/navigation';
 import { signIn } from 'next-auth/react';
 import { List, Calendar, FileText, MessageSquare } from 'lucide-react';
 import { Capacitor } from '@capacitor/core';
+import { motion } from 'framer-motion';
 
 // Same four icons as the real app's own nav rail (app/page.tsx), matching each feature exactly —
 // a logged-out visitor should recognize the same icons once they're actually inside the app. Was
@@ -97,92 +98,73 @@ function LoginPageContent() {
     }
   };
 
+  // One look for every screen size, taken from the phone app: soft-cornered dark surfaces, a pill
+  // switch like the bottom nav's, 48 px fields and buttons. The old version was a two-column
+  // marketing layout on desktop and a different stack on phones; "Jeg vil gjerne at både desktop og
+  // mobil appen skal se noenlunde lik ut, føles som samme app, og at den ser mye penere og ryddigere
+  // ut." Fields are 16 px text on purpose: iOS zooms the page into any smaller input on focus.
+  const field =
+    'w-full h-12 rounded-2xl bg-neutral-800/70 border border-transparent px-4 text-base text-app-strong placeholder:text-neutral-500 focus:outline-none focus:border-blue-500/60 focus:bg-neutral-800 transition';
+
   return (
-    <div className="relative min-h-screen bg-neutral-950 flex flex-col lg:flex-row overflow-hidden">
-      {/* A single soft radial glow instead of a flat black field — the previous version was
-          honest about its content but visually inert. Pure CSS (no image asset), fixed behind
-          everything (-z-10), sized generously so it reads as ambient light rather than a visible
-          shape with an edge. */}
+    <div className="relative min-h-dvh bg-neutral-950 flex flex-col items-center justify-center overflow-hidden px-4 pt-[calc(env(safe-area-inset-top)+32px)] pb-[calc(env(safe-area-inset-bottom)+32px)]">
+      {/* Ambient light from above and a faint grid that fades out — depth without an image. */}
       <div
-        className="pointer-events-none absolute -z-10 -top-40 -left-40 w-[720px] h-[720px] rounded-full opacity-[0.15] blur-3xl"
-        style={{ background: 'radial-gradient(circle, #3b82f6, transparent 70%)' }}
         aria-hidden
+        className="pointer-events-none absolute -z-0 left-1/2 -translate-x-1/2 -top-64 w-[900px] h-[640px] rounded-full opacity-25 blur-3xl"
+        style={{ background: 'radial-gradient(closest-side, #3b82f6, transparent)' }}
       />
-      {/* Marketing side — backlog #7: this used to be nothing but the auth card below, dropping
-          a logged-out visitor straight into a bare form with no explanation of what Siqt even is.
-          Copy trimmed to four features and rewritten to drop every self-hosting/"your own
-          infrastructure" claim (see FEATURES' own comment) — simpler and, more importantly,
-          actually true. */}
-      {/* order-2 on mobile: stacked vertically, this marketing column came first and pushed the
-          sign-in card entirely below the fold — you had to scroll down to log in at all. The card
-          leads on phones now; on lg+ the row order is restored so the layout is unchanged there. */}
-      <div className="order-2 lg:order-1 flex-1 flex flex-col justify-center px-6 py-16 sm:px-12 lg:px-20">
-        <div className="max-w-xl">
-          <div className="flex items-center gap-2.5 mb-12">
-            <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-blue-500 to-blue-700 text-white font-black flex items-center justify-center shrink-0 shadow-lg shadow-blue-500/20">
-              S
-            </div>
-            <span className="text-app-strong font-bold tracking-tight text-lg">Siqt</span>
-          </div>
+      <div
+        aria-hidden
+        className="pointer-events-none absolute inset-0 opacity-[0.35]"
+        style={{
+          backgroundImage:
+            'linear-gradient(rgb(255 255 255 / 0.035) 1px, transparent 1px), linear-gradient(90deg, rgb(255 255 255 / 0.035) 1px, transparent 1px)',
+          backgroundSize: '44px 44px',
+          maskImage: 'radial-gradient(ellipse 70% 55% at 50% 0%, black, transparent)',
+          WebkitMaskImage: 'radial-gradient(ellipse 70% 55% at 50% 0%, black, transparent)',
+        }}
+      />
 
-          <h1 className="text-4xl sm:text-5xl font-bold text-app-strong tracking-tight leading-[1.1] mb-5">
-            Tasks, planning, docs, and chat — <span className="text-blue-400">one place</span>.
+      <div className="relative w-full max-w-[400px]">
+        <div className="flex flex-col items-center text-center mb-7">
+          <div className="w-14 h-14 rounded-[18px] bg-gradient-to-br from-blue-400 to-blue-600 text-white text-2xl font-black flex items-center justify-center shadow-[0_8px_32px_-4px_rgb(59_130_246/0.55)] ring-1 ring-white/20 mb-5">
+            S
+          </div>
+          <h1 className="text-[26px] sm:text-[30px] font-bold text-app-strong tracking-tight leading-[1.15]">
+            Tasks, planning, docs and chat — <span className="text-blue-400">one place</span>.
           </h1>
-          {/* Deliberately plain, not marketing copy: this is a personal tool, and the previous
+          {/* Deliberately plain, not marketing copy: this is a personal tool, and an earlier
               "brings your team's work together..." blurb read as a real commercial product to
-              anyone who landed here without context. Per direct instruction — "så ikke randoms
-              tror det er noe 'ekte'." */}
-          <p className="text-neutral-400 text-base leading-relaxed mb-14 max-w-md">
-            Robins Project management tool
-          </p>
-
-          <div className="grid sm:grid-cols-2 gap-x-10 gap-y-8">
-            {FEATURES.map((f) => (
-              <div key={f.title} className="flex gap-3.5">
-                <div className="w-10 h-10 rounded-xl bg-neutral-900 border border-neutral-800 flex items-center justify-center shrink-0">
-                  <f.icon className="w-4.5 h-4.5 text-blue-400" />
-                </div>
-                <div className="min-w-0">
-                  <h3 className="text-sm font-semibold text-app-strong mb-0.5">{f.title}</h3>
-                  <p className="text-xs text-neutral-500 leading-relaxed">{f.description}</p>
-                </div>
-              </div>
-            ))}
-          </div>
+              anyone who landed here without context — "så ikke randoms tror det er noe 'ekte'." */}
+          <p className="text-neutral-500 text-sm mt-2.5">Robins Project management tool</p>
         </div>
-      </div>
 
-      {/* Auth side — the exact same functional sign-in/signup card as before (form/handlers
-          untouched), just a slightly more polished shell (rounded-xl, a touch more padding and
-          shadow) to match the marketing side's own refresh. */}
-      <div className="order-1 lg:order-2 w-full lg:w-[420px] shrink-0 flex items-center justify-center border-b lg:border-b-0 lg:border-l border-neutral-800 bg-neutral-900/20 px-4 py-12">
-        <div className="w-full max-w-sm">
-          <div className="bg-neutral-900 border border-neutral-800 rounded-xl p-6 shadow-2xl shadow-black/40">
-          <div className="flex mb-4 border border-neutral-800 rounded overflow-hidden">
-            <button
-              type="button"
-              onClick={() => {
-                setMode('signin');
-                setError(null);
-              }}
-              className={`flex-1 text-xs py-1.5 cursor-pointer transition ${
-                mode === 'signin' ? 'bg-neutral-800 text-app-strong' : 'text-neutral-400 hover:text-neutral-200'
-              }`}
-            >
-              Sign in
-            </button>
-            <button
-              type="button"
-              onClick={() => {
-                setMode('signup');
-                setError(null);
-              }}
-              className={`flex-1 text-xs py-1.5 cursor-pointer transition ${
-                mode === 'signup' ? 'bg-neutral-800 text-app-strong' : 'text-neutral-400 hover:text-neutral-200'
-              }`}
-            >
-              Create account
-            </button>
+        <div className="bg-neutral-900/90 backdrop-blur-xl border border-white/[0.06] rounded-[28px] p-5 shadow-2xl shadow-black/50">
+          {/* The same pill switch as the phone's create sheet and bottom nav: blue tint, faint glow. */}
+          <div className="relative flex rounded-full bg-neutral-800/70 p-1 mb-5">
+            {(['signin', 'signup'] as const).map((m) => (
+              <button
+                key={m}
+                type="button"
+                onClick={() => {
+                  setMode(m);
+                  setError(null);
+                }}
+                className={`relative flex-1 h-9 rounded-full text-[14px] font-semibold cursor-pointer transition-colors ${
+                  mode === m ? 'text-blue-400' : 'text-neutral-400 hover:text-neutral-200'
+                }`}
+              >
+                {mode === m && (
+                  <motion.span
+                    layoutId="loginModePill"
+                    transition={{ type: 'spring', stiffness: 500, damping: 38 }}
+                    className="absolute inset-0 rounded-full bg-blue-500/15 shadow-[0_0_12px_1px_rgb(59_130_246/0.28)]"
+                  />
+                )}
+                <span className="relative">{m === 'signin' ? 'Sign in' : 'Create account'}</span>
+              </button>
+            ))}
           </div>
 
           {/* Google is hidden inside the app, and this is a rule rather than a preference: Google
@@ -191,15 +173,15 @@ function LoginPageContent() {
               work is worse than none — someone presses it, gets a server error, and reasonably
               concludes their account is broken. That is exactly what happened to a colleague signing
               in for the first time.
-              
+
               Anyone whose account was made with Google has no password, so the note below points at
               the one route that gives them one. The web login is unchanged. */}
           {inApp ? (
-            <div className="mb-4 rounded-lg border border-neutral-800 bg-neutral-950/60 px-3 py-2.5">
-              <p className="text-[11px] text-neutral-400">
+            <div className="mb-4 rounded-2xl bg-neutral-800/50 px-4 py-3">
+              <p className="text-[13px] text-neutral-400">
                 The app signs in with email and password. Google sign-in only works in a browser.
               </p>
-              <p className="text-[11px] text-neutral-500 mt-1">
+              <p className="text-[13px] text-neutral-500 mt-1">
                 Made your account with Google? Use <span className="text-neutral-300">Forgot password</span>{' '}
                 below to set one — it works for Google accounts too.
               </p>
@@ -209,53 +191,50 @@ function LoginPageContent() {
               <button
                 type="button"
                 onClick={() => signIn('google', { redirectTo: callbackUrl })}
-                className="w-full flex items-center justify-center gap-2 bg-neutral-950 border border-neutral-700 rounded-lg px-3 py-2 text-xs text-app-strong hover:bg-neutral-800/60 transition cursor-pointer mb-4"
+                className="w-full h-12 flex items-center justify-center gap-2.5 rounded-2xl bg-neutral-800 hover:bg-neutral-700/80 text-[15px] font-semibold text-app-strong transition cursor-pointer"
               >
+                <GoogleMark />
                 Continue with Google
               </button>
 
-              <div className="flex items-center gap-2 mb-4">
+              <div className="flex items-center gap-3 my-4">
                 <div className="h-px flex-1 bg-neutral-800" />
-                <span className="text-[10px] text-neutral-500 uppercase tracking-wide">or</span>
+                <span className="text-[11px] text-neutral-500 uppercase tracking-wider">or</span>
                 <div className="h-px flex-1 bg-neutral-800" />
               </div>
             </>
           )}
 
-          <form onSubmit={handleSubmit} className="space-y-3">
+          <form onSubmit={handleSubmit} className="space-y-2.5">
             {mode === 'signup' && (
-              <input
-                type="text"
-                placeholder="Name"
-                value={name}
-                onChange={(e) => setName(e.target.value)}
-                className="w-full bg-neutral-950 border border-neutral-700 rounded-lg px-3 py-2 text-xs text-app-strong focus:outline-none focus:border-blue-500"
-              />
+              <input type="text" placeholder="Name" autoComplete="name" value={name} onChange={(e) => setName(e.target.value)} className={field} />
             )}
             <input
               type="email"
               placeholder="Email"
+              autoComplete="email"
               required
               value={email}
               onChange={(e) => setEmail(e.target.value)}
-              className="w-full bg-neutral-950 border border-neutral-700 rounded-lg px-3 py-2 text-xs text-app-strong focus:outline-none focus:border-blue-500"
+              className={field}
             />
             <input
               type="password"
               placeholder="Password"
+              autoComplete={mode === 'signup' ? 'new-password' : 'current-password'}
               required
               minLength={mode === 'signup' ? 8 : undefined}
               value={password}
               onChange={(e) => setPassword(e.target.value)}
-              className="w-full bg-neutral-950 border border-neutral-700 rounded-lg px-3 py-2 text-xs text-app-strong focus:outline-none focus:border-blue-500"
+              className={field}
             />
-            {error && <p className="text-[11px] text-red-400">{error}</p>}
+            {error && <p className="text-[13px] text-red-400 px-1">{error}</p>}
             <button
               type="submit"
               disabled={busy}
-              className="w-full bg-blue-600 hover:bg-blue-500 disabled:opacity-50 disabled:cursor-not-allowed rounded px-3 py-2 text-xs font-medium text-white transition cursor-pointer"
+              className="w-full h-12 rounded-2xl bg-blue-500 hover:bg-blue-400 active:scale-[0.99] disabled:opacity-50 disabled:cursor-not-allowed text-[15px] font-semibold text-white shadow-[0_6px_24px_-6px_rgb(59_130_246/0.7)] transition cursor-pointer !mt-4"
             >
-              {mode === 'signin' ? 'Sign in' : 'Create account'}
+              {busy ? (mode === 'signin' ? 'Signing in…' : 'Creating account…') : mode === 'signin' ? 'Sign in' : 'Create account'}
             </button>
 
             {/* Sign-in only — there's nothing to recover while creating an account. Kept inline
@@ -263,25 +242,23 @@ function LoginPageContent() {
                 is deliberately the same whether or not the address exists (see the route), so
                 there's no follow-up state worth a separate route for. */}
             {mode === 'signin' && (
-              <div className="pt-1 text-center">
+              <div className="pt-2 text-center">
                 {forgotSent ? (
-                  <p className="text-[11px] text-neutral-400">
-                    If an account uses that email, a reset link is on its way.
-                  </p>
+                  <p className="text-[13px] text-neutral-400">If an account uses that email, a reset link is on its way.</p>
                 ) : forgotOpen ? (
-                  <div className="space-y-2">
+                  <div className="space-y-2.5 text-left">
                     <input
                       type="email"
                       value={forgotEmail}
                       onChange={(e) => setForgotEmail(e.target.value)}
                       placeholder="Your email address"
-                      className="w-full bg-neutral-950 border border-neutral-700 rounded-lg px-3 py-2 text-xs text-app-strong focus:outline-none focus:border-blue-500"
+                      className={field}
                     />
-                    <div className="flex items-center gap-2">
+                    <div className="grid grid-cols-2 gap-2.5">
                       <button
                         type="button"
                         onClick={() => setForgotOpen(false)}
-                        className="flex-1 border border-neutral-700 hover:border-neutral-600 rounded px-3 py-1.5 text-[11px] text-neutral-300 cursor-pointer"
+                        className="h-11 rounded-2xl bg-neutral-800 text-[14px] font-semibold text-neutral-400 cursor-pointer"
                       >
                         Cancel
                       </button>
@@ -300,7 +277,7 @@ function LoginPageContent() {
                           // deliberately identical answer either way.
                           setForgotSent(true);
                         }}
-                        className="flex-1 bg-neutral-800 hover:bg-neutral-700 disabled:opacity-40 disabled:cursor-not-allowed rounded px-3 py-1.5 text-[11px] text-app-strong font-medium cursor-pointer"
+                        className="h-11 rounded-2xl bg-app-strong text-neutral-900 disabled:opacity-40 disabled:cursor-not-allowed text-[14px] font-semibold cursor-pointer"
                       >
                         {forgotBusy ? 'Sending…' : 'Send reset link'}
                       </button>
@@ -313,7 +290,7 @@ function LoginPageContent() {
                       setForgotEmail(email);
                       setForgotOpen(true);
                     }}
-                    className="text-[11px] text-neutral-500 hover:text-neutral-300 cursor-pointer"
+                    className="text-[13px] text-neutral-500 hover:text-neutral-300 cursor-pointer"
                   >
                     Forgot your password?
                   </button>
@@ -321,9 +298,32 @@ function LoginPageContent() {
               </div>
             )}
           </form>
-          </div>
+        </div>
+
+        {/* What's inside, as the app's own launcher tiles rather than a marketing grid. */}
+        <div className="grid grid-cols-4 gap-2 mt-7">
+          {FEATURES.map((f) => (
+            <div key={f.title} title={f.description} className="flex flex-col items-center gap-1.5">
+              <div className="w-11 h-11 rounded-2xl bg-neutral-900 border border-white/[0.06] flex items-center justify-center">
+                <f.icon className="w-[18px] h-[18px] text-blue-400" />
+              </div>
+              <span className="text-[12px] font-medium text-neutral-400">{f.title}</span>
+            </div>
+          ))}
         </div>
       </div>
     </div>
+  );
+}
+
+// Google's "G", in its own colours — the brand mark people look for on this button.
+function GoogleMark() {
+  return (
+    <svg width="18" height="18" viewBox="0 0 48 48" aria-hidden>
+      <path fill="#FFC107" d="M43.6 20.5H42V20H24v8h11.3C33.7 32.7 29.2 36 24 36c-6.6 0-12-5.4-12-12s5.4-12 12-12c3.1 0 5.8 1.2 7.9 3.1l5.7-5.7C34 6.1 29.3 4 24 4 12.9 4 4 12.9 4 24s8.9 20 20 20 20-8.9 20-20c0-1.3-.1-2.4-.4-3.5z" />
+      <path fill="#FF3D00" d="m6.3 14.7 6.6 4.8C14.7 15.1 19 12 24 12c3.1 0 5.8 1.2 7.9 3.1l5.7-5.7C34 6.1 29.3 4 24 4 16.3 4 9.7 8.3 6.3 14.7z" />
+      <path fill="#4CAF50" d="M24 44c5.2 0 9.9-2 13.4-5.2l-6.2-5.2C29.2 35.1 26.7 36 24 36c-5.2 0-9.6-3.3-11.3-7.9l-6.5 5C9.5 39.6 16.2 44 24 44z" />
+      <path fill="#1976D2" d="M43.6 20.5H42V20H24v8h11.3c-.8 2.2-2.2 4.2-4.1 5.6l6.2 5.2C37 39.2 44 34 44 24c0-1.3-.1-2.4-.4-3.5z" />
+    </svg>
   );
 }

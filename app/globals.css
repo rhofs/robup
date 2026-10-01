@@ -476,7 +476,10 @@ body {
 .siqt-hold-press {
   position: absolute;
   inset: 0;
-  background: rgb(120 120 128 / 0);
+  /* Fixed colour, faded in with opacity: animating `background` repaints every frame on the main
+     thread, while opacity and transform run on the compositor — the difference on an older phone. */
+  background: rgb(120 120 128 / 0.18);
+  opacity: 0;
   transform: scale(1);
   animation-name: siqt-hold-press;
   /* ease-out: answers at once and slows as it bottoms out, like a finger into a cushion */
@@ -485,7 +488,7 @@ body {
 }
 @keyframes siqt-hold-press {
   to {
-    background: rgb(120 120 128 / 0.18);
+    opacity: 1;
     transform: scale(0.94);
   }
 }
@@ -498,7 +501,7 @@ body {
   position: absolute;
   top: 0;
   bottom: 0;
-  background: rgb(59 130 246 / 0.24);
+  background: rgb(96 165 250 / 0.36);
   transition:
     left 160ms cubic-bezier(0.22, 1, 0.36, 1),
     width 160ms cubic-bezier(0.22, 1, 0.36, 1);
@@ -511,12 +514,15 @@ body {
     opacity: 0;
   }
 }
+/* The pulse is opacity (1 → 0.62, i.e. the old 0.36 → ~0.22 tint), not background: a background
+   animation repaints on the main thread every frame for as long as the finger is down. Starts at 1 so
+   it continues seamlessly from the entry animations. */
 @keyframes siqt-band-pulse {
   from {
-    background: rgb(59 130 246 / 0.22);
+    opacity: 1;
   }
   to {
-    background: rgb(96 165 250 / 0.36);
+    opacity: 0.62;
   }
 }
 /* A faint blue glow just past the edges — an outer shadow only, so it never washes out the days. */
@@ -546,15 +552,15 @@ body {
 }
 @keyframes siqt-band-release {
   0% {
-    background: rgb(96 165 250 / 0.36);
+    opacity: 1;
     transform: scale(1);
   }
   35% {
-    background: rgb(147 197 253 / 0.55);
+    opacity: 1;
     transform: scale(1.04);
   }
   100% {
-    background: rgb(147 197 253 / 0);
+    opacity: 0;
     transform: scale(1.02);
   }
 }
@@ -603,7 +609,6 @@ body {
      frame, and a dozen bursts at once stuttered. */
   box-shadow: 0 0 6px 1px var(--c);
   opacity: 0;
-  will-change: transform, opacity;
   animation-name: siqt-dust;
   animation-timing-function: cubic-bezier(0.12, 0.9, 0.3, 1);
   animation-fill-mode: forwards;
@@ -636,7 +641,6 @@ body {
   /* No drop-shadow filter: it is by far the most expensive thing here on iOS. The white core of the
      gradient carries the sparkle on its own. */
   opacity: 0;
-  will-change: transform, opacity;
   animation-name: siqt-star;
   animation-timing-function: cubic-bezier(0.16, 1, 0.3, 1);
   animation-fill-mode: forwards;

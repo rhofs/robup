@@ -21,6 +21,7 @@ import WeekRow, { BAR_GAP, BAR_H, DAY_NUM_H, GUTTER_WIDTH } from './WeekRow';
 import { contextMenuPosition } from '../../lib/contextMenuPosition';
 import DayTimeline from './DayTimeline';
 import TeamStrip from './TeamStrip';
+import { PuffHost } from './PuffBurst';
 
 type Granularity = 'month' | 'week' | 'day';
 
@@ -590,6 +591,8 @@ export default function CalendarView({ tasks, events, statuses, workspaces, show
 
   return (
     <div className="flex flex-col h-full">
+      {/* The Planner's long-press dust, drawn once for every row (see PuffHost). */}
+      <PuffHost />
       {/* Stacks into two rows on mobile (date-nav above, actions below) instead of squeezing both
           onto one line — at phone width there isn't enough room for justify-between to put real
           air between "New task" and the month label without shrinking anything. */}

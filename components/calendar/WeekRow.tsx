@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useRef, useState } from 'react';
-import PuffBurst, { makePuffParticles, type PuffParticle } from './PuffBurst';
+import { addPuff, makePuffParticles, pushCalmPuffs } from './PuffBurst';
 import { useTaskAssignDrop, useEventAssignDrop, assignDropClass } from './useAssignDrop';
 import { MiniAvatar } from '../AssigneePicker';
 import { Plus, Pin, CalendarClock } from 'lucide-react';
@@ -174,8 +174,6 @@ export default function WeekRow({
   const [pressedKey, setPressedKey] = useState<string | null>(null);
   // Where the finger is, for the puff cloud to come out from under it when the hold takes.
   const fingerRef = useRef({ x: 0, y: 0 });
-  const [puffs, setPuffs] = useState<{ id: number; x: number; y: number; particles: PuffParticle[]; calm?: boolean; pushed?: boolean }[]>([]);
-  const puffIdRef = useRef(0);
   const releaseTimerRef = useRef<number | null>(null);
   // A small puff from the middle of every selected day, staggered along the range in date order.
   // Returns how many days it covered. Lighter for longer ranges: a puff per day is the effect, and
@@ -184,7 +182,10 @@ export default function WeekRow({
     const from = new Date(Math.min(start.getTime(), end.getTime()));
     const to = new Date(Math.max(start.getTime(), end.getTime()));
     const count = Math.round((to.getTime() - from.getTime()) / 86_400_000) + 1;
-    const amount = count <= 3 ? 0.35 : count <= 7 ? 0.25 : 0.18;
+    // Capped across the whole release, not per day: a month-long range at the per-day rate is
+    // hundreds of animated elements at once, which is where an older phone starts dropping frames.
+    const RELEASE_DUST_BUDGET = 160;
+    const amount = Math.min(count <= 3 ? 0.35 : count <= 7 ? 0.25 : 0.18, RELEASE_DUST_BUDGET / (70 * count));
     let i = 0;
     for (let d = new Date(from); d <= to && i < 42; d.setDate(d.getDate() + 1), i++) {
       const cell = document.querySelector(`[data-day-key="${dayKey(d)}"]`);
@@ -192,7 +193,7 @@ export default function WeekRow({
       const r = cell.getBoundingClientRect();
       const at = { x: r.left + r.width / 2, y: r.top + r.height / 2 };
       window.setTimeout(() => {
-        setPuffs((ps) => [...ps, { id: ++puffIdRef.current, x: at.x, y: at.y, particles: makePuffParticles(amount, true), calm: true }]);
+        addPuff({ x: at.x, y: at.y, particles: makePuffParticles(amount, true), calm: true });
       }, Math.min(i, 8) * RELEASE_STAGGER_MS);
     }
     return count;
@@ -506,7 +507,7 @@ export default function WeekRow({
                             hapticTapStrong();
                             // The pop: a pastel cloud from under the thumb, out past the day.
                             const at = fingerRef.current;
-                            setPuffs((ps) => [...ps, { id: ++puffIdRef.current, x: at.x, y: at.y, particles: makePuffParticles() }]);
+                            addPuff({ x: at.x, y: at.y, particles: makePuffParticles() });
                           }, LONG_PRESS_MS);
                         }
                       : undefined
@@ -571,7 +572,7 @@ export default function WeekRow({
                           releaseTimerRef.current = window.setTimeout(() => {
                             releaseTimerRef.current = null;
                             // The sheet coming up nudges the release dust out of its way.
-                            setPuffs((ps) => ps.map((p) => (p.calm ? { ...p, pushed: true } : p)));
+                            pushCalmPuffs();
                             onPendingRangeChange(null);
                             onQuickAddDay(start, end);
                           }, RELEASE_MS + Math.min(days - 1, 8) * RELEASE_STAGGER_MS);
@@ -708,9 +709,6 @@ export default function WeekRow({
               />
             );
           })()}
-        {puffs.map((p) => (
-          <PuffBurst key={p.id} x={p.x} y={p.y} particles={p.particles} calm={p.calm} pushed={p.pushed} onDone={() => setPuffs((ps) => ps.filter((q) => q.id !== p.id))} />
-        ))}
 
         <div className="absolute inset-x-0 pointer-events-none" style={{ top: DAY_NUM_H, bottom: 0 }}>
           {visibleSegments.map((seg) => {
