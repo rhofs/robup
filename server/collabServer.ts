@@ -3,7 +3,7 @@ import * as Y from 'yjs';
 import { PrismaClient } from '@prisma/client';
 import { getToken } from 'next-auth/jwt';
 import { yXmlFragmentToProsemirrorJSON, prosemirrorJSONToYXmlFragment } from '@tiptap/y-tiptap';
-import { collabSchema } from '../lib/collab/schema';
+import { collabSchema, docSchemaToken } from '../lib/collab/schema';
 import { legacyContentToDocJSON } from '../lib/collab/legacyContentToDocJSON';
 import { docJSONToPlainText } from '../lib/collab/docJSONToPlainText';
 import { isPresenceDocumentName, workspaceIdFromPresenceDocumentName } from '../lib/collab/presenceRoom';
@@ -93,6 +93,13 @@ const server = new Server({
     // connect→auth-fail→reconnect loop (HocuspocusProvider auto-reconnects by default) the flicker
     // report showed. Fixed by detecting which cookie is actually present on this specific request,
     // rather than assuming one environment.
+    // An editor on older code would delete blocks it does not know from the shared doc (see
+    // DOC_SCHEMA_VERSION). Only real Docs: presence and chat rooms carry no ProseMirror content.
+    if (!isPresenceDocumentName(documentName) && !isChatDocumentName(documentName) && providedToken !== docSchemaToken()) {
+      // `reason` is what Hocuspocus passes on to the client (onAuthenticationFailed); the message is not.
+      throw Object.assign(new Error('Outdated client: reload to edit this doc'), { reason: 'outdated-client' });
+    }
+
     const cookieHeader = new Headers(requestHeaders).get('cookie') ?? '';
     const secureCookie = cookieHeader.includes('__Secure-authjs.session-token=');
     const token = await getToken({ req: { headers: requestHeaders }, secret: process.env.AUTH_SECRET, secureCookie });

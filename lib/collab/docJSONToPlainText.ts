@@ -3,7 +3,7 @@ import { buildMentionToken, type MentionKind } from '../mentions';
 type ProseMirrorJSONNode = {
   type: string;
   text?: string;
-  attrs?: { kind?: MentionKind; id?: string; label?: string; alt?: string; src?: string };
+  attrs?: { kind?: MentionKind; id?: string; label?: string; alt?: string; src?: string; checked?: boolean };
   content?: ProseMirrorJSONNode[];
 };
 
@@ -34,6 +34,23 @@ function blockToLines(node: ProseMirrorJSONNode): string[] {
   // silently contribute nothing at all rather than erroring, so give it an explicit placeholder.
   if (node.type === 'subpagesIndex') {
     return ['[Subpages]'];
+  }
+  if (node.type === 'taskListEmbed') {
+    return ['[Tasks]'];
+  }
+  if (node.type === 'horizontalRule') {
+    return ['---'];
+  }
+  if (node.type === 'blockquote') {
+    return (node.content ?? []).flatMap(blockToLines).map((line) => `> ${line}`);
+  }
+  // Checklist: a box per item, ticked or not, the way plain-text to-do lists are usually written.
+  if (node.type === 'taskList') {
+    return (node.content ?? []).flatMap((item) => {
+      const marker = item.attrs?.checked ? '[x] ' : '[ ] ';
+      const lines = (item.content ?? []).flatMap(blockToLines);
+      return lines.length ? lines.map((line, i) => (i === 0 ? `${marker}${line}` : line)) : [marker.trimEnd()];
+    });
   }
   if (node.type === 'image') {
     return [`[Image${node.attrs?.alt ? `: ${node.attrs.alt}` : ''}]`];

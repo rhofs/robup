@@ -17,10 +17,26 @@ import { TextStyle, Color, FontFamily, FontSize } from '@tiptap/extension-text-s
 import Highlight from '@tiptap/extension-highlight';
 import Image from '@tiptap/extension-image';
 import CodeBlock from '@tiptap/extension-code-block';
+import Blockquote from '@tiptap/extension-blockquote';
+import HorizontalRule from '@tiptap/extension-horizontal-rule';
+import { TaskList, TaskItem } from '@tiptap/extension-list';
 import { MentionNode } from './mentionNode';
 import { SubpagesIndexNode } from './subpagesIndexNode';
 import { CommentMark } from './commentMark';
 import { FileAttachmentNode } from './fileAttachmentNode';
+import { TaskListEmbedNode } from './taskListEmbedNode';
+
+// Bumped whenever a node or mark is added to the schema below. An editor that does not know a node
+// does not just fail to show it: y-prosemirror DELETES any element it cannot build from the shared
+// document (y-tiptap's createNodeFromYElement, the catch branch) — so one tab left open on old code
+// would silently strip every new block from the doc for everyone. The collab server refuses doc
+// connections that do not present the current version (server/collabServer.ts, onAuthenticate), and
+// CollabDocEditor sends it as its token and asks for a reload when it is turned away. Tabs from before
+// this existed send no token at all, so they are turned away too.
+//   1 — implicit, everything before checklists
+//   2 — Heading 3, quote, divider, checklist (taskList/taskItem), live task list (taskListEmbed)
+export const DOC_SCHEMA_VERSION = 2;
+export const docSchemaToken = () => `doc-schema:${DOC_SCHEMA_VERSION}`;
 
 // Paragraphs + mentions + bold/italic/underline/strike/headings(1-2)/bullet+ordered lists/text
 // align/links/font family+size/text+highlight color. Shared by the server (schema/migration) and
@@ -37,7 +53,7 @@ export const collabExtensions = [
   Italic,
   Underline,
   Strike,
-  Heading.configure({ levels: [1, 2] }),
+  Heading.configure({ levels: [1, 2, 3] }),
   BulletList,
   OrderedList,
   ListItem,
@@ -51,6 +67,11 @@ export const collabExtensions = [
   Highlight.configure({ multicolor: true }),
   Image,
   CodeBlock,
+  Blockquote,
+  HorizontalRule,
+  TaskList,
+  TaskItem.configure({ nested: true }),
+  TaskListEmbedNode,
   MentionNode,
   SubpagesIndexNode,
   CommentMark,

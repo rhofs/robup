@@ -10706,3 +10706,57 @@ which need root (`playwright install-deps`). The temp download was deleted. Veri
 and lint. The remaining lint error at `app/login/page.tsx:39` (setState in effect) was there before.
 
 **Deployed 2026-10-01 as `a66412b`** (tag `deploy/2026-10-01_0906`). /api/version reports the commit. The login body renders client-side (Suspense around useSearchParams), so its HTML could not confirm the new markup.
+
+### 2026-10-01 (continued) — ClickUp-style "+" and block menu in Docs: checklist, live task List, H3, quote, divider
+
+- **Asked:** "ClickUp has this function in the Docs, where you can press +, and even add a 'Check
+  list' with tasks even, and other stuff. Can we fix something similar?" The user sent screenshots
+  of ClickUp's margin "+" and its two-column Suggestions/Text menu.
+- **"+" in the margin** (`components/collab/DocBlockGutter.tsx`): appears beside the top-level block
+  under the mouse, level with its first line. Clicking it opens the "/" menu:
+  - on an empty line it types "/" there;
+  - otherwise it inserts a new paragraph under the block first, so nothing written is touched.
+  It is fixed-position in a portal to <body> (the doc pages' scroll containers would clip anything in
+  the margin) and driven by one document `pointermove` listener; it hides on scroll. Mouse only —
+  phones keep typing "/". Hidden when read-only.
+- **Menu** (`SlashCommandList.tsx`) is laid out like ClickUp's: two columns, icon tiles, headed
+  sections:
+  - Suggestions: Checklist, Tasks from a List, New Subpage, Subpages, Divider, Quote.
+  - Text: Normal text, H1–H3, Bullet, Numbered, Code.
+  - Media: Image, File.
+  While searching it shows a flat "Results" list, and items match on extra `keywords` ("todo" finds
+  Checklist). Arrows: left/right ±1, up/down ±2.
+- **New blocks:**
+  - Checklist: `TaskList`/`TaskItem` (nested) from `@tiptap/extension-list`, with a custom
+    blue-tick checkbox; ticked items are struck through.
+  - `@tiptap/extension-blockquote` and `@tiptap/extension-horizontal-rule` were added (pinned at
+    3.29.2, matching core).
+  - Heading levels are now [1,2,3] in both the client and the shared schema.
+- **"Tasks from a List"** — new atom node `taskListEmbed` {listId} (`lib/collab/taskListEmbedNode.ts`;
+  view `TaskListEmbedBlock.tsx`):
+  - A live view of one List's top-level, unarchived tasks in List order, from the store. It shows
+    the status (a dropdown of the Space's statuses → `optimisticMoveTask`), assignees and due date.
+  - The title opens the task via the mention jump (`onJump('task', id)`).
+  - "Add task" → `optimisticCreateTask` into that List.
+  - Inserted with listId null, it opens a searchable List picker; there is also a "Change" button.
+  - A List that is gone or inaccessible shows a note instead.
+  - It does NOT show subtasks, custom fields or grouping by status, and has no column config —
+    simpler than ClickUp's table.
+- **Exports:** plain text, PDF and Google Docs now handle taskList ([x]/[ ] or ☑/☐), blockquote,
+  horizontalRule, taskListEmbed (placeholder — the server-side export has no store) and HEADING_3.
+- **Important — doc schema version gate.** y-prosemirror DELETES from the shared Y doc any element
+  the local schema cannot build (`@tiptap/y-tiptap` `createNodeFromYElement`, catch branch →
+  `el._item.delete`). So one tab still running old code would strip every new block from the doc
+  for everyone. Fix:
+  - `DOC_SCHEMA_VERSION = 2` in `lib/collab/schema.ts`. `CollabDocEditor` sends
+    `token: doc-schema:2`.
+  - `server/collabServer.ts` onAuthenticate rejects doc connections (not presence/chat) without the
+    current token. It throws with `reason: 'outdated-client'`, because Hocuspocus only forwards
+    `error.reason`, not the message.
+  - The client shows a "Siqt has been updated — Reload" banner on that reason.
+  - Tabs from before this send no token, so they are rejected too and see the old amber "Not
+    connected" warning. Anything typed in such a tab after the deploy is not saved until it reloads.
+  - **Bump DOC_SCHEMA_VERSION whenever a node or mark is added.**
+- Verified: tsc; a tsx round-trip of every new node through `collabSchema` +
+  `prosemirrorJSONToYDoc`/`yDocToProsemirrorJSON`; lint (only pre-existing errors remain). **Not seen
+  rendered in a browser** (no browser on this host).

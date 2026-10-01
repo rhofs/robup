@@ -3,7 +3,7 @@ type PMNode = {
   type: string;
   text?: string;
   marks?: Mark[];
-  attrs?: { level?: number; kind?: string; id?: string; label?: string; name?: string; textAlign?: string; src?: string; alt?: string };
+  attrs?: { level?: number; kind?: string; id?: string; label?: string; name?: string; textAlign?: string; src?: string; alt?: string; checked?: boolean };
   content?: PMNode[];
 };
 
@@ -95,6 +95,28 @@ function flattenLines(node: PMNode, out: Line[]) {
     // Atom block, no static representation of a live table — an honest placeholder line rather
     // than silently contributing nothing (the generic child-recursing fallback below would).
     out.push({ runs: [{ text: '[Subpages]', bold: true, italic: false, underline: false, strike: false }] });
+    return;
+  }
+  if (node.type === 'taskListEmbed') {
+    out.push({ runs: [{ text: '[Tasks from a List]', bold: true, italic: false, underline: false, strike: false }] });
+    return;
+  }
+  if (node.type === 'horizontalRule') {
+    out.push({ runs: [{ text: '────────────', bold: false, italic: false, underline: false, strike: false }] });
+    return;
+  }
+  // Checklist: a ballot box in front of each item (Google Docs' API has no checkbox bullet preset).
+  if (node.type === 'taskList') {
+    (node.content ?? []).forEach((item) => {
+      (item.content ?? []).forEach((block, i) => {
+        if (i === 0 && (block.type === 'paragraph' || block.type === 'heading')) {
+          const box = { text: item.attrs?.checked ? '☑ ' : '☐ ', bold: false, italic: false, underline: false, strike: false };
+          out.push({ runs: [box, ...inlineRuns(block.content)] });
+        } else {
+          flattenLines(block, out);
+        }
+      });
+    });
     return;
   }
   if (node.type === 'codeBlock') {
@@ -192,7 +214,7 @@ export function docJSONToGoogleRequests(json: { content?: PMNode[] }) {
       const paragraphStyle: Record<string, any> = {};
       const fields: string[] = [];
       if (line.headingLevel) {
-        paragraphStyle.namedStyleType = line.headingLevel === 1 ? 'HEADING_1' : 'HEADING_2';
+        paragraphStyle.namedStyleType = `HEADING_${Math.min(3, line.headingLevel)}`;
         fields.push('namedStyleType');
       }
       if (line.textAlign && ALIGN_TO_NAMED[line.textAlign]) {

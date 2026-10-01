@@ -3,7 +3,7 @@ type PMNode = {
   type: string;
   text?: string;
   marks?: Mark[];
-  attrs?: { level?: number; kind?: string; id?: string; label?: string; name?: string; textAlign?: string; alt?: string; src?: string };
+  attrs?: { level?: number; kind?: string; id?: string; label?: string; name?: string; textAlign?: string; alt?: string; src?: string; checked?: boolean };
   content?: PMNode[];
 };
 
@@ -170,6 +170,41 @@ function renderBlock(doc: PDFKit.PDFDocument, node: PMNode, depth: number, image
     // node has no `content`).
     writeLine(doc, undefined, { size: BODY_SIZE, bold: true, indent: depth * LIST_INDENT, marker: '[Subpages]' });
     doc.moveDown(0.4);
+    return;
+  }
+  if (node.type === 'taskListEmbed') {
+    // A live List view has nothing static to print; the export runs server-side without the store.
+    writeLine(doc, undefined, { size: BODY_SIZE, bold: true, indent: depth * LIST_INDENT, marker: '[Tasks from a List]' });
+    doc.moveDown(0.4);
+    return;
+  }
+  if (node.type === 'horizontalRule') {
+    const left = doc.page.margins.left + depth * LIST_INDENT;
+    const right = doc.page.width - doc.page.margins.right;
+    doc.moveDown(0.3);
+    doc.moveTo(left, doc.y).lineTo(right, doc.y).lineWidth(0.5).strokeColor('#cccccc').stroke();
+    doc.strokeColor('black');
+    doc.moveDown(0.6);
+    return;
+  }
+  if (node.type === 'blockquote') {
+    (node.content ?? []).forEach((child) => renderBlock(doc, child, depth + 1, images));
+    return;
+  }
+  // Checklist: "[x]" / "[ ]" as the marker — Helvetica has no ballot-box glyphs.
+  if (node.type === 'taskList') {
+    (node.content ?? []).forEach((item) => {
+      const marker = item.attrs?.checked ? '[x] ' : '[ ] ';
+      (item.content ?? []).forEach((block, i) => {
+        if (i === 0 && (block.type === 'paragraph' || block.type === 'heading')) {
+          writeLine(doc, block.content, { size: BODY_SIZE, bold: false, indent: (depth + 1) * LIST_INDENT, marker });
+          doc.moveDown(0.2);
+        } else {
+          renderBlock(doc, block, depth + 1, images);
+        }
+      });
+    });
+    doc.moveDown(0.2);
     return;
   }
   if (node.type === 'codeBlock') {

@@ -23,6 +23,9 @@ import { TextStyle, Color, FontFamily, FontSize } from '@tiptap/extension-text-s
 import Highlight from '@tiptap/extension-highlight';
 import Image from '@tiptap/extension-image';
 import CodeBlock from '@tiptap/extension-code-block';
+import Blockquote from '@tiptap/extension-blockquote';
+import HorizontalRule from '@tiptap/extension-horizontal-rule';
+import { TaskList, TaskItem } from '@tiptap/extension-list';
 import Collaboration from '@tiptap/extension-collaboration';
 import CollaborationCaret from '@tiptap/extension-collaboration-caret';
 import Placeholder from '@tiptap/extension-placeholder';
@@ -32,6 +35,9 @@ import { ClientSubpagesIndexNode } from './subpagesIndexNodeView';
 import { ClientCommentMark } from './commentMarkView';
 import { ClientFileAttachmentNode } from './fileAttachmentView';
 import { SlashCommand } from './slashCommandExtension';
+import { ClientTaskListEmbedNode } from './taskListEmbedView';
+import DocBlockGutter from './DocBlockGutter';
+import { docSchemaToken } from '../../lib/collab/schema';
 import { GapCursor } from './gapCursorExtension';
 import PresenceBar from './PresenceBar';
 import DocFormatPanel from './DocFormatPanel';
@@ -126,13 +132,22 @@ export default function CollabDocEditor({
   // the normal brief state on first load) drives a visible warning below rather than losing
   // someone's work with zero indication anything was wrong.
   const [wsStatus, setWsStatus] = useState<'connecting' | 'connected' | 'disconnected'>('connecting');
+  // Turned away by the collab server for running older code than it (see DOC_SCHEMA_VERSION): this
+  // tab could delete blocks it does not know, so it is not let in until it reloads.
+  const [outdated, setOutdated] = useState(false);
+  const [editorBox, setEditorBox] = useState<HTMLDivElement | null>(null);
 
   useEffect(() => {
     setWsStatus('connecting');
+    setOutdated(false);
     const p = new HocuspocusProvider({
       url: collabWsUrl(),
       name: docId,
+      token: docSchemaToken(),
       onStatus: ({ status }) => setWsStatus(status),
+      onAuthenticationFailed: ({ reason }) => {
+        if (reason === 'outdated-client') setOutdated(true);
+      },
     });
     setProvider(p);
     return () => {
@@ -149,7 +164,7 @@ export default function CollabDocEditor({
             Text,
             Bold,
             Italic,
-            ClientHeading.configure({ levels: [1, 2] }),
+            ClientHeading.configure({ levels: [1, 2, 3] }),
             BulletList,
             OrderedList,
             ListItem,
@@ -165,6 +180,11 @@ export default function CollabDocEditor({
             Highlight.configure({ multicolor: true }),
             Image,
             CodeBlock,
+            Blockquote,
+            HorizontalRule,
+            TaskList,
+            TaskItem.configure({ nested: true }),
+            ClientTaskListEmbedNode.configure({ onOpenTask: (id: string) => onJump('task', id) }),
             GapCursor,
             ClientMentionNode.configure({ onJump }),
             ClientFileAttachmentNode,
@@ -357,7 +377,14 @@ export default function CollabDocEditor({
   return (
     <div className={`flex items-start gap-3 ${className ?? ''}`}>
       <div className="flex-1 min-w-0">
-        {wsStatus === 'disconnected' && (
+        {outdated ? (
+          <div className="mb-2 px-3 py-2 rounded-xl border border-blue-500/30 bg-blue-500/10 text-blue-200 text-[12px] flex items-center gap-2">
+            <span className="flex-1">Siqt has been updated. Reload to keep editing this doc.</span>
+            <button onClick={() => window.location.reload()} className="shrink-0 px-2.5 py-1 rounded-lg bg-blue-500 text-white text-[12px] font-semibold cursor-pointer">
+              Reload
+            </button>
+          </div>
+        ) : wsStatus === 'disconnected' && (
           <div className="mb-2 px-2.5 py-1.5 rounded border border-amber-500/30 bg-amber-500/10 text-amber-300 text-[11px] flex items-center gap-1.5">
             <span className="w-1.5 h-1.5 rounded-full bg-amber-400 shrink-0" />
             Not connected — changes here aren&apos;t being saved right now. Copy your text somewhere safe before leaving this page.
@@ -496,9 +523,10 @@ export default function CollabDocEditor({
             )}
           </BubbleMenu>
         )}
-        <div className="collab-doc-editor mt-1.5" onClick={openLinkOnClick}>
+        <div ref={setEditorBox} className="collab-doc-editor mt-1.5" onClick={openLinkOnClick}>
           <EditorContent editor={editor} />
         </div>
+        {editor && !readOnly && <DocBlockGutter editor={editor} container={editorBox} />}
       </div>
       {editor && !readOnly && (
         <DocFormatPanel
