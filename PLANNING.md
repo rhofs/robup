@@ -10705,4 +10705,4 @@ Google rule and forgot-password flow are unchanged.
 which need root (`playwright install-deps`). The temp download was deleted. Verified only with tsc
 and lint. The remaining lint error at `app/login/page.tsx:39` (setState in effect) was there before.
 
-**Deployed 2026-10-01 as `a66412b`** (tag `deploy/2026-10-01_0906`). /login served the new page (checked by fetching its HTML).
+**Deployed 2026-10-01 as `a66412b`** (tag `deploy/2026-10-01_0906`). /api/version reports the commit. The login body renders client-side (Suspense around useSearchParams), so its HTML could not confirm the new markup.
