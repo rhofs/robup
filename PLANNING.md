@@ -10760,3 +10760,18 @@ and lint. The remaining lint error at `app/login/page.tsx:39` (setState in effec
 - Verified: tsc; a tsx round-trip of every new node through `collabSchema` +
   `prosemirrorJSONToYDoc`/`yDocToProsemirrorJSON`; lint (only pre-existing errors remain). **Not seen
   rendered in a browser** (no browser on this host).
+
+**Deployed 2026-10-01 as `7f80967`** (tag `deploy/2026-10-01_1316`).
+- The gate was checked against a local collab server (`COLLAB_PORT=31234 AUTH_SECRET=x npx tsx
+  server/collabServer.ts`): no token → `outdated-client`; `doc-schema:2` → passes the gate and fails
+  later on "no valid session", as expected.
+- The production console showed the collab sidecar starting normally.
+- Probing production from this host did NOT work — neither a Node WebSocket nor a curl HTTP/1.1
+  upgrade, whether via siqt.no/collab or the origin 213.170.135.134:3000/collab. There was no
+  response and no `[onAuthenticate]` line in the console, so the requests never reached Hocuspocus.
+  Cause unknown; the browser path is the one that matters, and it has not been re-checked by me.
+- **How to read the production console** (new; useful later): GET
+  `/api/client/servers/$PTERO_SERVER/websocket` with the PTERO_KEY, then open `data.socket` with an
+  `Origin: $PTERO_URL` header. Send `{"event":"auth","args":[token]}`, then on "auth success" send
+  `{"event":"send logs","args":[null]}`, and collect the "console output" events. Node 20 needs
+  `--experimental-websocket`.
