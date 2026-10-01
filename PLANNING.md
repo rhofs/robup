@@ -10904,3 +10904,5 @@ and lint. The remaining lint error at `app/login/page.tsx:39` (setState in effec
   - reads "Empty space" / "Empty folder" counting docs, and excludes doc-owned Lists via
     `getListsIn`.
 - Prettier reformatted ContextSpaceList (the large diff is mostly that). Not seen on a device.
+
+**Deployed 2026-10-01 as `f7d0185`** (tag `deploy/2026-10-01_1501`).
