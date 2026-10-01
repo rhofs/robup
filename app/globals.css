@@ -371,9 +371,58 @@ body {
 .collab-doc-editor .ProseMirror ul[data-type='taskList'] input[type='checkbox']:checked::after {
   transform: translateY(-0.05em) rotate(-45deg) scale(1);
 }
+/* The strike-through is always there but transparent until the item is ticked, so the line fades in
+   with the dimming instead of snapping on — for whoever ticked it and for everyone watching live. */
+.collab-doc-editor .ProseMirror ul[data-type='taskList'] li > div {
+  text-decoration: line-through;
+  text-decoration-color: transparent;
+  text-decoration-thickness: 1.5px;
+  transition:
+    color 320ms ease,
+    text-decoration-color 320ms ease;
+}
 .collab-doc-editor .ProseMirror ul[data-type='taskList'] li[data-checked='true'] > div {
   color: var(--color-neutral-500);
-  text-decoration: line-through;
+  text-decoration-color: var(--color-neutral-500);
+}
+/* The tick itself, for the person who made it (celebrateCheck adds the class): the box pops, and the
+   item takes a short step to the right and settles back as it dims — on its way out, but staying. */
+.collab-doc-editor .ProseMirror li.siqt-just-checked > label input[type='checkbox'] {
+  animation: siqt-check-pop 380ms cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+.collab-doc-editor .ProseMirror li.siqt-just-checked > div {
+  animation: siqt-check-out 650ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+@keyframes siqt-check-pop {
+  0% {
+    transform: scale(0.7);
+  }
+  55% {
+    transform: scale(1.22);
+  }
+  100% {
+    transform: scale(1);
+  }
+}
+@keyframes siqt-check-out {
+  0% {
+    transform: translateX(0);
+    opacity: 1;
+  }
+  35% {
+    transform: translateX(8px);
+    opacity: 0.55;
+  }
+  100% {
+    transform: translateX(0);
+    opacity: 1;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .collab-doc-editor .ProseMirror li.siqt-just-checked > div,
+  .collab-doc-editor .ProseMirror li.siqt-just-checked > label input[type='checkbox'] {
+    animation: none;
+  }
 }
 
 .collab-doc-editor .doc-comment-mark {

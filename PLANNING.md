@@ -10775,3 +10775,27 @@ and lint. The remaining lint error at `app/login/page.tsx:39` (setState in effec
   `Origin: $PTERO_URL` header. Send `{"event":"auth","args":[token]}`, then on "auth success" send
   `{"event":"send logs","args":[null]}`, and collect the "console output" events. Node 20 needs
   `--experimental-websocket`.
+
+### 2026-10-01 (continued) — ticking a doc checklist item: dust, pop, and a "going out" nudge
+
+- **Asked:** "kan vi også fikse at det kommer litt partikler osv når vi checker tasks? Så går de
+  partiklene litt igjen? og en passende animasjon for at tasken går ut typ?" The app has no "complete
+  task" concept (statuses are free-form per Space, with no closed flag), so "checking" is the doc
+  checklist shipped in the previous round. Applied there.
+- `components/collab/celebrateCheck.ts`, called from a `change` listener on CollabDocEditor's
+  editor box (TaskItem's own node view fires only a plain change). When a box is ticked by this
+  person in an editable doc:
+  - a calm star-dust burst (`makePuffParticles(0.3, true)`, the lingering kind) from the box;
+  - `hapticTap()`;
+  - the class `siqt-just-checked` on the `li` for 800 ms, so the box pops (scale 0.7 → 1.22 → 1) and
+    the text steps 8 px right and back while dimming.
+  Unticking has no effect.
+- The strike-through is now always present but transparent, and fades in with the dimming via
+  `text-decoration-color`. Collaborators therefore also see a soft transition, not a snap; the dust
+  and nudge are only for the person who ticked.
+- **Decided: ticked items stay in the doc.** "Går ut" was read as struck out and dimmed, not
+  removed, because a checklist is the doc's own content.
+- `<PuffHost />` moved from CalendarView to the app root (`app/page.tsx`, inside `.siqt-app-shell`)
+  so the Planner, docs and the wiki share one host.
+- Not done: the "Tasks from a List" block has no such effect, since a status change there has no
+  "done" meaning to celebrate. Not seen in a browser.

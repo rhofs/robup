@@ -37,6 +37,7 @@ import { ClientFileAttachmentNode } from './fileAttachmentView';
 import { SlashCommand } from './slashCommandExtension';
 import { ClientTaskListEmbedNode } from './taskListEmbedView';
 import DocBlockGutter from './DocBlockGutter';
+import { celebrateCheck } from './celebrateCheck';
 import { docSchemaToken } from '../../lib/collab/schema';
 import { GapCursor } from './gapCursorExtension';
 import PresenceBar from './PresenceBar';
@@ -256,6 +257,21 @@ export default function CollabDocEditor({
     e.stopPropagation();
     window.open(href, '_blank', 'noopener,noreferrer');
   };
+
+  // A checklist item ticked by this person gets its dust and nudge (celebrateCheck). Listened for on
+  // the editor's box, because the checkbox belongs to Tiptap's own TaskItem view, which fires a plain
+  // `change` and nothing else. Unticking gets no fanfare.
+  useEffect(() => {
+    if (!editorBox) return;
+    const onChange = (e: Event) => {
+      const box = e.target;
+      if (!(box instanceof HTMLInputElement) || box.type !== 'checkbox' || !box.checked) return;
+      const item = box.closest('li[data-checked]');
+      if (item instanceof HTMLElement && editor?.isEditable) celebrateCheck(box, item);
+    };
+    editorBox.addEventListener('change', onChange);
+    return () => editorBox.removeEventListener('change', onChange);
+  }, [editorBox, editor]);
 
   // useEditor only reads `editable` when it builds the editor; switching the wiki between reading and
   // editing must not rebuild it (that would reconnect and flash), so the flag is applied here.

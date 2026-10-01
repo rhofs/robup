@@ -148,6 +148,7 @@ import InAppBanner from '../components/InAppBanner';
 import { pickableMembers, taskAudience, taskPickableMembers, workspaceIdForList, workspaceIdForSpace } from '../lib/workspaceMembers';
 import AssigneePicker, { PersonPill } from '../components/AssigneePicker';
 import { suggestTaskAssignees } from '../lib/assigneeSuggestions';
+import { PuffHost } from '../components/calendar/PuffBurst';
 
 // Client-only: HocuspocusProvider needs `window.location` and a real WebSocket, neither available
 // during SSR — a live collaborative editor has no reason to render server-side anyway.
@@ -5201,6 +5202,8 @@ function PageContent() {
         visible viewport and updates as the browser chrome shows/hides — the standard fix for
         exactly this class of "have to scroll to see the bottom bar" mobile-web bug. */}
     <div className="siqt-app-shell flex flex-col h-dvh bg-neutral-950 text-neutral-100 font-sans overflow-hidden select-none">
+      {/* Star dust, drawn once for the whole app: the Planner's long-press and a doc checklist's tick. */}
+      <PuffHost />
       {/* ================= TOP BAR — workspace + search, so the icon rail/sidebar below don't
           have to carry that weight themselves (previously both lived stacked at the very top
           of the sidebar, which read as cramped). ================= */}

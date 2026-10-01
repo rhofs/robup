@@ -177,7 +177,7 @@ function PuffBurst({
 }
 
 // The bursts on screen live here, outside React's tree of the calendar, and are drawn by one
-// <PuffHost /> (mounted once by CalendarView). They used to be state in WeekRow, so every new puff —
+// <PuffHost /> (mounted once, at the app's root in app/page.tsx). They used to be state in WeekRow, so every new puff —
 // up to nine in one release, plus the push — re-rendered a whole calendar row with all its events,
 // on the very frames the animation needed. Now adding a burst re-renders only the host, and the
 // memoised bursts already on screen skip even that.
@@ -217,8 +217,8 @@ const MemoBurst = memo(PuffBurst);
 
 export function PuffHost() {
   const list = useSyncExternalStore(subscribe, () => bursts, () => NONE);
-  // Leaving the Planner mid-animation unmounts the bursts and their removal timers with them; without
-  // this their leftovers would replay the next time the Planner opened.
+  // Mounted once at the app's root (app/page.tsx), so it lives as long as the app does. If it is ever
+  // unmounted anyway, its bursts' removal timers go with it — clear them, or they would replay later.
   useEffect(() => () => setBursts([]), []);
   return (
     <>
