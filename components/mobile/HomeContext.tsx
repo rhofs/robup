@@ -45,6 +45,7 @@ type Props = {
   onSpaceMenu: (x: number, y: number, space: HierarchySpace) => void;
   onFolderMenu: (x: number, y: number, folder: HierarchyFolder) => void;
   onListMenu: (x: number, y: number, list: HierarchyList, spaceId: string) => void;
+  onSelectDoc: (spaceId: string, docId: string) => void;
 
 
   onSelectDm: (channelId: string) => void;
@@ -67,6 +68,7 @@ export default function HomeContext({
   onSpaceMenu,
   onFolderMenu,
   onListMenu,
+  onSelectDoc,
   onSelectDm,
   onStartDm,
   onCreateSpace,
@@ -134,6 +136,7 @@ export default function HomeContext({
               onSpaceMenu={onSpaceMenu}
               onFolderMenu={onFolderMenu}
               onListMenu={onListMenu}
+            onSelectDoc={onSelectDoc}
             />
             {creatingSpace ? (
               // Creates the Space right here instead of opening the Spaces tree to do it. Routing this to

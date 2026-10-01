@@ -10882,3 +10882,25 @@ and lint. The remaining lint error at `app/login/page.tsx:39` (setState in effec
   block's circle, but the checklist on desktop is unverified in a browser.
 
 **Deployed 2026-10-01 as `71b12a9`** (tag `deploy/2026-10-01_1358`). The migration ran at start (deploy:prod snapshots the DB first). A code rollback past this leaves the unused `doc_id` column in place, which is harmless.
+
+### 2026-10-01 (continued) — mobile Office/Me space list: docs shown, "+" to make List/Folder/Doc
+
+- **Asked:** "det ikke er noen måte å lage list/folders/docs i spaces, hverken til office eller me.
+  Ser fortsatt ikke docs i spaces på mobil." The user also said the task check particles "ser bra
+  ut".
+- The cause of "no docs on mobile" was a gap, not a crash. Office and Home ("Me") render
+  `components/mobile/ContextSpaceList.tsx`, which only ever listed Folders and Lists.
+  MobileSpacesSheet, the full tree, did list docs, but those screens are not it.
+- `ContextSpaceList` now:
+  - lists Docs where the desktop sidebar has them (`getBoardDocsIn` at the Space top level and in
+    each Folder); a tap opens the doc through a new `onSelectDoc` prop. In page.tsx this pushes the
+    context forward, then `setNavigation(spaceId, [])`, `setDocsNavigation(null, docId)`,
+    `setActiveView('board')`, the same steps as MobileSpacesSheet's handler;
+  - has a quiet round "+" on every non-archived Space and top-level Folder. It opens the Space or
+    Folder and shows pill choices (List / Folder / Doc on a Space; List / Doc on a Folder), then an
+    inline name field (16 px, so iOS does not zoom; blur commits). It uses the store's `createList`,
+    `createFolder` and `createSpaceDoc` (with `boardFolderId` = the folder), and a new Doc opens
+    straight away;
+  - reads "Empty space" / "Empty folder" counting docs, and excludes doc-owned Lists via
+    `getListsIn`.
+- Prettier reformatted ContextSpaceList (the large diff is mostly that). Not seen on a device.

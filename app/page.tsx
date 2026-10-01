@@ -5112,6 +5112,13 @@ function PageContent() {
                 onSpaceMenu={(x, y, space) => setSpaceMenu({ x, y, space })}
                 onFolderMenu={(x, y, folder) => setFolderMenu({ x, y, folder })}
                 onListMenu={(x, y, list, spaceId) => setListMenu({ x, y, list, spaceId })}
+                onSelectDoc={(spaceId, docId) => {
+                  startContextPush('forward', 'home');
+                  setModalTaskStack([]);
+                  setNavigation(spaceId, []);
+                  setDocsNavigation(null, docId);
+                  setActiveView('board');
+                }}
                 onSelectDm={(channelId) => openConversationFromContext(channelId, 'home')}
                 onStartDm={(userId) => void handleStartDMFromOffice(userId)}
                 onCreateSpace={(name) => {
@@ -5162,6 +5169,13 @@ function PageContent() {
                 onSpaceMenu={(x, y, space) => setSpaceMenu({ x, y, space })}
                 onFolderMenu={(x, y, folder) => setFolderMenu({ x, y, folder })}
                 onListMenu={(x, y, list, spaceId) => setListMenu({ x, y, list, spaceId })}
+                onSelectDoc={(spaceId, docId) => {
+                  startContextPush('forward', 'office');
+                  setModalTaskStack([]);
+                  setNavigation(spaceId, []);
+                  setDocsNavigation(null, docId);
+                  setActiveView('board');
+                }}
                 onSelectRoom={setActiveOfficeRoomId}
                 onSelectChannel={(channelId) => openConversationFromContext(channelId, 'office')}
                 onCreateSpace={(name) => {
