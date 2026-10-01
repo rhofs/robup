@@ -10704,3 +10704,5 @@ Google rule and forgot-password flow are unchanged.
 **Not seen rendered.** Playwright's Chromium could not run on this host: it needs system libraries,
 which need root (`playwright install-deps`). The temp download was deleted. Verified only with tsc
 and lint. The remaining lint error at `app/login/page.tsx:39` (setState in effect) was there before.
+
+**Deployed 2026-10-01 as `a66412b`** (tag `deploy/2026-10-01_0906`). /login served the new page (checked by fetching its HTML).
