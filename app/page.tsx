@@ -986,6 +986,17 @@ function PageContent() {
   // device. Every hook in this component belongs above that early return.
   const TASK_PAGE_SIZE = 30;
   const [visibleTaskCount, setVisibleTaskCount] = useState(TASK_PAGE_SIZE);
+  // Tasks whose subtasks are folded out in the List view (desktop) — ClickUp's arrow: "trykke på en
+  // sånn pil ned, og så ser du alle subtasks under, og i subtasks kan du også gjøre det videre".
+  const [expandedTaskIds, setExpandedTaskIds] = useState<Set<string>>(() => new Set());
+  const toggleTaskExpanded = useCallback((id: string) => {
+    setExpandedTaskIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  }, []);
   const [selectionMode, setSelectionMode] = useState(false);
   // Choosing a List or Doc in the Spaces drawer pushes the board in from the right, the same way
   // opening a DM pushes a conversation in. Before this the board simply appeared the moment the
@@ -3257,6 +3268,36 @@ function PageContent() {
     return result;
     // eslint-disable-next-line react-hooks/exhaustive-deps -- isArchivedTask reads archivedSpaceListIds, listed
   }, [tasks, activeSpaceId, activeListIds, modalTaskStack, sortBy, sortOrder, showArchived, currentWorkspaceListIds, currentSpace, archivedSpaceListIds]);
+
+  // The List view's rows: the page of top-level tasks, each followed by its subtasks when folded out
+  // — recursively, so a subtask's own subtasks fold out under it. Subtasks in the same archive state
+  // as the view, in their own order, as the task modal lists them.
+  const subtasksByParent = useMemo(() => {
+    const map = new Map<string, Task[]>();
+    for (const t of tasks) {
+      if (!t.parentId || isArchivedTask(t) !== showArchived) continue;
+      const arr = map.get(t.parentId);
+      if (arr) arr.push(t);
+      else map.set(t.parentId, [t]);
+    }
+    for (const arr of map.values()) {
+      arr.sort((a, b) => (a.order ?? 0) - (b.order ?? 0) || new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime());
+    }
+    return map;
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- isArchivedTask reads archivedSpaceListIds, listed
+  }, [tasks, showArchived, archivedSpaceListIds]);
+  const listRows = useMemo(() => {
+    const rows: { task: Task; depth: number; subtaskCount: number }[] = [];
+    const add = (task: Task, depth: number) => {
+      const children = subtasksByParent.get(task.id) ?? [];
+      rows.push({ task, depth, subtaskCount: children.length });
+      // Depth-capped as a guard against a parent cycle in bad data, not as a product limit.
+      if (!isMobile && depth < 12 && expandedTaskIds.has(task.id)) for (const c of children) add(c, depth + 1);
+    };
+    for (const t of filteredTasks.slice(0, visibleTaskCount)) add(t, 0);
+    return rows;
+  }, [filteredTasks, visibleTaskCount, subtasksByParent, expandedTaskIds, isMobile]);
+
 
   // Scoped to whatever's currently visible/filtered in the board (filteredTasks), not the whole
   // workspace — the "Clear overdue" toolbar button below only ever touches what's on screen, so
@@ -7443,10 +7484,14 @@ function PageContent() {
                       This defers that work rather than deleting it: closing the sheet still has to
                       render the board. But by then a destination has been chosen and the render is
                       not competing with the tap that is being animated. */}
-                  {filteredTasks.slice(0, visibleTaskCount).map((task) => (
+                  {listRows.map(({ task, depth, subtaskCount }) => (
                     <TaskRow
                       key={task._localId || task.id}
                       task={task}
+                      depth={depth}
+                      subtaskCount={subtaskCount}
+                      expanded={expandedTaskIds.has(task.id)}
+                      onToggleExpand={isMobile ? undefined : () => toggleTaskExpanded(task.id)}
                       navScope={navScope}
                       dropIndicator={taskDropIndicator?.targetId === task.id ? taskDropIndicator.position : null}
                       onOpen={() => setModalTaskStack([task.id])}

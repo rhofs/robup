@@ -3,7 +3,7 @@
 import { memo, useEffect, useState } from 'react';
 import { motion } from 'framer-motion';
 import { useDraggable, useDroppable } from '@dnd-kit/core';
-import { Check, Pencil, RefreshCw, MoreHorizontal, GripVertical, Calendar } from 'lucide-react';
+import { Check, Pencil, RefreshCw, MoreHorizontal, GripVertical, Calendar, ChevronRight, ListTree } from 'lucide-react';
 import { useTaskStore, StatusDef, CustomFieldDef, Task } from '../store/useTaskStore';
 import { useIsMobile } from '../hooks/useIsMobile';
 import { taskPickableMembers } from '../lib/workspaceMembers';
@@ -40,6 +40,13 @@ type TaskRowProps = {
   // is what distinguishes "this will reorder" from "this will nest as a subtask", which is
   // otherwise the same gesture on the same target.
   dropIndicator?: 'above' | 'below' | null;
+  // Subtasks shown in place, ClickUp-style (desktop List view): how deep this row sits under the
+  // List's own tasks, how many open subtasks it has, and whether they are showing. A row with
+  // subtasks gets an arrow before its title and a count after it; either one toggles them.
+  depth?: number;
+  subtaskCount?: number;
+  expanded?: boolean;
+  onToggleExpand?: () => void;
 };
 
 function TaskRowImpl({
@@ -57,6 +64,10 @@ function TaskRowImpl({
   animateEntrance = true,
   navScope,
   dropIndicator,
+  depth = 0,
+  subtaskCount = 0,
+  expanded = false,
+  onToggleExpand,
 }: TaskRowProps) {
   const {
     users,
@@ -579,7 +590,24 @@ function TaskRowImpl({
           <div className="flex items-center">{selectCheckbox}</div>
           {doneToggle}
 
-          <div className="font-medium flex items-center gap-2 truncate pr-4 text-neutral-200">
+          <div className="font-medium flex items-center gap-2 truncate pr-4 text-neutral-200" style={depth ? { paddingLeft: depth * 22 } : undefined}>
+            {onToggleExpand && (
+              // Always a slot, arrow or not, so titles line up whether or not a task has subtasks.
+              <span className="shrink-0 w-4 -ml-1 flex items-center justify-center">
+                {subtaskCount > 0 && (
+                  <button
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      onToggleExpand();
+                    }}
+                    title={expanded ? 'Hide subtasks' : 'Show subtasks'}
+                    className="w-4 h-4 rounded flex items-center justify-center text-neutral-500 hover:text-neutral-200 hover:bg-neutral-700/60 cursor-pointer"
+                  >
+                    <ChevronRight className={`w-3.5 h-3.5 transition-transform duration-150 ${expanded ? 'rotate-90' : ''}`} />
+                  </button>
+                )}
+              </span>
+            )}
             {/* A visible grip, on hover. The whole desktop row has always been draggable, which
                 works and says nothing — and a capability nobody can see is one nobody has. Reported
                 as there being "no way" to reorder subtasks, which was half true: the machinery was
@@ -621,6 +649,21 @@ function TaskRowImpl({
                 >
                   {task.title}
                 </span>
+                {subtaskCount > 0 && onToggleExpand && (
+                  <button
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      onToggleExpand();
+                    }}
+                    title={`${subtaskCount} subtask${subtaskCount === 1 ? '' : 's'}`}
+                    className={`shrink-0 flex items-center gap-1 px-1.5 h-5 rounded-md text-[10px] font-medium cursor-pointer transition-colors ${
+                      expanded ? 'bg-blue-500/15 text-blue-400' : 'bg-neutral-800 text-neutral-400 hover:text-neutral-200'
+                    }`}
+                  >
+                    <ListTree className="w-3 h-3" />
+                    {subtaskCount}
+                  </button>
+                )}
                 <button
                   onClick={(e) => {
                     e.stopPropagation();

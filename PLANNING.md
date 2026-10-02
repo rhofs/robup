@@ -10947,3 +10947,28 @@ so the address changed under a half-set screen.
 
 **Lesson:** never run prettier on `app/page.tsx`. It is not prettier-formatted, and one `--write`
 rewrote 13k lines. It was reverted with `git checkout` and the edit re-applied.
+
+**Deployed 2026-10-02 as `6fc5629`** (tag `deploy/2026-10-02_0900`) — banner and wiki sheet.
+
+### 2026-10-02 (continued) — subtasks fold out in the List view (desktop)
+
+- **Asked (item 4):** a ClickUp-style arrow on tasks to fold out their subtasks, recursively,
+  desktop first.
+- `TaskRow` takes new props `depth`, `subtaskCount`, `expanded` and `onToggleExpand`.
+  - The desktop title cell gets a fixed 16 px slot holding a chevron (rotates 90° when open) on
+    tasks with subtasks, so titles still line up.
+  - After the title there is a count chip (ListTree icon + n), blue-tinted when open; it also
+    toggles.
+  - The row is indented by `depth × 22 px`.
+- page.tsx:
+  - `expandedTaskIds` state plus `toggleTaskExpanded`;
+  - `subtasksByParent`: subtasks in the same archive state as the view, ordered by order then
+    createdAt, like the modal;
+  - `listRows` flattens the current page of `filteredTasks` with the open subtasks under each,
+    recursively (depth capped at 12 as a guard against bad parent cycles);
+  - the List view maps `listRows`.
+  - Both memos sit right after `filteredTasks`. A first placement further down was after an early
+    `return` in the component — a conditional hook, caught by lint.
+- Mobile passes no `onToggleExpand`, so it is unchanged. Not seen in a browser.
+- Not handled: dragging a folded-out subtask row uses the same `reorderTaskByGesture` as any row,
+  which may re-parent it. Not tested.
