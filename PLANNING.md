@@ -10972,3 +10972,46 @@ rewrote 13k lines. It was reverted with `git checkout` and the edit re-applied.
 - Mobile passes no `onToggleExpand`, so it is unchanged. Not seen in a browser.
 - Not handled: dragging a folded-out subtask row uses the same `reorderTaskByGesture` as any row,
   which may re-parent it. Not tested.
+
+**Deployed 2026-10-02 as `8e2dc08`** (tag `deploy/2026-10-02_0905`) — subtask fold-out.
+
+### 2026-10-02 (continued) — doc task block rebuilt to match ClickUp's List-in-a-Doc (item 1)
+
+- **Asked:** "lag det så likt som mulig" ClickUp's embedded List, with four screenshots: a breadcrumb
+  header with open/collapse/close, a "List" tab and toolbar, status groups, custom-field columns
+  editable in place, row checkboxes with a bulk bar (Status / Assignees / Dates / delete / More),
+  and a ⊕ "Fields" panel. The user also wants to choose other tasks or Lists.
+- `components/collab/TaskListEmbedBlock.tsx` was rewritten. **The rows are the app's own `TaskRow`**
+  — the same component the List view uses — so status, assignee, dates, custom fields, the done
+  circle with its dust, rename and subtask fold-out all behave exactly as in a List. Nothing is
+  duplicated.
+- **Header:** the breadcrumb (path hidden for a doc-owned List), Change, Collapse/Expand, and Remove
+  from doc (`deleteNode`).
+- **Toolbar:** a "List" tab, search, and show/hide done (= archived) tasks.
+- **Columns:** the List's own `visibleColumnsJson` and `columnWidthsJson` (the same setting as the
+  List view; as in ClickUp, a List's fields belong to the List). Custom fields are the Space-wide
+  ones plus the List's own. The grid is `20px 28px name cols 32px`, matching TaskRow, and scrolls
+  horizontally.
+- **⊕ Fields panel** (FloatingPopover):
+  - search;
+  - a toggle per column → `setListVisibleColumns`;
+  - "New field" with name + type (dropdown/text/number/date) →
+    `createCustomField(spaceId, name, type, [], uuid, listId)`, then shown.
+  - Dropdown options are added from the column as in the List view.
+- **Status groups** follow the Space's status order and are collapsible. A status no longer defined
+  gets its own group; empty groups after the first are hidden. "+" on the group header and "Add
+  Task" at the bottom create into that status (`optimisticCreateTask(..., status)`).
+- **Selection:** header select-all plus row checkboxes. The bulk bar has "N tasks selected ×",
+  Status (List mode), Done (archive → dust), and Delete (with confirm). Assignees/Dates bulk were
+  not built.
+- **Setup:** three tabs:
+  - New List (doc-owned, as before);
+  - Existing List;
+  - **Pick tasks** — search across all open tasks, tick any number, "Show these tasks" → stored in
+    a new node attribute `taskIds` (JSON array) with `listId: null`. Shown flat with Status /
+    Assignee / Due date.
+- **DOC_SCHEMA_VERSION 2 → 3** for the new attribute. Open v2 tabs get the "Siqt has been updated —
+  Reload" banner; the UpdateReloader also reloads them on return.
+- Not done: dragging columns in the block, an "open in List view" button (the doc editor's onJump
+  has no `list` kind), and Assignees/Dates in the bulk bar.
+- Not seen in a browser.

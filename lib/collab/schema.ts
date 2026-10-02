@@ -35,7 +35,8 @@ import { TaskListEmbedNode } from './taskListEmbedNode';
 // this existed send no token at all, so they are turned away too.
 //   1 — implicit, everything before checklists
 //   2 — Heading 3, quote, divider, checklist (taskList/taskItem), live task list (taskListEmbed)
-export const DOC_SCHEMA_VERSION = 2;
+//   3 — taskListEmbed.taskIds (a block of hand-picked tasks)
+export const DOC_SCHEMA_VERSION = 3;
 export const docSchemaToken = () => `doc-schema:${DOC_SCHEMA_VERSION}`;
 
 // Paragraphs + mentions + bold/italic/underline/strike/headings(1-2)/bullet+ordered lists/text

@@ -16,6 +16,9 @@ export const TaskListEmbedNode = Node.create({
   addAttributes() {
     return {
       listId: { default: null },
+      // The other way to fill the block: hand-picked tasks from anywhere, as a JSON array of ids.
+      // Used when listId is null ("velge andre tasker, eller lister").
+      taskIds: { default: null },
     };
   },
 
