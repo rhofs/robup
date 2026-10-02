@@ -26,6 +26,9 @@ import { useWikiStore, wikiChapters, wikiChildren, wikiDescendantIds, wikiReadin
 import type { MentionKind } from '../../lib/mentions';
 import WikiSettingsDialog from './WikiSettingsDialog';
 import WikiFeedbackDialog from './WikiFeedbackDialog';
+import { AnimatePresence, motion } from 'framer-motion';
+import { useSheetDrag } from '../mobile/sheetDrag';
+import { useBackLayer } from '../../hooks/useBackLayer';
 
 const CollabDocEditor = dynamic(() => import('../collab/CollabDocEditor'), { ssr: false });
 
@@ -77,6 +80,11 @@ export default function WikiView({ workspace, pageId, onOpenPage, onJump, onCont
   const [query, setQuery] = useState('');
   const [editing, setEditing] = useState(false);
   const [tocOpen, setTocOpen] = useState(false);
+  // The Contents sheet on a phone: swipe it down by its grabber to close, and Back closes it rather
+  // than leaving the Wiki — "du kan ikke trekke den pagen ned. Og hvis du blar deg tilbake, så havner
+  // du … ut fra wikien".
+  const tocDrag = useSheetDrag(() => setTocOpen(false));
+  useBackLayer(isMobile && tocOpen, () => setTocOpen(false));
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [feedbackKind, setFeedbackKind] = useState<'bug' | 'feature' | null>(null);
   // The term the reader came in on from a search, highlighted on the page they land on.
@@ -521,19 +529,34 @@ export default function WikiView({ workspace, pageId, onOpenPage, onJump, onCont
         </div>
       </div>
 
-      {isMobile && tocOpen && (
-        <div className="fixed inset-0 z-[60] flex flex-col justify-end bg-scrim/60" onClick={() => setTocOpen(false)}>
-          <div
-            onClick={(e) => e.stopPropagation()}
-            className="bg-neutral-900 border-t border-neutral-800 rounded-t-2xl h-[85vh] flex flex-col pb-[env(safe-area-inset-bottom)]"
+      <AnimatePresence>
+        {isMobile && tocOpen && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            transition={{ duration: 0.2 }}
+            className="fixed inset-0 z-[60] flex flex-col justify-end bg-scrim/60"
+            onClick={() => setTocOpen(false)}
           >
-            <div className="flex justify-center pt-2 shrink-0">
-              <span className="w-10 h-1 rounded-full bg-neutral-700" />
-            </div>
-            {toc}
-          </div>
-        </div>
-      )}
+            <motion.div
+              initial={{ y: '100%' }}
+              animate={{ y: 0 }}
+              exit={{ y: '100%' }}
+              transition={{ type: 'spring', stiffness: 380, damping: 38 }}
+              onClick={(e) => e.stopPropagation()}
+              {...tocDrag.sheetProps}
+              className="bg-neutral-900 border-t border-neutral-800 rounded-t-[28px] h-[85vh] flex flex-col pb-[env(safe-area-inset-bottom)]"
+            >
+              {/* The grabber strip is the drag handle; the list below keeps its own scrolling. */}
+              <div {...tocDrag.handleProps} className="flex justify-center pt-2.5 pb-2 shrink-0 cursor-grab">
+                <span className="w-10 h-1 rounded-full bg-neutral-700" />
+              </div>
+              {toc}
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
 
       {settingsOpen && <WikiSettingsDialog workspace={workspace} onClose={() => setSettingsOpen(false)} />}
       {feedbackKind && (

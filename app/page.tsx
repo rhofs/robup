@@ -82,7 +82,7 @@ import { BOOT_MARK_SRC, BOOT_MARK_WIDTH_SHARE, BOOT_RING_BOX_SHARE } from '../li
 // The boot mark's size on screen. See its own use below for why this is a min() rather than a share.
 const BOOT_MAX_PX = 340;
 const BOOT_RING_BOX = `min(${BOOT_RING_BOX_SHARE * 100}vw, ${BOOT_RING_BOX_SHARE * 100}vh, ${BOOT_MAX_PX}px)`;
-import { setNativeBackHandler, runNativeBackHandler } from '../lib/nativeBack';
+import { setNativeBackHandler, runNativeBackHandler, consumeIgnoredPopState } from '../lib/nativeBack';
 import { Capacitor } from '@capacitor/core';
 import { setMentionJumpHandler } from '../lib/mentionJump';
 import { readStartPage } from '../lib/startPage';
@@ -1374,6 +1374,8 @@ function PageContent() {
       // entry has the same address as the one under it, and a skip flag left standing would eat the
       // next real Back instead.
       const addressChanged = window.location.search.replace(/^\?/, '') !== renderedSearchRef.current;
+      // An overlay's own entry being stepped back over after it closed some other way (useBackLayer).
+      if (consumeIgnoredPopState()) return;
       // Our own step back, removing the "New" sheet's entry after it closed some other way.
       if (ignoreNextPopRef.current) {
         ignoreNextPopRef.current = false;
@@ -2668,6 +2670,42 @@ function PageContent() {
     setActiveChatChannelId(channelId);
     setActiveView('chat');
   };
+
+  // A notification's URL (the in-app banner, or a tapped system notification — InAppBanner's
+  // openAppUrl) opened the way the app itself would open that place. On a phone a conversation is
+  // reached by the forward push from Home (DMs) or Office (channels); only setting the address skipped
+  // it and left the screen half-changed — "du bare havner et random sted". A task opens its modal.
+  // Anything else falls back to the plain URL change.
+  const openAppUrlRef = useRef<(url: string) => boolean>(() => false);
+  useEffect(() => {
+    openAppUrlRef.current = (url: string) => {
+      const params = new URL(url, window.location.origin).searchParams;
+      const chat = params.get('chat');
+      if (chat) {
+        if (isMobile) {
+          openConversationFromContext(chat, useChatStore.getState().dms.some((d) => d.id === chat) ? 'home' : 'office');
+        } else {
+          setActiveChatChannelId(chat);
+          setActiveView('chat');
+        }
+        return true;
+      }
+      const modal = params.get('modal');
+      if (modal && tasks.some((t) => t.id === modal)) {
+        setModalTaskStack([modal]);
+        return true;
+      }
+      return false;
+    };
+  });
+  useEffect(() => {
+    const onOpen = (e: Event) => {
+      const url = (e as CustomEvent<string>).detail;
+      if (typeof url === 'string' && openAppUrlRef.current(url)) e.preventDefault();
+    };
+    window.addEventListener('siqt-open-app-url', onOpen);
+    return () => window.removeEventListener('siqt-open-app-url', onOpen);
+  }, []);
 
   const openOfficeContext = () => {
     if (currentWorkspace?.isPersonal && realSheetWorkspace) {

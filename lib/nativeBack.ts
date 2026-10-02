@@ -22,7 +22,37 @@ export function setNativeBackHandler(next: BackHandler | null): void {
   handler = next;
 }
 
+// Overlays that Back closes before anything else — a sheet opened inside a view the page does not
+// know about (the Wiki's Contents sheet). Registered by hooks/useBackLayer.ts; the newest is on top.
+// Without this, Back went past the open sheet to the page's own handler and left the Wiki altogether.
+const layers: (() => void)[] = [];
+
+export function pushBackLayer(close: () => void): () => void {
+  layers.push(close);
+  return () => {
+    const i = layers.lastIndexOf(close);
+    if (i !== -1) layers.splice(i, 1);
+  };
+}
+
+// A layer that closed some other way (×, a tap outside) steps back over its own history entry; the
+// pop that causes is ours and must not be read as the user's Back.
+let ignoreNextPop = false;
+export function ignoreNextPopState(): void {
+  ignoreNextPop = true;
+}
+export function consumeIgnoredPopState(): boolean {
+  if (!ignoreNextPop) return false;
+  ignoreNextPop = false;
+  return true;
+}
+
 export function runNativeBackHandler(): boolean {
+  const top = layers.pop();
+  if (top) {
+    top();
+    return true;
+  }
   try {
     return handler ? handler() : false;
   } catch {

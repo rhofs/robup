@@ -10906,3 +10906,44 @@ and lint. The remaining lint error at `app/login/page.tsx:39` (setState in effec
 - Prettier reformatted ContextSpaceList (the large diff is mostly that). Not seen on a device.
 
 **Deployed 2026-10-01 as `f7d0185`** (tag `deploy/2026-10-01_1501`).
+
+### 2026-10-02 — notification banner opens the conversation on mobile; Wiki Contents sheet: swipe-down + Back
+
+**Robin's message this round (voice, condensed):**
+1. Make the doc task block as close as possible to ClickUp's embedded List: custom fields,
+   everything, while still being able to pick other tasks/lists.
+2. iOS bug: tapping the in-app message banner lands "et random sted", not on the message.
+3. Wiki on iOS and Android: the Contents sheet cannot be dragged down, and Back leaves the Wiki.
+4. Lists: ClickUp-style expand arrow on tasks to show subtasks, recursively, desktop first.
+Items 2–3 were shipped first; 1 and 4 follow.
+
+**Banner (2):** `openAppUrl` only pushed `/?view=chat&chat=…`. On a phone a conversation is
+reached by a forward push from Home (DMs) or Office (channels) — `openConversationFromContext` —
+so the address changed under a half-set screen.
+- `openAppUrl` now dispatches a cancelable `siqt-open-app-url` event first.
+- page.tsx handles it:
+  - chat → on mobile `openConversationFromContext(id, dms.has(id) ? 'home' : 'office')`, on
+    desktop set the channel and the chat view;
+  - `modal=` → `setModalTaskStack([id])`;
+  - then `preventDefault`.
+- Otherwise it falls back to `pushState`.
+- Covers the in-app banner and tapped system/native notifications alike.
+- Not reproduced on a device; the diagnosis is from code.
+
+**Wiki sheet (3):**
+- New back-layer mechanism. `lib/nativeBack.ts` gets a stack via `pushBackLayer`, and
+  `runNativeBackHandler` closes the top layer before asking the page's handler. Also new:
+  `ignoreNextPopState` / `consumeIgnoredPopState`, which the page's popstate bridge checks first.
+- `hooks/useBackLayer(open, close)` registers a layer.
+  - On touch web it also pushes a same-address history entry, so iOS's edge swipe pops exactly
+    that entry.
+  - Closed another way, it steps back over that entry after a `setTimeout(0)`, and only if the
+    address is still the entry's. Picking a page in the sheet navigates, and stepping back then
+    would undo it; the spare entry is left instead.
+  - Usable for any future overlay.
+- The Contents sheet is now framer-motion: it slides up, the scrim fades, and `useSheetDrag` is on
+  the grabber, so it swipes down to close. Rounded 28 px like the other sheets.
+- Not seen on a device.
+
+**Lesson:** never run prettier on `app/page.tsx`. It is not prettier-formatted, and one `--write`
+rewrote 13k lines. It was reverted with `git checkout` and the edit re-applied.

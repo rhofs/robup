@@ -28,8 +28,17 @@ type Banner = { id: number; title: string; body: string; url: string };
 // treats a URL it did not push itself as a navigation and goes there — no reload, no request.
 // (Deliberately no synthetic popstate: Next's router reads one without its own history state as an
 // outside navigation and may reload the page.)
+//
+// The page gets first refusal (the `siqt-open-app-url` event, handled in app/page.tsx): on a phone a
+// conversation is not just a URL — it is reached by a forward push from Home or Office
+// (openConversationFromContext), and setting only the address skipped that, leaving whatever screen
+// was showing under a half-set state. Reported on iOS as tapping the banner landing "et random sted,
+// … ikke på meldingen". When the page takes the URL it calls preventDefault and nothing else happens.
 export function openAppUrl(url: string) {
   if (!url.startsWith('/')) return;
+  const event = new CustomEvent('siqt-open-app-url', { detail: url, cancelable: true });
+  window.dispatchEvent(event);
+  if (event.defaultPrevented) return;
   window.history.pushState(null, '', url);
 }
 
