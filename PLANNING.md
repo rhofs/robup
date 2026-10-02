@@ -11100,3 +11100,5 @@ rewrote 13k lines. It was reverted with `git checkout` and the edit re-applied.
   The web loading screen must keep matching the native splash, or the handover becomes visible
   again.
 - **Waiting on the user's choice.**
+
+**Deployed 2026-10-02 as `b107780`** (tag `deploy/2026-10-02_1326`). /ideas/logo.html sits behind the login gate (307 to /login when signed out).
