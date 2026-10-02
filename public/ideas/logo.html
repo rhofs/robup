@@ -1,0 +1,283 @@
+<!doctype html>
+<html lang="no">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Siqt logo-ideer</title>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;800&display=swap" rel="stylesheet" />
+<style>
+  :root {
+    --bg: #0a0a0a;
+    --card: #141518;
+    --line: #23252b;
+    --text: #e9ebef;
+    --muted: #8b919c;
+    --blue: #60a5fa;
+    --blue2: #3b82f6;
+    --cyan: #67e8f9;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--text);
+    font-family: Inter, system-ui, sans-serif;
+    -webkit-font-smoothing: antialiased;
+  }
+  .wrap { max-width: 1120px; margin: 0 auto; padding: 40px 16px 80px; }
+  h1 { font-size: 28px; letter-spacing: -0.02em; margin: 0 0 6px; }
+  .lead { color: var(--muted); font-size: 15px; line-height: 1.55; max-width: 720px; margin: 0 0 32px; }
+  .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(330px, 1fr)); gap: 16px; }
+  .card {
+    background: var(--card);
+    border: 1px solid var(--line);
+    border-radius: 22px;
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
+  }
+  .stage {
+    position: relative;
+    height: 240px;
+    display: grid;
+    place-items: center;
+    background: radial-gradient(120% 90% at 50% 0%, #111827 0%, #0a0a0a 70%);
+    border-bottom: 1px solid var(--line);
+    overflow: hidden;
+  }
+  .meta { padding: 16px 18px 18px; }
+  .meta h2 { font-size: 16px; margin: 0 0 4px; display: flex; align-items: center; gap: 8px; }
+  .tag { font-size: 11px; font-weight: 600; color: var(--blue); background: rgb(59 130 246 / .14); padding: 2px 8px; border-radius: 99px; }
+  .meta p { margin: 0; color: var(--muted); font-size: 13.5px; line-height: 1.55; }
+  .sizes { display: flex; align-items: center; gap: 14px; margin-top: 14px; }
+  .sizes .lbl { font-size: 11px; color: #5d636e; }
+  .chip { display: grid; place-items: center; }
+
+  /* ---------- shared: the lingering blue pulse (lasteanimasjonen) ---------- */
+  .halo { position: absolute; width: 120px; height: 120px; border-radius: 50%; pointer-events: none; }
+  .halo::before, .halo::after, .halo i {
+    content: ''; position: absolute; inset: 0; border-radius: 50%;
+    background: radial-gradient(circle, rgb(96 165 250 / .55) 0%, rgb(59 130 246 / .25) 40%, transparent 70%);
+    animation: afterglow 2.8s cubic-bezier(.2,.7,.3,1) infinite;
+  }
+  .halo::after { animation-delay: .93s; }
+  .halo i { animation-delay: 1.86s; }
+  @keyframes afterglow {
+    0% { transform: scale(.55); opacity: 0; }
+    12% { opacity: 1; }
+    100% { transform: scale(2.3); opacity: 0; }
+  }
+
+  /* ---------- A: Glow tile ---------- */
+  .tile {
+    width: 92px; height: 92px; border-radius: 28px;
+    background: linear-gradient(145deg, #7dd3fc 0%, #3b82f6 55%, #4f46e5 100%);
+    box-shadow: inset 0 1.5px 0 rgb(255 255 255 / .45), inset 0 -10px 20px rgb(30 27 75 / .35), 0 14px 40px -10px rgb(59 130 246 / .7);
+    display: grid; place-items: center; position: relative;
+    animation: breathe 2.8s ease-in-out infinite;
+  }
+  .tile::after { /* gloss */
+    content: ''; position: absolute; inset: 0; border-radius: inherit;
+    background: radial-gradient(80% 50% at 30% 10%, rgb(255 255 255 / .35), transparent 60%);
+  }
+  .tile svg { width: 58%; height: 58%; position: relative; z-index: 1; }
+  @keyframes breathe { 0%,100% { transform: scale(1); } 50% { transform: scale(1.035); } }
+
+  /* ---------- B: Orbit stroke ---------- */
+  .orbit svg { width: 120px; height: 120px; overflow: visible; }
+  .orbit .base { stroke: #1f2937; }
+  .orbit .s { stroke: url(#gB); }
+  .orbit .comet {
+    stroke: #bfe3ff; stroke-dasharray: 18 400; animation: travel 2.2s cubic-bezier(.45,.05,.35,1) infinite;
+    filter: drop-shadow(0 0 6px #60a5fa) drop-shadow(0 0 14px #3b82f6);
+  }
+  .orbit .trail {
+    stroke: #60a5fa; stroke-dasharray: 70 400; opacity: .45; animation: travel 2.2s cubic-bezier(.45,.05,.35,1) infinite;
+    animation-delay: -.06s; filter: blur(3px);
+  }
+  @keyframes travel { from { stroke-dashoffset: 210; } to { stroke-dashoffset: -210; } }
+
+  /* ---------- C: S that becomes a tick ---------- */
+  .tick svg { width: 120px; height: 120px; overflow: visible; }
+  .tick .draw {
+    stroke-dasharray: 260; stroke-dashoffset: 260;
+    animation: draw 3.2s cubic-bezier(.6,.05,.3,1) infinite;
+  }
+  .tick .glow { filter: blur(6px); opacity: 0; animation: tickglow 3.2s ease-out infinite; }
+  @keyframes draw {
+    0% { stroke-dashoffset: 260; }
+    45%, 82% { stroke-dashoffset: 0; }
+    100% { stroke-dashoffset: -260; }
+  }
+  @keyframes tickglow { 0%, 40% { opacity: 0; } 52% { opacity: .9; } 100% { opacity: 0; } }
+
+  /* ---------- D: Chat bubble ---------- */
+  .bubble svg { width: 104px; height: 104px; overflow: visible; animation: hop 1.8s cubic-bezier(.3,.7,.4,1) infinite; transform-origin: 50% 100%; }
+  @keyframes hop {
+    0%, 100% { transform: translateY(0) scale(1, 1); }
+    18% { transform: translateY(0) scale(1.08, .9); }
+    42% { transform: translateY(-12px) scale(.96, 1.05); }
+    64% { transform: translateY(0) scale(1.05, .94); }
+    80% { transform: translateY(0) scale(.99, 1.01); }
+  }
+  .ripple { position: absolute; width: 104px; height: 104px; border-radius: 34px; border: 2px solid rgb(96 165 250 / .6); animation: ripple 1.8s ease-out infinite; animation-delay: .3s; }
+  @keyframes ripple { 0% { transform: scale(.9); opacity: 0; } 15% { opacity: .9; } 100% { transform: scale(1.7); opacity: 0; } }
+
+  /* ---------- E: Wordmark ---------- */
+  .word { font-weight: 800; font-size: 64px; letter-spacing: -0.055em; line-height: 1; position: relative; }
+  .word .txt {
+    background: linear-gradient(100deg, #e5f0ff 0%, #e5f0ff 40%, #ffffff 48%, #93c5fd 52%, #e5f0ff 60%, #e5f0ff 100%);
+    background-size: 260% 100%;
+    -webkit-background-clip: text; background-clip: text; color: transparent;
+    animation: shimmer 2.6s ease-in-out infinite;
+  }
+  .word .dot { /* the dot of the i, as a glowing blue bead */
+    position: absolute; left: 1.02em; top: -0.02em; width: .2em; height: .2em; border-radius: 50%;
+    background: radial-gradient(circle at 35% 30%, #dbeafe, #3b82f6 70%);
+    box-shadow: 0 0 12px 2px rgb(59 130 246 / .9);
+    animation: bead 2.6s ease-in-out infinite;
+  }
+  @keyframes shimmer { 0% { background-position: 100% 0; } 100% { background-position: 0 0; } }
+  @keyframes bead { 0%,100% { box-shadow: 0 0 10px 1px rgb(59 130 246 / .7); } 50% { box-shadow: 0 0 26px 8px rgb(96 165 250 / .55); } }
+
+  /* ---------- F: Current, for comparison ---------- */
+  .current { width: 120px; height: 120px; position: relative; display: grid; place-items: center; }
+  .current .ring { position: absolute; inset: 0; animation: spin 1.1s linear infinite; }
+  .current .S { font-weight: 800; font-size: 54px; color: #60a5fa; }
+  @keyframes spin { to { transform: rotate(360deg); } }
+
+  .note { margin-top: 36px; padding: 18px 20px; border: 1px solid var(--line); border-radius: 18px; background: var(--card); color: var(--muted); font-size: 14px; line-height: 1.6; }
+  .note b { color: var(--text); font-weight: 600; }
+
+  @media (prefers-reduced-motion: reduce) { *, *::before, *::after { animation: none !important; } }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>Siqt – logo-ideer</h1>
+  <p class="lead">Seks skisser: dagens logo først som sammenligning, så fem retninger. Hver har en lasteanimasjon. Alle bruker blått lys som pulserer og <i>henger litt igjen</i> før det dør ut, ikke en ring som snurrer. Skissene er tegnet kjapt for å vise retningen. Den vi velger, finpusser jeg ordentlig.</p>
+
+  <svg width="0" height="0" style="position:absolute">
+    <defs>
+      <linearGradient id="gB" x1="0" y1="0" x2="1" y2="1">
+        <stop offset="0" stop-color="#7dd3fc" />
+        <stop offset=".55" stop-color="#3b82f6" />
+        <stop offset="1" stop-color="#6366f1" />
+      </linearGradient>
+      <linearGradient id="gD" x1="0" y1="0" x2="1" y2="1">
+        <stop offset="0" stop-color="#7dd3fc" />
+        <stop offset=".6" stop-color="#3b82f6" />
+        <stop offset="1" stop-color="#4f46e5" />
+      </linearGradient>
+    </defs>
+  </svg>
+
+  <div class="grid">
+    <!-- current -->
+    <div class="card">
+      <div class="stage">
+        <div class="current">
+          <svg class="ring" viewBox="0 0 100 100"><circle cx="50" cy="50" r="47" fill="none" stroke="#60a5fa" stroke-opacity=".14" stroke-width="2"/><circle cx="50" cy="50" r="47" fill="none" stroke="#60a5fa" stroke-width="2" stroke-linecap="round" stroke-dasharray="77 218"/></svg>
+          <span class="S">S</span>
+        </div>
+      </div>
+      <div class="meta">
+        <h2>0 · Dagens</h2>
+        <p>Fet «S» i lyseblått på svart, med en ring som snurrer rundt. Tydelig, men litt «standard-spinner» og ganske alvorlig.</p>
+      </div>
+    </div>
+
+    <!-- A -->
+    <div class="card">
+      <div class="stage">
+        <span class="halo"><i></i></span>
+        <div class="tile">
+          <svg viewBox="0 0 100 100"><path d="M68 28 C62 20 52 18 44 20 C34 22 28 30 31 38 C34 47 46 49 54 52 C64 55 72 61 69 71 C66 81 52 84 42 81 C36 79 32 76 30 72" fill="none" stroke="#fff" stroke-width="12" stroke-linecap="round"/></svg>
+        </div>
+      </div>
+      <div class="meta">
+        <h2>A · Glow tile <span class="tag">tryggest</span></h2>
+        <p>En myk app-flis med gradient fra himmelblå til indigo, en rund hvit «S» tegnet som én linje, og en svak glans øverst. Moderne og lystig, og nær det appen bruker i dag (innloggingssiden). Lasting: flisa puster, og blått lys ringer ut og blir hengende litt.</p>
+        <div class="sizes">
+          <span class="lbl">liten:</span>
+          <span class="chip"><span class="tile" style="width:32px;height:32px;border-radius:10px;animation:none"><svg viewBox="0 0 100 100"><path d="M68 28 C62 20 52 18 44 20 C34 22 28 30 31 38 C34 47 46 49 54 52 C64 55 72 61 69 71 C66 81 52 84 42 81 C36 79 32 76 30 72" fill="none" stroke="#fff" stroke-width="13" stroke-linecap="round"/></svg></span></span>
+          <span class="chip"><span class="tile" style="width:18px;height:18px;border-radius:6px;animation:none;box-shadow:none"><svg viewBox="0 0 100 100"><path d="M68 28 C62 20 52 18 44 20 C34 22 28 30 31 38 C34 47 46 49 54 52 C64 55 72 61 69 71 C66 81 52 84 42 81 C36 79 32 76 30 72" fill="none" stroke="#fff" stroke-width="15" stroke-linecap="round"/></svg></span></span>
+        </div>
+      </div>
+    </div>
+
+    <!-- B -->
+    <div class="card">
+      <div class="stage">
+        <span class="halo" style="width:90px;height:90px"><i></i></span>
+        <div class="orbit">
+          <svg viewBox="0 0 100 100">
+            <path class="base" d="M68 28 C62 20 52 18 44 20 C34 22 28 30 31 38 C34 47 46 49 54 52 C64 55 72 61 69 71 C66 81 52 84 42 81 C36 79 32 76 30 72" fill="none" stroke-width="13" stroke-linecap="round"/>
+            <path class="s" d="M68 28 C62 20 52 18 44 20 C34 22 28 30 31 38 C34 47 46 49 54 52 C64 55 72 61 69 71 C66 81 52 84 42 81 C36 79 32 76 30 72" fill="none" stroke-width="13" stroke-linecap="round" opacity=".9"/>
+            <path class="trail" d="M68 28 C62 20 52 18 44 20 C34 22 28 30 31 38 C34 47 46 49 54 52 C64 55 72 61 69 71 C66 81 52 84 42 81 C36 79 32 76 30 72" fill="none" stroke-width="10" stroke-linecap="round"/>
+            <path class="comet" d="M68 28 C62 20 52 18 44 20 C34 22 28 30 31 38 C34 47 46 49 54 52 C64 55 72 61 69 71 C66 81 52 84 42 81 C36 79 32 76 30 72" fill="none" stroke-width="7" stroke-linecap="round"/>
+          </svg>
+        </div>
+      </div>
+      <div class="meta">
+        <h2>B · Lysspor <span class="tag">mest «magisk»</span></h2>
+        <p>Selve logoen er en ren, frittstående «S» i gradient, uten flis. Ved lasting løper en lysende komet gjennom S-en og etterlater et blått spor som falmer sakte. Det er etterglød-effekten du beskrev, og den passer med stjernestøvet i Planner.</p>
+      </div>
+    </div>
+
+    <!-- C -->
+    <div class="card">
+      <div class="stage">
+        <span class="halo" style="width:100px;height:100px"><i></i></span>
+        <div class="tick">
+          <svg viewBox="0 0 100 100">
+            <path class="glow draw" d="M70 27 C62 18 44 17 35 26 C27 35 34 45 47 49 C56 52 62 54 64 58 M30 66 L42 78 L76 44" fill="none" stroke="#60a5fa" stroke-width="16" stroke-linecap="round" stroke-linejoin="round"/>
+            <path class="draw" d="M70 27 C62 18 44 17 35 26 C27 35 34 45 47 49 C56 52 62 54 64 58 M30 66 L42 78 L76 44" fill="none" stroke="url(#gB)" stroke-width="12" stroke-linecap="round" stroke-linejoin="round"/>
+          </svg>
+        </div>
+      </div>
+      <div class="meta">
+        <h2>C · S + hake <span class="tag">forteller hva appen er</span></h2>
+        <p>Toppen er en S, og bunnen ender i en hake: «tasks som blir ferdige». En smart logo med historie i seg. Lasting: streken tegner seg selv, blusser opp i blått idet haken lander, og viskes bort igjen.</p>
+      </div>
+    </div>
+
+    <!-- D -->
+    <div class="card">
+      <div class="stage">
+        <span class="ripple"></span>
+        <div class="bubble">
+          <svg viewBox="0 0 100 100">
+            <path d="M30 8 H70 C86 8 94 16 94 32 V62 C94 78 86 86 70 86 H42 L24 97 C21 99 18 97 19 94 L22 86 C10 84 6 76 6 62 V32 C6 16 14 8 30 8 Z" fill="url(#gD)"/>
+            <path d="M30 8 H70 C86 8 94 16 94 32" fill="none" stroke="#fff" stroke-opacity=".35" stroke-width="2" stroke-linecap="round"/>
+            <path d="M64 30 C59 24 51 23 45 24 C38 26 34 31 36 37 C38 43 47 45 53 47 C60 49 65 53 63 60 C61 67 51 69 44 67 C40 66 37 63 35 60" fill="none" stroke="#fff" stroke-width="9" stroke-linecap="round"/>
+          </svg>
+        </div>
+      </div>
+      <div class="meta">
+        <h2>D · Snakkeboble <span class="tag">lystigst</span></h2>
+        <p>S-en i en avrundet snakkeboble, fordi chat og samarbeid er en stor del av Siqt. Den mest lekne og vennlige varianten. Lasting: boblen hopper litt (squash and stretch) og sender ut en blå krusning.</p>
+      </div>
+    </div>
+
+    <!-- E -->
+    <div class="card">
+      <div class="stage">
+        <span class="halo" style="width:70px;height:70px;left:calc(50% - 8px);top:calc(50% - 64px)"><i></i></span>
+        <div class="word"><span class="txt">siqt</span><span class="dot"></span></div>
+      </div>
+      <div class="meta">
+        <h2>E · Ordmerke <span class="tag">mest «brand»</span></h2>
+        <p>Hele navnet med små, tette og runde bokstaver, der prikken over i-en er en glødende blå perle. Det gir appen en tydelig identitet, og «S»-ikonet kan fortsatt brukes som app-ikon. Lasting: et lysglimt glir over bokstavene, og perlen pulserer.</p>
+      </div>
+    </div>
+  </div>
+
+  <div class="note">
+    <b>Min anbefaling:</b> <b>A</b> som app-ikon og logo, kombinert med <b>B</b>s lysspor-animasjon når appen laster. Flisa er lystig, moderne og gjenkjennelig i små størrelser (favicon, Android-ikon), og den passer med den blå glødstilen appen har fått (nav-boblen, Planner-markeringen). Lysporet gir lasteskjermen det «magiske» med etterglød, i stedet for en generisk spinner.<br /><br />
+    <b>Verdt å vite:</b> lasteskjermen er nå laget for å se nøyaktig lik ut som Androids egen splash-skjerm, så overgangen ikke synes. Bytter vi logo, må splash-bildet og app-ikonet genereres på nytt (scripts/generate-splash.mjs og lib/pwaIcon.tsx). Det er en ny Android-build, ikke bare en deploy.
+  </div>
+</div>
+</body>
+</html>
