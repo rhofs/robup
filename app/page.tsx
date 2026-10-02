@@ -415,7 +415,8 @@ function SortableFieldOption({
 // and slightly lifted lightness so status pills, calendar bars, and sidebar color dots
 // read as soft accents instead of solid neon fills.
 export const DEFAULT_STATUSES: StatusDef[] = [
-  { id: 'default-todo', name: 'To Do', color: '#c89642', order: 0 },
+  // Calm grey, not the old mustard (#c89642) — "den gulfargen, synes den er så stygg" (2026-10-02).
+  { id: 'default-todo', name: 'To Do', color: '#8d97a5', order: 0 },
   { id: 'default-progress', name: 'In Progress', color: '#618cd1', order: 1 },
   { id: 'default-review', name: 'Review', color: '#9a61d1', order: 2 },
   { id: 'default-done', name: 'Done', color: '#349f7c', order: 3 },

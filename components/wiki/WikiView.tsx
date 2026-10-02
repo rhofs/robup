@@ -27,6 +27,7 @@ import type { MentionKind } from '../../lib/mentions';
 import WikiSettingsDialog from './WikiSettingsDialog';
 import WikiFeedbackDialog from './WikiFeedbackDialog';
 import { AnimatePresence, motion } from 'framer-motion';
+import { X as XIcon } from 'lucide-react';
 import { useSheetDrag } from '../mobile/sheetDrag';
 import { useBackLayer } from '../../hooks/useBackLayer';
 
@@ -548,9 +549,21 @@ export default function WikiView({ workspace, pageId, onOpenPage, onJump, onCont
               {...tocDrag.sheetProps}
               className="bg-neutral-900 border-t border-neutral-800 rounded-t-[28px] h-[85vh] flex flex-col pb-[env(safe-area-inset-bottom)]"
             >
-              {/* The grabber strip is the drag handle; the list below keeps its own scrolling. */}
-              <div {...tocDrag.handleProps} className="flex justify-center pt-2.5 pb-2 shrink-0 cursor-grab">
-                <span className="w-10 h-1 rounded-full bg-neutral-700" />
+              {/* The whole top of the sheet is the drag handle — grabber, title and all, 56px of it —
+                  like the app's other sheets. A thin grabber strip alone was too small to land a
+                  swipe on (Android: "jeg kan fortsatt ikke swipe ned"); the finger hit the list under
+                  it, which scrolls instead. The list keeps its own scrolling below. */}
+              <div {...tocDrag.handleProps} className="relative flex items-center justify-center h-14 shrink-0 cursor-grab">
+                <span className="absolute top-2 left-1/2 -translate-x-1/2 w-10 h-1 rounded-full bg-neutral-700" />
+                <span className="text-[15px] font-semibold text-app-strong mt-1">Contents</span>
+                <button
+                  onPointerDown={(e) => e.stopPropagation()}
+                  onClick={() => setTocOpen(false)}
+                  aria-label="Close"
+                  className="absolute right-4 top-1/2 -translate-y-1/2 mt-0.5 w-8 h-8 rounded-full bg-neutral-800 flex items-center justify-center text-neutral-400 cursor-pointer"
+                >
+                  <XIcon className="w-4 h-4" />
+                </button>
               </div>
               {toc}
             </motion.div>

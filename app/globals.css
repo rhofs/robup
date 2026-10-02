@@ -209,6 +209,22 @@ body {
   height: 8px;
 }
 
+/* On touch screens, no scrollbar takes up room. Styling ::-webkit-scrollbar (above) turns Android's
+   overlay scrollbars into classic ones that eat 8px of width, so every scrolling screen was 8px
+   narrower than the same screen when it did not scroll. The mobile push draws a non-scrolling copy of
+   Home/Office behind the sliding page, and the swap between copy and real screen showed as the cards
+   widening as a push began and narrowing as one ended ("Space bakgrunnsarket … utvides … når jeg
+   trykker meg inn, og blir smalere når jeg går ut"). Phones show their own scroll indicator anyway. */
+@media (pointer: coarse) {
+  * {
+    scrollbar-width: none;
+  }
+  *::-webkit-scrollbar {
+    width: 0;
+    height: 0;
+  }
+}
+
 *::-webkit-scrollbar-track {
   background: transparent;
 }

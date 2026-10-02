@@ -11017,3 +11017,32 @@ rewrote 13k lines. It was reverted with `git checkout` and the edit re-applied.
 - Not seen in a browser.
 
 **Deployed 2026-10-02 as `adb5a4e`** (tag `deploy/2026-10-02_0910`).
+
+### 2026-10-02 (continued) — Android push width jump, wiki sheet handle, a modern caret, To Do grey
+
+- **"Space bakgrunnsarket … utvides … når jeg trykker meg inn, og blir smalere når jeg går ut"
+  (Android).**
+  - Cause: globals.css styles `*::-webkit-scrollbar { width: 8px }`. Styling it turns Android's
+    overlay scrollbars into classic ones that take 8 px of width, so a scrolling screen is 8 px
+    narrower than a non-scrolling one.
+  - The context push layer draws Home/Office in an `overflow-hidden` copy, while the real screen
+    scrolls, so swapping between them at the push's start and end showed as an 8 px widen/narrow.
+  - Fix: `@media (pointer: coarse)` hides scrollbars entirely (`scrollbar-width: none`, webkit
+    width/height 0). Desktop keeps its thin bars.
+  - **Known gotcha:** any styled `::-webkit-scrollbar` changes layout width on Android.
+- **Wiki Contents sheet still would not swipe down on Android** (Back already worked). The drag
+  handle was only the ~18 px grabber strip, so the finger landed on the scrolling list. The whole
+  56 px top is now the handle, holding the grabber, a "Contents" title and a close button (the
+  button stops pointerdown so it does not start a drag). This matches the other sheets.
+- **Subtask arrow** ("vanskelig å treffe … en annen type pil … mer moderne"):
+  - New `components/Caret.tsx`, a soft filled rounded triangle that rotates 90° when open.
+  - Used in TaskRow's expand button, which is now a 24 px target pulled into the row padding, and
+    for the doc block's status-group toggles.
+- **To Do colour:** the default is now `#8d97a5` (grey, from the existing palette) instead of
+  mustard `#c89642`, in DEFAULT_STATUSES (page.tsx), the doc block fallback and seed.ts.
+  - Existing Spaces store their own Status rows, so data migration
+    `20261002100000_todo_status_grey` updates rows where name is "to do" (case-insensitive) AND the
+    colour is still exactly the old default. Other colours are untouched.
+  - Applied cleanly to a fresh temp DB with `migrate deploy`.
+  - A code rollback does not re-yellow them.
+- None of this has been seen on a device.

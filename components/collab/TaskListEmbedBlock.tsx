@@ -8,7 +8,6 @@ import {
   PlusCircle,
   Search,
   ChevronDown,
-  ChevronRight,
   Repeat,
   X,
   Minimize2,
@@ -22,6 +21,7 @@ import {
 import { useTaskStore, type Task, type StatusDef, type CustomFieldDef, type HierarchySpace } from '../../store/useTaskStore';
 import TaskRow, { type ColumnDef } from '../TaskRow';
 import FloatingPopover from '../FloatingPopover';
+import Caret from '../Caret';
 import type { TaskListEmbedExtensionOptions } from './taskListEmbedView';
 
 // Node view for `taskListEmbed` (lib/collab/taskListEmbedNode.ts): tasks, live, inside a Doc.
@@ -43,7 +43,7 @@ import type { TaskListEmbedExtensionOptions } from './taskListEmbedView';
 // ClickUp, where a List's fields are the List's, wherever it is shown.
 
 const FALLBACK_STATUSES: StatusDef[] = [
-  { id: 'default-todo', name: 'To Do', color: '#c89642', order: 0 },
+  { id: 'default-todo', name: 'To Do', color: '#8d97a5', order: 0 },
   { id: 'default-progress', name: 'In Progress', color: '#618cd1', order: 1 },
   { id: 'default-review', name: 'Review', color: '#9a61d1', order: 2 },
   { id: 'default-done', name: 'Done', color: '#349f7c', order: 3 },
@@ -430,9 +430,9 @@ export default function TaskListEmbedBlock({ node, updateAttributes, deleteNode,
                 <div className="flex items-center gap-2 px-2 h-10">
                   <button
                     onClick={() => setClosedGroups((s) => toggle(s, g.name))}
-                    className="w-5 h-5 rounded flex items-center justify-center text-neutral-500 hover:text-neutral-200 cursor-pointer"
+                    className="w-6 h-6 rounded-md flex items-center justify-center text-neutral-500 hover:text-neutral-100 hover:bg-neutral-800 cursor-pointer"
                   >
-                    {closed ? <ChevronRight className="w-3.5 h-3.5" /> : <ChevronDown className="w-3.5 h-3.5" />}
+                    <Caret open={!closed} />
                   </button>
                   <span
                     className="flex items-center gap-1.5 h-6 px-2 rounded-md text-[11px] font-bold uppercase tracking-wide"

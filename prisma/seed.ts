@@ -2,7 +2,7 @@ import { PrismaClient } from '@prisma/client'
 const prisma = new PrismaClient()
 
 const STATUS_DEFS = [
-  { name: 'To Do', color: '#c89642' },
+  { name: 'To Do', color: '#8d97a5' },
   { name: 'In Progress', color: '#618cd1' },
   { name: 'Review', color: '#9a61d1' },
   { name: 'Done', color: '#349f7c' },

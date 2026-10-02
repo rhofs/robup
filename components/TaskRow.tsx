@@ -3,9 +3,10 @@
 import { memo, useEffect, useState } from 'react';
 import { motion } from 'framer-motion';
 import { useDraggable, useDroppable } from '@dnd-kit/core';
-import { Check, Pencil, RefreshCw, MoreHorizontal, GripVertical, Calendar, ChevronRight, ListTree } from 'lucide-react';
+import { Check, Pencil, RefreshCw, MoreHorizontal, GripVertical, Calendar, ListTree } from 'lucide-react';
 import { useTaskStore, StatusDef, CustomFieldDef, Task } from '../store/useTaskStore';
 import { useIsMobile } from '../hooks/useIsMobile';
+import Caret from './Caret';
 import { taskPickableMembers } from '../lib/workspaceMembers';
 import AssigneePicker, { AssigneeStack } from './AssigneePicker';
 import { suggestTaskAssignees } from '../lib/assigneeSuggestions';
@@ -592,8 +593,11 @@ function TaskRowImpl({
 
           <div className="font-medium flex items-center gap-2 truncate pr-4 text-neutral-200" style={depth ? { paddingLeft: depth * 22 } : undefined}>
             {onToggleExpand && (
-              // Always a slot, arrow or not, so titles line up whether or not a task has subtasks.
-              <span className="shrink-0 w-4 -ml-1 flex items-center justify-center">
+              // Always a slot, arrow or not, so titles line up whether or not a task has subtasks. The
+              // button is 24px square — the arrow itself is small, the target is not ("litt vanskelig å
+              // treffe") — and pulled into the row's padding so it costs no width. A soft, filled
+              // rounded caret rather than a line chevron ("en annen type pil … mer moderne").
+              <span className="shrink-0 w-5 -ml-2 flex items-center justify-center">
                 {subtaskCount > 0 && (
                   <button
                     onClick={(e) => {
@@ -601,9 +605,9 @@ function TaskRowImpl({
                       onToggleExpand();
                     }}
                     title={expanded ? 'Hide subtasks' : 'Show subtasks'}
-                    className="w-4 h-4 rounded flex items-center justify-center text-neutral-500 hover:text-neutral-200 hover:bg-neutral-700/60 cursor-pointer"
+                    className="w-6 h-6 -m-0.5 rounded-md flex items-center justify-center text-neutral-500 hover:text-neutral-100 hover:bg-neutral-700/50 cursor-pointer transition-colors"
                   >
-                    <ChevronRight className={`w-3.5 h-3.5 transition-transform duration-150 ${expanded ? 'rotate-90' : ''}`} />
+                    <Caret open={expanded} />
                   </button>
                 )}
               </span>
