@@ -11015,3 +11015,5 @@ rewrote 13k lines. It was reverted with `git checkout` and the edit re-applied.
 - Not done: dragging columns in the block, an "open in List view" button (the doc editor's onJump
   has no `list` kind), and Assignees/Dates in the bulk bar.
 - Not seen in a browser.
+
+**Deployed 2026-10-02 as `adb5a4e`** (tag `deploy/2026-10-02_0910`).
