@@ -11186,3 +11186,5 @@ screen was also too quick to see. The user is fine with a ≥ 3 s intro on a fre
 - **APK:** clean build, 5.0 MB, copied to `public/siqt.apk`. **It must be reinstalled** for the
   splash changes.
 - Not seen on a device.
+
+**Deployed 2026-10-02 as `4b0c86e`** (tag `deploy/2026-10-02_1840`).
