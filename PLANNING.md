@@ -11069,3 +11069,5 @@ rewrote 13k lines. It was reverted with `git checkout` and the edit re-applied.
 - A new doc-owned List opens its add field in the Space's real first status (not a hardcoded
   "To Do").
 - The user confirmed the new caret looks good and the wiki sheet now swipes down (Android).
+
+**Deployed 2026-10-02 as `bc60304`** (tag `deploy/2026-10-02_0953`).
