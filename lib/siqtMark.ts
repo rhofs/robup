@@ -20,12 +20,14 @@ const STOPS = [
   { offset: 1, color: '#4f46e5' },
 ];
 
-// The tile's size on the boot screen and the splash, as a share of screen width (capped on the web).
-// The contract between scripts/generate-brand.ts and app/page.tsx's boot screen: change it there and
-// regenerate, never one alone.
-export const BOOT_TILE_SHARE = 0.24;
-export const BOOT_TILE_MAX_PX = 132;
-// The soft glow behind the tile on both: its diameter as a multiple of the tile, and its strength.
+// The boot tile's size, in dp — which is a CSS px in Android's WebView. One fixed size for all three
+// screens a launch passes through: Android 12+'s own splash (its icon is a fixed dp size), the
+// Capacitor splash (drawn unscaled, centred), and the web boot screen. A share of screen width, as
+// before, could only ever match the first of those on one particular phone; the mismatch showed as the
+// logo changing size between them. The contract between scripts/generate-brand.ts and
+// components/BootScreen.tsx: change it, regenerate, rebuild the app.
+export const BOOT_TILE_DP = 100;
+// The soft glow behind the tile: its diameter as a multiple of the tile, and its strength.
 export const BOOT_GLOW_SCALE = 2.4;
 export const BOOT_GLOW_OPACITY = 0.38;
 

@@ -77,12 +77,14 @@ import {
 import { useTaskStore, HierarchySpace, HierarchyFolder, HierarchyList, HierarchyDocFolder, HierarchyRoom, HierarchyWorkspace, StatusDef, CustomFieldDef, Task, TaskDoc, AppUser } from '../store/useTaskStore';
 import { useHistoryStore } from '../store/useHistoryStore';
 import { hapticTap } from '../lib/haptics';
-import { SIQT_BG, BOOT_TILE_SHARE, BOOT_TILE_MAX_PX, BOOT_GLOW_SCALE, BOOT_GLOW_OPACITY } from '../lib/siqtMark';
 import SiqtMark from '../components/SiqtMark';
+import BootScreen from '../components/BootScreen';
 
-// The boot tile's size on screen: the splash's share of width on a phone, never more than the same
-// share of height, and capped for a desktop window.
-const BOOT_TILE = `min(${BOOT_TILE_SHARE * 100}vw, ${BOOT_TILE_SHARE * 100}vh, ${BOOT_TILE_MAX_PX}px)`;
+// How long the launch intro lasts at least, counted from the start of the page load: "vi tåler å
+// vente i allefall 3 sekunder på 'introen' om vi starter appen fresh, da får appen tid til å loade
+// litt lenger i bakgrunnen". Before this the boot screen vanished the instant data arrived — often
+// before its animation had begun — so the logo barely showed at all.
+const INTRO_MIN_MS = 2800;
 import { setNativeBackHandler, runNativeBackHandler, consumeIgnoredPopState } from '../lib/nativeBack';
 import { Capacitor } from '@capacitor/core';
 import { setMentionJumpHandler } from '../lib/mentionJump';
@@ -999,6 +1001,15 @@ function PageContent() {
       return next;
     });
   }, []);
+  // The launch intro: the boot screen stays over the freshly loaded app until INTRO_MIN_MS after the
+  // page began loading (at least a moment, so its exit always plays), then fades away. Above the
+  // isLoading return, as every hook here must be.
+  const [bootDone, setBootDone] = useState(false);
+  useEffect(() => {
+    if (isLoading || bootDone) return;
+    const t = window.setTimeout(() => setBootDone(true), Math.max(150, INTRO_MIN_MS - performance.now()));
+    return () => window.clearTimeout(t);
+  }, [isLoading, bootDone]);
   const [selectionMode, setSelectionMode] = useState(false);
   // Choosing a List or Doc in the Spaces drawer pushes the board in from the right, the same way
   // opening a DM pushes a conversation in. Before this the board simply appeared the moment the
@@ -4991,43 +5002,9 @@ function PageContent() {
   const docBookHasPages = !!(currentSpace && docBookRoot && getChildDocs(currentSpace, docBookRoot.id).length > 0);
 
   if (isLoading) {
-    // The boot screen: the Siqt tile (lib/siqtMark.ts) on its blue glow, exactly as the native Android
-    // splash draws it (scripts/generate-brand.ts renders the same SVG at the same share of screen
-    // width, on the same glow and the same #0a0a0a). So the handover from splash to page changes
-    // nothing — until, a moment later, the tile starts to breathe and pulses of blue light ring out of
-    // it and linger as they fade: "at det pulser blått lys, som går litt igjen" (design A, chosen
-    // 2026-10-02). It replaced a ring spinning round the old letter S.
-    //
-    // Hard-coded colours, not theme tokens: it has to match a native splash that is always dark.
-    // Sized min() of both viewport axes and a cap, so it is the splash's size on a phone and never
-    // runs off a short or wide window.
-    return (
-      <div
-        className="flex h-dvh w-screen items-center justify-center overflow-hidden"
-        style={{ background: SIQT_BG }}
-        role="status"
-        aria-label="Loading Siqt"
-      >
-        <div className="relative flex items-center justify-center" style={{ width: BOOT_TILE, height: BOOT_TILE }}>
-          {/* The still glow the splash also has, then the moving light on top of it. */}
-          <span
-            aria-hidden
-            className="absolute rounded-full pointer-events-none"
-            style={{
-              width: `${BOOT_GLOW_SCALE * 100}%`,
-              height: `${BOOT_GLOW_SCALE * 100}%`,
-              background: `radial-gradient(circle closest-side, rgb(59 130 246 / ${BOOT_GLOW_OPACITY}) 0%, rgb(59 130 246 / 0) 70%)`,
-            }}
-          />
-          <span aria-hidden className="siqt-boot-pulse">
-            <i />
-            <i />
-            <i />
-          </span>
-          <SiqtMark className="siqt-boot-tile relative w-full h-full" />
-        </div>
-      </div>
-    );
+    // The boot screen (components/BootScreen.tsx) while the first data loads; after that the same
+    // screen stays over the app as an overlay until the intro has had its time (see bootDone).
+    return <BootScreen />;
   }
 
   const activeModalTask = activeModalTaskId ? tasks.find((t) => t.id === activeModalTaskId) ?? null : null;
@@ -5258,6 +5235,18 @@ function PageContent() {
       {/* Star dust, drawn once for the whole app: the Planner's long-press and a doc checklist's tick. */}
       <PuffHost />
       <UpdateReloader />
+      <AnimatePresence>
+        {!bootDone && (
+          <motion.div
+            key="boot-overlay"
+            className="fixed inset-0 z-[300]"
+            exit={{ opacity: 0 }}
+            transition={{ duration: 0.5, ease: 'easeOut' }}
+          >
+            <BootScreen />
+          </motion.div>
+        )}
+      </AnimatePresence>
       {/* ================= TOP BAR — workspace + search, so the icon rail/sidebar below don't
           have to carry that weight themselves (previously both lived stacked at the very top
           of the sidebar, which read as cramped). ================= */}

@@ -11144,3 +11144,45 @@ rewrote 13k lines. It was reverted with `git checkout` and the edit re-applied.
   the result; then delete it.
 
 **Deployed 2026-10-02 as `ead6993`** (tag `deploy/2026-10-02_1825`).
+
+### 2026-10-02 (continued) — launch: one fixed-size picture through all three stages, and a ~3 s intro
+
+**Reported** with a screenshot from Android: "først helt mørkt med en s, så kommer logoen fadende
+inn, ikke noe animasjon … går veldig raskt, man rekker nesten ikke se logoen". The web loading
+screen was also too quick to see. The user is fine with a ≥ 3 s intro on a fresh start.
+
+**Cause**, three stages that did not match:
+1. Android 12+'s own splash used `windowSplashScreenAnimatedIcon = @mipmap/ic_launcher_foreground`,
+   the white S alone.
+2. The Capacitor splash, `splash.png` with CENTER_CROP, then crossfaded in (the screenshot caught
+   both S's at once), sized as a share of screen width.
+3. NativeSplashGate hid that splash on first render, and the web boot screen vanished the instant
+   data arrived, usually before its 240 ms animation delay had passed.
+
+**Fix:**
+- **Fixed size everywhere:** `BOOT_TILE_DP = 100` (lib/siqtMark.ts) replaces the width share. A CSS
+  px is a dp in the WebView, so all three can match on any phone.
+- **`scripts/generate-brand.ts`** now writes, in `drawable-xxxhdpi`:
+  - `splash_icon.png`, a 288 dp canvas (1152 px) with the tile and glow, for Android 12+;
+  - `splash.png`, a 240 dp canvas, for the Capacitor plugin (`androidScaleType: 'CENTER'`, so it is
+    unscaled);
+  - plus `drawable/launch_background.xml`, a layer-list of dark ground and centred bitmap, for
+    Android ≤ 11's window background.
+  - `styles.xml` points at `@drawable/splash_icon` and `@drawable/launch_background`.
+  - `npx cap sync android` was run for the config change.
+- **`components/BootScreen.tsx`:** the tile, static glow and pulses at 100 px.
+  - Its animations are offset by the time since the first BootScreen mounted (a module-level start,
+    via the `--boot-offset` CSS variable in the delays). The second instance therefore continues
+    mid-breath instead of restarting.
+  - On exit the tile swells to 1.14 while the overlay fades.
+- **Intro:** `INTRO_MIN_MS = 2800`, counted from page-load start (`performance.now()`).
+  - page.tsx returns `<BootScreen/>` while `isLoading`.
+  - After that, a `bootDone` effect keeps a fixed z-300 overlay of the same screen over the loaded
+    app until that time, at least 150 ms so the exit always plays. The overlay then fades out over
+    0.5 s through AnimatePresence.
+  - The app renders and settles underneath meanwhile.
+  - It applies to every full page load, desktop refresh included; nothing distinguishes a "fresh
+    start". Revisit if refreshes feel slow.
+- **APK:** clean build, 5.0 MB, copied to `public/siqt.apk`. **It must be reinstalled** for the
+  splash changes.
+- Not seen on a device.

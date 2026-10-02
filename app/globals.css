@@ -539,7 +539,7 @@ body {
      thread gets, and an animation beginning in them stutters. Until then this is the splash's still
      image, so the pause is invisible. */
   will-change: transform;
-  animation: siqt-boot-breathe 2.8s ease-in-out 240ms infinite;
+  animation: siqt-boot-breathe 2.8s ease-in-out calc(240ms + var(--boot-offset, 0ms)) infinite;
 }
 @keyframes siqt-boot-breathe {
   0%,
@@ -567,13 +567,13 @@ body {
   animation: siqt-boot-afterglow 2.8s cubic-bezier(0.2, 0.7, 0.3, 1) infinite;
 }
 .siqt-boot-pulse i:nth-child(1) {
-  animation-delay: 240ms;
+  animation-delay: calc(240ms + var(--boot-offset, 0ms));
 }
 .siqt-boot-pulse i:nth-child(2) {
-  animation-delay: 1173ms;
+  animation-delay: calc(1173ms + var(--boot-offset, 0ms));
 }
 .siqt-boot-pulse i:nth-child(3) {
-  animation-delay: 2107ms;
+  animation-delay: calc(2107ms + var(--boot-offset, 0ms));
 }
 @keyframes siqt-boot-afterglow {
   0% {

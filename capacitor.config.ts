@@ -55,7 +55,11 @@ const config: CapacitorConfig = {
       // them is invisible. That is also why this stays a static image rather than being made
       // fancier: its job is to match, not to perform.
       androidSplashResourceName: 'splash',
-      androidScaleType: 'CENTER_CROP',
+      // CENTER, not CENTER_CROP: the picture is the tile at a fixed dp size, drawn as it is on the
+      // plugin's dark background — the same size as Android 12's own splash before it and the web
+      // boot screen after it. Cropping a screen-sized image to fill made the tile a different size
+      // on every phone.
+      androidScaleType: 'CENTER',
       // Still off, and now for a better reason than "it looked busy": the logo itself is the
       // loading indicator. A separate spinner beside a spinning logo is two things saying the same
       // thing.
