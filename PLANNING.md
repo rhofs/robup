@@ -11046,3 +11046,5 @@ rewrote 13k lines. It was reverted with `git checkout` and the edit re-applied.
   - Applied cleanly to a fresh temp DB with `migrate deploy`.
   - A code rollback does not re-yellow them.
 - None of this has been seen on a device.
+
+**Deployed 2026-10-02 as `7ffa2c4`** (tag `deploy/2026-10-02_0927`). The To Do migration ran on start, after the usual DB snapshot.
