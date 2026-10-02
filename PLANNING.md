@@ -11102,3 +11102,43 @@ rewrote 13k lines. It was reverted with `git checkout` and the edit re-applied.
 - **Waiting on the user's choice.**
 
 **Deployed 2026-10-02 as `b107780`** (tag `deploy/2026-10-02_1326`). /ideas/logo.html sits behind the login gate (307 to /login when signed out).
+
+### 2026-10-02 (continued) — new Siqt mark: design A, the glow tile (logo, icons, splash, boot screen, APK)
+
+- **The user chose A ("Jeg liker A!")**: a rounded tile with a sky→blue→indigo gradient, gloss and
+  top rim light, and a white single-stroke rounded S. Its loading animation: the tile breathes, and
+  three staggered blue glows swell out of it and linger as they fade. Not the "B light trail" I had
+  suggested combining with it; A's own animation was used.
+- **One source:** `lib/siqtMark.ts` holds `siqtMarkSvg(opts)` (shapes tile / square / circle / glyph;
+  `glyph` scale, 0 = none; `stroke`; unique `id` prefix) and the boot contract constants:
+  `BOOT_TILE_SHARE` 0.24, `BOOT_TILE_MAX_PX` 132, `BOOT_GLOW_SCALE` 2.4, `BOOT_GLOW_OPACITY` 0.38.
+  - `components/SiqtMark.tsx` renders it inline in React.
+  - `lib/pwaIcon.tsx` renders it for next/og as an SVG data-URI `<img>`, with variants:
+    - `any`: the tile; the stroke is thicker at ≤ 48 px;
+    - `apple`: full-bleed;
+    - `maskable`: full-bleed with a smaller S.
+  - `app/apple-icon.tsx` and `pwa-icon-512-maskable` pass their variant. `app/favicon.ico` was
+    deleted, so tabs use `app/icon.tsx`.
+  - Checked by fetching /icon, /apple-icon, /pwa-icon-192 and /pwa-icon-512-maskable from a local
+    dev server and viewing them.
+- **Android:** `scripts/generate-brand.ts` (run: `npx tsx scripts/generate-brand.ts`) replaces
+  `scripts/generate-splash.mjs`, and `lib/bootMark.ts` is gone.
+  - It writes, for every density, `ic_launcher` (tile), `ic_launcher_round` (circle),
+    `ic_launcher_background` (full-bleed gradient, no S) and `ic_launcher_foreground` (white S at
+    0.4 on transparent).
+  - The adaptive XMLs lost the old 16.7 % insets, since the layers fill the canvas themselves.
+  - `drawable/splash.png` is 1080×2400: #0a0a0a, a radial blue glow, and the tile at 24 % of width.
+  - Lesson from the first run: the adaptive background must have **no** S, or the launcher shows two
+    stacked.
+- **Boot screen** (page.tsx `isLoading`) mirrors the splash: the same tile size min(24vw, 24vh,
+  132px), the same static glow, then `.siqt-boot-tile` (breathes 1→1.035 over 2.8 s) and
+  `.siqt-boot-pulse` (3 glows, a third of a cycle apart, scale 0.55→1.9 with an opacity fade), all
+  starting after 240 ms so the handover stays invisible. The old spinning ring CSS was removed.
+- **In-app mark** replaced the gradient-square "S" on the login page, the desktop header,
+  /invite/[code] and /connect/[code].
+- **APK:** clean build (`./gradlew clean assembleDebug`), 4.8 MB with Firebase present, copied to
+  `public/siqt.apk`. **The new launcher icon and splash need the app reinstalled from that APK**; a
+  web deploy alone does not change them.
+- Not seen on a device: the splash→boot handover and the installed launcher icon are unverified.
+- `public/ideas/logo.html` (the sketch sheet) is now obsolete. It is left until the user has seen
+  the result; then delete it.

@@ -1,5 +1,6 @@
 'use client';
 
+import SiqtMark from '../../../components/SiqtMark';
 import { useEffect, useState } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import { useSession } from 'next-auth/react';
@@ -44,7 +45,7 @@ export default function ConnectPage() {
     <div className="min-h-screen flex items-center justify-center bg-neutral-950 px-4">
       <div className="w-full max-w-sm">
         <div className="text-center mb-6">
-          <div className="w-10 h-10 rounded bg-blue-500 text-white font-bold flex items-center justify-center mx-auto mb-3">S</div>
+          <SiqtMark className="w-12 h-12 mx-auto mb-3" />
           <h1 className="text-lg font-semibold text-app-strong">Siqt</h1>
         </div>
 

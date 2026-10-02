@@ -1,5 +1,6 @@
 'use client';
 
+import SiqtMark from '../../components/SiqtMark';
 import { Suspense, useEffect, useState } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { signIn } from 'next-auth/react';
@@ -128,9 +129,7 @@ function LoginPageContent() {
 
       <div className="relative w-full max-w-[400px]">
         <div className="flex flex-col items-center text-center mb-7">
-          <div className="w-14 h-14 rounded-[18px] bg-gradient-to-br from-blue-400 to-blue-600 text-white text-2xl font-black flex items-center justify-center shadow-[0_8px_32px_-4px_rgb(59_130_246/0.55)] ring-1 ring-white/20 mb-5">
-            S
-          </div>
+          <SiqtMark className="w-16 h-16 mb-5 drop-shadow-[0_10px_28px_rgb(59_130_246/0.5)]" />
           <h1 className="text-[26px] sm:text-[30px] font-bold text-app-strong tracking-tight leading-[1.15]">
             Tasks, planning, docs and chat — <span className="text-blue-400">one place</span>.
           </h1>

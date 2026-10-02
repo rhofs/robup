@@ -77,11 +77,12 @@ import {
 import { useTaskStore, HierarchySpace, HierarchyFolder, HierarchyList, HierarchyDocFolder, HierarchyRoom, HierarchyWorkspace, StatusDef, CustomFieldDef, Task, TaskDoc, AppUser } from '../store/useTaskStore';
 import { useHistoryStore } from '../store/useHistoryStore';
 import { hapticTap } from '../lib/haptics';
-import { BOOT_MARK_SRC, BOOT_MARK_WIDTH_SHARE, BOOT_RING_BOX_SHARE } from '../lib/bootMark';
+import { SIQT_BG, BOOT_TILE_SHARE, BOOT_TILE_MAX_PX, BOOT_GLOW_SCALE, BOOT_GLOW_OPACITY } from '../lib/siqtMark';
+import SiqtMark from '../components/SiqtMark';
 
-// The boot mark's size on screen. See its own use below for why this is a min() rather than a share.
-const BOOT_MAX_PX = 340;
-const BOOT_RING_BOX = `min(${BOOT_RING_BOX_SHARE * 100}vw, ${BOOT_RING_BOX_SHARE * 100}vh, ${BOOT_MAX_PX}px)`;
+// The boot tile's size on screen: the splash's share of width on a phone, never more than the same
+// share of height, and capped for a desktop window.
+const BOOT_TILE = `min(${BOOT_TILE_SHARE * 100}vw, ${BOOT_TILE_SHARE * 100}vh, ${BOOT_TILE_MAX_PX}px)`;
 import { setNativeBackHandler, runNativeBackHandler, consumeIgnoredPopState } from '../lib/nativeBack';
 import { Capacitor } from '@capacitor/core';
 import { setMentionJumpHandler } from '../lib/mentionJump';
@@ -4990,86 +4991,40 @@ function PageContent() {
   const docBookHasPages = !!(currentSpace && docBookRoot && getChildDocs(currentSpace, docBookRoot.id).length > 0);
 
   if (isLoading) {
-    // Deliberately identical to the native splash screen the Android app shows before this page
-    // exists: same #0a0a0a ground, same mark. That mark is not an image anywhere — lib/pwaIcon.tsx
-    // generates every Siqt icon from a bold sans "S" at #60a5fa on #0a0a0a — so it can be reproduced
-    // here exactly rather than approximated.
+    // The boot screen: the Siqt tile (lib/siqtMark.ts) on its blue glow, exactly as the native Android
+    // splash draws it (scripts/generate-brand.ts renders the same SVG at the same share of screen
+    // width, on the same glow and the same #0a0a0a). So the handover from splash to page changes
+    // nothing — until, a moment later, the tile starts to breathe and pulses of blue light ring out of
+    // it and linger as they fade: "at det pulser blått lys, som går litt igjen" (design A, chosen
+    // 2026-10-02). It replaced a ring spinning round the old letter S.
     //
-    // The point is that the handover stops being visible. Before, the splash gave way to a
-    // monospace "Loading Siqt..." on a themed background: a second waiting screen, in a different
-    // style, which reads as something having gone wrong. Reported as "den føles veldig out of
-    // place".
-    //
-    // The ring is CSS rather than the animated drawable the native splash was given. That drawable
-    // never ran on a real device across two attempts (see PLANNING.md) — AnimationDrawable is
-    // silently unreliable about when it may start. This is the same idea somewhere it cannot fail.
-    //
-    // Hard-coded colours, not theme tokens: this has to match a native splash that is always dark,
-    // whatever theme the user has chosen.
+    // Hard-coded colours, not theme tokens: it has to match a native splash that is always dark.
+    // Sized min() of both viewport axes and a cap, so it is the splash's size on a phone and never
+    // runs off a short or wide window.
     return (
       <div
-        className="flex h-dvh w-screen items-center justify-center"
-        style={{ background: '#0a0a0a' }}
+        className="flex h-dvh w-screen items-center justify-center overflow-hidden"
+        style={{ background: SIQT_BG }}
         role="status"
         aria-label="Loading Siqt"
       >
-        {/* The same artwork the splash uses, at the same share of screen width, inside the same
-            ring. Nothing here is drawn twice: lib/bootMark.ts is generated from the identical
-            source by scripts/generate-splash.mjs, and the shares below come from that same script.
-            The splash already carries this ring, stationary — so the only thing that changes when
-            this screen takes over is that the ring starts turning. */}
-        <div
-          className="relative flex items-center justify-center"
-          // The shares are taken from the native splash, which is always a portrait phone — so as
-          // bare `vw` they are right there and nonsense anywhere else. At 1920px wide, 58vw is
-          // 1114px: taller than the screen, so the ring ran off both edges. Reported on desktop.
-          //
-          // min() of the two axes and a cap: the two viewport terms keep it from ever exceeding a
-          // short or narrow window, and BOOT_MAX_PX stops it growing past the size it has on the
-          // device it was designed for. A phone is unaffected — there 58vw is the smallest of the
-          // three, which is the whole point of writing it this way rather than branching on width.
-          style={{ width: BOOT_RING_BOX, height: BOOT_RING_BOX }}
-        >
-          {/* The rotation is on this wrapper, not on the <svg>. A transform on a plain element gets
-              its own compositing layer and runs off the main thread; the same transform applied to
-              an SVG element does not reliably, and this screen exists precisely while the main
-              thread is at its busiest — hydrating and fetching. */}
-          <div className="absolute inset-0 siqt-boot-ring">
-            <svg width="100%" height="100%" viewBox="0 0 100 100">
-              <circle cx="50" cy="50" r="47" fill="none" stroke="#60a5fa" strokeOpacity="0.14" strokeWidth="2" />
-              <circle
-                cx="50"
-                cy="50"
-                r="47"
-                fill="none"
-                stroke="#60a5fa"
-                strokeWidth="2"
-                strokeLinecap="round"
-                strokeDasharray="77 218"
-              />
-            </svg>
-          </div>
-          {/* eslint-disable-next-line @next/next/no-img-element -- a data URI; next/image would add
-              a loader and a layout wrapper to something that is already inline and 4.6KB. */}
-          <img
-            src={BOOT_MARK_SRC}
-            alt=""
-            // Decoded synchronously, which is not the default even for a data URI. Without it the
-            // first frame of this screen can paint before the image is ready — so the splash's S
-            // gives way to an empty circle for a frame and then the S returns. That is the hitch
-            // right at the handover, and it looks like the animation stumbling rather than like a
-            // missing image.
-            decoding="sync"
-            fetchPriority="high"
-            draggable={false}
+        <div className="relative flex items-center justify-center" style={{ width: BOOT_TILE, height: BOOT_TILE }}>
+          {/* The still glow the splash also has, then the moving light on top of it. */}
+          <span
+            aria-hidden
+            className="absolute rounded-full pointer-events-none"
             style={{
-              // A share of the ring box rather than of the viewport, so the two cannot be capped
-              // independently and drift out of proportion — the mark sitting off-centre or
-              // overflowing its own ring is worse than either being the wrong size.
-              width: `${(BOOT_MARK_WIDTH_SHARE / BOOT_RING_BOX_SHARE) * 100}%`,
-              height: 'auto',
+              width: `${BOOT_GLOW_SCALE * 100}%`,
+              height: `${BOOT_GLOW_SCALE * 100}%`,
+              background: `radial-gradient(circle closest-side, rgb(59 130 246 / ${BOOT_GLOW_OPACITY}) 0%, rgb(59 130 246 / 0) 70%)`,
             }}
           />
+          <span aria-hidden className="siqt-boot-pulse">
+            <i />
+            <i />
+            <i />
+          </span>
+          <SiqtMark className="siqt-boot-tile relative w-full h-full" />
         </div>
       </div>
     );
@@ -5343,9 +5298,7 @@ function PageContent() {
             uses), matching MobileSpacesSheet's own title-on-the-left header shape so every mobile
             screen's top bar reads consistently instead of a plain logo everywhere except Spaces. */}
         <div className="flex items-center gap-2 shrink-0 md:w-64">
-          <div className="hidden md:flex w-8 h-8 rounded bg-gradient-to-br from-blue-500 to-blue-700 items-center justify-center font-black text-white shadow-lg shadow-blue-500/20 shrink-0">
-            S
-          </div>
+          <SiqtMark className="hidden md:block w-8 h-8" />
           {/* The mobile title. In the new layout it also says which context you are in, and in
               Office it is the workspace switcher itself — the single most-used control in the app
               by the user's own account ("alfa og omega"), so it is one tap from anywhere rather

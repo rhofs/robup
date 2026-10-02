@@ -1,30 +1,25 @@
-import type { CSSProperties } from 'react';
+import { siqtMarkDataUri } from './siqtMark';
 
-// Matches the app's dark theme (neutral-950 background) and the blue-400 accent used everywhere
-// else for "active"/brand state (nav-rail active tab, etc.) — no separate logo asset exists yet,
-// so this is a simple, consistent placeholder rather than a new unrelated design.
-const BG = '#0a0a0a';
-const ACCENT = '#60a5fa';
-
-// Shared by app/icon.tsx, app/apple-icon.tsx, and the dedicated PWA manifest icon routes — one
-// definition so all of Siqt's generated icons agree on look and background/foreground colors.
-export function siqtIconElement(sizePx: number, maskable = false) {
-  // A maskable icon must have its background fill the entire canvas edge-to-edge (a launcher may
-  // crop it into a circle/squircle), with the actual glyph kept inside a smaller "safe zone" so it
-  // survives that crop — hence the smaller font size than the plain (non-maskable) icon, which is
-  // sized to fill the square directly since nothing crops it.
-  const fontSize = maskable ? sizePx * 0.42 : sizePx * 0.62;
-  const style: CSSProperties = {
-    width: '100%',
-    height: '100%',
-    background: BG,
-    display: 'flex',
-    alignItems: 'center',
-    justifyContent: 'center',
-  };
+// Every icon Siqt generates on the fly — favicon, Apple touch icon, the PWA manifest icons — drawn from
+// the one shared mark (lib/siqtMark.ts), so they cannot drift from the logo in the app or the Android
+// icons. Rendered by next/og, which draws an SVG <img> through resvg.
+//
+//   'any'      — the rounded tile on transparent: browser tabs, desktop installs.
+//   'apple'    — gradient to the edges: iOS masks it into its own rounded square.
+//   'maskable' — gradient to the edges with a smaller S, kept inside the safe zone a launcher may crop
+//                to a circle or squircle.
+export function siqtIconElement(sizePx: number, variant: 'any' | 'apple' | 'maskable' = 'any') {
+  const src =
+    variant === 'maskable'
+      ? siqtMarkDataUri({ shape: 'square', glyph: 0.42 })
+      : variant === 'apple'
+        ? siqtMarkDataUri({ shape: 'square', glyph: 0.56 })
+        : // Small sizes get a thicker stroke so the S survives at favicon scale.
+          siqtMarkDataUri({ shape: 'tile', stroke: sizePx <= 48 ? 15 : 12 });
   return (
-    <div style={style}>
-      <span style={{ fontSize, fontWeight: 700, color: ACCENT, fontFamily: 'sans-serif' }}>S</span>
+    <div style={{ width: '100%', height: '100%', display: 'flex', background: 'transparent' }}>
+      {/* eslint-disable-next-line @next/next/no-img-element -- rendered by next/og, not the browser */}
+      <img src={src} width={sizePx} height={sizePx} alt="" />
     </div>
   );
 }

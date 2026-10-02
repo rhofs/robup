@@ -533,29 +533,64 @@ body {
    the Android splash was given an AnimationDrawable doing the same job and it never once ran on a
    device — that API is silently unreliable about when it is allowed to start. Here there is nothing
    to be unreliable about. */
-.siqt-boot-ring {
-  transform-origin: 50% 50%;
-  /* Promoted to its own layer up front rather than the browser discovering mid-animation that it
-     needs one. This screen runs while the app is hydrating and fetching, so the main thread is as
-     contended as it ever gets — which is exactly when an unpromoted animation drops frames. */
+.siqt-boot-tile {
+  /* Breathes, very slightly, once the page has taken over from the splash. Starts after a short pause
+     for the same reason the old ring did: the first frames after the handover are the busiest the main
+     thread gets, and an animation beginning in them stutters. Until then this is the splash's still
+     image, so the pause is invisible. */
   will-change: transform;
-  /* A short pause before it starts turning, and the pause is invisible: the splash draws this same
-     ring in this same position, so the first fraction of a second on screen is indistinguishable
-     from the image it replaced.
-     
-     What it buys is the handover itself. Those frames are the busiest the main thread ever gets —
-     React hydrating, the first fetches going out — and an animation beginning in the middle of that
-     stutters on its opening steps. Starting just after, against a settled screen, is the same trick
-     the Spaces drawer's own push uses for the same reason. */
-  animation: siqt-boot-ring-spin 1.15s linear 220ms infinite;
+  animation: siqt-boot-breathe 2.8s ease-in-out 240ms infinite;
 }
-@keyframes siqt-boot-ring-spin {
-  to {
-    transform: rotate(360deg);
+@keyframes siqt-boot-breathe {
+  0%,
+  100% {
+    transform: scale(1);
+  }
+  50% {
+    transform: scale(1.035);
+  }
+}
+/* Blue light pulsing out of the tile and lingering as it fades: three soft glows, a third of a cycle
+   apart, each swelling from behind the tile to well past it. Transform and opacity only. */
+.siqt-boot-pulse {
+  position: absolute;
+  inset: -20%;
+  pointer-events: none;
+}
+.siqt-boot-pulse i {
+  position: absolute;
+  inset: 0;
+  border-radius: 9999px;
+  background: radial-gradient(circle closest-side, rgb(96 165 250 / 0.55) 0%, rgb(59 130 246 / 0.25) 45%, rgb(59 130 246 / 0) 72%);
+  opacity: 0;
+  will-change: transform, opacity;
+  animation: siqt-boot-afterglow 2.8s cubic-bezier(0.2, 0.7, 0.3, 1) infinite;
+}
+.siqt-boot-pulse i:nth-child(1) {
+  animation-delay: 240ms;
+}
+.siqt-boot-pulse i:nth-child(2) {
+  animation-delay: 1173ms;
+}
+.siqt-boot-pulse i:nth-child(3) {
+  animation-delay: 2107ms;
+}
+@keyframes siqt-boot-afterglow {
+  0% {
+    transform: scale(0.55);
+    opacity: 0;
+  }
+  12% {
+    opacity: 1;
+  }
+  100% {
+    transform: scale(1.9);
+    opacity: 0;
   }
 }
 @media (prefers-reduced-motion: reduce) {
-  .siqt-boot-ring {
+  .siqt-boot-tile,
+  .siqt-boot-pulse i {
     animation: none;
   }
 }
