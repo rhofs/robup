@@ -11142,3 +11142,5 @@ rewrote 13k lines. It was reverted with `git checkout` and the edit re-applied.
 - Not seen on a device: the splash→boot handover and the installed launcher icon are unverified.
 - `public/ideas/logo.html` (the sketch sheet) is now obsolete. It is left until the user has seen
   the result; then delete it.
+
+**Deployed 2026-10-02 as `ead6993`** (tag `deploy/2026-10-02_1825`).
