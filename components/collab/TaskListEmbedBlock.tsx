@@ -104,6 +104,7 @@ export default function TaskListEmbedBlock({ node, updateAttributes, deleteNode,
   const deleteTask = useTaskStore((s) => s.optimisticDeleteTask);
   const createTask = useTaskStore((s) => s.optimisticCreateTask);
   const createList = useTaskStore((s) => s.createList);
+  const deleteList = useTaskStore((s) => s.deleteList);
   const setListVisibleColumns = useTaskStore((s) => s.setListVisibleColumns);
   const createCustomField = useTaskStore((s) => s.createCustomField);
 
@@ -223,9 +224,10 @@ export default function TaskListEmbedBlock({ node, updateAttributes, deleteNode,
       }
       g.tasks.push(t);
     }
-    // Empty groups beyond the first are left out, as ClickUp does; the first always shows so there is
-    // somewhere to add the first task.
-    return out.filter((g, i) => g.tasks.length > 0 || i === 0);
+    // Only statuses that have tasks — an empty "To Do" sitting at the top of every List read as a task
+    // that was not there. An empty List says so instead, and new tasks come from the toolbar's "+".
+    // (The status a task is being added to shows while its name is typed, so the field has a home.)
+    return out.filter((g) => g.tasks.length > 0 || g.name === addingIn);
   })();
 
   const toggle = (set: Set<string>, id: string) => {
@@ -268,6 +270,20 @@ export default function TaskListEmbedBlock({ node, updateAttributes, deleteNode,
     if (!title) setAddingIn(null);
   };
 
+  // Removing the block. A List that was made here (doc-owned) has nowhere else to be seen, so it goes
+  // to Trash with its tasks — restorable there, where it comes back as an ordinary List — rather than
+  // living on invisibly: "Hvis jeg 'krysser ut' en task-list i en doc, hvor havner den? Den burde jo
+  // havne i trash". An existing List shown here, or hand-picked tasks, are not this block's to delete:
+  // the block goes, they stay where they are.
+  const removeBlock = () => {
+    if (list?.docId) {
+      const n = topTasks.length;
+      if (!window.confirm(`Remove this task list?\n\n"${list.name}"${n ? ` and its ${n} task${n === 1 ? '' : 's'}` : ''} will be moved to Trash, where you can restore it.`)) return;
+      void deleteList(list.space.id, list.id);
+    }
+    deleteNode();
+  };
+
   const header = (
     <div className="flex items-center gap-1.5 px-3 h-10 border-b border-neutral-800/80">
       <ListChecks className="w-4 h-4 shrink-0" style={{ color: list?.color ?? undefined }} />
@@ -294,7 +310,7 @@ export default function TaskListEmbedBlock({ node, updateAttributes, deleteNode,
         </HeaderButton>
       )}
       {editable && (
-        <HeaderButton title="Remove from doc" onClick={() => deleteNode()}>
+        <HeaderButton title={list?.docId ? 'Remove (the List goes to Trash)' : 'Remove from doc'} onClick={removeBlock}>
           <X className="w-3.5 h-3.5" />
         </HeaderButton>
       )}
@@ -307,6 +323,26 @@ export default function TaskListEmbedBlock({ node, updateAttributes, deleteNode,
         <ListChecks className="w-3.5 h-3.5" /> List
       </span>
       <div className="flex-1" />
+      {mode === 'list' && editable && list && (
+        // Always-there way in at the top, ClickUp's "+ Add Task": into the first status, which then
+        // appears as a group if it was not showing.
+        <button
+          onClick={() => {
+            const first = statuses[0]?.name ?? 'To Do';
+            setClosedGroups((s) => {
+              const n = new Set(s);
+              n.delete(first);
+              return n;
+            });
+            setAddDraft('');
+            setAddingIn(first);
+          }}
+          title="Add Task"
+          className="flex items-center gap-1 h-7 px-2 mr-1 rounded-lg text-[12px] font-medium text-neutral-300 hover:text-app-strong hover:bg-neutral-800 cursor-pointer"
+        >
+          <Plus className="w-3.5 h-3.5" /> Task
+        </button>
+      )}
       {searchOpen ? (
         <div className="flex items-center gap-1.5 h-7 px-2 rounded-lg bg-neutral-800/70">
           <Search className="w-3.5 h-3.5 text-neutral-500" />
@@ -423,6 +459,22 @@ export default function TaskListEmbedBlock({ node, updateAttributes, deleteNode,
       <div className="overflow-x-auto">
         <div style={{ minWidth }}>
           {columnHeader}
+          {groups.length === 0 && (
+            <div className="flex items-center gap-3 px-4 py-4">
+              <span className="text-[12.5px] text-neutral-500">{query.trim() ? 'No tasks match.' : 'No tasks yet.'}</span>
+              {editable && !query.trim() && (
+                <button
+                  onClick={() => {
+                    setAddDraft('');
+                    setAddingIn(statuses[0]?.name ?? 'To Do');
+                  }}
+                  className="flex items-center gap-1 text-[12.5px] text-blue-400 hover:text-blue-300 cursor-pointer"
+                >
+                  <Plus className="w-3.5 h-3.5" /> Add Task
+                </button>
+              )}
+            </div>
+          )}
           {groups.map((g) => {
             const closed = closedGroups.has(g.name);
             return (
@@ -566,7 +618,9 @@ export default function TaskListEmbedBlock({ node, updateAttributes, deleteNode,
               updateAttributes({ listId: id, taskIds: null });
               setSetupOpen(false);
               setAddDraft('');
-              setAddingIn(FALLBACK_STATUSES[0].name);
+              // Straight into typing the first task, in the Space's own first status.
+              const sp = workspaces.flatMap((w) => w.spaces).find((x) => x.id === spaceId);
+              setAddingIn(sp?.statuses?.[0]?.name ?? FALLBACK_STATUSES[0].name);
             }}
             onCancel={mode === 'setup' ? undefined : () => setSetupOpen(false)}
           />

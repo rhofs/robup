@@ -11048,3 +11048,24 @@ rewrote 13k lines. It was reverted with `git checkout` and the edit re-applied.
 - None of this has been seen on a device.
 
 **Deployed 2026-10-02 as `7ffa2c4`** (tag `deploy/2026-10-02_0927`). The To Do migration ran on start, after the usual DB snapshot.
+
+### 2026-10-02 (continued) — removing a doc task block; no empty status groups; "+ Task" at the top
+
+- **Asked:** "Hvis jeg 'krysser ut' en task-list i en doc, hvor havner den? Den burde jo havne i
+  trash". Before this, × only removed the block, so a doc-owned List lived on invisible (hidden
+  everywhere by docId).
+  - Now × on a **doc-owned List** confirms ("… and its N tasks will be moved to Trash, where you
+    can restore it"), then calls `deleteList` (soft delete → Trash, undoable) and removes the block.
+  - The list DELETE route also sets `docId = null` when trashing, so a List restored from Trash
+    comes back as an ordinary List in its Space instead of an invisible one.
+  - An existing List or picked tasks: × removes only the block; the tasks stay where they are.
+  - Not handled: deleting a whole Doc still leaves its doc-owned Lists hidden. Follow-up: cascade
+    them to Trash with the Doc.
+- **Empty status groups:** "'To do' er alltid tilstede … Den burde være borte".
+  - Only statuses with tasks show. The status a task is being typed into shows temporarily.
+  - An empty List shows "No tasks yet. + Add Task".
+- **"+ Task" in the toolbar**, always there (ClickUp's top Add Task): it opens the add field in the
+  Space's first status.
+- A new doc-owned List opens its add field in the Space's real first status (not a hardcoded
+  "To Do").
+- The user confirmed the new caret looks good and the wiki sheet now swipes down (Android).

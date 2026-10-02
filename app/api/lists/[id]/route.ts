@@ -84,6 +84,10 @@ export async function DELETE(req: Request, { params }: { params: Promise<{ id: s
     await prisma.list.delete({ where: { id } });
   } else {
     await cascadeList(id, new Date());
+    // A Doc's own List (removed from its Doc's task-list block) stops belonging to the Doc on its way
+    // to Trash: restored from there, it comes back as an ordinary List in its Space rather than as a
+    // List hidden everywhere with no block left to show it.
+    await prisma.list.update({ where: { id }, data: { docId: null } });
   }
   return NextResponse.json({ ok: true });
 }
