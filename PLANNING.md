@@ -11246,3 +11246,26 @@ screen was also too quick to see. The user is fine with a ≥ 3 s intro on a fre
   arithmetic are untested.
 
 **Deployed 2026-10-04 as `316e687`** (tag `deploy/2026-10-04_1659`).
+
+### 2026-10-04 (continued) — "Add Task" on a phone opens a ClickUp-style card
+
+- **Feedback:** "Dette ble mye bedre!" But the docked composer left very little air between itself
+  and the last card. The user sent ClickUp's add-task sheet: "Kan vi få et sånt kort istedet når vi
+  trykker ny task?"
+- **New `components/mobile/TaskCreateSheet.tsx`** replaces TaskComposer, which was deleted. It is a
+  bottom card over a dimmed list, placed on the visual viewport so it rides the keyboard.
+  - Layout: grabber; "In <List> ▾" (List picker, doc-owned Lists excluded); ✕; a 28 px "Untitled
+    task" title; an auto-growing description; rows for **Add assignees** (AssigneePicker,
+    restricted to the List's audience via `taskAudience` on a public stand-in task) and **Set
+    dates** (DateSheet, Start/Due); a bottom bar with a **status pill** (the Space's statuses;
+    picking another List resets it) and a blue **Create**.
+  - Enter on the title creates. It drags down to cancel; Back closes the top picker first, then the
+    card (two `useBackLayer`s).
+  - `Row` and `PickSheet` are now exported from MobileQuickCreateSheet and reused.
+- **`createTaskFromSheet`** in page.tsx: a uuid; `materializeTaskId` set first, so the card
+  materialises as soon as it is inserted; `await optimisticCreateTask(..., start, due, id, status)`;
+  then `optimisticSetAssignees` / `optimisticSetDescription`, which are separate writes and must
+  wait for the server to have the task.
+- The scroll-into-view floor is now the viewport minus 120 px on phones (clear of the floating
+  nav). Desktop keeps the inline row via `quickAddTask`.
+- Not seen on a device.

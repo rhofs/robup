@@ -67,7 +67,7 @@ function datesSummary(start: string | null, end: string | null): string | null {
   return null;
 }
 
-function Row({ icon: Icon, children, onClick }: { icon: typeof CalendarDays; children: React.ReactNode; onClick?: () => void }) {
+export function Row({ icon: Icon, children, onClick }: { icon: typeof CalendarDays; children: React.ReactNode; onClick?: () => void }) {
   return (
     <div onClick={onClick} className={`flex items-center gap-4 min-h-[60px] py-2 ${onClick ? 'cursor-pointer active:opacity-70' : ''}`}>
       <Icon className="w-6 h-6 text-neutral-500 shrink-0" />
@@ -77,7 +77,7 @@ function Row({ icon: Icon, children, onClick }: { icon: typeof CalendarDays; chi
 }
 
 // A bottom sheet for a list of choices (the list to create a task in, attendees).
-function PickSheet({ title, onClose, children }: { title: string; onClose: () => void; children: React.ReactNode }) {
+export function PickSheet({ title, onClose, children }: { title: string; onClose: () => void; children: React.ReactNode }) {
   const drag = useSheetDrag(onClose);
   const visible = useVisibleViewport();
   return (

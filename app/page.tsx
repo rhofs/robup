@@ -79,7 +79,7 @@ import { useHistoryStore } from '../store/useHistoryStore';
 import { hapticTap } from '../lib/haptics';
 import SiqtMark from '../components/SiqtMark';
 import BootScreen from '../components/BootScreen';
-import TaskComposer, { TASK_COMPOSER_ID } from '../components/mobile/TaskComposer';
+import TaskCreateSheet, { type NewTaskInput } from '../components/mobile/TaskCreateSheet';
 import { MATERIALIZE_MS } from '../components/TaskMaterialize';
 
 // How long the launch intro lasts at least, counted from the start of the page load: "vi tåler å
@@ -1012,12 +1012,12 @@ function PageContent() {
     const t = window.setTimeout(() => setBootDone(true), Math.max(150, INTRO_MIN_MS - performance.now()));
     return () => window.clearTimeout(t);
   }, [isLoading, bootDone]);
-  // Phone: the composer docked on the keyboard (components/mobile/TaskComposer.tsx) instead of the
-  // inline add row. And the task that was just made, which arrives with its materialise animation.
+  // Phone: "Add Task" opens a ClickUp-style card (components/mobile/TaskCreateSheet.tsx) instead of
+  // the inline add row. And the task that was just made, which arrives with its materialise animation.
   const [taskComposerOpen, setTaskComposerOpen] = useState(false);
   const [materializeTaskId, setMaterializeTaskId] = useState<string | null>(null);
-  // The task just made: bring its card into view — above the composer on a phone, where it would
-  // otherwise land behind it — and end its entrance once it has played.
+  // The task just made: bring its card into view — clear of the floating bottom nav on a phone — and
+  // end its entrance once it has played.
   useEffect(() => {
     if (!materializeTaskId) return;
     const id = materializeTaskId;
@@ -1030,8 +1030,7 @@ function PageContent() {
         while (scroller && !/(auto|scroll)/.test(getComputedStyle(scroller).overflowY)) scroller = scroller.parentElement;
         if (!scroller) return;
         const r = card.getBoundingClientRect();
-        const composer = document.getElementById(TASK_COMPOSER_ID)?.getBoundingClientRect();
-        const floor = (composer ? composer.top : window.visualViewport?.height ?? window.innerHeight) - 16;
+        const floor = (window.visualViewport?.height ?? window.innerHeight) - (window.innerWidth < 768 ? 120 : 24);
         const ceiling = scroller.getBoundingClientRect().top + 16;
         const delta = r.bottom > floor ? r.bottom - floor : r.top < ceiling ? r.top - ceiling : 0;
         if (delta) scroller.scrollBy({ top: delta, behavior: 'smooth' });
@@ -3516,6 +3515,19 @@ function PageContent() {
     return id;
   };
 
+  // The phone's "Add Task" card. The task appears at once (optimistic, with its id chosen here so it
+  // can materialise), then assignees and a description follow as soon as the server has the task —
+  // they are separate writes, and a write to a task the server has not created yet would miss.
+  const createTaskFromSheet = async (t: NewTaskInput) => {
+    const id = crypto.randomUUID();
+    setSortBy('none');
+    setMaterializeTaskId(id);
+    setVisibleTaskCount((n) => Math.max(n, filteredTasks.length + 1));
+    await optimisticCreateTask(t.title, t.listId, t.spaceId, null, t.startDate, t.dueDate, id, t.status);
+    if (t.assigneeIds.length) optimisticSetAssignees(id, t.assigneeIds);
+    if (t.description) optimisticSetDescription(id, t.description);
+  };
+
   const handleQuickAdd = () => {
     if (!newTaskTitle.trim()) return;
     if (quickAddTask(newTaskTitle.trim())) setNewTaskTitle('');
@@ -5278,13 +5290,10 @@ function PageContent() {
       <UpdateReloader />
       <AnimatePresence>
         {isMobile && taskComposerOpen && activeView === 'board' && (
-          <TaskComposer
-            key="task-composer"
-            listName={(() => {
-              const id = [...activeListIds][0];
-              return id ? currentSpace?.lists.find((l) => l.id === id)?.name ?? null : null;
-            })()}
-            onSubmit={(title) => void quickAddTask(title)}
+          <TaskCreateSheet
+            key="task-create-sheet"
+            defaultListId={[...activeListIds][0] ?? currentSpace?.lists.find((l) => !l.archived && !l.docId)?.id ?? null}
+            onCreate={(t) => void createTaskFromSheet(t)}
             onClose={() => setTaskComposerOpen(false)}
           />
         )}
@@ -7554,8 +7563,6 @@ function PageContent() {
               </div>
               </div>
             </div>
-            {/* Room under the last card while the composer is up, so a new task can scroll clear of it. */}
-            {isMobile && taskComposerOpen && <div aria-hidden className="h-28" />}
             {/* The archive, on a phone: under the list, where the end of your tasks is — asked for
                 as "under selve arket … under tasksa". It was only in the launcher menu, far from
                 the list it changes. Desktop keeps its toolbar button. */}
