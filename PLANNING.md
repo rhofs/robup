@@ -11367,3 +11367,36 @@ screen was also too quick to see. The user is fine with a ≥ 3 s intro on a fre
 - Not seen on a device.
 
 **Deployed 2026-10-04 as `c01f7b3`** (tag `deploy/2026-10-04_1826`).
+
+### 2026-10-04 (continued) — the real cause of sheets "pushing" the page: keyboard pans; fixed with resizes-content while sheets are open
+
+- **Reported**, with screenshots: still "en liten glippe" on the new-task card's entrance, and
+  something odd under Assignees and the calendar. The Assignees screenshot was decisive: the picker
+  sat correctly above the keyboard, while the task card and the whole page behind were shifted up
+  by **exactly one keyboard height**.
+- **Diagnosis:** Android's engine (Chrome and the app's WebView) defaults to the keyboard *covering*
+  the page. The layout viewport stays full height and only the visual viewport shrinks, so when a
+  field gains focus the engine may **pan the visual viewport**.
+  - Layers positioned on the live visible box (`top = visualViewport.offsetTop`) followed the pan
+    and looked right.
+  - Anything else moved by the pan: the page behind, and the task card while held on a frozen box.
+  - **`window.scrollTo` cannot undo a visual-viewport pan in Chromium** (it scrolls the layout
+    viewport, already at 0). That is why the last two rounds' "un-pan" did nothing on Android and
+    may have caused the black flash. That code is removed.
+- **Fix in `hooks/useVisibleViewport.ts`:** a refcounted layout effect appends
+  `interactive-widget=resizes-content` to the viewport meta while any sheet is mounted, and
+  restores the original when the last one unmounts.
+  - With the page resized by the keyboard, the visible area is the whole page, so there is nothing
+    to pan.
+  - It is a layout effect so it is in place before the sheet's field takes focus.
+  - Deliberately not global: elsewhere (chat, search) the layout assumes the keyboard covers, and a
+    resize would lift the bottom nav above the keyboard.
+  - iOS ignores the setting. Its own page scroll is still reset to 0 when a sheet unmounts, as
+    before.
+- `SheetLayer` transitions its `height` (240 ms), so a sheet rises with the keyboard instead of
+  jumping when the box changes.
+- **Unverified on a device**, in particular that the WebView honours a runtime change of the
+  viewport meta's interactive-widget. If it does not, the fallback is to set it globally in
+  `app/layout.tsx` (`viewport.interactiveWidget`) and deal with the bottom nav, or to set
+  `android:windowSoftInputMode="adjustResize"` and apply IME insets in MainActivity (targetSdk 35
+  edge-to-edge: Android no longer resizes on its own).

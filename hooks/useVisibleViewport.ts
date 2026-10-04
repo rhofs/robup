@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useLayoutEffect, useState } from 'react';
 
 // The part of the screen actually visible: its top and height in layout-viewport pixels, from
 // window.visualViewport. For anything anchored to the bottom that must stay above the on-screen
@@ -15,41 +15,60 @@ import { useEffect, useState } from 'react';
 // box is simply the whole screen.
 export type VisibleBox = { top: number; height: number };
 
+// While any sheet is open, the on-screen keyboard RESIZES the page instead of covering it (the
+// viewport meta's interactive-widget=resizes-content), and the setting goes back when the last sheet
+// closes.
+//
+// Why: with the default (the keyboard only covers), Android's browser engine — Chrome, and the WebView
+// inside the app — keeps the page full height under the keyboard, and when a field gains focus it
+// may PAN the visible area down to show it. Fixed layers positioned against the visible box followed
+// the pan; anything that was not (the new-task card held in place under a picker) and the whole page
+// behind slid up by exactly one keyboard height, under the status bar: "task lista ble liksom pusha
+// litt opp", the card overshooting at the end of its entrance, and the Assignees and calendar pickers
+// showing the card above them. A pan of the visible area cannot be undone from script —
+// window.scrollTo moves the page, not the pan, which is why two rounds of trying failed. With the page
+// resized instead, the visible area IS the page, so there is nothing to pan. iOS ignores the setting
+// and keeps its own behaviour, handled by the scroll reset below.
+//
+// Only while a sheet is up: elsewhere (a chat box, the search field) the app is laid out for the
+// keyboard covering the page, and a resize would lift the bottom nav above the keyboard there.
+let sheetsOpen = 0;
+let originalViewport: string | null = null;
+function setResizesContent(on: boolean) {
+  const meta = document.querySelector('meta[name="viewport"]');
+  if (!meta) return;
+  if (on) {
+    originalViewport = meta.getAttribute('content') ?? '';
+    if (!/interactive-widget/.test(originalViewport)) meta.setAttribute('content', `${originalViewport}, interactive-widget=resizes-content`);
+  } else if (originalViewport !== null) {
+    meta.setAttribute('content', originalViewport);
+    originalViewport = null;
+  }
+}
+
 export function useVisibleViewport(): VisibleBox | null {
   const [box, setBox] = useState<VisibleBox | null>(null);
+  // A layout effect, so the setting is in place within the same commit that mounts the sheet — before
+  // its field takes focus and the keyboard is asked for.
+  useLayoutEffect(() => {
+    if (sheetsOpen++ === 0) setResizesContent(true);
+    return () => {
+      if (--sheetsOpen === 0) setResizesContent(false);
+    };
+  }, []);
   useEffect(() => {
     const vv = typeof window !== 'undefined' ? window.visualViewport : null;
     if (!vv) return;
-    // While a sheet is up, the page behind it does not move. When the keyboard opens, the browser may
-    // pan the visible area down to "reveal" the focused field — which the sheet has already put above
-    // the keyboard — and everything behind the sheet slid up under the status bar. It happened only
-    // some of the time, depending on whether the keyboard or the sheet's layout won the race ("Noen
-    // ganger … riktig … task lista ble liksom pusha litt opp"). The sheet, laid out against the
-    // visible box, is above the keyboard either way, so the browser has nothing to reveal once the pan
-    // is undone and does not pan again. Not while pinch-zoomed: that pan is the user's own.
-    //
-    // Undone right here, inside the viewport's own event — which runs before the frame is painted —
-    // and not on the next animation frame. Waiting a frame let one frame paint panned: the new-task
-    // card visibly overshot upward at the end of its entrance and then dropped back ("går litt for
-    // langt opp … så 'popper den ned igjen'").
-    //
-    // Only on the viewport's scroll — a pan — and never on its resize. Resizes stream in while the
-    // keyboard animates, and resetting the scroll in the middle of those was a likely cause of the
-    // occasional black flash as a picker opened ("Noen ganger når jeg trykker assignees nå, så blinker
-    // det svart").
     const measure = () => setBox({ top: vv.offsetTop, height: vv.height });
-    const onPan = () => {
-      if (vv.offsetTop > 0.5 && Math.abs(vv.scale - 1) < 0.01) window.scrollTo(0, 0);
-      measure();
-    };
     measure();
     vv.addEventListener('resize', measure);
-    vv.addEventListener('scroll', onPan);
+    vv.addEventListener('scroll', measure);
     return () => {
       vv.removeEventListener('resize', measure);
-      vv.removeEventListener('scroll', onPan);
-      // Leave the page where it belongs when the sheet goes. Unconditionally: a pan of the visible
-      // area does not show in window.scrollY, which is what this used to check.
+      vv.removeEventListener('scroll', measure);
+      // iOS scrolls the page itself to bring a focused field into view and leaves it scrolled after
+      // the keyboard closes; put it back when the sheet goes, or the app sits shifted under the status
+      // bar.
       window.scrollTo(0, 0);
     };
   }, []);

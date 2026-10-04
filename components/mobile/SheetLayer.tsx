@@ -25,7 +25,9 @@ export default function SheetLayer({
   return (
     <div
       className="fixed inset-x-0 top-0 bottom-0 flex flex-col justify-end pt-[calc(env(safe-area-inset-top)+12px)]"
-      style={{ zIndex: z, ...style }}
+      // The layer's height follows the keyboard (the visible box), and it glides there rather than
+      // jumping when the keyboard opens or closes — the sheet rises with the keyboard.
+      style={{ zIndex: z, transition: 'height 240ms cubic-bezier(0.22, 1, 0.36, 1)', ...style }}
       onClick={(e) => {
         e.stopPropagation();
         onClose();
