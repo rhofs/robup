@@ -11303,3 +11303,28 @@ screen was also too quick to see. The user is fine with a ≥ 3 s intro on a fre
 - Not seen on a device.
 
 **Deployed 2026-10-04 as `003a3f6`** (tag `deploy/2026-10-04_1815`).
+
+### 2026-10-04 (continued) — the page behind a sheet no longer gets pushed up; picking an assignee keeps the keyboard
+
+- **Reported:** "Noen ganger … riktig og bakgrunnen dyttes ikke … [så] task lista ble liksom pusha
+  litt opp". Screenshots of the same sheet twice: once correct, once with the whole app behind
+  shifted up under the status bar. Then: "når jeg nå valgte meg selv som assignee så falt de pagene
+  ned igjen siden tastaturet gikk ned."
+- **Cause of the push:** when the keyboard opens, the browser can *pan the visual viewport* to
+  reveal the focused field (`visualViewport.offsetTop > 0`), even though the sheet is already laid
+  out above the keyboard. Whether it happens depends on a race between the keyboard and the sheet's
+  layout, hence "noen ganger". A pan does **not** show in `window.scrollY`, so the old cleanup check
+  (`if scrollY !== 0`) never undid it.
+- **Fix in `hooks/useVisibleViewport.ts`**, which every sheet uses: on each visualViewport
+  resize/scroll, the next frame calls `window.scrollTo(0,0)` if `offsetTop > 0.5` and the user is
+  not pinch-zoomed (scale ≈ 1). Chrome's root scroll covers the visual-viewport pan. The sheet,
+  laid out on the visible box, stays above the keyboard afterwards, so the browser does not pan
+  again. The cleanup now scrolls to 0 unconditionally. **Risk:** iOS Safari animating its own
+  scroll while this resets it could jitter; not tested on iOS.
+- **TaskCreateSheet's title** is focused with `focus({ preventScroll: true })` in a
+  `useLayoutEffect` (still inside the opening tap, so iOS raises the keyboard) instead of
+  `autoFocus`, which scrolls into view.
+- **AssigneePicker option buttons** `preventDefault` on mousedown, so a pick leaves focus in the
+  search field and the keyboard stays. This applies everywhere the picker is used; on desktop it
+  just keeps the search focused.
+- Not seen on a device.

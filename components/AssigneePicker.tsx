@@ -200,6 +200,10 @@ export default function AssigneePicker({
                   key={u.id}
                   type="button"
                   data-index={i}
+                  // Picking someone leaves the focus in the search field. Otherwise the tap moved it to
+                  // this button, and on a phone that put the keyboard away and dropped the sheets above
+                  // it ("når jeg nå valgte meg selv som assignee så falt de pagene ned igjen").
+                  onMouseDown={(e) => e.preventDefault()}
                   onClick={() => onToggle(u.id)}
                   onMouseMove={() => i !== activeIndex && setActive(i)}
                   className={`group w-full flex items-center gap-2.5 px-2 py-2 md:py-1.5 rounded-lg text-left cursor-pointer transition ${

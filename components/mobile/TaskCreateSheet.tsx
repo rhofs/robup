@@ -1,6 +1,6 @@
 'use client';
 
-import { useMemo, useRef, useState } from 'react';
+import { useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
 import { X, CalendarDays, UserCircle, ChevronDown, Check, ListChecks } from 'lucide-react';
 import { useTaskStore, type StatusDef } from '../../store/useTaskStore';
@@ -87,6 +87,13 @@ export default function TaskCreateSheet({
   // the keyboard never goes away and nothing jumps. Focus moves between fields during the tap itself,
   // which is what lets a phone keep its keyboard up.
   const keepFocus = { onMouseDown: (e: React.MouseEvent) => e.preventDefault(), onPointerDown: (e: React.PointerEvent) => e.preventDefault() };
+  // The title takes the focus as the card opens — without asking the browser to scroll it into view
+  // (autoFocus would), which is one of the ways the page behind used to get pushed up. In a layout
+  // effect, so it still happens inside the tap that opened the card, which is what lets iOS raise the
+  // keyboard for it.
+  useLayoutEffect(() => {
+    titleRef.current?.focus({ preventScroll: true });
+  }, []);
   const closePeople = () => {
     titleRef.current?.focus({ preventScroll: true });
     setSheet(null);
@@ -161,7 +168,6 @@ export default function TaskCreateSheet({
         <div className="overflow-y-auto px-5 pt-3">
           <input
             ref={titleRef}
-            autoFocus
             value={title}
             onChange={(e) => setTitle(e.target.value)}
             onKeyDown={(e) => e.key === 'Enter' && create()}

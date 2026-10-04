@@ -20,16 +20,33 @@ export function useVisibleViewport(): VisibleBox | null {
   useEffect(() => {
     const vv = typeof window !== 'undefined' ? window.visualViewport : null;
     if (!vv) return;
-    const measure = () => setBox({ top: vv.offsetTop, height: vv.height });
+    // While a sheet is up, the page behind it does not move. When the keyboard opens, the browser may
+    // pan the visible area down to "reveal" the focused field — which the sheet has already put above
+    // the keyboard — and everything behind the sheet slid up under the status bar. It happened only
+    // some of the time, depending on whether the keyboard or the sheet's layout won the race ("Noen
+    // ganger … riktig … task lista ble liksom pusha litt opp"). Any pan is undone on the next frame;
+    // the sheet, laid out against the visible box, is still above the keyboard after it, so the
+    // browser has nothing left to reveal and does not pan again. Not while pinch-zoomed: that pan is
+    // the user's own.
+    let raf = 0;
+    const unpan = () => {
+      if (vv.offsetTop > 0.5 && Math.abs(vv.scale - 1) < 0.01) window.scrollTo(0, 0);
+    };
+    const measure = () => {
+      setBox({ top: vv.offsetTop, height: vv.height });
+      cancelAnimationFrame(raf);
+      raf = requestAnimationFrame(unpan);
+    };
     measure();
     vv.addEventListener('resize', measure);
     vv.addEventListener('scroll', measure);
     return () => {
+      cancelAnimationFrame(raf);
       vv.removeEventListener('resize', measure);
       vv.removeEventListener('scroll', measure);
-      // iOS leaves the page scrolled after it scrolled a focused field into view; put it back when
-      // the sheet goes, or the app sits shifted under the status bar.
-      if (window.scrollY !== 0 || window.scrollX !== 0) window.scrollTo(0, 0);
+      // Leave the page where it belongs when the sheet goes. Unconditionally: a pan of the visible
+      // area does not show in window.scrollY, which is what this used to check.
+      window.scrollTo(0, 0);
     };
   }, []);
   return box;
