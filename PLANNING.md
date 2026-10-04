@@ -11328,3 +11328,5 @@ screen was also too quick to see. The user is fine with a ≥ 3 s intro on a fre
   search field and the keyboard stays. This applies everywhere the picker is used; on desktop it
   just keeps the search focused.
 - Not seen on a device.
+
+**Deployed 2026-10-04 as `bfad322`** (tag `deploy/2026-10-04_1819`).
