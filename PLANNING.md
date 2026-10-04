@@ -11489,3 +11489,25 @@ screen was also too quick to see. The user is fine with a ≥ 3 s intro on a fre
 - APK clean-built and copied to `public/siqt.apk`; it must be reinstalled. Not seen on a device.
 
 **Deployed 2026-10-04 as `b73d2a0`** (tag `deploy/2026-10-04_1853`), with the new APK.
+
+### 2026-10-04 (continued) — new-task card rides the keyboard (Android); no per-frame renders; card code warmed during the intro
+
+- **Feedback:** he likes the calendar entrance now ("trekker tasken seg litt ned, før kalender går
+  opp"). Still: the new-task card "stuttrer litt" and sometimes "hopper … litt for langt opp og så
+  ned igjen". And the first List opened after launch hitches slightly; later ones are smooth.
+- **Checked and ruled out:** framer-motion's drag re-scaling on window resize. It only applies to
+  ref-based `dragConstraints`, and ours are an object.
+- **Card entrance (Android app only, `keyboardResizesPage`):** the card fades in (`opacity 0→1`,
+  `y 14→0`) and is carried up by the keyboard-driven page edge, a single movement. Its own
+  `y: 100% → 0` slide on top of the keyboard's rise was two upward movements on different curves.
+  iOS and web keep the slide.
+- **No per-frame React renders on Android:** `useVisibleViewport` no longer subscribes to
+  visualViewport events there (sheets are CSS-pinned; nothing reads the box). It still does the
+  meta/page-hold refcount and the scroll reset on unmount. TaskCreateSheet's hold release now polls
+  `currentVisibleBox()` in a rAF loop (≤ 700 ms) instead of reading React state.
+- **First-List hitch:** while the boot overlay is up (`!bootDone`, mobile), six TaskRows are
+  rendered off-screen and hidden (`left:-10000px; visibility:hidden`) inside their own nested
+  `DndContext`, so they do not register as drag targets beside the real ones. They use navScope
+  "warmup" and are thrown away when the intro ends. This warms the code paths a first List render
+  hits. Unverified that this was the cause.
+- Web-only changes; no new APK needed. Not seen on a device.

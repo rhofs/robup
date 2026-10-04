@@ -81,6 +81,10 @@ export function useVisibleViewport(): VisibleBox | null {
   }, []);
   useEffect(() => {
     const vv = typeof window !== 'undefined' ? window.visualViewport : null;
+    // Where the page itself follows the keyboard, sheets are pinned by CSS and nothing reads this box —
+    // and measuring it would re-render every open sheet on every frame of the keyboard's animation,
+    // which is part of what made the new-task card stutter. Only the scroll reset below is kept.
+    if (keyboardResizesPage) return () => window.scrollTo(0, 0);
     if (!vv) return;
     const measure = () => setBox({ top: vv.offsetTop, height: vv.height });
     measure();

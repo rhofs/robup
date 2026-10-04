@@ -8,6 +8,7 @@ import { useSessionStore } from '../../store/useSessionStore';
 import {
   currentVisibleBox,
   fullViewportBox,
+  keyboardResizesPage,
   liveOverlayStyle,
   overlayStyle,
   useVisibleViewport,
@@ -155,12 +156,24 @@ export default function TaskCreateSheet({
     titleRef.current?.focus({ preventScroll: true });
     setSheet(null);
   };
-  const keyboardBack = !!(frozen && visible && visible.height <= frozen.height + 2);
+  // Let go of the held place once the keyboard is back up (the visible height down to the held one),
+  // or after a moment if it does not come back. Read from the viewport on each frame rather than from
+  // React state, which in the Android app is not tracked at all (see useVisibleViewport).
   useEffect(() => {
-    if (sheet !== null || released) return;
-    const t = window.setTimeout(() => setReleased(true), keyboardBack ? 0 : 700);
-    return () => window.clearTimeout(t);
-  }, [sheet, released, keyboardBack]);
+    if (sheet !== null || released || !frozen) return;
+    const started = performance.now();
+    let raf = 0;
+    const check = () => {
+      const h = currentVisibleBox()?.height ?? 0;
+      if (h <= frozen.height + 2 || performance.now() - started > 700) {
+        setReleased(true);
+        return;
+      }
+      raf = requestAnimationFrame(check);
+    };
+    raf = requestAnimationFrame(check);
+    return () => cancelAnimationFrame(raf);
+  }, [sheet, released, frozen]);
   const holdAt = !released && frozen ? frozen : null;
 
   // Back closes whatever is on top: a picker first, then this card.
@@ -196,8 +209,14 @@ export default function TaskCreateSheet({
   return (
     <SheetLayer z={80} dim={0.6} style={holdAt ? overlayStyle(holdAt) : liveOverlayStyle(visible)} onClose={onClose}>
       <motion.div
-        initial={{ y: '100%' }}
-        animate={{ y: 0 }}
+        // In the Android app the keyboard carries the card up — the page's bottom edge rises with it,
+        // frame by frame — so the card only fades in where it is and rides along: one movement, tied to
+        // the keyboard. Its own slide from the bottom on top of that was two upward movements on two
+        // different curves at once, which is what read as stutter and overshoot ("stuttrer … hopper
+        // noen gang litt for langt opp og så ned igjen"). Elsewhere the keyboard does not move the page,
+        // so the card slides up itself.
+        initial={keyboardResizesPage ? { opacity: 0, y: 14 } : { y: '100%' }}
+        animate={keyboardResizesPage ? { opacity: 1, y: 0 } : { y: 0 }}
         exit={{ y: '100%' }}
         transition={{ type: 'spring', stiffness: 380, damping: 38 }}
         onClick={(e) => e.stopPropagation()}

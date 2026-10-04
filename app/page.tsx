@@ -5317,6 +5317,30 @@ function PageContent() {
           />
         )}
       </AnimatePresence>
+      {/* A first List used to open with a slight hitch, and every later one smoothly ("første gang jeg
+          går inn i lista så hakker den … men etter den første, er den smooth"): the first time task
+          cards are drawn, all of their code runs for the first time. While the intro covers the
+          screen, a handful of cards are drawn once out of sight and thrown away, so that first run has
+          already happened by the time a List is opened. Their own DndContext keeps them from
+          registering as drag targets beside the real cards. */}
+      {!bootDone && isMobile && tasks.length > 0 && (
+        <div aria-hidden className="fixed top-0 left-[-10000px] w-[380px] pointer-events-none" style={{ visibility: 'hidden' }}>
+          <DndContext>
+            {tasks.slice(0, 6).map((t) => (
+              <TaskRow
+                key={t.id}
+                task={t}
+                navScope="warmup"
+                onOpen={() => {}}
+                columns={activeColumns}
+                gridTemplate={rowGridTemplate}
+                statuses={statuses}
+                animateEntrance={false}
+              />
+            ))}
+          </DndContext>
+        </div>
+      )}
       <AnimatePresence>
         {!bootDone && (
           <motion.div
