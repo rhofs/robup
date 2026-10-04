@@ -11244,3 +11244,5 @@ screen was also too quick to see. The user is fine with a ≥ 3 s intro on a fre
     are hex, and `${hex}1f` / `${hex}66` append alpha.
 - Not seen on a device. In particular, the keyboard docking on iOS and Android and the scroll
   arithmetic are untested.
+
+**Deployed 2026-10-04 as `316e687`** (tag `deploy/2026-10-04_1659`).
