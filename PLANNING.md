@@ -11402,3 +11402,29 @@ screen was also too quick to see. The user is fine with a ≥ 3 s intro on a fre
   edge-to-edge: Android no longer resizes on its own).
 
 **Deployed 2026-10-04 as `d4fb69f`** (tag `deploy/2026-10-04_1832`).
+
+### 2026-10-04 (continued) — keyboard handled natively in the Android app (new APK)
+
+- **Reported:** "Akkurat samme feil nå". The runtime `interactive-widget=resizes-content` change
+  had no effect in the app's WebView (it stays in the code: harmless there, and it may help in
+  Chrome).
+- **Root cause, confirmed by reading Capacitor's source:** `android.adjustMarginsForEdgeToEdge`
+  defaults to `"disable"`, so Capacitor leaves window insets to the WebView. With targetSdk 35 on
+  Android 15+, the app is edge-to-edge, so the system does not resize it for the keyboard. The
+  WebView therefore treats the IME as *covering* the page: the visual viewport shrinks and can pan.
+  The manifest also had no `windowSoftInputMode`.
+- **Fix, native:**
+  - `AndroidManifest.xml`: the activity gets `android:windowSoftInputMode="adjustResize"`, so the
+    system never pans the window, and below Android 15 it resizes it the classic way.
+  - `MainActivity.fitWebViewAboveKeyboard()`, on API ≥ 35 only, sets an
+    `OnApplyWindowInsetsListener` on the bridge WebView. It does three things:
+    - sets the WebView's bottom margin to the IME inset while the keyboard is up, so the page
+      really ends at the keyboard;
+    - passes the insets on (`ViewCompat.onApplyWindowInsets`) with the IME removed (`Insets.NONE`,
+      not visible), so the WebView no longer shrinks its visual viewport or pans;
+    - passes the navigation bar's bottom inset as 0 while the keyboard is up, so the CSS
+      `safe-area-inset-bottom` does not leave a gap above the keyboard.
+  - **MainActivity is hand-written code**: regenerating the platform loses this (see AGENTS.md).
+- **APK:** clean build, 5.0 MB, copied to `public/siqt.apk`. The user must reinstall it.
+- Not seen on a device. If it misbehaves, suspects: the WebView ignoring the stripped IME insets on
+  some version, or the margin applying a frame late.
