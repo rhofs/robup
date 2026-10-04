@@ -265,7 +265,7 @@ export default function TaskCreateSheet({
           />
         )}
         {sheet === 'list' && (
-          <PickSheet title="Create in" onClose={closeSheet}>
+          <PickSheet title="Create in" noKeyboard onClose={closeSheet}>
             {spaces.map((sp) => {
               const lists = sp.lists.filter((l) => !l.archived && !l.docId);
               if (lists.length === 0) return null;
@@ -294,7 +294,7 @@ export default function TaskCreateSheet({
           </PickSheet>
         )}
         {sheet === 'status' && (
-          <PickSheet title="Status" onClose={closeSheet}>
+          <PickSheet title="Status" noKeyboard onClose={closeSheet}>
             {statuses.map((s) => (
               <button
                 key={s.id}

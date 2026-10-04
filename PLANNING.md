@@ -11430,3 +11430,29 @@ screen was also too quick to see. The user is fine with a ≥ 3 s intro on a fre
   some version, or the margin applying a frame late.
 
 **Deployed 2026-10-04 as `b4ceee8`** (tag `deploy/2026-10-04_1836`), with the new APK.
+
+### 2026-10-04 (continued) — keyboard edge follows the keyboard frame by frame; keyboard-free sheets on the full height
+
+- **Feedback after the native fix:** "Assignees funker bra nå." Still: "Set dates hopper litt
+  fortsatt, ikke like ille", and the add-task entrance still has "noe glippe/feil/bevegelse mellom
+  tastatur og det kortet".
+- **Gap between keyboard and card:** the system delivers the IME's *final* inset as its animation
+  starts, so the WebView edge jumped there while the keyboard was still sliding up.
+  - `MainActivity` now adds a `WindowInsetsAnimationCompat.Callback` (DISPATCH_MODE_STOP) that sets
+    the WebView's bottom margin to the IME's current inset on every `onProgress` frame. The inset
+    listener leaves the margin alone while `imeAnimating`, and `onEnd` settles it from the root
+    insets.
+  - The IME is still stripped from what the WebView sees.
+  - `SheetLayer` drops its own 240 ms height transition in the Android app
+    (`Capacitor.getPlatform() === 'android'`), so it follows the native edge exactly; it keeps the
+    transition elsewhere.
+  - **Watch:** this resizes the WebView every frame of the keyboard animation (a Blink relayout per
+    frame). Fine on a modern phone; could stutter on an old one.
+- **Set dates jump:** a picker with no text field sends the keyboard away as it opens, and the page
+  grows back while the picker slides in; a bottom-anchored layer was dragged down with it.
+  - New `fullViewportBox()` in `useVisibleViewport.ts` returns the tallest `innerHeight` seen
+    (measured at module load, keyboard down, and on every resize; reset on orientation change).
+  - DateSheet, TimeDialSheet and `PickSheet noKeyboard` (status, List, the Planner's Space) are
+    laid out on it, so they sit where they will end up and the keyboard sliding away uncovers them.
+  - Assignees/attendees keep the live box (they have a search field).
+- **APK** clean-built and copied to `public/siqt.apk`; it must be reinstalled. Not seen on a device.

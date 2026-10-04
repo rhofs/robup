@@ -75,6 +75,31 @@ export function useVisibleViewport(): VisibleBox | null {
   return box;
 }
 
+// The page's height with no keyboard up: the tallest it has been. A sheet with no text field of its
+// own (the calendar, the clock, the status and List pickers) is laid out against this instead of the
+// visible box. Such a sheet sends the keyboard away as it opens, and the page grows back while the
+// sheet is still sliding in — a sheet anchored to the shrinking-then-growing bottom was dragged down
+// with it ("Set dates hopper litt fortsatt"). Anchored to the full height it simply sits where it will
+// end up, and the keyboard sliding away uncovers it.
+let fullHeight = 0;
+export function fullViewportBox(): VisibleBox {
+  if (typeof window === 'undefined') return { top: 0, height: 0 };
+  fullHeight = Math.max(fullHeight, window.innerHeight);
+  return { top: 0, height: fullHeight };
+}
+if (typeof window !== 'undefined') {
+  // Measured from the start (this module loads with the app, keyboard down) and on every resize, so it
+  // is known before any sheet asks — by then the keyboard may already be up.
+  fullHeight = window.innerHeight;
+  window.addEventListener('resize', () => {
+    fullHeight = Math.max(fullHeight, window.innerHeight);
+  });
+  // A turn of the phone changes what "full" is.
+  window.addEventListener('orientationchange', () => {
+    fullHeight = 0;
+  });
+}
+
 // Style for a full-screen overlay that should cover only what is visible.
 export function overlayStyle(box: VisibleBox | null): React.CSSProperties {
   return box ? { top: box.top, height: box.height, bottom: 'auto' } : {};

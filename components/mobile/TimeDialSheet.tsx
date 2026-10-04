@@ -4,7 +4,7 @@ import SheetLayer from './SheetLayer';
 import { useSheetDrag } from './sheetDrag';
 import { useRef, useState } from 'react';
 import { motion } from 'framer-motion';
-import { overlayStyle, useVisibleViewport } from '../../hooks/useVisibleViewport';
+import { fullViewportBox, overlayStyle, useVisibleViewport } from '../../hooks/useVisibleViewport';
 import { X } from 'lucide-react';
 import { hapticTap } from '../../lib/haptics';
 
@@ -36,7 +36,8 @@ export default function TimeDialSheet({
   onClose: () => void;
 }) {
   const drag = useSheetDrag(onClose);
-  const visible = useVisibleViewport();
+  // No text field here: laid out on the full height, not the visible box (see fullViewportBox).
+  useVisibleViewport();
   const [h, setH] = useState(initial?.h ?? 9);
   const [m, setM] = useState(initial?.m ?? 0);
   const [mode, setMode] = useState<'hour' | 'minute'>('hour');
@@ -75,7 +76,7 @@ export default function TimeDialSheet({
   const selectedLabel = mode === 'hour' ? String(h) : pad(m);
 
   return (
-    <SheetLayer z={95} dim={0.5} style={overlayStyle(visible)} onClose={onClose}>
+    <SheetLayer z={95} dim={0.5} style={overlayStyle(fullViewportBox())} onClose={onClose}>
       <motion.div
         initial={{ y: '100%' }}
         animate={{ y: 0 }}

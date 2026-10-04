@@ -2,14 +2,19 @@ package no.siqt.app;
 
 import android.os.Build;
 import android.os.Bundle;
+import android.view.View;
 import android.view.ViewGroup;
 import android.webkit.WebView;
 
+import androidx.annotation.NonNull;
 import androidx.core.graphics.Insets;
 import androidx.core.view.ViewCompat;
+import androidx.core.view.WindowInsetsAnimationCompat;
 import androidx.core.view.WindowInsetsCompat;
 
 import com.getcapacitor.BridgeActivity;
+
+import java.util.List;
 
 public class MainActivity extends BridgeActivity {
 
@@ -23,7 +28,7 @@ public class MainActivity extends BridgeActivity {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.VANILLA_ICE_CREAM) fitWebViewAboveKeyboard();
     }
 
-    // The on-screen keyboard shrinks the page instead of covering it.
+    // The on-screen keyboard shrinks the page instead of covering it, in step with the keyboard.
     //
     // From Android 15 every app targeting SDK 35 is drawn edge to edge, and the system no longer
     // resizes it for the keyboard (adjustResize does nothing on its own there). Capacitor leaves the
@@ -36,26 +41,28 @@ public class MainActivity extends BridgeActivity {
     // cannot be undone from script, and the viewport meta's interactive-widget, which asks for exactly
     // this behaviour, is not honoured by the WebView — both were tried first (see PLANNING.md).
     //
-    // So the app does it: while the keyboard is up, the WebView's bottom edge is moved to the
-    // keyboard's top, and the keyboard is taken out of the insets the WebView sees — it is no longer
-    // covering anything. With the page and its visible area the same size there is nothing to pan. The
-    // navigation bar's inset is dropped too while the keyboard is up, since the page no longer reaches
-    // down to it (otherwise the bottom safe-area padding would leave a gap above the keyboard).
+    // So the app does it: the WebView's bottom edge sits on the keyboard's top, and the keyboard is
+    // taken out of the insets the WebView sees — it is no longer covering anything, so there is nothing
+    // to pan. The navigation bar's inset is dropped too while the keyboard is up, since the page no
+    // longer reaches down to it (otherwise the bottom safe-area padding leaves a gap above the keyboard).
+    //
+    // Frame by frame while the keyboard slides, not in one step: the system reports the keyboard's
+    // FINAL height as its animation starts, and moving the edge there at once left a gap between the
+    // page and a keyboard still on its way up — "noe glippe … mellom tastatur og det kortet". The
+    // animation callback follows the keyboard's real position on every frame instead; the inset listener
+    // keeps its hands off the edge while an animation is running and settles it when one is not.
     //
     // Below Android 15 the window is not edge to edge, and adjustResize (AndroidManifest.xml) resizes
     // it for the keyboard the classic way, so nothing is done here.
+    private boolean imeAnimating = false;
+
     private void fitWebViewAboveKeyboard() {
         WebView webView = getBridge().getWebView();
+
         ViewCompat.setOnApplyWindowInsetsListener(webView, (v, insets) -> {
             Insets ime = insets.getInsets(WindowInsetsCompat.Type.ime());
             boolean keyboardUp = insets.isVisible(WindowInsetsCompat.Type.ime()) && ime.bottom > 0;
-
-            ViewGroup.MarginLayoutParams lp = (ViewGroup.MarginLayoutParams) v.getLayoutParams();
-            int bottom = keyboardUp ? ime.bottom : 0;
-            if (lp.bottomMargin != bottom) {
-                lp.bottomMargin = bottom;
-                v.setLayoutParams(lp);
-            }
+            if (!imeAnimating) setKeyboardEdge(v, keyboardUp ? ime.bottom : 0);
 
             WindowInsetsCompat.Builder seen = new WindowInsetsCompat.Builder(insets)
                 .setInsets(WindowInsetsCompat.Type.ime(), Insets.NONE)
@@ -66,5 +73,39 @@ public class MainActivity extends BridgeActivity {
             }
             return ViewCompat.onApplyWindowInsets(v, seen.build());
         });
+
+        ViewCompat.setWindowInsetsAnimationCallback(
+            webView,
+            new WindowInsetsAnimationCompat.Callback(WindowInsetsAnimationCompat.Callback.DISPATCH_MODE_STOP) {
+                @Override
+                public void onPrepare(@NonNull WindowInsetsAnimationCompat animation) {
+                    if ((animation.getTypeMask() & WindowInsetsCompat.Type.ime()) != 0) imeAnimating = true;
+                }
+
+                @NonNull
+                @Override
+                public WindowInsetsCompat onProgress(@NonNull WindowInsetsCompat insets, @NonNull List<WindowInsetsAnimationCompat> running) {
+                    if (imeAnimating) setKeyboardEdge(webView, insets.getInsets(WindowInsetsCompat.Type.ime()).bottom);
+                    return insets;
+                }
+
+                @Override
+                public void onEnd(@NonNull WindowInsetsAnimationCompat animation) {
+                    if ((animation.getTypeMask() & WindowInsetsCompat.Type.ime()) == 0) return;
+                    imeAnimating = false;
+                    WindowInsetsCompat now = ViewCompat.getRootWindowInsets(webView);
+                    if (now == null) return;
+                    boolean up = now.isVisible(WindowInsetsCompat.Type.ime());
+                    setKeyboardEdge(webView, up ? now.getInsets(WindowInsetsCompat.Type.ime()).bottom : 0);
+                }
+            }
+        );
+    }
+
+    private static void setKeyboardEdge(View v, int bottom) {
+        ViewGroup.MarginLayoutParams lp = (ViewGroup.MarginLayoutParams) v.getLayoutParams();
+        if (lp.bottomMargin == bottom) return;
+        lp.bottomMargin = bottom;
+        v.setLayoutParams(lp);
     }
 }

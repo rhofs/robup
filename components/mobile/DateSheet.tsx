@@ -4,7 +4,7 @@ import SheetLayer from './SheetLayer';
 import { useSheetDrag } from './sheetDrag';
 import { useMemo, useState } from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
-import { overlayStyle, useVisibleViewport } from '../../hooks/useVisibleViewport';
+import { fullViewportBox, overlayStyle, useVisibleViewport } from '../../hooks/useVisibleViewport';
 import { X, ChevronUp, ChevronDown, CalendarDays, Sunrise, CalendarCheck, CalendarArrowUp } from 'lucide-react';
 import TimeDialSheet from './TimeDialSheet';
 import { hapticTap } from '../../lib/haptics';
@@ -70,7 +70,8 @@ export default function DateSheet({
   onClose: () => void;
 }) {
   const drag = useSheetDrag(onClose);
-  const visible = useVisibleViewport();
+  // No text field here: laid out on the full height, not the visible box (see fullViewportBox).
+  useVisibleViewport();
   const [start, setStart] = useState<Date | null>(() => parse(startIso));
   const [end, setEnd] = useState<Date | null>(() => parse(endIso));
   const [active, setActive] = useState<Field>(start && !end && !single ? 'end' : 'start');
@@ -167,7 +168,7 @@ export default function DateSheet({
   const timeTarget = timeFor === 'start' ? start : timeFor === 'end' ? end : null;
 
   return (
-    <SheetLayer z={90} dim={0.5} style={overlayStyle(visible)} onClose={onClose}>
+    <SheetLayer z={90} dim={0.5} style={overlayStyle(fullViewportBox())} onClose={onClose}>
       <motion.div
         initial={{ y: '100%' }}
         animate={{ y: 0 }}

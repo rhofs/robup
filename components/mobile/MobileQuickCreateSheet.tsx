@@ -3,7 +3,7 @@
 import SheetLayer from './SheetLayer';
 import { useMemo, useState } from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
-import { overlayStyle, useVisibleViewport } from '../../hooks/useVisibleViewport';
+import { fullViewportBox, overlayStyle, useVisibleViewport } from '../../hooks/useVisibleViewport';
 import { X, CalendarDays, MapPin, Palette, Layers, UserCircle, ChevronDown, Check, ListChecks } from 'lucide-react';
 import type { AppUser, HierarchyWorkspace } from '../../store/useTaskStore';
 import { useTaskStore } from '../../store/useTaskStore';
@@ -78,11 +78,23 @@ export function Row({ icon: Icon, children, onClick }: { icon: typeof CalendarDa
 }
 
 // A bottom sheet for a list of choices (the list to create a task in, attendees).
-export function PickSheet({ title, onClose, children }: { title: string; onClose: () => void; children: React.ReactNode }) {
+// `noKeyboard`: the picker has no text field, so the keyboard goes as it opens — laid out on the full
+// height rather than the visible box (see fullViewportBox), so it is not dragged down as the page grows.
+export function PickSheet({
+  title,
+  onClose,
+  children,
+  noKeyboard = false,
+}: {
+  title: string;
+  onClose: () => void;
+  children: React.ReactNode;
+  noKeyboard?: boolean;
+}) {
   const drag = useSheetDrag(onClose);
   const visible = useVisibleViewport();
   return (
-    <SheetLayer z={90} dim={0.5} style={overlayStyle(visible)} onClose={onClose}>
+    <SheetLayer z={90} dim={0.5} style={overlayStyle(noKeyboard ? fullViewportBox() : visible)} onClose={onClose}>
       <motion.div
         initial={{ y: '100%' }}
         animate={{ y: 0 }}
@@ -301,7 +313,7 @@ export default function MobileQuickCreateSheet({
           />
         )}
         {sheet === 'list' && (
-          <PickSheet title="Create in" onClose={() => setSheet(null)}>
+          <PickSheet title="Create in" noKeyboard onClose={() => setSheet(null)}>
             {spaces.map((sp) => (
               <div key={sp.id} className="pb-2">
                 <p className="px-2 pt-2 pb-1 text-[12px] font-semibold uppercase tracking-wider text-neutral-500">{sp.name}</p>
@@ -327,7 +339,7 @@ export default function MobileQuickCreateSheet({
           </PickSheet>
         )}
         {sheet === 'space' && (
-          <PickSheet title="Space" onClose={() => setSheet(null)}>
+          <PickSheet title="Space" noKeyboard onClose={() => setSheet(null)}>
             {[{ id: '', name: 'No space' }, ...spaces].map((sp) => (
               <button
                 key={sp.id || 'none'}
