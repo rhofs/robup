@@ -11511,3 +11511,5 @@ screen was also too quick to see. The user is fine with a ≥ 3 s intro on a fre
   "warmup" and are thrown away when the intro ends. This warms the code paths a first List render
   hits. Unverified that this was the cause.
 - Web-only changes; no new APK needed. Not seen on a device.
+
+**Deployed 2026-10-04 as `df5c6a9`** (tag `deploy/2026-10-04_1904`).
