@@ -11365,3 +11365,5 @@ screen was also too quick to see. The user is fine with a ≥ 3 s intro on a fre
   there is no device here. If it persists, the next suspects are the keyboard type change when focus
   moves title → search, and stacked scrims.
 - Not seen on a device.
+
+**Deployed 2026-10-04 as `c01f7b3`** (tag `deploy/2026-10-04_1826`).
