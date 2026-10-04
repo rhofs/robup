@@ -1,6 +1,6 @@
 'use client';
 
-import { Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { Suspense, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { useRouter, usePathname, useSearchParams } from 'next/navigation';
 import dynamic from 'next/dynamic';
 import { AnimatePresence, motion, useAnimationControls } from 'framer-motion';
@@ -1592,6 +1592,25 @@ function PageContent() {
   const [newTaskTitle, setNewTaskTitle] = useState('');
 
   const [modalTaskStack, setModalTaskStack] = useState<string[]>([]);
+  // Where you were in the list when a task opened, put back when it closes: "når jeg trykker meg inn
+  // på en task nede, og så krysser meg tilbake, så havner jeg øverst i lista". The list is emptied while
+  // a task is open (filteredTasks returns nothing then — no reason to render rows behind a full-screen
+  // task), which drops the scroll position to the top. It is recorded as you scroll, never while a task
+  // is open (the drop itself fires a scroll event), and restored in a layout effect — before the
+  // re-filled list is painted, so the top of the list never flashes by. Only for the same list.
+  const contentScrollRef = useRef<HTMLDivElement>(null);
+  const listScrollMemoRef = useRef<{ key: string; top: number } | null>(null);
+  const modalOpenRef = useRef(false);
+  const listScrollKey = `${activeView}|${activeSpaceId}|${[...activeListIds].sort().join(',')}|${showArchived}`;
+  useLayoutEffect(() => {
+    const wasOpen = modalOpenRef.current;
+    const open = modalTaskStack.length > 0;
+    modalOpenRef.current = open;
+    if (!wasOpen || open) return;
+    const memo = listScrollMemoRef.current;
+    const el = contentScrollRef.current;
+    if (memo && el && memo.key === listScrollKey) el.scrollTop = memo.top;
+  }, [modalTaskStack.length, listScrollKey]);
   const [newSubtaskTitle, setNewSubtaskTitle] = useState('');
   // Starts collapsed to a discreet text link on both mobile and desktop now (an expert design
   // review flagged the desktop input's permanently-visible dark box + bright blue "Add" button as
@@ -6675,6 +6694,10 @@ function PageContent() {
                 'flex-1 overflow-auto p-6 pb-28 md:pb-6'
           }
           onClick={closeAllMenus}
+          ref={contentScrollRef}
+          onScroll={(e) => {
+            if (!modalOpenRef.current) listScrollMemoRef.current = { key: listScrollKey, top: e.currentTarget.scrollTop };
+          }}
         >
           <div
             className={

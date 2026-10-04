@@ -11271,3 +11271,33 @@ screen was also too quick to see. The user is fine with a ≥ 3 s intro on a fre
 - Not seen on a device.
 
 **Deployed 2026-10-04 as `466fcdb`** (tag `deploy/2026-10-04_1803`).
+
+### 2026-10-04 (continued) — sheet scrims fade, keyboard stays through Assignees, scrim taps don't bubble, list keeps its scroll
+
+- **Feedback:** he likes the new task card and the dimmed Assignees picker. Four problems:
+  1. The dimming appeared instantly while the sheet slid up; it should fade in with it.
+  2. The keyboard "hopper ned" when opening Assignees.
+  3. Tapping the dimmed area behind Assignees should act like its ✕ (back to the task).
+  4. Opening a task far down a List and closing it lands at the top of the list.
+- **New `components/mobile/SheetLayer.tsx`**, used by every bottom sheet: DateSheet, TimeDialSheet,
+  MobileQuickCreateSheet's PickSheet and main sheet, and TaskCreateSheet.
+  - The scrim is its own framer-motion layer: opacity 0 → `dim` over 0.28 s, fading out on exit
+    together with the sheet's slide.
+  - A tap on the layer calls `stopPropagation()` before `onClose`. **Root cause of 3, and worse than
+    reported:** pickers render inside their parent sheet's layer, so a tap on the Assignees scrim
+    bubbled to the task card's own scrim handler and closed the whole half-written task. The same
+    was true in the Planner's New sheet.
+  - Each sheet panel got `relative` so it stacks above the absolute scrim.
+- **Keyboard (2):** the "Add assignees" row cancels mousedown/pointerdown, so the title keeps focus.
+  The AssigneePicker opens with `autoFocus`, so its search field takes over focus with the keyboard
+  still up. Closing (✕, scrim, drag, Back) calls `closePeople`, which focuses the title
+  synchronously in the same gesture, then closes. The dates/status/list pickers still let the
+  keyboard drop, on purpose: they have no text field and need the room.
+- **Scroll (4):** while a task modal is open, `filteredTasks` returns nothing, so no rows render
+  behind it — and the content scroller's `scrollTop` collapses to 0.
+  - The fix records `{key, top}` on the content container's `onScroll` (`contentScrollRef`; key =
+    view | space | lists | archive), never while a modal is open, because the collapse itself fires
+    a scroll event.
+  - A `useLayoutEffect` on modal open→closed restores it before paint, for the same key only.
+  - It sits next to `modalTaskStack`'s declaration, above the isLoading early return like every hook.
+- Not seen on a device.

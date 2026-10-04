@@ -1,5 +1,6 @@
 'use client';
 
+import SheetLayer from './SheetLayer';
 import { useMemo, useState } from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
 import { overlayStyle, useVisibleViewport } from '../../hooks/useVisibleViewport';
@@ -81,7 +82,7 @@ export function PickSheet({ title, onClose, children }: { title: string; onClose
   const drag = useSheetDrag(onClose);
   const visible = useVisibleViewport();
   return (
-    <div className="fixed inset-x-0 top-0 bottom-0 z-[90] flex flex-col justify-end bg-scrim/50 pt-[calc(env(safe-area-inset-top)+12px)]" style={overlayStyle(visible)} onClick={onClose}>
+    <SheetLayer z={90} dim={0.5} style={overlayStyle(visible)} onClose={onClose}>
       <motion.div
         initial={{ y: '100%' }}
         animate={{ y: 0 }}
@@ -89,7 +90,7 @@ export function PickSheet({ title, onClose, children }: { title: string; onClose
         transition={{ type: 'spring', stiffness: 380, damping: 38 }}
         onClick={(e) => e.stopPropagation()}
         {...drag.sheetProps}
-        className="bg-neutral-900 rounded-t-[28px] max-h-full min-h-0 flex flex-col pb-[calc(env(safe-area-inset-bottom)+12px)]"
+        className="relative bg-neutral-900 rounded-t-[28px] max-h-full min-h-0 flex flex-col pb-[calc(env(safe-area-inset-bottom)+12px)]"
       >
         <div {...drag.handleProps} className="relative flex items-center justify-center px-5 pt-5 pb-3 shrink-0">
           <span className="absolute top-2 left-1/2 -translate-x-1/2 w-10 h-1 rounded-full bg-neutral-700" />
@@ -100,7 +101,7 @@ export function PickSheet({ title, onClose, children }: { title: string; onClose
         </div>
         <div className="overflow-y-auto px-4 pb-2">{children}</div>
       </motion.div>
-    </div>
+    </SheetLayer>
   );
 }
 
@@ -170,14 +171,14 @@ export default function MobileQuickCreateSheet({
   const summary = datesSummary(start, isTask ? taskDue : end);
 
   return (
-    <div className="fixed inset-x-0 top-0 bottom-0 z-[80] flex flex-col justify-end bg-scrim/60 pt-[calc(env(safe-area-inset-top)+12px)]" style={overlayStyle(visible)} onClick={onClose}>
+    <SheetLayer z={80} dim={0.6} style={overlayStyle(visible)} onClose={onClose}>
       <motion.div
         initial={{ y: '100%' }}
         animate={{ y: 0 }}
         transition={{ type: 'spring', stiffness: 380, damping: 38 }}
         onClick={(e) => e.stopPropagation()}
         {...drag.sheetProps}
-        className="bg-neutral-900 rounded-t-[28px] max-h-full min-h-0 flex flex-col"
+        className="relative bg-neutral-900 rounded-t-[28px] max-h-full min-h-0 flex flex-col"
       >
         {/* The grabber and the header drag the sheet; pull it down to cancel. */}
         <div {...drag.handleProps} className="shrink-0">
@@ -357,6 +358,6 @@ export default function MobileQuickCreateSheet({
           </PickSheet>
         )}
       </AnimatePresence>
-    </div>
+    </SheetLayer>
   );
 }

@@ -1,5 +1,6 @@
 'use client';
 
+import SheetLayer from './SheetLayer';
 import { useSheetDrag } from './sheetDrag';
 import { useRef, useState } from 'react';
 import { motion } from 'framer-motion';
@@ -74,7 +75,7 @@ export default function TimeDialSheet({
   const selectedLabel = mode === 'hour' ? String(h) : pad(m);
 
   return (
-    <div className="fixed inset-x-0 top-0 bottom-0 z-[95] flex flex-col justify-end bg-scrim/50 pt-[calc(env(safe-area-inset-top)+12px)]" style={overlayStyle(visible)} onClick={onClose}>
+    <SheetLayer z={95} dim={0.5} style={overlayStyle(visible)} onClose={onClose}>
       <motion.div
         initial={{ y: '100%' }}
         animate={{ y: 0 }}
@@ -82,7 +83,7 @@ export default function TimeDialSheet({
         transition={{ type: 'spring', stiffness: 380, damping: 38 }}
         onClick={(e) => e.stopPropagation()}
         {...drag.sheetProps}
-        className="bg-neutral-900 rounded-t-[28px] max-h-full overflow-y-auto pb-[calc(env(safe-area-inset-bottom)+12px)]"
+        className="relative bg-neutral-900 rounded-t-[28px] max-h-full overflow-y-auto pb-[calc(env(safe-area-inset-bottom)+12px)]"
       >
         <div {...drag.handleProps} className="relative flex items-center justify-center px-5 pt-5 pb-3">
           <span className="absolute top-2 left-1/2 -translate-x-1/2 w-10 h-1 rounded-full bg-neutral-700" />
@@ -178,6 +179,6 @@ export default function TimeDialSheet({
           </button>
         </div>
       </motion.div>
-    </div>
+    </SheetLayer>
   );
 }

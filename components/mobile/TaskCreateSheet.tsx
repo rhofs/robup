@@ -1,6 +1,6 @@
 'use client';
 
-import { useMemo, useState } from 'react';
+import { useMemo, useRef, useState } from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
 import { X, CalendarDays, UserCircle, ChevronDown, Check, ListChecks } from 'lucide-react';
 import { useTaskStore, type StatusDef } from '../../store/useTaskStore';
@@ -13,6 +13,7 @@ import AssigneePicker, { AssigneeStack } from '../AssigneePicker';
 import DateSheet from './DateSheet';
 import { PickSheet, Row } from './MobileQuickCreateSheet';
 import { useSheetDrag } from './sheetDrag';
+import SheetLayer from './SheetLayer';
 
 // "Add Task" in a List, on a phone: a card that rises from the bottom over the dimmed list, laid out
 // after ClickUp's (the user's screenshot of theirs beside one of ours: "Kan vi få et sånt kort istedet
@@ -78,10 +79,22 @@ export default function TaskCreateSheet({
   const [due, setDue] = useState<string | null>(null);
   const [assigneeIds, setAssigneeIds] = useState<string[]>([]);
   const [sheet, setSheet] = useState<'list' | 'people' | 'dates' | 'status' | null>(null);
+  const titleRef = useRef<HTMLInputElement>(null);
+
+  // The keyboard keeps its place through Assignees: "når jeg trykker meg inn på assignees så 'hopper
+  // den ned'". Opening it no longer takes focus off the title (the row cancels the press's default),
+  // the picker's search field takes it over as it opens, and closing hands it back to the title — so
+  // the keyboard never goes away and nothing jumps. Focus moves between fields during the tap itself,
+  // which is what lets a phone keep its keyboard up.
+  const keepFocus = { onMouseDown: (e: React.MouseEvent) => e.preventDefault(), onPointerDown: (e: React.PointerEvent) => e.preventDefault() };
+  const closePeople = () => {
+    titleRef.current?.focus({ preventScroll: true });
+    setSheet(null);
+  };
 
   // Back closes whatever is on top: a picker first, then this card.
   useBackLayer(true, onClose);
-  useBackLayer(sheet !== null, () => setSheet(null));
+  useBackLayer(sheet !== null, () => (sheet === 'people' ? closePeople() : setSheet(null)));
 
   // The people who will be able to open a task in this List — the same rule a task's own picker uses.
   const people = useMemo(() => {
@@ -110,15 +123,7 @@ export default function TaskCreateSheet({
   const dates = shortDates(start, due);
 
   return (
-    <motion.div
-      initial={{ opacity: 0 }}
-      animate={{ opacity: 1 }}
-      exit={{ opacity: 0 }}
-      transition={{ duration: 0.2 }}
-      className="fixed inset-x-0 top-0 bottom-0 z-[80] flex flex-col justify-end bg-scrim/60 pt-[calc(env(safe-area-inset-top)+12px)] md:hidden"
-      style={overlayStyle(visible)}
-      onClick={onClose}
-    >
+    <SheetLayer z={80} dim={0.6} style={overlayStyle(visible)} onClose={onClose}>
       <motion.div
         initial={{ y: '100%' }}
         animate={{ y: 0 }}
@@ -126,7 +131,7 @@ export default function TaskCreateSheet({
         transition={{ type: 'spring', stiffness: 380, damping: 38 }}
         onClick={(e) => e.stopPropagation()}
         {...drag.sheetProps}
-        className="bg-neutral-900 rounded-t-[28px] max-h-full min-h-0 flex flex-col shadow-[0_-12px_40px_-12px_rgb(0_0_0/0.5)]"
+        className="relative bg-neutral-900 rounded-t-[28px] max-h-full min-h-0 flex flex-col shadow-[0_-12px_40px_-12px_rgb(0_0_0/0.5)]"
       >
         <div {...drag.handleProps} className="shrink-0">
           <div className="flex justify-center pt-2.5 pb-1">
@@ -155,6 +160,7 @@ export default function TaskCreateSheet({
 
         <div className="overflow-y-auto px-5 pt-3">
           <input
+            ref={titleRef}
             autoFocus
             value={title}
             onChange={(e) => setTitle(e.target.value)}
@@ -177,6 +183,7 @@ export default function TaskCreateSheet({
             className="w-full bg-transparent text-[16px] text-neutral-300 placeholder:text-neutral-500 focus:outline-none resize-none py-2"
           />
           <div className="mt-1">
+            <div {...keepFocus}>
             <Row icon={UserCircle} onClick={() => setSheet('people')}>
               {chosen.length ? (
                 <span className="flex items-center gap-2">
@@ -187,6 +194,7 @@ export default function TaskCreateSheet({
                 <span className="text-[17px] text-neutral-500">Add assignees</span>
               )}
             </Row>
+            </div>
             <Row icon={CalendarDays} onClick={() => setSheet('dates')}>
               <span className={`text-[17px] ${dates ? 'text-app-strong' : 'text-neutral-500'}`}>{dates ?? 'Set dates'}</span>
             </Row>
@@ -276,7 +284,7 @@ export default function TaskCreateSheet({
           </PickSheet>
         )}
         {sheet === 'people' && (
-          <PickSheet title="Assignees" onClose={() => setSheet(null)}>
+          <PickSheet title="Assignees" onClose={closePeople}>
             <AssigneePicker
               heading="Assignees"
               people={people}
@@ -284,11 +292,11 @@ export default function TaskCreateSheet({
               suggestedIds={listId ? suggestTaskAssignees(useTaskStore.getState().tasks, listId) : []}
               onToggle={(uid) => setAssigneeIds((prev) => (prev.includes(uid) ? prev.filter((id) => id !== uid) : [...prev, uid]))}
               currentUserId={currentUserId}
-              autoFocus={false}
+              autoFocus
             />
           </PickSheet>
         )}
       </AnimatePresence>
-    </motion.div>
+    </SheetLayer>
   );
 }

@@ -1,5 +1,6 @@
 'use client';
 
+import SheetLayer from './SheetLayer';
 import { useSheetDrag } from './sheetDrag';
 import { useMemo, useState } from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
@@ -166,7 +167,7 @@ export default function DateSheet({
   const timeTarget = timeFor === 'start' ? start : timeFor === 'end' ? end : null;
 
   return (
-    <div className="fixed inset-x-0 top-0 bottom-0 z-[90] flex flex-col justify-end bg-scrim/50 pt-[calc(env(safe-area-inset-top)+12px)]" style={overlayStyle(visible)} onClick={onClose}>
+    <SheetLayer z={90} dim={0.5} style={overlayStyle(visible)} onClose={onClose}>
       <motion.div
         initial={{ y: '100%' }}
         animate={{ y: 0 }}
@@ -174,7 +175,7 @@ export default function DateSheet({
         transition={{ type: 'spring', stiffness: 380, damping: 38 }}
         onClick={(e) => e.stopPropagation()}
         {...drag.sheetProps}
-        className="bg-neutral-900 rounded-t-[28px] max-h-full min-h-0 flex flex-col pb-[calc(env(safe-area-inset-bottom)+12px)]"
+        className="relative bg-neutral-900 rounded-t-[28px] max-h-full min-h-0 flex flex-col pb-[calc(env(safe-area-inset-bottom)+12px)]"
       >
         <div {...drag.handleProps} className="relative flex items-center justify-center px-5 pt-5 pb-3 shrink-0">
           <span className="absolute top-2 left-1/2 -translate-x-1/2 w-10 h-1 rounded-full bg-neutral-700" />
@@ -295,6 +296,6 @@ export default function DateSheet({
           />
         )}
       </AnimatePresence>
-    </div>
+    </SheetLayer>
   );
 }
