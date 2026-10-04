@@ -11330,3 +11330,14 @@ screen was also too quick to see. The user is fine with a ≥ 3 s intro on a fre
 - Not seen on a device.
 
 **Deployed 2026-10-04 as `bfad322`** (tag `deploy/2026-10-04_1819`).
+
+### 2026-10-04 (continued) — the un-pan now happens before paint
+
+- **Reported:** the new-task card "går litt for langt opp, i mot slutten av inn animasjonen …, men så
+  'popper den ned igjen til riktig sted'".
+- That was the previous fix showing itself. The un-pan ran on the next `requestAnimationFrame`, so
+  one frame painted panned: the fixed sheet moved up with the visual viewport, then dropped back.
+- `useVisibleViewport` now calls `scrollTo(0,0)` synchronously inside the visualViewport
+  resize/scroll handler. Those handlers run in the rendering update before paint, and `scrollTo` is
+  synchronous, so `offsetTop` reads 0 straight after and the box is measured from that.
+- Not seen on a device.
