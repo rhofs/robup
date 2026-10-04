@@ -79,6 +79,7 @@ import { useHistoryStore } from '../store/useHistoryStore';
 import { hapticTap } from '../lib/haptics';
 import SiqtMark from '../components/SiqtMark';
 import BootScreen from '../components/BootScreen';
+import { traceMoment } from '../lib/perfTrace';
 import TaskCreateSheet, { type NewTaskInput } from '../components/mobile/TaskCreateSheet';
 import { MATERIALIZE_MS } from '../components/TaskMaterialize';
 
@@ -1145,6 +1146,8 @@ function PageContent() {
   };
 
   const startBoardPush = (dir: 'forward' | 'back', sheet: 'spaces' | 'personal' | 'context' = 'spaces') => {
+    // Temporary: measure the first few List openings on a phone (lib/perfTrace.ts).
+    if (dir === 'forward') traceMoment('list-open', { main: '[data-trace="board-main"]' });
     boardPushDirRef.current = dir;
     boardPushSheetRef.current = sheet;
     setBoardPushing(true);
@@ -6348,6 +6351,7 @@ function PageContent() {
           behind it only has to move a third and never has to hide itself. Dropped back to `auto`
           when idle so nothing else in the app has to reason about a permanently raised main. */}
       <motion.main
+        data-trace="board-main"
         animate={boardPushControls}
         style={{ zIndex: boardPushing ? 40 : undefined }}
         className="flex-1 flex flex-col h-full overflow-hidden bg-neutral-950 relative"

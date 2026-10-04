@@ -22,6 +22,7 @@ import DateSheet from './DateSheet';
 import { PickSheet, Row } from './MobileQuickCreateSheet';
 import { useSheetDrag } from './sheetDrag';
 import SheetLayer from './SheetLayer';
+import { traceMoment } from '../../lib/perfTrace';
 
 // "Add Task" in a List, on a phone: a card that rises from the bottom over the dimmed list, laid out
 // after ClickUp's (the user's screenshot of theirs beside one of ours: "Kan vi få et sånt kort istedet
@@ -101,6 +102,8 @@ export default function TaskCreateSheet({
   // keyboard for it.
   useLayoutEffect(() => {
     titleRef.current?.focus({ preventScroll: true });
+    // Temporary: measure the first few openings on a phone (lib/perfTrace.ts).
+    traceMoment('task-sheet', { card: '[data-trace="task-card"]', shell: '.siqt-app-shell' });
   }, []);
 
   // The card holds still while a picker is open over it. The pickers without a text field (dates,
@@ -221,6 +224,7 @@ export default function TaskCreateSheet({
         transition={{ type: 'spring', stiffness: 380, damping: 38 }}
         onClick={(e) => e.stopPropagation()}
         {...drag.sheetProps}
+        data-trace="task-card"
         className="relative bg-neutral-900 rounded-t-[28px] max-h-full min-h-0 flex flex-col shadow-[0_-12px_40px_-12px_rgb(0_0_0/0.5)]"
       >
         <div {...drag.handleProps} className="shrink-0">

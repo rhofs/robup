@@ -11513,3 +11513,26 @@ screen was also too quick to see. The user is fine with a ≥ 3 s intro on a fre
 - Web-only changes; no new APK needed. Not seen on a device.
 
 **Deployed 2026-10-04 as `df5c6a9`** (tag `deploy/2026-10-04_1904`).
+
+### 2026-10-04 (continued) — TEMPORARY on-device frame tracing for two problems reasoning could not pin down
+
+- **Reported:** "Liste, fortsatt samme initielle hakk. Virker som ett hakk." and "Task pagen er
+  fortsatt lik." Two rounds of fixes from reading code had missed both.
+- **Added:**
+  - **`lib/perfTrace.ts`** — `traceMoment(kind, selectors, ms)`. On phones (`innerWidth < 768`)
+    and for the first 3 of each kind per page load, it samples every frame for ~1.1 s:
+    - the frame delta;
+    - innerHeight, visualViewport height and offsetTop, scrollY;
+    - the top/bottom of the named elements;
+    - plus `long-animation-frame` entries (Chrome/WebView 123+), with script attribution and
+      forced-layout time.
+    It then POSTs to `/api/debug/trace`.
+  - **`app/api/debug/trace/route.ts`** — signed-in users only; appends JSON lines to
+    `logs/client-traces.jsonl` in the server's cwd (`/logs/` is gitignored, so it survives a
+    reinstall's `git clean -fd`); capped at 2 MB.
+  - Hooks: `startBoardPush('forward')` → `list-open` (tracks `<main data-trace="board-main">`);
+    TaskCreateSheet mount → `task-sheet` (tracks `[data-trace="task-card"]` and `.siqt-app-shell`).
+- **To read:** Pterodactyl client API
+  `GET /api/client/servers/$PTERO_SERVER/files/contents?file=/logs/client-traces.jsonl`.
+- **Remove `lib/perfTrace.ts`, the route, the two calls and the `data-trace` attributes once
+  done.**

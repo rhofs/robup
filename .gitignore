@@ -86,3 +86,6 @@ next-env.d.ts
 # on purpose: the install script ends in `git clean -fd`, which deletes untracked files but spares
 # ignored ones, so this survives every re-install for the same reason /prisma/*.db does.
 /firebase-service-account.json
+
+# Temporary on-device frame traces (app/api/debug/trace).
+/logs/
