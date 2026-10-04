@@ -11188,3 +11188,59 @@ screen was also too quick to see. The user is fine with a ≥ 3 s intro on a fre
 - Not seen on a device.
 
 **Deployed 2026-10-02 as `4b0c86e`** (tag `deploy/2026-10-02_1840`).
+
+### 2026-10-04 — mobile task list: keyboard-docked composer, "materialise" entrance, prettier cards
+
+- **Asked** (two screenshots did not arrive):
+  - Adding tasks on mobile "føles ikke ut som en sømmeløs skreddersydd løsning": you can scroll,
+    the keyboard pushes things, and after creating, "popper hele raden ned … det er nesten så du
+    ikke vet om den blir laget eller ikke".
+  - He wants a magic animation on creation, like the check-off one: "partikkeleffektene … danner
+    rammer … at det liksom den spåner inn".
+  - The cards look "kommun[al]": "Kan vi få de selve kortene til å se litt mer magisk ut også?
+    Penere … det skal føles godt å se på dem."
+  - He also said everything so far "virker bra".
+- **Composer** (`components/mobile/TaskComposer.tsx`) replaces the inline add row on phones (desktop
+  keeps the row).
+  - It is fixed to the bottom of the *visual* viewport (`useVisibleViewport`), so it rides the
+    keyboard on iOS too.
+  - Its look: a rounded glassy bar with a faint blue glow, a dashed "future done circle", a 16 px
+    input ("New task in <List>"), and a blue round send button that appears once something is typed
+    (✕ otherwise).
+  - It stays open and focused after each send, for adding several in a row. Buttons
+    `preventDefault` on pointerdown to keep focus, and `enterKeyHint="send"`.
+  - It closes on ✕, on Back (`useBackLayer`), or on blur while empty. A 400 ms `justSentRef` guard
+    stops some keyboards' blur-on-submit, which happens with the field already cleared, from closing
+    it.
+  - An `h-28` spacer under the list while it is open gives the new card room to scroll clear.
+- **Creation:** `quickAddTask(title)` in page.tsx replaces the body of handleQuickAdd, now used by
+  both desktop and phone.
+  - It picks a uuid itself (`optimisticCreateTask(..., id)`; the API accepts `id`) and sets
+    `materializeTaskId`.
+  - It widens `visibleTaskCount` so the new last card is on the page.
+  - An effect, two frames later, finds `[data-task-row=id]` and scrolls its scroll container so the
+    card sits above the composer (or the viewport floor). After `MATERIALIZE_MS` (1.5 s) it clears
+    the id.
+- **Materialise** (`components/TaskMaterialize.tsx` + `.siqt-mat-*` in globals.css), drawn over the
+  row by TaskRow while `materialize`:
+  - 44 dust specks (every 9th a star) fly in from 34–80 px outside the card and land on its edges
+    (`siqt-mat-gather`); the positions are seeded from the task id, so they are deterministic.
+  - An SVG rounded rect with `pathLength=100` traces the frame in blue light (140–660 ms), then
+    fades.
+  - The card itself (`.siqt-mat-card`) goes from opacity 0 / scale .94 / blur 8 px to sharp, from
+    300 ms over 520 ms.
+  - A light sheen sweeps across (620 ms), a blue ring glow pulses (560 ms), and there is a
+    `hapticTap` at 560 ms.
+  - Radius 16 on the mobile card, 8 on desktop rows.
+  - TaskRow's own slide-up entrance is skipped for a materialising row.
+- **Card look** (mobile TaskRow → `.siqt-task-card`):
+  - rounded-2xl;
+  - a color-mix gradient of neutral-800 82 % → 55 %;
+  - an inset lit top edge plus an inset 1 px hairline;
+  - a lifting shadow (light mode: hairline plus a soft shadow);
+  - `:active` scale .985.
+  - The hard 3 px status rail became a rounded 3 px stripe inset 5 px with a glow in the status
+    colour, plus a faint radial wash of the status colour in the top-left corner. Status colours
+    are hex, and `${hex}1f` / `${hex}66` append alpha.
+- Not seen on a device. In particular, the keyboard docking on iOS and Android and the scroll
+  arithmetic are untested.

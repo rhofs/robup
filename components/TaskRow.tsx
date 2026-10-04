@@ -7,6 +7,7 @@ import { Check, Pencil, RefreshCw, MoreHorizontal, GripVertical, Calendar, ListT
 import { useTaskStore, StatusDef, CustomFieldDef, Task } from '../store/useTaskStore';
 import { useIsMobile } from '../hooks/useIsMobile';
 import Caret from './Caret';
+import TaskMaterialize from './TaskMaterialize';
 import { taskPickableMembers } from '../lib/workspaceMembers';
 import AssigneePicker, { AssigneeStack } from './AssigneePicker';
 import { suggestTaskAssignees } from '../lib/assigneeSuggestions';
@@ -48,6 +49,9 @@ type TaskRowProps = {
   subtaskCount?: number;
   expanded?: boolean;
   onToggleExpand?: () => void;
+  // Set for a moment right after this task was created here: it arrives with TaskMaterialize's
+  // gathering-dust frame, and the card fades and sharpens in inside it (.siqt-mat-card).
+  materialize?: boolean;
 };
 
 function TaskRowImpl({
@@ -69,6 +73,7 @@ function TaskRowImpl({
   subtaskCount = 0,
   expanded = false,
   onToggleExpand,
+  materialize = false,
 }: TaskRowProps) {
   const {
     users,
@@ -355,11 +360,15 @@ function TaskRowImpl({
     <motion.div
       layout
       layoutId={`task-${navScope}-${task.id}`}
-      initial={animateEntrance ? { opacity: 0, y: 10 } : false}
+      // A materialising task brings its own entrance (the card's CSS, under the dust), so the plain
+      // slide-up is left out for it.
+      initial={animateEntrance && !materialize ? { opacity: 0, y: 10 } : false}
       animate={{ opacity: 1, y: 0 }}
       exit={{ opacity: 0, scale: 0.85, filter: 'blur(6px)', y: -6 }}
       transition={{ duration: 0.28, ease: 'easeOut' }}
+      className="relative"
     >
+      {materialize && <TaskMaterialize seed={task.id} radius={isMobile ? 16 : 8} />}
       {/* The gap IS the indication, and the line only names it.
           
           A 2px line between two rows that sit flush against each other asks you to aim at a seam —
@@ -422,14 +431,26 @@ function TaskRowImpl({
           //   things, so it names the status without ever letting you scan for it. At the edge, in
           //   a fixed position on every card, the same information reads down the whole list at a
           //   glance — the thing ClickUp's list actually does that this one did not.
-          className={`relative overflow-hidden rounded-xl bg-neutral-800/60 shadow-[inset_0_1px_0_rgba(255,255,255,0.05)] ${
+          //
+          // 2026-10-04, "Kan vi få de selve kortene til å se litt mer magisk ut også? Penere … det
+          // skal føles godt å se på dem": the surface became .siqt-task-card (globals.css) — a soft
+          // top-to-bottom gradient, a lit top edge and a faint hairline all round, a shadow that
+          // lifts it, a 16px corner, and a gentle press. The hard 3px rail became a rounded,
+          // glowing stripe inset from the edge, with a faint wash of the status colour across the
+          // top-left corner, so the colour reads as light on the card rather than paint on its edge.
+          className={`siqt-task-card relative overflow-hidden rounded-2xl ${materialize ? 'siqt-mat-card' : ''} ${
             isSelected ? 'ring-1 ring-inset ring-blue-500/60' : ''
           } ${isOver ? 'ring-1 ring-inset ring-neutral-500' : ''} ${isDragging ? 'opacity-40' : ''}`}
         >
           <span
             aria-hidden
-            className="absolute left-0 top-0 bottom-0 w-[3px]"
-            style={{ backgroundColor: statusColorOf(task.status) }}
+            className="absolute inset-0 pointer-events-none"
+            style={{ background: `radial-gradient(130% 90% at 0% 0%, ${statusColorOf(task.status)}1f, transparent 55%)` }}
+          />
+          <span
+            aria-hidden
+            className="absolute left-[5px] top-3.5 bottom-3.5 w-[3px] rounded-full"
+            style={{ backgroundColor: statusColorOf(task.status), boxShadow: `0 0 10px 1px ${statusColorOf(task.status)}66` }}
           />
           <div className="absolute top-2 right-2 flex items-center gap-0.5 z-10">
             <span
@@ -571,6 +592,8 @@ function TaskRowImpl({
           onClick={onOpen}
           onContextMenu={(e) => onContextMenu?.(e, task)}
           className={`grid items-center px-4 py-2.5 text-xs hover:bg-neutral-800/50 transition-colors duration-150 cursor-pointer group ${
+            materialize ? 'siqt-mat-card' : ''
+          } ${
             isOver ? 'bg-neutral-700/40 ring-1 ring-inset ring-neutral-500' : ''
           } ${isDragging ? 'opacity-40' : ''} ${isSelected ? 'bg-neutral-700/30' : ''}`}
           style={{ gridTemplateColumns: gridTemplate }}

@@ -79,6 +79,8 @@ import { useHistoryStore } from '../store/useHistoryStore';
 import { hapticTap } from '../lib/haptics';
 import SiqtMark from '../components/SiqtMark';
 import BootScreen from '../components/BootScreen';
+import TaskComposer, { TASK_COMPOSER_ID } from '../components/mobile/TaskComposer';
+import { MATERIALIZE_MS } from '../components/TaskMaterialize';
 
 // How long the launch intro lasts at least, counted from the start of the page load: "vi tåler å
 // vente i allefall 3 sekunder på 'introen' om vi starter appen fresh, da får appen tid til å loade
@@ -1010,6 +1012,37 @@ function PageContent() {
     const t = window.setTimeout(() => setBootDone(true), Math.max(150, INTRO_MIN_MS - performance.now()));
     return () => window.clearTimeout(t);
   }, [isLoading, bootDone]);
+  // Phone: the composer docked on the keyboard (components/mobile/TaskComposer.tsx) instead of the
+  // inline add row. And the task that was just made, which arrives with its materialise animation.
+  const [taskComposerOpen, setTaskComposerOpen] = useState(false);
+  const [materializeTaskId, setMaterializeTaskId] = useState<string | null>(null);
+  // The task just made: bring its card into view — above the composer on a phone, where it would
+  // otherwise land behind it — and end its entrance once it has played.
+  useEffect(() => {
+    if (!materializeTaskId) return;
+    const id = materializeTaskId;
+    let raf = 0;
+    raf = requestAnimationFrame(() => {
+      raf = requestAnimationFrame(() => {
+        const card = document.querySelector(`[data-task-row="${id}"]`) as HTMLElement | null;
+        if (!card) return;
+        let scroller: HTMLElement | null = card.parentElement;
+        while (scroller && !/(auto|scroll)/.test(getComputedStyle(scroller).overflowY)) scroller = scroller.parentElement;
+        if (!scroller) return;
+        const r = card.getBoundingClientRect();
+        const composer = document.getElementById(TASK_COMPOSER_ID)?.getBoundingClientRect();
+        const floor = (composer ? composer.top : window.visualViewport?.height ?? window.innerHeight) - 16;
+        const ceiling = scroller.getBoundingClientRect().top + 16;
+        const delta = r.bottom > floor ? r.bottom - floor : r.top < ceiling ? r.top - ceiling : 0;
+        if (delta) scroller.scrollBy({ top: delta, behavior: 'smooth' });
+      });
+    });
+    const done = window.setTimeout(() => setMaterializeTaskId((cur) => (cur === id ? null : cur)), MATERIALIZE_MS);
+    return () => {
+      cancelAnimationFrame(raf);
+      window.clearTimeout(done);
+    };
+  }, [materializeTaskId]);
   const [selectionMode, setSelectionMode] = useState(false);
   // Choosing a List or Doc in the Spaces drawer pushes the board in from the right, the same way
   // opening a DM pushes a conversation in. Before this the board simply appeared the moment the
@@ -3459,25 +3492,33 @@ function PageContent() {
     setStatusMenuOpen(false);
   };
 
-  const handleQuickAdd = () => {
-    if (!newTaskTitle.trim()) return;
+  // Creates a task in the List on screen (or the first one there is) and returns its id — chosen here,
+  // so the new card can be found and given its entrance the moment it renders.
+  const quickAddTask = (title: string): string | null => {
     let targetListId: string | null = [...activeListIds][0] ?? null;
     let targetSpaceId = activeSpaceId === 'everything' ? '' : activeSpaceId;
-
     if (!targetListId && currentSpace && currentSpace.lists.length > 0) {
       targetListId = currentSpace.lists[0].id;
     } else if (!targetListId && currentWorkspace?.spaces[0]?.lists[0]) {
       targetListId = currentWorkspace.spaces[0].lists[0].id;
       targetSpaceId = currentWorkspace.spaces[0].id;
     }
-
-    if (targetListId) {
-      setSortBy('none');
-      optimisticCreateTask(newTaskTitle, targetListId, targetSpaceId, null);
-      setNewTaskTitle('');
-    } else {
+    if (!targetListId) {
       alert('Select a list in the sidebar first.');
+      return null;
     }
+    const id = crypto.randomUUID();
+    setSortBy('none');
+    void optimisticCreateTask(title, targetListId, targetSpaceId, null, null, null, id);
+    setMaterializeTaskId(id);
+    // New tasks go to the end; make sure the end is on the page, or the card would arrive unseen.
+    setVisibleTaskCount((n) => Math.max(n, filteredTasks.length + 1));
+    return id;
+  };
+
+  const handleQuickAdd = () => {
+    if (!newTaskTitle.trim()) return;
+    if (quickAddTask(newTaskTitle.trim())) setNewTaskTitle('');
   };
 
   // Multi-select for Lists in the Tasks-tab sidebar — plain click selects just one; Ctrl/Cmd
@@ -5235,6 +5276,19 @@ function PageContent() {
       {/* Star dust, drawn once for the whole app: the Planner's long-press and a doc checklist's tick. */}
       <PuffHost />
       <UpdateReloader />
+      <AnimatePresence>
+        {isMobile && taskComposerOpen && activeView === 'board' && (
+          <TaskComposer
+            key="task-composer"
+            listName={(() => {
+              const id = [...activeListIds][0];
+              return id ? currentSpace?.lists.find((l) => l.id === id)?.name ?? null : null;
+            })()}
+            onSubmit={(title) => void quickAddTask(title)}
+            onClose={() => setTaskComposerOpen(false)}
+          />
+        )}
+      </AnimatePresence>
       <AnimatePresence>
         {!bootDone && (
           <motion.div
@@ -7431,6 +7485,7 @@ function PageContent() {
                     <TaskRow
                       key={task._localId || task.id}
                       task={task}
+                      materialize={materializeTaskId === task.id}
                       depth={depth}
                       subtaskCount={subtaskCount}
                       expanded={expandedTaskIds.has(task.id)}
@@ -7489,7 +7544,7 @@ function PageContent() {
                 ) : (
                   !showArchived && (
                     <button
-                      onClick={() => setActiveAdd(true)}
+                      onClick={() => (isMobile ? setTaskComposerOpen(true) : setActiveAdd(true))}
                       className="w-full text-left px-4 py-3.5 md:py-2 text-sm md:text-xs font-medium text-neutral-400 hover:bg-neutral-800/40 hover:text-blue-400 transition flex items-center gap-2 cursor-pointer"
                     >
                       <span className="font-bold text-blue-400">+</span> Add Task
@@ -7499,6 +7554,8 @@ function PageContent() {
               </div>
               </div>
             </div>
+            {/* Room under the last card while the composer is up, so a new task can scroll clear of it. */}
+            {isMobile && taskComposerOpen && <div aria-hidden className="h-28" />}
             {/* The archive, on a phone: under the list, where the end of your tasks is — asked for
                 as "under selve arket … under tasksa". It was only in the launcher menu, far from
                 the list it changes. Desktop keeps its toolbar button. */}

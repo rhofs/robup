@@ -312,6 +312,150 @@ body {
   margin: 0;
 }
 
+/* A task card on a phone (TaskRow's mobile layout): "Kan vi få de selve kortene til å se litt mer
+   magisk ut også? Penere … det skal føles godt å se på dem". A soft fall of light from top to bottom,
+   a lit upper edge and a faint hairline all round instead of a border, a shadow that lifts it off the
+   sheet, and a small give when pressed. color-mix keeps it on the theme's own neutral (inverted in
+   light mode, where the shadow does the separating instead). */
+.siqt-task-card {
+  background: linear-gradient(
+    180deg,
+    color-mix(in srgb, var(--color-neutral-800) 82%, transparent) 0%,
+    color-mix(in srgb, var(--color-neutral-800) 55%, transparent) 100%
+  );
+  box-shadow:
+    inset 0 1px 0 rgb(255 255 255 / 0.07),
+    inset 0 0 0 1px rgb(255 255 255 / 0.035),
+    0 12px 28px -18px rgb(0 0 0 / 0.75);
+  transition: transform 180ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+.siqt-task-card:active {
+  transform: scale(0.985);
+}
+html[data-theme='light'] .siqt-task-card {
+  box-shadow:
+    inset 0 0 0 1px rgb(0 0 0 / 0.045),
+    0 1px 2px rgb(0 0 0 / 0.05),
+    0 8px 20px -14px rgb(0 0 0 / 0.22);
+}
+
+/* A task arriving where it was just made (components/TaskMaterialize.tsx over TaskRow): dust gathers
+   on the card's edges from outside, a line of blue light traces the frame, the card materialises
+   inside it — from faint and blurred to sharp — and a sweep of light and a brief glow finish it. The
+   timings overlap so it reads as one movement, about a second and a half end to end. */
+.siqt-mat-card {
+  animation: siqt-mat-card 520ms cubic-bezier(0.22, 1, 0.36, 1) 300ms both;
+}
+@keyframes siqt-mat-card {
+  from {
+    opacity: 0;
+    transform: scale(0.94);
+    filter: blur(8px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+    filter: none;
+  }
+}
+.siqt-mat-dust,
+.siqt-mat-star {
+  position: absolute;
+  margin: 0;
+  translate: -50% -50%;
+  opacity: 0;
+  animation-name: siqt-mat-gather;
+  animation-timing-function: cubic-bezier(0.2, 0.75, 0.3, 1);
+  animation-fill-mode: both;
+}
+.siqt-mat-dust {
+  border-radius: 9999px;
+  background: radial-gradient(circle, #fff 0%, #93c5fd 60%);
+  box-shadow: 0 0 6px 1px rgb(96 165 250 / 0.9);
+}
+.siqt-mat-star {
+  background: radial-gradient(circle, #fff 0%, #bfdbfe 60%);
+  clip-path: polygon(50% 0%, 60% 40%, 100% 50%, 60% 60%, 50% 100%, 40% 60%, 0% 50%, 40% 40%);
+}
+@keyframes siqt-mat-gather {
+  0% {
+    opacity: 0;
+    transform: translate(var(--dx), var(--dy)) scale(0.6);
+  }
+  25% {
+    opacity: 1;
+  }
+  70% {
+    opacity: 1;
+    transform: translate(0, 0) scale(1);
+  }
+  100% {
+    opacity: 0;
+    transform: translate(0, 0) scale(0.3);
+  }
+}
+.siqt-mat-frame rect {
+  stroke: #93c5fd;
+  stroke-width: 1.5;
+  stroke-dasharray: 100;
+  stroke-dashoffset: 100;
+  filter: drop-shadow(0 0 4px rgb(59 130 246 / 0.9));
+  animation:
+    siqt-mat-trace 520ms cubic-bezier(0.45, 0, 0.25, 1) 140ms forwards,
+    siqt-mat-fade 600ms ease-out 760ms forwards;
+}
+@keyframes siqt-mat-trace {
+  to {
+    stroke-dashoffset: 0;
+  }
+}
+@keyframes siqt-mat-fade {
+  to {
+    opacity: 0;
+  }
+}
+.siqt-mat-glow {
+  opacity: 0;
+  box-shadow:
+    0 0 0 1px rgb(147 197 253 / 0.6),
+    0 0 26px 2px rgb(59 130 246 / 0.45);
+  animation: siqt-mat-glow 900ms ease-out 560ms forwards;
+}
+@keyframes siqt-mat-glow {
+  0% {
+    opacity: 0;
+  }
+  25% {
+    opacity: 1;
+  }
+  100% {
+    opacity: 0;
+  }
+}
+.siqt-mat-sheen {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: 45%;
+  left: 0;
+  background: linear-gradient(100deg, transparent 0%, rgb(255 255 255 / 0.16) 50%, transparent 100%);
+  transform: translateX(-120%);
+  animation: siqt-mat-sheen 700ms cubic-bezier(0.4, 0, 0.2, 1) 620ms forwards;
+}
+@keyframes siqt-mat-sheen {
+  to {
+    transform: translateX(260%);
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .siqt-mat {
+    display: none;
+  }
+  .siqt-mat-card {
+    animation: none;
+  }
+}
+
 /* The doc margin's "+" (DocBlockGutter) eases in instead of popping up. */
 .siqt-gutter-plus {
   animation: siqt-gutter-in 180ms ease-out;
