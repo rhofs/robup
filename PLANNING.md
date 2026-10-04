@@ -11536,3 +11536,5 @@ screen was also too quick to see. The user is fine with a ≥ 3 s intro on a fre
   `GET /api/client/servers/$PTERO_SERVER/files/contents?file=/logs/client-traces.jsonl`.
 - **Remove `lib/perfTrace.ts`, the route, the two calls and the `data-trace` attributes once
   done.**
+
+**Deployed 2026-10-04 as `d44fbc2`** (tag `deploy/2026-10-04_2142`) — tracing live; endpoint returns 401 when signed out.
