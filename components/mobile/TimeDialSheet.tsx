@@ -81,7 +81,8 @@ export default function TimeDialSheet({
         initial={{ y: '100%' }}
         animate={{ y: 0 }}
         exit={{ y: '100%' }}
-        transition={{ type: 'spring', stiffness: 380, damping: 38 }}
+        // A touch slower than the other sheets — still quick, but it should be seen arriving.
+        transition={{ type: 'spring', stiffness: 290, damping: 34 }}
         onClick={(e) => e.stopPropagation()}
         {...drag.sheetProps}
         className="relative bg-neutral-900 rounded-t-[28px] max-h-full overflow-y-auto pb-[calc(env(safe-area-inset-bottom)+12px)]"

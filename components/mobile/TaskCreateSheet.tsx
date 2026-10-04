@@ -72,7 +72,14 @@ export default function TaskCreateSheet({
   const users = useTaskStore((s) => s.users);
   const currentUserId = useSessionStore((s) => s.currentUserId);
   const visible = useVisibleViewport();
-  const drag = useSheetDrag(onClose);
+  // Closing lets go of the keyboard at once. The title kept the focus while the card animated away, so
+  // the keyboard only started down after it — the keyboard's top strip "henger litt før den spretter
+  // ned".
+  const close = () => {
+    (document.activeElement as HTMLElement | null)?.blur();
+    onClose();
+  };
+  const drag = useSheetDrag(close);
 
   const spaces = useMemo(() => workspaces.flatMap((w) => w.spaces).filter((s) => !s.archived), [workspaces]);
   const [listId, setListId] = useState<string | null>(defaultListId);
@@ -143,12 +150,32 @@ export default function TaskCreateSheet({
       setSheet(which);
       return;
     }
+    // In the Android app the keyboard says when it has finished going down (MainActivity sends a
+    // 'siqt-keyboard' event at the end of its animation), so the picker starts on exactly that frame —
+    // "starter i det tastaturet er helt ned". Elsewhere, or if no word comes, the page's height decides:
+    // full height and unchanged for a few frames, with a ceiling so a picker always opens.
     const started = performance.now();
+    let opened = false;
+    let lastH = -1;
+    let steady = 0;
+    const open = () => {
+      if (opened) return;
+      opened = true;
+      window.removeEventListener('siqt-keyboard', onKeyboard);
+      if (pendingOpen.current !== null) cancelAnimationFrame(pendingOpen.current);
+      pendingOpen.current = null;
+      setSheet(which);
+    };
+    const onKeyboard = (e: Event) => {
+      if (!(e as CustomEvent<{ up: boolean }>).detail?.up) open();
+    };
+    window.addEventListener('siqt-keyboard', onKeyboard);
     const waitForKeyboard = () => {
       const h = currentVisibleBox()?.height ?? full;
-      if (h >= full - 4 || performance.now() - started > 450) {
-        pendingOpen.current = null;
-        setSheet(which);
+      steady = h === lastH ? steady + 1 : 0;
+      lastH = h;
+      if ((h >= full - 4 && steady >= 3) || performance.now() - started > 900) {
+        open();
         return;
       }
       pendingOpen.current = requestAnimationFrame(waitForKeyboard);
@@ -180,7 +207,7 @@ export default function TaskCreateSheet({
   const holdAt = !released && frozen ? frozen : null;
 
   // Back closes whatever is on top: a picker first, then this card.
-  useBackLayer(true, onClose);
+  useBackLayer(true, close);
   useBackLayer(sheet !== null, closeSheet);
 
   // The people who will be able to open a task in this List — the same rule a task's own picker uses.
@@ -205,12 +232,12 @@ export default function TaskCreateSheet({
       dueDate: due,
       assigneeIds,
     });
-    onClose();
+    close();
   };
   const dates = shortDates(start, due);
 
   return (
-    <SheetLayer z={80} dim={0.6} style={holdAt ? overlayStyle(holdAt) : liveOverlayStyle(visible)} onClose={onClose}>
+    <SheetLayer z={80} dim={0.6} style={holdAt ? overlayStyle(holdAt) : liveOverlayStyle(visible)} onClose={close}>
       <motion.div
         // In the Android app the keyboard carries the card up — the page's bottom edge rises with it,
         // frame by frame — so the card only fades in where it is and rides along: one movement, tied to
@@ -243,7 +270,7 @@ export default function TaskCreateSheet({
             <span className="flex-1" />
             <button
               onPointerDown={(e) => e.stopPropagation()}
-              onClick={onClose}
+              onClick={close}
               aria-label="Close"
               className="w-9 h-9 rounded-full bg-neutral-800 flex items-center justify-center text-neutral-400 cursor-pointer"
             >

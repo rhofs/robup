@@ -3361,9 +3361,14 @@ function PageContent() {
       // Depth-capped as a guard against a parent cycle in bad data, not as a product limit.
       if (!isMobile && depth < 12 && expandedTaskIds.has(task.id)) for (const c of children) add(c, depth + 1);
     };
-    for (const t of filteredTasks.slice(0, visibleTaskCount)) add(t, 0);
+    // While a List is sliding in on a phone, only the cards that fit on the screen are built; the rest
+    // follow once it has arrived. Building all of a page of cards in the slide's first frames is what
+    // made the first List after launch hitch — measured on the device as two frames of 60ms and 50ms
+    // a tenth of a second in, with no single script to blame, just a lot of first-time rendering.
+    const limit = isMobile && boardPushing ? Math.min(visibleTaskCount, 8) : visibleTaskCount;
+    for (const t of filteredTasks.slice(0, limit)) add(t, 0);
     return rows;
-  }, [filteredTasks, visibleTaskCount, subtasksByParent, expandedTaskIds, isMobile]);
+  }, [filteredTasks, visibleTaskCount, subtasksByParent, expandedTaskIds, isMobile, boardPushing]);
 
 
   // Scoped to whatever's currently visible/filtered in the board (filteredTasks), not the whole

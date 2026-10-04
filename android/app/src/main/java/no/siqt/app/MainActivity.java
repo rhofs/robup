@@ -41,10 +41,16 @@ public class MainActivity extends BridgeActivity {
     // cannot be undone from script, and the viewport meta's interactive-widget, which asks for exactly
     // this behaviour, is not honoured by the WebView — both were tried first (see PLANNING.md).
     //
-    // So the app does it: the WebView's bottom edge sits on the keyboard's top, and the keyboard is
-    // taken out of the insets the WebView sees — it is no longer covering anything, so there is nothing
-    // to pan. The navigation bar's inset is dropped too while the keyboard is up, since the page no
-    // longer reaches down to it (otherwise the bottom safe-area padding leaves a gap above the keyboard).
+    // So the app does it: the WebView's bottom edge follows the keyboard, and the keyboard is taken out
+    // of the insets the WebView sees — it is no longer covering anything, so there is nothing to pan.
+    //
+    // The edge stops one navigation-bar height BELOW the keyboard's top, behind the keyboard, and the
+    // navigation bar's inset is left as it is. The page's own bottom safe-area padding then puts its
+    // content exactly on the keyboard. An earlier version moved the edge to the keyboard's top and
+    // zeroed the navigation-bar inset instead — but the inset changed in one step as the keyboard
+    // began to move, so every bottom sheet lost that padding at once and visibly dropped by it mid-
+    // entrance (measured on the device: the new-task card's top fell 15px in a single frame) — the
+    // "litt forbi og popper ned".
     //
     // Frame by frame while the keyboard slides, not in one step: the system reports the keyboard's
     // FINAL height as its animation starts, and moving the edge there at once left a gap between the
@@ -71,7 +77,7 @@ public class MainActivity extends BridgeActivity {
             WindowInsetsCompat now = ViewCompat.getRootWindowInsets(webView);
             if (now == null) return;
             boolean up = now.isVisible(WindowInsetsCompat.Type.ime());
-            setKeyboardEdge(webView, up ? now.getInsets(WindowInsetsCompat.Type.ime()).bottom : 0);
+            setKeyboardEdge(webView, up ? edgeFor(now) : 0);
         }
     };
 
@@ -83,7 +89,7 @@ public class MainActivity extends BridgeActivity {
             boolean keyboardUp = insets.isVisible(WindowInsetsCompat.Type.ime()) && ime.bottom > 0;
             if (!imeAnimating) {
                 if (keyboardUp && keyboardWasUp) {
-                    setKeyboardEdge(v, ime.bottom);
+                    setKeyboardEdge(v, edgeFor(insets));
                 } else if (keyboardUp != keyboardWasUp) {
                     v.removeCallbacks(settleWithoutAnimation);
                     v.postDelayed(settleWithoutAnimation, 400);
@@ -91,14 +97,11 @@ public class MainActivity extends BridgeActivity {
             }
             keyboardWasUp = keyboardUp;
 
-            WindowInsetsCompat.Builder seen = new WindowInsetsCompat.Builder(insets)
+            WindowInsetsCompat seen = new WindowInsetsCompat.Builder(insets)
                 .setInsets(WindowInsetsCompat.Type.ime(), Insets.NONE)
-                .setVisible(WindowInsetsCompat.Type.ime(), false);
-            if (keyboardUp) {
-                Insets nav = insets.getInsets(WindowInsetsCompat.Type.navigationBars());
-                seen.setInsets(WindowInsetsCompat.Type.navigationBars(), Insets.of(nav.left, 0, nav.right, 0));
-            }
-            return ViewCompat.onApplyWindowInsets(v, seen.build());
+                .setVisible(WindowInsetsCompat.Type.ime(), false)
+                .build();
+            return ViewCompat.onApplyWindowInsets(v, seen);
         });
 
         ViewCompat.setWindowInsetsAnimationCallback(
@@ -114,7 +117,7 @@ public class MainActivity extends BridgeActivity {
                 @NonNull
                 @Override
                 public WindowInsetsCompat onProgress(@NonNull WindowInsetsCompat insets, @NonNull List<WindowInsetsAnimationCompat> running) {
-                    if (imeAnimating) setKeyboardEdge(webView, insets.getInsets(WindowInsetsCompat.Type.ime()).bottom);
+                    if (imeAnimating) setKeyboardEdge(webView, edgeFor(insets));
                     return insets;
                 }
 
@@ -125,10 +128,24 @@ public class MainActivity extends BridgeActivity {
                     WindowInsetsCompat now = ViewCompat.getRootWindowInsets(webView);
                     if (now == null) return;
                     boolean up = now.isVisible(WindowInsetsCompat.Type.ime());
-                    setKeyboardEdge(webView, up ? now.getInsets(WindowInsetsCompat.Type.ime()).bottom : 0);
+                    setKeyboardEdge(webView, up ? edgeFor(now) : 0);
+                    // Tell the page the keyboard has finished moving, so what waits for it (a picker that
+                    // opens once the keyboard is down) can start on the exact frame instead of guessing.
+                    webView.evaluateJavascript(
+                        "window.dispatchEvent(new CustomEvent('siqt-keyboard',{detail:{up:" + up + "}}))",
+                        null
+                    );
                 }
             }
         );
+    }
+
+    // How far up the WebView's bottom edge goes for a given keyboard position: the keyboard's height
+    // less the navigation bar it covers, whose inset the page keeps (see above).
+    private static int edgeFor(WindowInsetsCompat insets) {
+        int ime = insets.getInsets(WindowInsetsCompat.Type.ime()).bottom;
+        int nav = insets.getInsets(WindowInsetsCompat.Type.navigationBars()).bottom;
+        return Math.max(0, ime - nav);
     }
 
     private static void setKeyboardEdge(View v, int bottom) {

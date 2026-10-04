@@ -11538,3 +11538,38 @@ screen was also too quick to see. The user is fine with a ≥ 3 s intro on a fre
   done.**
 
 **Deployed 2026-10-04 as `d44fbc2`** (tag `deploy/2026-10-04_2142`) — tracing live; endpoint returns 401 when signed out.
+
+### 2026-10-04 (continued) — what the traces showed, and the fixes
+
+**Traces read** (6 of them; 120 Hz device; via the panel files API):
+- **list-open, cold:** two long frames ~0.1 s into the push (58–67 ms and 35–51 ms). The
+  long-animation-frame entries had **no script ≥ 5 ms** and `blockingDuration` 0, so the time is
+  many small chunks: the first build of a page of cards during the slide. A warm list open shows
+  only one ~34 ms frame at the very start.
+- **task-sheet:** the card's top **fell 15 px in one frame at ~70 ms** while its bottom stayed put.
+  That was the navigation-bar inset being zeroed when the keyboard started, which removed the
+  sheet's `env(safe-area-inset-bottom)` padding in one step. This is the "går litt forbi og popper
+  ned". Otherwise the card tracks innerHeight exactly. 6–9 of ~120 frames ran 13–24 ms during the
+  per-frame resize: a mild stutter, accepted for now.
+
+**User feedback this round:** the keyboard's top strip "henger litt før den spretter ned" when the
+card closes. He dislikes the keyboard going down *while* the calendar comes up, and wants the
+calendar to start once the keyboard is fully down, "bittelitt tregere".
+
+**Fixes:**
+- `MainActivity`:
+  - The navigation-bar inset is no longer stripped. The WebView edge goes to
+    `max(0, ime − navBottom)` (`edgeFor`), i.e. one nav-bar height *behind* the keyboard, and the
+    page's own safe-area padding lands content exactly on the keyboard. No inset ever changes in a
+    step.
+  - `onEnd` dispatches `window` event `siqt-keyboard` `{detail:{up}}`.
+- **TaskCreateSheet:**
+  - `close()` blurs before closing, so the keyboard leaves with the card.
+  - Keyboard-free pickers open on `siqt-keyboard` `{up:false}`; otherwise when the height is full
+    and steady for 3 frames, with a 900 ms ceiling (was 450 ms, likely firing early).
+- **Pickers that open on a clear screen** (DateSheet, TimeDialSheet, `PickSheet noKeyboard`) use a
+  spring of 290/34, slightly slower than 380/38.
+- **First list:** `listRows` builds at most 8 cards while `boardPushing` on mobile; the rest mount
+  when the push ends.
+- **Tracing is still on** (first 3 per kind per load) to verify; remove afterwards.
+- APK clean-built and copied to `public/siqt.apk`; it must be reinstalled.
