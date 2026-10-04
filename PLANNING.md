@@ -11400,3 +11400,5 @@ screen was also too quick to see. The user is fine with a ≥ 3 s intro on a fre
   `app/layout.tsx` (`viewport.interactiveWidget`) and deal with the bottom nav, or to set
   `android:windowSoftInputMode="adjustResize"` and apply IME insets in MainActivity (targetSdk 35
   edge-to-edge: Android no longer resizes on its own).
+
+**Deployed 2026-10-04 as `d4fb69f`** (tag `deploy/2026-10-04_1832`).
