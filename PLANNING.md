@@ -11269,3 +11269,5 @@ screen was also too quick to see. The user is fine with a ≥ 3 s intro on a fre
 - The scroll-into-view floor is now the viewport minus 120 px on phones (clear of the floating
   nav). Desktop keeps the inline row via `quickAddTask`.
 - Not seen on a device.
+
+**Deployed 2026-10-04 as `466fcdb`** (tag `deploy/2026-10-04_1803`).
