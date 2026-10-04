@@ -11428,3 +11428,5 @@ screen was also too quick to see. The user is fine with a ≥ 3 s intro on a fre
 - **APK:** clean build, 5.0 MB, copied to `public/siqt.apk`. The user must reinstall it.
 - Not seen on a device. If it misbehaves, suspects: the WebView ignoring the stripped IME insets on
   some version, or the margin applying a frame late.
+
+**Deployed 2026-10-04 as `b4ceee8`** (tag `deploy/2026-10-04_1836`), with the new APK.
