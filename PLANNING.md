@@ -11487,3 +11487,5 @@ screen was also too quick to see. The user is fine with a ≥ 3 s intro on a fre
   within 4 px of full, with a 450 ms cap. The card stays held throughout. Assignees still opens at
   once and keeps the keyboard.
 - APK clean-built and copied to `public/siqt.apk`; it must be reinstalled. Not seen on a device.
+
+**Deployed 2026-10-04 as `b73d2a0`** (tag `deploy/2026-10-04_1853`), with the new APK.
