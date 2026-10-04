@@ -11573,3 +11573,5 @@ calendar to start once the keyboard is fully down, "bittelitt tregere".
   when the push ends.
 - **Tracing is still on** (first 3 per kind per load) to verify; remove afterwards.
 - APK clean-built and copied to `public/siqt.apk`; it must be reinstalled.
+
+**Deployed 2026-10-04 as `48d8dd2`** (tag `deploy/2026-10-04_2154`), with the new APK. Traces recorded before 21:54Z are from the previous build.
