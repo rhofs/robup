@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useLayoutEffect, useState } from 'react';
+import { Capacitor } from '@capacitor/core';
 
 // The part of the screen actually visible: its top and height in layout-viewport pixels, from
 // window.visualViewport. For anything anchored to the bottom that must stay above the on-screen
@@ -32,7 +33,23 @@ export type VisibleBox = { top: number; height: number };
 //
 // Only while a sheet is up: elsewhere (a chat box, the search field) the app is laid out for the
 // keyboard covering the page, and a resize would lift the bottom nav above the keyboard there.
+// In the Android app the page is resized natively for the keyboard, frame by frame (MainActivity), so a
+// sheet pinned to the page's bottom edge with plain CSS is already on top of the keyboard, in the same
+// frame. Positioning it from the visual viewport in React state instead lagged a frame behind the edge
+// on every step of the keyboard's animation.
+export const keyboardResizesPage = typeof window !== 'undefined' && Capacitor.getPlatform() === 'android';
+
 let sheetsOpen = 0;
+// The page behind is held at its full height while any sheet is open. When the keyboard resizes the
+// page, everything sized to it — the whole app, every card in the list — was laid out again on every
+// frame of the keyboard's animation, which is what made a sheet's entrance stutter ("hakkete og
+// uoptimalisert"), and the page behind visibly reflowed under the dimming. Held, the keyboard only
+// changes the sheet layers, and the page behind does not move at all.
+function holdPage(on: boolean) {
+  const shell = document.querySelector('.siqt-app-shell') as HTMLElement | null;
+  if (!shell) return;
+  shell.style.height = on ? `${fullViewportBox().height}px` : '';
+}
 let originalViewport: string | null = null;
 function setResizesContent(on: boolean) {
   const meta = document.querySelector('meta[name="viewport"]');
@@ -51,9 +68,15 @@ export function useVisibleViewport(): VisibleBox | null {
   // A layout effect, so the setting is in place within the same commit that mounts the sheet — before
   // its field takes focus and the keyboard is asked for.
   useLayoutEffect(() => {
-    if (sheetsOpen++ === 0) setResizesContent(true);
+    if (sheetsOpen++ === 0) {
+      setResizesContent(true);
+      holdPage(true);
+    }
     return () => {
-      if (--sheetsOpen === 0) setResizesContent(false);
+      if (--sheetsOpen === 0) {
+        setResizesContent(false);
+        holdPage(false);
+      }
     };
   }, []);
   useEffect(() => {
@@ -98,6 +121,20 @@ if (typeof window !== 'undefined') {
   window.addEventListener('orientationchange', () => {
     fullHeight = 0;
   });
+}
+
+// The style for a sheet layer that should sit on the visible area, following the keyboard. Where the
+// page itself is resized for the keyboard, that is simply the page — top 0, bottom 0 — and no style is
+// needed; elsewhere it is the measured visible box.
+export function liveOverlayStyle(box: VisibleBox | null): React.CSSProperties {
+  return keyboardResizesPage ? {} : overlayStyle(box);
+}
+
+// The visible area right now, read directly (not from React state, which trails by a render).
+export function currentVisibleBox(): VisibleBox | null {
+  if (typeof window === 'undefined') return null;
+  const vv = window.visualViewport;
+  return vv ? { top: vv.offsetTop, height: vv.height } : { top: 0, height: window.innerHeight };
 }
 
 // Style for a full-screen overlay that should cover only what is visible.

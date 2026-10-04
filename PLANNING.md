@@ -11458,3 +11458,32 @@ screen was also too quick to see. The user is fine with a ≥ 3 s intro on a fre
 - **APK** clean-built and copied to `public/siqt.apk`; it must be reinstalled. Not seen on a device.
 
 **Deployed 2026-10-04 as `584d689`** (tag `deploy/2026-10-04_1844`), with the new APK.
+
+### 2026-10-04 (continued) — smoother keyboard: page held, sheets CSS-pinned, edge moved only by the animation, pickers wait for the keyboard
+
+- **Feedback:** the new-task entrance felt "litt hakkete og uoptimalisert" and could "hoppe litt
+  for langt og poppe tilbake, men ikke hver gang". Set dates was still odd: "Tastaturet havner over
+  og går ned".
+- **Stutter:** resizing the WebView every keyboard frame re-laid out the whole app (h-dvh shell,
+  every card).
+  - `useVisibleViewport`'s refcounted layout effect now also **holds `.siqt-app-shell` at the full
+    height** (inline px from `fullViewportBox()`) while any sheet is open, and restores `h-dvh` when
+    the last closes. Only the fixed sheet layers relayout per frame, and the page behind cannot
+    move or reflow.
+  - New `keyboardResizesPage` (Android app) and `liveOverlayStyle(box)`, which returns `{}` there,
+    so live layers are pinned `top:0; bottom:0` by plain CSS and follow the native edge in the same
+    frame. Positioning from visualViewport state lagged a render behind.
+  - New `currentVisibleBox()` reads the viewport directly instead of from React state.
+- **Overshoot:** the final IME insets can reach the listener before the animation's `onPrepare`, so
+  the edge sometimes jumped to the final height and then snapped back to follow the animation.
+  - `MainActivity`'s inset listener no longer moves the edge on a show/hide. Only the animation
+    callback does.
+  - The listener moves it only when the keyboard was up and stays up (a height change no animation
+    covers).
+  - A posted 400 ms `settleWithoutAnimation` covers a show/hide that arrives with no animation;
+    `onPrepare` cancels it.
+- **Set dates:** pickers with no text field (dates, status, List) now **blur the title first and
+  wait for the keyboard to be gone** before opening. A rAF loop runs until the visible height is
+  within 4 px of full, with a 450 ms cap. The card stays held throughout. Assignees still opens at
+  once and keeps the keyboard.
+- APK clean-built and copied to `public/siqt.apk`; it must be reinstalled. Not seen on a device.

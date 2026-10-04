@@ -3,7 +3,7 @@
 import SheetLayer from './SheetLayer';
 import { useMemo, useState } from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
-import { fullViewportBox, overlayStyle, useVisibleViewport } from '../../hooks/useVisibleViewport';
+import { fullViewportBox, liveOverlayStyle, overlayStyle, useVisibleViewport } from '../../hooks/useVisibleViewport';
 import { X, CalendarDays, MapPin, Palette, Layers, UserCircle, ChevronDown, Check, ListChecks } from 'lucide-react';
 import type { AppUser, HierarchyWorkspace } from '../../store/useTaskStore';
 import { useTaskStore } from '../../store/useTaskStore';
@@ -94,7 +94,7 @@ export function PickSheet({
   const drag = useSheetDrag(onClose);
   const visible = useVisibleViewport();
   return (
-    <SheetLayer z={90} dim={0.5} style={overlayStyle(noKeyboard ? fullViewportBox() : visible)} onClose={onClose}>
+    <SheetLayer z={90} dim={0.5} style={noKeyboard ? overlayStyle(fullViewportBox()) : liveOverlayStyle(visible)} onClose={onClose}>
       <motion.div
         initial={{ y: '100%' }}
         animate={{ y: 0 }}
@@ -183,7 +183,7 @@ export default function MobileQuickCreateSheet({
   const summary = datesSummary(start, isTask ? taskDue : end);
 
   return (
-    <SheetLayer z={80} dim={0.6} style={overlayStyle(visible)} onClose={onClose}>
+    <SheetLayer z={80} dim={0.6} style={liveOverlayStyle(visible)} onClose={onClose}>
       <motion.div
         initial={{ y: '100%' }}
         animate={{ y: 0 }}

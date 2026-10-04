@@ -49,12 +49,31 @@ public class MainActivity extends BridgeActivity {
     // Frame by frame while the keyboard slides, not in one step: the system reports the keyboard's
     // FINAL height as its animation starts, and moving the edge there at once left a gap between the
     // page and a keyboard still on its way up — "noe glippe … mellom tastatur og det kortet". The
-    // animation callback follows the keyboard's real position on every frame instead; the inset listener
-    // keeps its hands off the edge while an animation is running and settles it when one is not.
+    // animation callback follows the keyboard's real position on every frame instead.
+    //
+    // Only the animation moves the edge when the keyboard opens or closes. The inset listener used to
+    // set it too, unless an animation was already flagged as running — but the final insets can arrive
+    // before the animation's onPrepare, so now and then the edge leapt to the final height and then
+    // snapped back to follow the animation from the bottom: "kan faktisk hoppe litt for langt og poppe
+    // tilbake, men ikke hver gang". The listener now moves the edge only when the keyboard was already
+    // up and stays up (a taller emoji panel, a different keyboard), which no animation covers; and if a
+    // show or hide somehow arrives without an animation, a short fallback settles it.
     //
     // Below Android 15 the window is not edge to edge, and adjustResize (AndroidManifest.xml) resizes
     // it for the keyboard the classic way, so nothing is done here.
     private boolean imeAnimating = false;
+    private boolean keyboardWasUp = false;
+    private final Runnable settleWithoutAnimation = new Runnable() {
+        @Override
+        public void run() {
+            if (imeAnimating) return;
+            WebView webView = getBridge().getWebView();
+            WindowInsetsCompat now = ViewCompat.getRootWindowInsets(webView);
+            if (now == null) return;
+            boolean up = now.isVisible(WindowInsetsCompat.Type.ime());
+            setKeyboardEdge(webView, up ? now.getInsets(WindowInsetsCompat.Type.ime()).bottom : 0);
+        }
+    };
 
     private void fitWebViewAboveKeyboard() {
         WebView webView = getBridge().getWebView();
@@ -62,7 +81,15 @@ public class MainActivity extends BridgeActivity {
         ViewCompat.setOnApplyWindowInsetsListener(webView, (v, insets) -> {
             Insets ime = insets.getInsets(WindowInsetsCompat.Type.ime());
             boolean keyboardUp = insets.isVisible(WindowInsetsCompat.Type.ime()) && ime.bottom > 0;
-            if (!imeAnimating) setKeyboardEdge(v, keyboardUp ? ime.bottom : 0);
+            if (!imeAnimating) {
+                if (keyboardUp && keyboardWasUp) {
+                    setKeyboardEdge(v, ime.bottom);
+                } else if (keyboardUp != keyboardWasUp) {
+                    v.removeCallbacks(settleWithoutAnimation);
+                    v.postDelayed(settleWithoutAnimation, 400);
+                }
+            }
+            keyboardWasUp = keyboardUp;
 
             WindowInsetsCompat.Builder seen = new WindowInsetsCompat.Builder(insets)
                 .setInsets(WindowInsetsCompat.Type.ime(), Insets.NONE)
@@ -79,7 +106,9 @@ public class MainActivity extends BridgeActivity {
             new WindowInsetsAnimationCompat.Callback(WindowInsetsAnimationCompat.Callback.DISPATCH_MODE_STOP) {
                 @Override
                 public void onPrepare(@NonNull WindowInsetsAnimationCompat animation) {
-                    if ((animation.getTypeMask() & WindowInsetsCompat.Type.ime()) != 0) imeAnimating = true;
+                    if ((animation.getTypeMask() & WindowInsetsCompat.Type.ime()) == 0) return;
+                    imeAnimating = true;
+                    webView.removeCallbacks(settleWithoutAnimation);
                 }
 
                 @NonNull

@@ -5,7 +5,14 @@ import { AnimatePresence, motion } from 'framer-motion';
 import { X, CalendarDays, UserCircle, ChevronDown, Check, ListChecks } from 'lucide-react';
 import { useTaskStore, type StatusDef } from '../../store/useTaskStore';
 import { useSessionStore } from '../../store/useSessionStore';
-import { overlayStyle, useVisibleViewport, type VisibleBox } from '../../hooks/useVisibleViewport';
+import {
+  currentVisibleBox,
+  fullViewportBox,
+  liveOverlayStyle,
+  overlayStyle,
+  useVisibleViewport,
+  type VisibleBox,
+} from '../../hooks/useVisibleViewport';
 import { useBackLayer } from '../../hooks/useBackLayer';
 import { pickableMembers, taskAudience, workspaceIdForList } from '../../lib/workspaceMembers';
 import { suggestTaskAssignees } from '../../lib/assigneeSuggestions';
@@ -102,12 +109,47 @@ export default function TaskCreateSheet({
   // picker hands the focus back to the title in the same tap, so the keyboard comes back up under a
   // card that never moved, and only once the keyboard is back does the card follow the live box again
   // (or after a moment, if it does not come back).
+  //
+  // The pickers without a text field wait for the keyboard to be gone before they rise. Opening one
+  // while the keyboard was still on its way down put the keyboard over the picker as it slid in, and
+  // the whole thing looked like a tangle ("Tastaturet havner over og går ned"). Now the tap puts the
+  // keyboard away, the card holds still in the meantime, and the picker comes up on a clear screen —
+  // a fraction of a second, the way the phone's own apps do it. Assignees, which has a search field,
+  // keeps the keyboard and opens at once.
   const [frozen, setFrozen] = useState<VisibleBox | null>(null);
   const [released, setReleased] = useState(true);
+  const pendingOpen = useRef<number | null>(null);
+  useEffect(
+    () => () => {
+      if (pendingOpen.current !== null) cancelAnimationFrame(pendingOpen.current);
+    },
+    []
+  );
   const openSheet = (which: NonNullable<typeof sheet>) => {
-    setFrozen(visible);
+    setFrozen(currentVisibleBox());
     setReleased(false);
-    setSheet(which);
+    if (which === 'people') {
+      setSheet(which);
+      return;
+    }
+    const full = fullViewportBox().height;
+    const keyboardUp = (currentVisibleBox()?.height ?? full) < full - 80;
+    (document.activeElement as HTMLElement | null)?.blur();
+    if (!keyboardUp) {
+      setSheet(which);
+      return;
+    }
+    const started = performance.now();
+    const waitForKeyboard = () => {
+      const h = currentVisibleBox()?.height ?? full;
+      if (h >= full - 4 || performance.now() - started > 450) {
+        pendingOpen.current = null;
+        setSheet(which);
+        return;
+      }
+      pendingOpen.current = requestAnimationFrame(waitForKeyboard);
+    };
+    pendingOpen.current = requestAnimationFrame(waitForKeyboard);
   };
   const closeSheet = () => {
     titleRef.current?.focus({ preventScroll: true });
@@ -152,7 +194,7 @@ export default function TaskCreateSheet({
   const dates = shortDates(start, due);
 
   return (
-    <SheetLayer z={80} dim={0.6} style={overlayStyle(holdAt ?? visible)} onClose={onClose}>
+    <SheetLayer z={80} dim={0.6} style={holdAt ? overlayStyle(holdAt) : liveOverlayStyle(visible)} onClose={onClose}>
       <motion.div
         initial={{ y: '100%' }}
         animate={{ y: 0 }}
