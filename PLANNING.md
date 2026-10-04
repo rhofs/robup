@@ -11456,3 +11456,5 @@ screen was also too quick to see. The user is fine with a ≥ 3 s intro on a fre
     laid out on it, so they sit where they will end up and the keyboard sliding away uncovers them.
   - Assignees/attendees keep the live box (they have a search field).
 - **APK** clean-built and copied to `public/siqt.apk`; it must be reinstalled. Not seen on a device.
+
+**Deployed 2026-10-04 as `584d689`** (tag `deploy/2026-10-04_1844`), with the new APK.
