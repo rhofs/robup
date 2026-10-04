@@ -11341,3 +11341,27 @@ screen was also too quick to see. The user is fine with a ≥ 3 s intro on a fre
   resize/scroll handler. Those handlers run in the rendering update before paint, and `scrollTo` is
   synchronous, so `offsetTop` reads 0 straight after and the box is measured from that.
 - Not seen on a device.
+
+**Deployed 2026-10-04 as `ab0146e`** (tag `deploy/2026-10-04_1824`) — the synchronous un-pan.
+
+### 2026-10-04 (continued) — the task card holds still under its pickers; un-pan only on pans
+
+- **Reported:**
+  - "Noen ganger når jeg trykker assignees nå, så blinker det svart. Men ikke hver gang."
+  - "Samme greia med kalender pagen … da forsvinner tastaturet bak, og pagen bak hopper ned før
+    animasjonen inn fra kalenderen er ferdig."
+- **The card holds its place** (TaskCreateSheet):
+  - opening any picker records the current visible box (`frozen`), and the card's SheetLayer is laid
+    out on that box instead of the live one, so the keyboard dropping for dates/status/List no
+    longer drags the card down under the picker's entrance;
+  - every close path (✕, scrim, drag, Back, a pick, Save) is `closeSheet`, which refocuses the title
+    in the same tap, so the keyboard returns;
+  - the hold is released, latched by `released` and set from a timer so lint allows it, as soon as
+    the live height is back to within 2 px of the held one, or after 700 ms if the keyboard does not
+    come back.
+- **Black flash, probable cause:** the un-pan `scrollTo` also ran on visualViewport *resize*
+  events, which stream in while the keyboard animates. It now runs only on the viewport's *scroll*
+  event, which is the pan; resize only re-measures. **Unconfirmed** that this was the flash, since
+  there is no device here. If it persists, the next suspects are the keyboard type change when focus
+  moves title → search, and stacked scrims.
+- Not seen on a device.

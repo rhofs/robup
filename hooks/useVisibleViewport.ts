@@ -32,16 +32,22 @@ export function useVisibleViewport(): VisibleBox | null {
     // and not on the next animation frame. Waiting a frame let one frame paint panned: the new-task
     // card visibly overshot upward at the end of its entrance and then dropped back ("går litt for
     // langt opp … så 'popper den ned igjen'").
-    const measure = () => {
+    //
+    // Only on the viewport's scroll — a pan — and never on its resize. Resizes stream in while the
+    // keyboard animates, and resetting the scroll in the middle of those was a likely cause of the
+    // occasional black flash as a picker opened ("Noen ganger når jeg trykker assignees nå, så blinker
+    // det svart").
+    const measure = () => setBox({ top: vv.offsetTop, height: vv.height });
+    const onPan = () => {
       if (vv.offsetTop > 0.5 && Math.abs(vv.scale - 1) < 0.01) window.scrollTo(0, 0);
-      setBox({ top: vv.offsetTop, height: vv.height });
+      measure();
     };
     measure();
     vv.addEventListener('resize', measure);
-    vv.addEventListener('scroll', measure);
+    vv.addEventListener('scroll', onPan);
     return () => {
       vv.removeEventListener('resize', measure);
-      vv.removeEventListener('scroll', measure);
+      vv.removeEventListener('scroll', onPan);
       // Leave the page where it belongs when the sheet goes. Unconditionally: a pan of the visible
       // area does not show in window.scrollY, which is what this used to check.
       window.scrollTo(0, 0);

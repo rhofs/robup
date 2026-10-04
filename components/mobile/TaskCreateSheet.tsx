@@ -1,11 +1,11 @@
 'use client';
 
-import { useLayoutEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
 import { X, CalendarDays, UserCircle, ChevronDown, Check, ListChecks } from 'lucide-react';
 import { useTaskStore, type StatusDef } from '../../store/useTaskStore';
 import { useSessionStore } from '../../store/useSessionStore';
-import { overlayStyle, useVisibleViewport } from '../../hooks/useVisibleViewport';
+import { overlayStyle, useVisibleViewport, type VisibleBox } from '../../hooks/useVisibleViewport';
 import { useBackLayer } from '../../hooks/useBackLayer';
 import { pickableMembers, taskAudience, workspaceIdForList } from '../../lib/workspaceMembers';
 import { suggestTaskAssignees } from '../../lib/assigneeSuggestions';
@@ -94,14 +94,36 @@ export default function TaskCreateSheet({
   useLayoutEffect(() => {
     titleRef.current?.focus({ preventScroll: true });
   }, []);
-  const closePeople = () => {
+
+  // The card holds still while a picker is open over it. The pickers without a text field (dates,
+  // status, List) let the keyboard go down — the calendar needs the room — and the card used to follow
+  // it down mid-way through the calendar's entrance ("pagen bak hopper ned før animasjonen inn fra
+  // kalenderen er ferdig"). Now the card keeps the place it had when the picker opened. Closing any
+  // picker hands the focus back to the title in the same tap, so the keyboard comes back up under a
+  // card that never moved, and only once the keyboard is back does the card follow the live box again
+  // (or after a moment, if it does not come back).
+  const [frozen, setFrozen] = useState<VisibleBox | null>(null);
+  const [released, setReleased] = useState(true);
+  const openSheet = (which: NonNullable<typeof sheet>) => {
+    setFrozen(visible);
+    setReleased(false);
+    setSheet(which);
+  };
+  const closeSheet = () => {
     titleRef.current?.focus({ preventScroll: true });
     setSheet(null);
   };
+  const keyboardBack = !!(frozen && visible && visible.height <= frozen.height + 2);
+  useEffect(() => {
+    if (sheet !== null || released) return;
+    const t = window.setTimeout(() => setReleased(true), keyboardBack ? 0 : 700);
+    return () => window.clearTimeout(t);
+  }, [sheet, released, keyboardBack]);
+  const holdAt = !released && frozen ? frozen : null;
 
   // Back closes whatever is on top: a picker first, then this card.
   useBackLayer(true, onClose);
-  useBackLayer(sheet !== null, () => (sheet === 'people' ? closePeople() : setSheet(null)));
+  useBackLayer(sheet !== null, closeSheet);
 
   // The people who will be able to open a task in this List — the same rule a task's own picker uses.
   const people = useMemo(() => {
@@ -130,7 +152,7 @@ export default function TaskCreateSheet({
   const dates = shortDates(start, due);
 
   return (
-    <SheetLayer z={80} dim={0.6} style={overlayStyle(visible)} onClose={onClose}>
+    <SheetLayer z={80} dim={0.6} style={overlayStyle(holdAt ?? visible)} onClose={onClose}>
       <motion.div
         initial={{ y: '100%' }}
         animate={{ y: 0 }}
@@ -147,7 +169,7 @@ export default function TaskCreateSheet({
           <div className="flex items-center gap-3 px-5 pt-2">
             <button
               onPointerDown={(e) => e.stopPropagation()}
-              onClick={() => setSheet('list')}
+              onClick={() => openSheet('list')}
               className="min-w-0 flex items-center gap-1 text-[15px] text-neutral-500 cursor-pointer"
             >
               In <span className="font-semibold text-app-strong truncate">{list ? list.name : 'Choose a list'}</span>
@@ -190,7 +212,7 @@ export default function TaskCreateSheet({
           />
           <div className="mt-1">
             <div {...keepFocus}>
-            <Row icon={UserCircle} onClick={() => setSheet('people')}>
+            <Row icon={UserCircle} onClick={() => openSheet('people')}>
               {chosen.length ? (
                 <span className="flex items-center gap-2">
                   <AssigneeStack people={chosen} size={26} max={5} />
@@ -201,7 +223,7 @@ export default function TaskCreateSheet({
               )}
             </Row>
             </div>
-            <Row icon={CalendarDays} onClick={() => setSheet('dates')}>
+            <Row icon={CalendarDays} onClick={() => openSheet('dates')}>
               <span className={`text-[17px] ${dates ? 'text-app-strong' : 'text-neutral-500'}`}>{dates ?? 'Set dates'}</span>
             </Row>
           </div>
@@ -209,7 +231,7 @@ export default function TaskCreateSheet({
 
         <div className="flex items-center gap-3 px-4 pt-3 pb-[calc(env(safe-area-inset-bottom)+12px)] border-t border-neutral-800 mt-2 shrink-0">
           <button
-            onClick={() => setSheet('status')}
+            onClick={() => openSheet('status')}
             className="flex items-center gap-2 h-11 pl-3 pr-4 rounded-full bg-neutral-800/80 cursor-pointer active:scale-95 transition-transform"
           >
             <span className="w-4 h-4 rounded-full border-2 border-dashed" style={{ borderColor: status.color }} />
@@ -234,16 +256,16 @@ export default function TaskCreateSheet({
             start={start}
             end={due}
             endName="Due"
-            onClose={() => setSheet(null)}
+            onClose={closeSheet}
             onSave={(s, e) => {
               setStart(s);
               setDue(e);
-              setSheet(null);
+              closeSheet();
             }}
           />
         )}
         {sheet === 'list' && (
-          <PickSheet title="Create in" onClose={() => setSheet(null)}>
+          <PickSheet title="Create in" onClose={closeSheet}>
             {spaces.map((sp) => {
               const lists = sp.lists.filter((l) => !l.archived && !l.docId);
               if (lists.length === 0) return null;
@@ -257,7 +279,7 @@ export default function TaskCreateSheet({
                         setListId(l.id);
                         // A status of the old List's Space may not exist in the new one.
                         setStatusName(null);
-                        setSheet(null);
+                        closeSheet();
                       }}
                       className="w-full flex items-center gap-3 px-2 h-12 rounded-xl text-left active:bg-neutral-800 cursor-pointer"
                     >
@@ -272,13 +294,13 @@ export default function TaskCreateSheet({
           </PickSheet>
         )}
         {sheet === 'status' && (
-          <PickSheet title="Status" onClose={() => setSheet(null)}>
+          <PickSheet title="Status" onClose={closeSheet}>
             {statuses.map((s) => (
               <button
                 key={s.id}
                 onClick={() => {
                   setStatusName(s.name);
-                  setSheet(null);
+                  closeSheet();
                 }}
                 className="w-full flex items-center gap-3 px-2 h-12 rounded-xl text-left active:bg-neutral-800 cursor-pointer"
               >
@@ -290,7 +312,7 @@ export default function TaskCreateSheet({
           </PickSheet>
         )}
         {sheet === 'people' && (
-          <PickSheet title="Assignees" onClose={closePeople}>
+          <PickSheet title="Assignees" onClose={closeSheet}>
             <AssigneePicker
               heading="Assignees"
               people={people}
