@@ -11301,3 +11301,5 @@ screen was also too quick to see. The user is fine with a ≥ 3 s intro on a fre
   - A `useLayoutEffect` on modal open→closed restores it before paint, for the same key only.
   - It sits next to `modalTaskStack`'s declaration, above the isLoading early return like every hook.
 - Not seen on a device.
+
+**Deployed 2026-10-04 as `003a3f6`** (tag `deploy/2026-10-04_1815`).
