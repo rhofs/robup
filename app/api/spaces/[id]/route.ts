@@ -35,7 +35,7 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
   if (body.archived !== undefined) data.archived = body.archived === true;
   // How checking a task works in this Space, and whether done tasks are struck through — set in
   // "Manage statuses" by anyone who can edit the Space, like its statuses themselves.
-  if (body.checkMode === 'archive' || body.checkMode === 'status') data.checkMode = body.checkMode;
+  if (body.checkMode === 'close' || body.checkMode === 'menu') data.checkMode = body.checkMode;
   if (body.strikeDone !== undefined) data.strikeDone = body.strikeDone === true;
 
   // Marking something private, or editing who it's shared with, is a stricter, separate

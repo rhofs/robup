@@ -323,9 +323,11 @@ model Space {
   // pickers) unless the viewer has "Archived spaces" switched on, which brings it all back to browse.
   // Nothing inside is touched, so unarchiving restores it exactly.
   archived      Boolean       @default(false)
-  // RETIRED the same day it was added (2026-10-06): a per-Space choice of what checking a task does,
-  // superseded by the circle opening a status menu with Open / Done / Closed statuses (Status.isDone,
-  // Status.isClosed). Nothing reads it; left in place rather than dropped by another migration.
+  // What tapping a task's circle does in this Space: 'close' closes (archives) the task at once, the
+  // circle's original behaviour; anything else — 'menu', and the legacy 'archive' / 'status' every
+  // Space already holds — opens the status menu. Briefly retired on 2026-10-06 and brought back the
+  // same day as the "gamle stilen" toggle; reading every old value as "menu" kept today's behaviour
+  // without a data migration.
   checkMode     String        @default("archive") @map("check_mode")
   // Strike through the title of a task whose status is a done one.
   strikeDone    Boolean       @default(false) @map("strike_done")

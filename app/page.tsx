@@ -489,7 +489,7 @@ export const DEFAULT_STATUSES: StatusDef[] = [
   { id: 'default-todo', name: 'To Do', color: '#8d97a5', order: 0 },
   { id: 'default-progress', name: 'In Progress', color: '#618cd1', order: 1 },
   { id: 'default-review', name: 'Review', color: '#9a61d1', order: 2 },
-  { id: 'default-done', name: 'Done', color: '#349f7c', order: 3 },
+  { id: 'default-done', name: 'Done', color: '#349f7c', order: 3, isDone: true },
 ];
 
 const FIELD_COLOR_CHOICES = ['#c89642', '#618cd1', '#9a61d1', '#349f7c', '#cd6565', '#31a0b3', '#cb6798', '#8d97a5'];
@@ -817,6 +817,7 @@ function PageContent() {
     optimisticSetDescription,
     setTaskPrivacy,
     createStatus,
+    adoptDefaultStatuses,
     updateStatus,
     deleteStatus,
     createCustomField,
@@ -3300,6 +3301,15 @@ function PageContent() {
   const statusSpace =
     (statusMenuSpaceId ? workspaces.flatMap((w) => w.spaces).find((sp) => sp.id === statusMenuSpaceId) : undefined) ?? currentSpace;
   const statusSpaceStatuses: StatusDef[] = statusSpace?.statuses?.length ? statusSpace.statuses : DEFAULT_STATUSES;
+  // A Space still on the built-in defaults gets them as real statuses the moment its Statuses window
+  // opens, so every row there can be edited — the window used to list the defaults read-only, with
+  // only "Create status" working ("Jeg kan ikke edite noe.. Bare lage ny?"). That also fixes the first
+  // custom status replacing the whole default set, which used to orphan every task's status.
+  const statusSpaceNeedsAdopt = statusMenuOpen && !!statusSpace && statusSpace.statuses.length === 0;
+  useEffect(() => {
+    if (statusSpaceNeedsAdopt && statusSpace) void adoptDefaultStatuses(statusSpace.id, DEFAULT_STATUSES);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [statusSpaceNeedsAdopt, statusSpace?.id]);
   // Space-wide fields (listId: null — every field created before per-List scoping existed) always
   // show; a List-scoped field only shows on the List(s) it was actually created on.
   const customFields: CustomFieldDef[] = (currentSpace?.customFields || []).filter(
@@ -3612,9 +3622,12 @@ function PageContent() {
     setFieldToDelete({ id: fieldId, name: fieldName });
   };
 
-  const handleAddStatus = () => {
+  const handleAddStatus = async () => {
     if (!newStatusName.trim() || !statusSpace) return;
-    createStatus(statusSpace.id, newStatusName, newStatusColor);
+    const spaceId = statusSpace.id;
+    // After the defaults, never instead of them.
+    if (statusSpace.statuses.length === 0) await adoptDefaultStatuses(spaceId, DEFAULT_STATUSES);
+    createStatus(spaceId, newStatusName, newStatusColor);
     // The window stays open: it is where you see the new status land, and statuses tend to be added
     // several at a time.
     setNewStatusName('');
@@ -8743,6 +8756,32 @@ function PageContent() {
                   stay in their order either way, with no separate done section. "for noen tasks trenger
                   vi at vi ser at den er gjort, ikke bare borte". */}
               <div className="space-y-1.5">
+                {/* What tapping a task's circle does here: the status menu, or the original "close it now"
+                    ("at man kan toggle om man vil ha den 'gamle' stilen"). See Space.checkMode. */}
+                <div className="px-1">
+                  <p className="text-[10px] font-semibold uppercase tracking-wider text-neutral-500 mb-1.5">Task circle</p>
+                  <div className="flex rounded-lg bg-neutral-800/70 p-0.5">
+                    {(['menu', 'close'] as const).map((m) => {
+                      const on = (statusSpace.checkMode === 'close' ? 'close' : 'menu') === m;
+                      return (
+                        <button
+                          key={m}
+                          onClick={() => !on && updateSpace(statusSpace.id, { checkMode: m })}
+                          className={`flex-1 h-7 rounded-md text-[11.5px] font-medium cursor-pointer transition-colors ${
+                            on ? 'bg-neutral-700 text-app-strong' : 'text-neutral-400 hover:text-neutral-200'
+                          }`}
+                        >
+                          {m === 'menu' ? 'Status menu' : 'Close directly'}
+                        </button>
+                      );
+                    })}
+                  </div>
+                  <p className="text-[10px] text-neutral-500 mt-1 leading-relaxed">
+                    {statusSpace.checkMode === 'close'
+                      ? 'A tap on the circle closes the task at once (archived). Change status in the Status column or the task.'
+                      : 'A tap on the circle opens the statuses to pick from.'}
+                  </p>
+                </div>
                 <button
                   onClick={() => updateSpace(statusSpace.id, { strikeDone: !statusSpace.strikeDone })}
                   className="w-full flex items-center gap-2.5 px-2.5 py-2 rounded-lg hover:bg-neutral-800/50 cursor-pointer"
@@ -8784,12 +8823,13 @@ function PageContent() {
               ) : (
                 <>
                   {statusSpaceStatuses.map((s) => (
-                    <div key={s.id} className="flex items-center gap-2 text-[11px] text-neutral-300 px-2 py-1">
-                      <span className="w-2.5 h-2.5 rounded-full" style={{ backgroundColor: s.color }}></span>
+                    <div key={s.id} className="flex items-center gap-2 text-[11px] text-neutral-300 px-2 py-1 opacity-60">
+                      <StatusGlyph kind={statusKind(s)} color={s.color} size={14} />
                       {s.name}
                     </div>
                   ))}
-                  <p className="text-[10px] text-neutral-500 px-2">Default statuses are shown until you create your own.</p>
+                  {/* Only for the moment adoptDefaultStatuses takes to turn these into the Space's own. */}
+                  <p className="text-[10px] text-neutral-500 px-2">Setting up this Space&apos;s statuses…</p>
                 </>
               )}
               <div className="border-t border-neutral-800 pt-3 mt-1 space-y-1.5">

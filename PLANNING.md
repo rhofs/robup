@@ -11903,3 +11903,40 @@ calendar to start once the keyboard is fully down, "bittelitt tregere".
   harmless).
 
 **Deployed 2026-10-06 as `e3707bb`** (tag `deploy/2026-10-06_1315`); the status_icon migration ran at start.
+
+### 2026-10-06 (continued) — default statuses editable; dust only on Close, from the circle; "Close directly" toggle
+
+- **Feedback (screenshot of "Statuses · Personal"):**
+  - "Jeg kan ikke edite noe.. Bare lage ny?"
+  - "Når jeg trykker 'Done' status, så kommer det partikkel effekt som kun 'Close' skal ha. Og den
+    kommer ut fra der musepekern velger … Den burde vel komme fra 'Hullet' eller 'Sirkelen'?"
+  - "muligheten til å kun ha 'Close Task' direkte … toggle om man vil ha den 'gamle' stilen, eller
+    en ny 'status' hvor du får dropdown meny."
+- **Built:**
+  - **Editable defaults.** A Space with no statuses of its own showed the built-in four read-only.
+    Opening its Statuses window now runs `adoptDefaultStatuses`, which creates them as real
+    statuses (Done with `isDone`); concurrent calls share one run. "Create status" waits for it.
+    - This also fixes an older bug: the first custom status used to *replace* the whole default
+      set, orphaning every task's status.
+    - `DEFAULT_STATUSES` in page.tsx now marks Done `isDone`.
+  - **Dust:** `optimisticMoveTask` celebrates only on the way into a **closed** status
+    (`isClosedStatus`), no longer a done one. Archiving still celebrates.
+    - `celebrateTaskDone(taskId)` bursts from the centre of the task's circle
+      (`[data-status-circle=id]`, the one nearest the press) and falls back to the press position.
+  - **Close directly:** `Space.checkMode` is un-retired with new meaning.
+    - `'close'` = a tap on the circle archives at once; on an archived task it un-archives.
+    - Anything else = the status menu. That includes the legacy `'archive'`/`'status'` every Space
+      already holds, so no data migration was needed and nobody's behaviour changed.
+    - The API accepts `'close'|'menu'`.
+    - In close mode the circle shows a faint tick on hover, but only on an open status without an
+      icon.
+    - The toggle is "Task circle: Status menu | Close directly", at the top of the Statuses window.
+- Not seen in a browser. No migration (the schema change is a comment).
+- **Asked for next (mid-round), not built yet:** the Statuses window to look like ClickUp's "Edit
+  <List> statuses" (screenshot):
+  - left pane: Status type (Inherit from Space / Use custom statuses) and a Status template
+    dropdown;
+  - right pane: Active / Done / Closed sections, each with "+" and rows of grip, glyph, NAME and
+    "···", plus a dashed "Add status";
+  - footer: Save as template, Apply changes;
+  - "muligheten for å adde templates, og eventuelt sette Default template for nye spaces/lists".

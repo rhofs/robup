@@ -18,6 +18,11 @@ import { useTaskStore, type StatusDef, type Task } from '../store/useTaskStore';
 // (archive, status unchanged), the behaviour the circle always had. Picking an open or done status for
 // an archived task brings it back.
 //
+// A Space can instead keep the circle's original behaviour (Space.checkMode 'close', set in its
+// Statuses window): a tap closes the task at once, no menu — "at man kan toggle om man vil ha den
+// 'gamle' stilen, eller en ny 'status' hvor du får dropdown meny". Tapping a closed task's circle
+// reopens it. Statuses are then changed in the Status column or the task itself.
+//
 // The menu holds statuses only. "Edit statuses" was here for one round and was moved to the status
 // group's "···" (and the Status column's and Space's menus): "Vi kan ikke ha den inne i sirkelen" — the
 // circle may one day close a task directly, with no menu at all.
@@ -26,10 +31,12 @@ export default function StatusCircle({
   task,
   statuses,
   size,
+  mode = 'menu',
 }: {
   task: Task;
   statuses: StatusDef[];
   size: 'sm' | 'md';
+  mode?: 'menu' | 'close';
 }) {
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState('');
@@ -91,14 +98,27 @@ export default function StatusCircle({
       panelClassName="w-56 bg-neutral-900 border border-neutral-800 rounded-xl shadow-2xl p-1.5"
       anchor={
         <button
+          data-status-circle={task.id}
           onClick={(e) => {
             e.stopPropagation();
+            if (mode === 'close') {
+              archiveTask(task.id, !task.archived);
+              return;
+            }
             setOpen((o) => !o);
           }}
-          title={closed ? 'Closed' : current?.name ?? task.status}
-          className={`rounded-full flex items-center justify-center cursor-pointer transition-transform duration-200 active:scale-90 hover:scale-110 shrink-0 ${dim}`}
+          title={mode === 'close' ? (task.archived ? 'Reopen task' : 'Close task') : closed ? 'Closed' : current?.name ?? task.status}
+          className={`group/circle relative rounded-full flex items-center justify-center cursor-pointer transition-transform duration-200 active:scale-90 hover:scale-110 shrink-0 ${dim}`}
         >
           {rowGlyph}
+          {/* Closing at a tap: the tick shows on hover, so it is clear what the tap will do. */}
+          {mode === 'close' && !closed && !done && !current?.icon && (
+            <Check
+              className="absolute inset-0 m-auto w-2.5 h-2.5 opacity-0 group-hover/circle:opacity-70 transition-opacity pointer-events-none"
+              style={{ color: current?.color ?? '#94a3b8' }}
+              strokeWidth={3}
+            />
+          )}
         </button>
       }
     >

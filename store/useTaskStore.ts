@@ -7,7 +7,7 @@ import { useHistoryStore } from './useHistoryStore';
 import { uploadChatFile } from '../lib/uploadChatFile';
 import { parseTaskTemplate, type AppTemplate, type TemplateKind } from '../lib/templates';
 import { useSessionStore } from './useSessionStore';
-import { celebrateTaskDone, isDoneStatus } from '../lib/taskDoneDust';
+import { celebrateTaskDone, isClosedStatus } from '../lib/taskDoneDust';
 
 export type StatusDef = {
   id: string;
@@ -213,10 +213,10 @@ export type HierarchySpace = {
   description: string | null;
   coverImageUrl: string | null;
   statuses: StatusDef[];
-  // checkMode is RETIRED (2026-10-06, the day it was added): the circle now opens a status menu and each
-  // status is Open / Done / Closed (StatusDef.isDone / isClosed). Kept only because the column exists.
+  // checkMode: 'close' = the circle closes (archives) a task at once; anything else (incl. the legacy
+  // 'archive' / 'status') = it opens the status menu. See Space.checkMode in the schema.
   // strikeDone: whether done tasks are struck through. Optional for older payloads.
-  checkMode?: 'archive' | 'status' | string;
+  checkMode?: 'close' | 'menu' | string;
   strikeDone?: boolean;
   customFields: CustomFieldDef[];
   folders: HierarchyFolder[];
@@ -426,6 +426,9 @@ interface TaskStore {
   optimisticSetDescription: (taskId: string, description: string | null) => void;
 
   createStatus: (spaceId: string, name: string, color: string, id?: string) => Promise<void>;
+  // Turns the built-in defaults a Space shows while it has no statuses of its own into real ones, so
+  // they can be edited ("Jeg kan ikke edite noe.. Bare lage ny?"). Concurrent calls share one run.
+  adoptDefaultStatuses: (spaceId: string, defs: StatusDef[]) => Promise<void>;
   updateStatus: (
     spaceId: string,
     statusId: string,
@@ -559,7 +562,7 @@ interface TaskStore {
       coverImageUrl?: string | null;
       isPrivate?: boolean;
       accessJson?: string;
-      checkMode?: 'archive' | 'status';
+      checkMode?: 'close' | 'menu';
       strikeDone?: boolean;
     }
   ) => Promise<void>;
@@ -717,6 +720,10 @@ interface TaskStore {
 
 // Appended to every request that loads Spaces or what is in them — see lib/archivedSpaces.ts.
 const archivedSpacesQS = () => (useTaskStore.getState().showArchivedSpaces ? '&archivedSpaces=1' : '');
+
+// adoptDefaultStatuses runs in flight, per Space — a second call joins the first instead of creating
+// the defaults twice.
+const adoptingStatuses = new Map<string, Promise<void>>();
 
 export const useTaskStore = create<TaskStore>((set, get) => {
   // Delete/restore for Space, Folder, List, Task, DocFolder, and Doc all go through the
@@ -1182,11 +1189,12 @@ export const useTaskStore = create<TaskStore>((set, get) => {
     optimisticMoveTask: (taskId, newStatus) => {
       const task = get().tasks.find((t) => t.id === taskId);
       const oldStatus = task?.status;
-      // Completing a task throws star dust where it was done (lib/taskDoneDust.ts) — only on the way
-      // into a done status, not when moving between two of them or reopening.
+      // Closing a task throws star dust from its circle (lib/taskDoneDust.ts) — only on the way into a
+      // closed status, not into a done one: "Når jeg trykker 'Done' status, så kommer det partikkel
+      // effekt som kun 'Close' skal ha".
       if (task && oldStatus !== newStatus) {
         const statuses = get().workspaces.flatMap((w) => w.spaces).find((sp) => sp.lists.some((l) => l.id === task.listId))?.statuses ?? [];
-        if (isDoneStatus(newStatus, statuses) && !(oldStatus && isDoneStatus(oldStatus, statuses))) celebrateTaskDone();
+        if (isClosedStatus(newStatus, statuses) && !(oldStatus && isClosedStatus(oldStatus, statuses))) celebrateTaskDone(taskId);
       }
       set((state) => ({
         tasks: state.tasks.map((t) => (t.id === taskId ? { ...t, status: newStatus } : t)),
@@ -1316,7 +1324,7 @@ export const useTaskStore = create<TaskStore>((set, get) => {
       const wasArchived = get().tasks.find((t) => t.id === taskId)?.archived;
       // "Done" in this app is archiving (TaskRow's circle, the doc task block's circle): completing a
       // task throws star dust where it was ticked (lib/taskDoneDust.ts). Not on restore.
-      if (archived && !wasArchived) celebrateTaskDone();
+      if (archived && !wasArchived) celebrateTaskDone(taskId);
       set((state) => ({
         tasks: state.tasks.map((t) =>
           t.id === taskId ? { ...t, archived, archivedAt: archived ? new Date() : null } : t
@@ -1544,6 +1552,33 @@ export const useTaskStore = create<TaskStore>((set, get) => {
           redo: () => get().optimisticSetParent(taskId, parentId),
         });
       }
+    },
+
+    adoptDefaultStatuses: (spaceId, defs) => {
+      const running = adoptingStatuses.get(spaceId);
+      if (running) return running;
+      const space = get().workspaces.flatMap((w) => w.spaces).find((s) => s.id === spaceId);
+      if (!space || space.statuses.length > 0) return Promise.resolve();
+      const run = (async () => {
+        const created: StatusDef[] = [];
+        for (const d of defs) {
+          const res = await fetch('/api/statuses', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ spaceId, name: d.name, color: d.color, order: d.order, isDone: !!d.isDone, isClosed: !!d.isClosed }),
+          });
+          if (!res.ok) break;
+          created.push(await res.json());
+        }
+        set((state) => ({
+          workspaces: state.workspaces.map((ws) => ({
+            ...ws,
+            spaces: ws.spaces.map((s) => (s.id === spaceId && s.statuses.length === 0 ? { ...s, statuses: created } : s)),
+          })),
+        }));
+      })().finally(() => adoptingStatuses.delete(spaceId));
+      adoptingStatuses.set(spaceId, run);
+      return run;
     },
 
     createStatus: async (spaceId, name, color, id) => {
@@ -2228,7 +2263,7 @@ export const useTaskStore = create<TaskStore>((set, get) => {
         if (patch.coverImageUrl !== undefined) oldPatch.coverImageUrl = oldSpace.coverImageUrl;
         if (patch.isPrivate !== undefined) oldPatch.isPrivate = oldSpace.isPrivate;
         if (patch.accessJson !== undefined) oldPatch.accessJson = oldSpace.accessJson;
-        if (patch.checkMode !== undefined) oldPatch.checkMode = oldSpace.checkMode === 'status' ? 'status' : 'archive';
+        if (patch.checkMode !== undefined) oldPatch.checkMode = oldSpace.checkMode === 'close' ? 'close' : 'menu';
         if (patch.strikeDone !== undefined) oldPatch.strikeDone = !!oldSpace.strikeDone;
         useHistoryStore.getState().push({
           label: 'Update space',
