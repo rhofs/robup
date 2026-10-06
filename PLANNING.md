@@ -11940,3 +11940,5 @@ calendar to start once the keyboard is fully down, "bittelitt tregere".
     "···", plus a dashed "Add status";
   - footer: Save as template, Apply changes;
   - "muligheten for å adde templates, og eventuelt sette Default template for nye spaces/lists".
+
+**Deployed 2026-10-06 as `0feb822`** (tag `deploy/2026-10-06_1326`).
