@@ -11772,3 +11772,5 @@ calendar to start once the keyboard is fully down, "bittelitt tregere".
   - Row padding `py-2.5` → `py-1.5`.
 - Not seen in a browser. **A code rollback does not undo the migration.** The new columns are
   harmless to old code.
+
+**Deployed 2026-10-06 as `a2223b0`** (tag `deploy/2026-10-06_1237`). Migration ran at start after the DB snapshot.
