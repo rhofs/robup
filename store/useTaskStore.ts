@@ -18,6 +18,9 @@ export type StatusDef = {
   isDone?: boolean;
   // Picking it checks the task away — archived, gone from the list (Status.isClosed).
   isClosed?: boolean;
+  // The icon inside the status's circle (a key of STATUS_ICONS in components/StatusGlyph.tsx); null or
+  // absent = the kind's default.
+  icon?: string | null;
 };
 
 export type CustomFieldDef = {
@@ -426,7 +429,7 @@ interface TaskStore {
   updateStatus: (
     spaceId: string,
     statusId: string,
-    patch: { name?: string; color?: string; order?: number; isDone?: boolean; isClosed?: boolean }
+    patch: { name?: string; color?: string; order?: number; isDone?: boolean; isClosed?: boolean; icon?: string | null }
   ) => Promise<void>;
   deleteStatus: (spaceId: string, statusId: string) => Promise<void>;
   createCustomField: (
@@ -1597,6 +1600,7 @@ export const useTaskStore = create<TaskStore>((set, get) => {
         if (patch.order !== undefined) oldPatch.order = oldStatus.order;
         if (patch.isDone !== undefined) oldPatch.isDone = !!oldStatus.isDone;
         if (patch.isClosed !== undefined) oldPatch.isClosed = !!oldStatus.isClosed;
+        if (patch.icon !== undefined) oldPatch.icon = oldStatus.icon ?? null;
         useHistoryStore.getState().push({
           label: 'Update status',
           undo: () => get().updateStatus(spaceId, statusId, oldPatch),

@@ -3,6 +3,7 @@
 import { useState } from 'react';
 import { Check, Search } from 'lucide-react';
 import FloatingPopover from './FloatingPopover';
+import StatusGlyph, { statusKind } from './StatusGlyph';
 import { useTaskStore, type StatusDef, type Task } from '../store/useTaskStore';
 
 // The circle in front of a task, ClickUp's way: it shows the task's status — a dashed ring in the
@@ -57,16 +58,16 @@ export default function StatusCircle({
   };
 
   const dim = size === 'md' ? 'w-5 h-5' : 'w-4 h-4';
-  const tick = size === 'md' ? 'w-3 h-3' : 'w-2.5 h-2.5';
-
-  const glyph = (s: StatusDef | undefined, isClosed: boolean, isDone: boolean, cls: string, tickCls: string) =>
-    isClosed || isDone ? (
-      <span className={`${cls} rounded-full flex items-center justify-center text-white shrink-0`} style={{ backgroundColor: isClosed && !s ? '#10b981' : s?.color ?? '#10b981' }}>
-        <Check className={tickCls} strokeWidth={3} />
-      </span>
-    ) : (
-      <span className={`${cls} rounded-full border-2 border-dashed shrink-0`} style={{ borderColor: s?.color ?? '#94a3b8' }} />
-    );
+  // The task's own circle. An archived task whose status is not a closed one shows the plain closed
+  // tick in its status colour, not that status's icon — it is the archiving that is being shown.
+  const rowGlyph = (
+    <StatusGlyph
+      kind={closed ? 'closed' : done ? 'done' : 'open'}
+      color={current?.color ?? (closed ? '#10b981' : '#94a3b8')}
+      icon={closed && !current?.isClosed ? null : current?.icon}
+      size={size === 'md' ? 20 : 16}
+    />
+  );
 
   const row = (s: StatusDef) => (
     <button
@@ -74,7 +75,7 @@ export default function StatusCircle({
       onClick={() => pick(s)}
       className="w-full flex items-center gap-2.5 px-2 py-1.5 rounded-lg text-left hover:bg-neutral-800 cursor-pointer"
     >
-      {glyph(s, !!s.isClosed, !!s.isDone, 'w-3.5 h-3.5', 'w-2 h-2')}
+      <StatusGlyph kind={statusKind(s)} color={s.color} icon={s.icon} size={14} />
       <span className="flex-1 min-w-0 truncate text-[11px] font-bold uppercase tracking-wide text-neutral-200">{s.name}</span>
       {s.name === task.status && !(task.archived && !s.isClosed) && <Check className="w-3.5 h-3.5 text-neutral-300 shrink-0" />}
     </button>
@@ -97,7 +98,7 @@ export default function StatusCircle({
           title={closed ? 'Closed' : current?.name ?? task.status}
           className={`rounded-full flex items-center justify-center cursor-pointer transition-transform duration-200 active:scale-90 hover:scale-110 shrink-0 ${dim}`}
         >
-          {glyph(current, closed, done, dim, tick)}
+          {rowGlyph}
         </button>
       }
     >
@@ -123,7 +124,7 @@ export default function StatusCircle({
                 onClick={() => pick(null)}
                 className="w-full flex items-center gap-2.5 px-2 py-1.5 rounded-lg text-left hover:bg-neutral-800 cursor-pointer"
               >
-                {glyph(undefined, true, false, 'w-3.5 h-3.5', 'w-2 h-2')}
+                <StatusGlyph kind="closed" color="#10b981" size={14} />
                 <span className="flex-1 text-[11px] font-bold uppercase tracking-wide text-neutral-200">Close task</span>
                 {task.archived && <Check className="w-3.5 h-3.5 text-neutral-300 shrink-0" />}
               </button>

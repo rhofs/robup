@@ -28,6 +28,7 @@ import { useTaskStore, type Task, type StatusDef, type CustomFieldDef, type Hier
 import TaskRow, { type ColumnDef } from '../TaskRow';
 import FloatingPopover from '../FloatingPopover';
 import Caret from '../Caret';
+import StatusGlyph, { statusKind } from '../StatusGlyph';
 import type { TaskListEmbedExtensionOptions } from './taskListEmbedView';
 
 // Node view for `taskListEmbed` (lib/collab/taskListEmbedNode.ts): tasks, live, inside a Doc.
@@ -532,7 +533,10 @@ export default function TaskListEmbedBlock({ node, updateAttributes, deleteNode,
                     className="flex items-center gap-1.5 h-6 px-2 rounded-md text-[11px] font-bold uppercase tracking-wide"
                     style={{ backgroundColor: `${g.color}26`, color: g.color }}
                   >
-                    <span className="w-2 h-2 rounded-full shrink-0" style={{ backgroundColor: g.color }} />
+                    {(() => {
+                      const st = statuses.find((x) => x.name === g.name);
+                      return <StatusGlyph kind={statusKind(st)} color={g.color} icon={st?.icon} size={12} />;
+                    })()}
                     {renamingGroup === g.name && g.def ? (
                       <input
                         autoFocus

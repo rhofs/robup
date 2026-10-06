@@ -11870,3 +11870,34 @@ calendar to start once the keyboard is fully down, "bittelitt tregere".
 - Not seen in a browser. No migration.
 
 **Deployed 2026-10-06 as `6cc77ca`** (tag `deploy/2026-10-06_1311`).
+
+### 2026-10-06 (continued) — status icons; Done loses the tick; "···" beside Name
+
+- **Feedback (screenshot of the circle menu):** "Kanskje også ikke ha en 'Checkmark' inne i 'Done',
+  men kun i 'Close', for den ser helt lik ut som Close Task. Kanskje vi kan velge ikon inne i de
+  sirklene, eller koster det mye?" Also mid-round: "vi må ha 3 prikker, ved siden av 'Name' … på den
+  øverste linja, så vi har mulighet til å åpne menyen og trykke 'Edit Statuses'".
+  - The screenshot still showed "Edit statuses" in the circle menu. That was the build before
+    `6cc77ca`, which had already removed it; a reload drops it.
+- **Cost answer given:** small. It needed one nullable column, a picker and one shared drawing
+  component.
+- **Built:**
+  - Migration **`20261006150000_status_icon`**: `Status.icon TEXT NULL`, a plain ADD COLUMN.
+    Verified with `migrate deploy` on a temp DB plus `migrate diff` (no difference).
+    - The PATCH API takes `icon`: a string sliced to 32 characters, or null.
+    - `StatusDef.icon`; updateStatus undo covers it.
+  - **`components/StatusGlyph.tsx`** draws a status's circle everywhere: the row circle, its menu,
+    Manage statuses and the doc List group pills.
+    - Defaults by kind: open = empty dashed ring; **done = solid disc with no tick**; closed =
+      solid disc with a tick.
+    - A chosen icon (16 lucide icons, keys in `STATUS_ICONS`) goes inside the ring in the status
+      colour when open, or in white on the disc.
+    - An archived task whose status is not a closed one shows the plain closed tick in its status
+      colour.
+  - **Manage statuses:** the colour dot is now the status's own glyph. Tapping it opens colours plus
+    an icon grid, "Default" first.
+  - **List view header:** an always-visible **"···" beside "Name"** opens "List options" →
+    **Edit statuses** for the Space in view. It is disabled with a hint when no single Space is
+    open (Everything). Desktop only, like the header row; phones use the Space menu.
+- Not seen in a browser. **Migration in this round** (a code rollback leaves the column, which is
+  harmless).

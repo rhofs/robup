@@ -20,6 +20,7 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
   if (body.order !== undefined) data.order = body.order;
   if (body.isDone !== undefined) data.isDone = body.isDone === true;
   if (body.isClosed !== undefined) data.isClosed = body.isClosed === true;
+  if (body.icon !== undefined) data.icon = typeof body.icon === 'string' && body.icon ? body.icon.slice(0, 32) : null;
 
   const updated = await prisma.status.update({ where: { id }, data });
 

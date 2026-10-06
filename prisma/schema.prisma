@@ -448,6 +448,9 @@ model Status {
   // A closed status: choosing it from a task's circle checks the task away — it is archived and
   // leaves the list (ClickUp's "Closed" group; e.g. "Slett"). A done status keeps the task in view.
   isClosed  Boolean  @default(false) @map("is_closed")
+  // The icon inside the status's circle (a key from components/StatusGlyph.tsx), or null for the
+  // kind's default: an empty dashed ring when open, a solid disc when done, a tick when closed.
+  icon      String?
   order     Int      @default(0)
   spaceId   String   @map("space_id")
   space     Space    @relation(fields: [spaceId], references: [id], onDelete: Cascade)

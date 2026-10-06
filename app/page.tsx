@@ -31,6 +31,7 @@ import {
   Bookmark,
   ClipboardList,
   MoreHorizontal,
+  Settings2,
   House as HouseIcon,
   UserCircle,
   LogOut,
@@ -109,6 +110,7 @@ import { startDateColor, dueDateColor, DATE_BADGE_COLOR_HEX, startDateTooltip, d
 import ColorSwatchPicker from '../components/ColorSwatchPicker';
 import ConfirmDialog from '../components/ConfirmDialog';
 import FloatingPopover from '../components/FloatingPopover';
+import StatusGlyph, { STATUS_ICONS, statusKind } from '../components/StatusGlyph';
 import { activeGlowStyle } from '../lib/activeGlowStyle';
 import { copyToClipboard } from '../lib/copyToClipboard';
 import { contextMenuPosition } from '../lib/contextMenuPosition';
@@ -317,6 +319,7 @@ function SortableStatusRow({
   onChangeColor,
   onDelete,
   onSetKind,
+  onChangeIcon,
 }: {
   status: StatusDef;
   colorChoices: string[];
@@ -324,6 +327,7 @@ function SortableStatusRow({
   onChangeColor: (color: string) => void;
   onDelete: () => void;
   onSetKind: (kind: 'open' | 'done' | 'closed') => void;
+  onChangeIcon: (icon: string | null) => void;
 }) {
   const [paletteOpen, setPaletteOpen] = useState(false);
   const [nameDraft, setNameDraft] = useState(status.name);
@@ -336,11 +340,10 @@ function SortableStatusRow({
         <span {...attributes} {...listeners} className="text-neutral-600 hover:text-neutral-400 cursor-grab active:cursor-grabbing shrink-0">
           <GripVertical className="w-3.5 h-3.5" />
         </span>
-        <button
-          onClick={() => setPaletteOpen((o) => !o)}
-          className="w-4 h-4 rounded-full shrink-0 cursor-pointer ring-1 ring-neutral-700"
-          style={{ backgroundColor: status.color }}
-        />
+        {/* The status as its circle looks; a tap opens colour and icon. */}
+        <button onClick={() => setPaletteOpen((o) => !o)} title="Colour and icon" className="shrink-0 cursor-pointer rounded-full hover:scale-110 transition-transform">
+          <StatusGlyph kind={statusKind(status)} color={status.color} icon={status.icon} size={18} />
+        </button>
         <input
           value={nameDraft}
           onChange={(e) => setNameDraft(e.target.value)}
@@ -383,8 +386,27 @@ function SortableStatusRow({
         </button>
       </div>
       {paletteOpen && (
-        <div className="pl-6">
+        <div className="pl-6 space-y-2 pb-1">
           <ColorSwatchPicker value={status.color} onChange={onChangeColor} choices={colorChoices} size="sm" />
+          {/* The icon inside the circle. "Default" follows the kind: empty when open, solid when done, a
+              tick when closed. */}
+          <div className="flex flex-wrap gap-1">
+            {[null, ...Object.keys(STATUS_ICONS)].map((key) => {
+              const on = (status.icon ?? null) === key;
+              return (
+                <button
+                  key={key ?? 'default'}
+                  onClick={() => !on && onChangeIcon(key)}
+                  title={key ?? 'Default'}
+                  className={`w-7 h-7 rounded-lg flex items-center justify-center cursor-pointer transition-colors ${
+                    on ? 'bg-neutral-700 ring-1 ring-blue-500' : 'hover:bg-neutral-800'
+                  }`}
+                >
+                  <StatusGlyph kind={statusKind(status)} color={status.color} icon={key} size={16} />
+                </button>
+              );
+            })}
+          </div>
         </div>
       )}
     </div>
@@ -1732,6 +1754,8 @@ function PageContent() {
   const [newFieldType, setNewFieldType] = useState<CustomFieldDef['type']>('text');
 
   const [statusMenuOpen, setStatusMenuOpen] = useState(false);
+  // The "···" beside the list header's "Name".
+  const [listOptionsOpen, setListOptionsOpen] = useState(false);
   // Which Space's statuses the Manage statuses window edits: the one in view by default, or the one a
   // task belongs to when opened from that task's circle (a task in My Tasks may be from anywhere).
   const [statusMenuSpaceId, setStatusMenuSpaceId] = useState<string | null>(null);
@@ -7583,10 +7607,43 @@ function PageContent() {
                     );
                   })()}
                 </div>
-                <div className="relative flex items-center pr-2">
+                <div className="relative flex items-center gap-1.5 pr-2">
                   <button onClick={() => toggleSort('name')} className="flex items-center gap-1 hover:text-neutral-300 cursor-pointer text-left">
                     Name <SortIcon field="name" />
                   </button>
+                  {/* Always there, not only on hover: "vi må ha 3 prikker, ved siden av 'Name' … så vi har
+                      mulighet til å åpne menyen og trykke 'Edit Statuses'" — a List whose Status column is
+                      hidden had no way to its statuses but the sidebar's Space menu. */}
+                  <FloatingPopover
+                    open={listOptionsOpen}
+                    onClose={() => setListOptionsOpen(false)}
+                    panelClassName="w-52 bg-neutral-900 border border-neutral-800 rounded-xl shadow-2xl p-1.5 normal-case tracking-normal"
+                    anchor={
+                      <button
+                        onClick={() => setListOptionsOpen((o) => !o)}
+                        title="List options"
+                        className="w-5 h-5 rounded flex items-center justify-center text-neutral-500 hover:text-neutral-200 hover:bg-neutral-800 cursor-pointer"
+                      >
+                        <MoreHorizontal className="w-3.5 h-3.5" />
+                      </button>
+                    }
+                  >
+                    <p className="px-2 pt-1 pb-1 text-[10px] font-semibold text-neutral-500">List options</p>
+                    <button
+                      disabled={!currentSpace}
+                      onClick={() => {
+                        setListOptionsOpen(false);
+                        openStatusEditor(null);
+                      }}
+                      className="w-full flex items-center gap-2.5 px-2 py-1.5 rounded-lg text-left text-[12.5px] text-neutral-200 hover:bg-neutral-800 cursor-pointer disabled:opacity-50 disabled:cursor-default disabled:hover:bg-transparent"
+                    >
+                      <Settings2 className="w-3.5 h-3.5 text-neutral-400 shrink-0" />
+                      Edit statuses
+                    </button>
+                    {!currentSpace && (
+                      <p className="px-2 pb-1 text-[10.5px] text-neutral-500">Open a Space to edit its statuses.</p>
+                    )}
+                  </FloatingPopover>
                   <ColumnResizeHandle onResize={(d) => resizeColumn('name', d)} onReset={() => resetColumnWidth('name')} />
                 </div>
                 <DndContext sensors={columnSensors} collisionDetection={closestCenter} onDragEnd={handleColumnDragEnd}>
@@ -8718,6 +8775,7 @@ function PageContent() {
                           onChangeColor={(color) => updateStatus(statusSpace.id, s.id, { color })}
                           onDelete={() => setStatusToDelete({ id: s.id, name: s.name })}
                           onSetKind={(k) => updateStatus(statusSpace.id, s.id, { isDone: k === 'done', isClosed: k === 'closed' })}
+                          onChangeIcon={(icon) => updateStatus(statusSpace.id, s.id, { icon })}
                         />
                       ))}
                     </div>
