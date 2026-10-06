@@ -11901,3 +11901,5 @@ calendar to start once the keyboard is fully down, "bittelitt tregere".
     open (Everything). Desktop only, like the header row; phones use the Space menu.
 - Not seen in a browser. **Migration in this round** (a code rollback leaves the column, which is
   harmless).
+
+**Deployed 2026-10-06 as `e3707bb`** (tag `deploy/2026-10-06_1315`); the status_icon migration ran at start.
