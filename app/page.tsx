@@ -1717,6 +1717,9 @@ function PageContent() {
   const [newFieldType, setNewFieldType] = useState<CustomFieldDef['type']>('text');
 
   const [statusMenuOpen, setStatusMenuOpen] = useState(false);
+  // Which Space's statuses the Manage statuses window edits: the one in view by default, or the one a
+  // task belongs to when opened from that task's circle (a task in My Tasks may be from anywhere).
+  const [statusMenuSpaceId, setStatusMenuSpaceId] = useState<string | null>(null);
   const [newStatusName, setNewStatusName] = useState('');
   const [newStatusColor, setNewStatusColor] = useState(FIELD_COLOR_CHOICES[0]);
 
@@ -2147,7 +2150,21 @@ function PageContent() {
   };
 
   const statusSensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 5 } }));
+  // "Edit statuses" from a task's circle menu (components/StatusCircle.tsx) — the window had only been
+  // reachable by right-clicking the Status column header ("Hvor kan vi edite status nå?").
+  useEffect(() => {
+    const onEdit = (e: Event) => {
+      const spaceId = (e as CustomEvent<{ spaceId?: string }>).detail?.spaceId ?? null;
+      setStatusMenuSpaceId(spaceId);
+      setStatusMenuOpen(true);
+    };
+    window.addEventListener('siqt-edit-statuses', onEdit);
+    return () => window.removeEventListener('siqt-edit-statuses', onEdit);
+  }, []);
+
   const handleStatusDragEnd = (event: DragEndEvent) => {
+    const currentSpace = statusSpace;
+    const statuses = statusSpaceStatuses;
     if (!currentSpace) return;
     const { active, over } = event;
     if (!over || active.id === over.id) return;
@@ -3231,6 +3248,10 @@ function PageContent() {
     !mobilePersonalSpacesOpen;
 
   const statuses: StatusDef[] = currentSpace?.statuses?.length ? currentSpace.statuses : DEFAULT_STATUSES;
+  // The Space the Manage statuses window edits (see statusMenuSpaceId).
+  const statusSpace =
+    (statusMenuSpaceId ? workspaces.flatMap((w) => w.spaces).find((sp) => sp.id === statusMenuSpaceId) : undefined) ?? currentSpace;
+  const statusSpaceStatuses: StatusDef[] = statusSpace?.statuses?.length ? statusSpace.statuses : DEFAULT_STATUSES;
   // Space-wide fields (listId: null — every field created before per-List scoping existed) always
   // show; a List-scoped field only shows on the List(s) it was actually created on.
   const customFields: CustomFieldDef[] = (currentSpace?.customFields || []).filter(
@@ -3544,10 +3565,11 @@ function PageContent() {
   };
 
   const handleAddStatus = () => {
-    if (!newStatusName.trim() || !currentSpace) return;
-    createStatus(currentSpace.id, newStatusName, newStatusColor);
+    if (!newStatusName.trim() || !statusSpace) return;
+    createStatus(statusSpace.id, newStatusName, newStatusColor);
+    // The window stays open: it is where you see the new status land, and statuses tend to be added
+    // several at a time.
     setNewStatusName('');
-    setStatusMenuOpen(false);
   };
 
   // Creates a task in the List on screen (or the first one there is) and returns its id — chosen here,
@@ -8165,6 +8187,7 @@ function PageContent() {
             {columnMenu.col.kind === 'status' && (
               <button
                 onClick={() => {
+                  setStatusMenuSpaceId(null);
                   setStatusMenuOpen(true);
                   setColumnMenu(null);
                 }}
@@ -8605,13 +8628,20 @@ function PageContent() {
         </div>
       )}
 
-      {/* ================= MANAGE STATUSES MODAL (opens via right-click on the Status column) ================= */}
-      {statusMenuOpen && currentSpace && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-scrim/70 backdrop-blur-xs" onClick={() => setStatusMenuOpen(false)}>
-          <div onClick={(e) => e.stopPropagation()} className="w-[380px] bg-neutral-900 border border-neutral-800 rounded-xl shadow-2xl overflow-hidden">
+      {/* ================= MANAGE STATUSES MODAL — opens from right-click on the Status column, or "Edit statuses"
+          in a task's circle menu (the siqt-edit-statuses event), for that task's own Space ================= */}
+      {statusMenuOpen && statusSpace && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-scrim/70 backdrop-blur-xs" onClick={() => {
+                setStatusMenuOpen(false);
+                setStatusMenuSpaceId(null);
+              }}>
+          <div onClick={(e) => e.stopPropagation()} className="w-[380px] max-w-[calc(100vw-32px)] bg-neutral-900 border border-neutral-800 rounded-xl shadow-2xl overflow-hidden">
             <div className="px-5 py-4 border-b border-neutral-800 flex items-center justify-between">
-              <h3 className="font-bold text-sm text-app-strong">Manage statuses</h3>
-              <button onClick={() => setStatusMenuOpen(false)} className="text-neutral-400 hover:text-app-strong cursor-pointer">
+              <h3 className="font-bold text-sm text-app-strong">Statuses · {statusSpace.name}</h3>
+              <button onClick={() => {
+                setStatusMenuOpen(false);
+                setStatusMenuSpaceId(null);
+              }} className="text-neutral-400 hover:text-app-strong cursor-pointer">
                 <X className="w-3.5 h-3.5" />
               </button>
             </div>
@@ -8623,11 +8653,11 @@ function PageContent() {
                   vi at vi ser at den er gjort, ikke bare borte". */}
               <div className="space-y-1.5">
                 <button
-                  onClick={() => updateSpace(currentSpace.id, { strikeDone: !currentSpace.strikeDone })}
+                  onClick={() => updateSpace(statusSpace.id, { strikeDone: !statusSpace.strikeDone })}
                   className="w-full flex items-center gap-2.5 px-2.5 py-2 rounded-lg hover:bg-neutral-800/50 cursor-pointer"
                 >
-                  <span className={`w-7 h-4 rounded-full p-0.5 transition-colors shrink-0 ${currentSpace.strikeDone ? 'bg-blue-500' : 'bg-neutral-700'}`}>
-                    <span className={`block w-3 h-3 rounded-full bg-white transition-transform ${currentSpace.strikeDone ? 'translate-x-3' : ''}`} />
+                  <span className={`w-7 h-4 rounded-full p-0.5 transition-colors shrink-0 ${statusSpace.strikeDone ? 'bg-blue-500' : 'bg-neutral-700'}`}>
+                    <span className={`block w-3 h-3 rounded-full bg-white transition-transform ${statusSpace.strikeDone ? 'translate-x-3' : ''}`} />
                   </span>
                   <span className="text-[12px] text-neutral-200">
                     Strike through done tasks <span className="line-through text-neutral-500">like this</span>
@@ -8636,24 +8666,24 @@ function PageContent() {
                 <p className="text-[10px] text-neutral-500 px-1 leading-relaxed">
                   <span className="text-neutral-300">Done</span> keeps a task in the list, ticked.{' '}
                   <span className="text-neutral-300">Closed</span> checks it away (archived).
-                  {currentSpace.statuses.length > 0 && !currentSpace.statuses.some((st) => st.isClosed) &&
+                  {statusSpace.statuses.length > 0 && !statusSpace.statuses.some((st) => st.isClosed) &&
                     ' With no Closed status, the circle offers “Close task”, which does the same.'}
                 </p>
               </div>
               <p className="text-[10px] font-semibold uppercase tracking-wider text-neutral-500 pt-1">Statuses</p>
-              {currentSpace.statuses.length > 0 ? (
+              {statusSpace.statuses.length > 0 ? (
                 <DndContext sensors={statusSensors} collisionDetection={closestCenter} onDragEnd={handleStatusDragEnd}>
-                  <SortableContext items={statuses.map((s) => s.id)} strategy={verticalListSortingStrategy}>
+                  <SortableContext items={statusSpaceStatuses.map((s) => s.id)} strategy={verticalListSortingStrategy}>
                     <div className="space-y-1.5">
-                      {statuses.map((s) => (
+                      {statusSpaceStatuses.map((s) => (
                         <SortableStatusRow
                           key={s.id}
                           status={s}
                           colorChoices={FIELD_COLOR_CHOICES}
-                          onChangeName={(name) => updateStatus(currentSpace.id, s.id, { name })}
-                          onChangeColor={(color) => updateStatus(currentSpace.id, s.id, { color })}
+                          onChangeName={(name) => updateStatus(statusSpace.id, s.id, { name })}
+                          onChangeColor={(color) => updateStatus(statusSpace.id, s.id, { color })}
                           onDelete={() => setStatusToDelete({ id: s.id, name: s.name })}
-                          onSetKind={(k) => updateStatus(currentSpace.id, s.id, { isDone: k === 'done', isClosed: k === 'closed' })}
+                          onSetKind={(k) => updateStatus(statusSpace.id, s.id, { isDone: k === 'done', isClosed: k === 'closed' })}
                         />
                       ))}
                     </div>
@@ -8661,7 +8691,7 @@ function PageContent() {
                 </DndContext>
               ) : (
                 <>
-                  {statuses.map((s) => (
+                  {statusSpaceStatuses.map((s) => (
                     <div key={s.id} className="flex items-center gap-2 text-[11px] text-neutral-300 px-2 py-1">
                       <span className="w-2.5 h-2.5 rounded-full" style={{ backgroundColor: s.color }}></span>
                       {s.name}
@@ -8674,6 +8704,7 @@ function PageContent() {
                 <input
                   value={newStatusName}
                   onChange={(e) => setNewStatusName(e.target.value)}
+                  onKeyDown={(e) => e.key === 'Enter' && handleAddStatus()}
                   placeholder="New status (e.g. Blocked)"
                   className="w-full bg-neutral-950 border border-neutral-700 rounded-lg px-2 py-1.5 text-xs text-app-strong focus:outline-none focus:border-blue-500"
                 />
@@ -9569,8 +9600,8 @@ function PageContent() {
         message={statusToDelete ? `This deletes the status "${statusToDelete.name}". Tasks using it keep the text but lose the color.` : ''}
         onCancel={() => setStatusToDelete(null)}
         onConfirm={() => {
-          if (statusToDelete && currentSpace) {
-            deleteStatus(currentSpace.id, statusToDelete.id);
+          if (statusToDelete && statusSpace) {
+            deleteStatus(statusSpace.id, statusToDelete.id);
           }
           setStatusToDelete(null);
         }}

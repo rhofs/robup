@@ -11804,3 +11804,23 @@ calendar to start once the keyboard is fully down, "bittelitt tregere".
 - Not seen in a browser. Migration in this round.
 
 **Deployed 2026-10-06 as `e6945a5`** (tag `deploy/2026-10-06_1251`); the is_closed migration ran at start.
+
+### 2026-10-06 (continued) — "Edit statuses" from the circle menu
+
+- **Question:** "Hvor kan vi edite status nå?" Answer: the Manage statuses window was reachable
+  *only* by right-clicking the Status column header in the List view ("Manage statuses"). Nothing
+  on a task, and nothing on mobile, led there.
+- **Built:**
+  - The circle's menu (`StatusCircle`) ends with **"Edit statuses"**. It dispatches a
+    `siqt-edit-statuses` window event carrying the task's Space id (TaskRow passes it; the event
+    is the same pattern as `siqt-toast`).
+  - `app/page.tsx` listens and opens the window for **that** Space. A task in My Tasks or
+    Everything can belong to any Space, so the window now edits `statusSpace`
+    (`statusMenuSpaceId ?? currentSpace`) instead of always `currentSpace`. That covers rename,
+    colour, kind, reorder, add and delete. The column-header route resets the id to null, so it
+    still means "the Space in view".
+  - Title is now "Statuses · <Space name>", so it is visible which Space is being edited.
+  - Adding a status no longer closes the window, and Enter in the name field adds. Width is capped
+    at the screen minus 32px for phones.
+- No migration. Not seen in a browser; tsc is clean and lint is unchanged from before (63 errors
+  in page.tsx, 1 pre-existing in TaskRow).
