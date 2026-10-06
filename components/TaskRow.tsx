@@ -8,6 +8,7 @@ import { useTaskStore, StatusDef, CustomFieldDef, Task } from '../store/useTaskS
 import { useIsMobile } from '../hooks/useIsMobile';
 import Caret from './Caret';
 import { isDoneStatus } from '../lib/taskDoneDust';
+import StatusCircle from './StatusCircle';
 import TaskMaterialize from './TaskMaterialize';
 import { taskPickableMembers } from '../lib/workspaceMembers';
 import AssigneePicker, { AssigneeStack } from './AssigneePicker';
@@ -123,19 +124,15 @@ function TaskRowImpl({
     setDroppableRef(node);
   };
 
-  // Done, the way this task's Space defines it (Manage statuses): in "status" mode a task is done when
-  // its status is a done one, and the circle toggles that status; otherwise (the original behaviour)
-  // done means archived. Read as plain values, so each row only re-renders when its own answer changes.
-  const statusMode = useTaskStore((st) => spaceOfList(st.workspaces, task.listId)?.checkMode === 'status');
+  // This task's own Space's statuses (the row may be showing in My Tasks or Everything, among others'),
+  // for the circle's menu and for what counts as done. The defaults where a Space has none of its own.
+  // Store references, so a row only re-renders when its Space's statuses change.
+  const spaceStatuses = useTaskStore((st) => spaceOfList(st.workspaces, task.listId)?.statuses);
+  const ownStatuses = spaceStatuses && spaceStatuses.length > 0 ? spaceStatuses : DEFAULT_ROW_STATUSES;
   const strikeDone = useTaskStore((st) => !!spaceOfList(st.workspaces, task.listId)?.strikeDone);
-  const statusIsDone = useTaskStore((st) => {
-    const sp = spaceOfList(st.workspaces, task.listId);
-    return sp ? isDoneStatus(task.status, sp.statuses) : false;
-  });
-  const showAsDone = statusMode ? statusIsDone : task.archived;
-  // "Strike through gjennom hele oppgaven når den er Complete eller Done" — a Space setting.
-  const struck = strikeDone && showAsDone;
-  const toggleTaskDone = useTaskStore((st) => st.toggleTaskDone);
+  // Done = archived (closed), or in a done status. "Strike through gjennom hele oppgaven når den er
+  // Complete eller Done" — a Space setting.
+  const struck = strikeDone && (task.archived || isDoneStatus(task.status, ownStatuses));
 
   const statusColorOf = (name: string) => statuses.find((s) => s.name === name)?.color || '#94a3b8';
 
@@ -346,20 +343,8 @@ function TaskRowImpl({
     <div></div>
   );
 
-  const doneToggle = (
-    <button
-      onClick={(e) => {
-        e.stopPropagation();
-        toggleTaskDone(task.id);
-      }}
-      title={statusMode ? (showAsDone ? 'Mark as not done' : 'Mark as done') : task.archived ? 'Restore from archive' : 'Mark as done (archive)'}
-      className={`rounded-full border flex items-center justify-center cursor-pointer transition-all duration-300 ease-out active:scale-90 shrink-0 ${isMobile ? 'w-5 h-5' : 'w-4 h-4'} ${
-        showAsDone ? 'bg-emerald-500 border-emerald-500 text-white' : 'border-neutral-600 hover:border-emerald-400'
-      }`}
-    >
-      {showAsDone && <Check className={isMobile ? 'w-3 h-3' : 'w-2.5 h-2.5'} />}
-    </button>
-  );
+  // The circle in front of the task: its status, and a menu of statuses on a tap (StatusCircle).
+  const doneToggle = <StatusCircle task={task} statuses={ownStatuses} size={isMobile ? 'md' : 'sm'} />;
 
   // Mobile-only: press-and-hold the row to open the same context menu desktop gets from a
   // right-click (Open/Rename/Mark done/Delete) — there's no right-click equivalent on touch.
@@ -749,7 +734,14 @@ function TaskRowImpl({
   );
 }
 
-// The Space a List belongs to, for the row's done rules.
+const DEFAULT_ROW_STATUSES: StatusDef[] = [
+  { id: 'default-todo', name: 'To Do', color: '#8d97a5', order: 0 },
+  { id: 'default-progress', name: 'In Progress', color: '#618cd1', order: 1 },
+  { id: 'default-review', name: 'Review', color: '#9a61d1', order: 2 },
+  { id: 'default-done', name: 'Done', color: '#349f7c', order: 3, isDone: true },
+];
+
+// The Space a List belongs to, for the row's statuses and done rules.
 function spaceOfList(workspaces: ReturnType<typeof useTaskStore.getState>['workspaces'], listId: string) {
   for (const ws of workspaces) for (const sp of ws.spaces) if (sp.lists.some((l) => l.id === listId)) return sp;
   return undefined;

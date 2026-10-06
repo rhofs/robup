@@ -16,6 +16,8 @@ export type StatusDef = {
   order: number;
   // Counts as finished (see Status.isDone). Optional: older payloads and the built-in defaults lack it.
   isDone?: boolean;
+  // Picking it checks the task away — archived, gone from the list (Status.isClosed).
+  isClosed?: boolean;
 };
 
 export type CustomFieldDef = {
@@ -208,8 +210,9 @@ export type HierarchySpace = {
   description: string | null;
   coverImageUrl: string | null;
   statuses: StatusDef[];
-  // What checking a task does here — archive it, or set the done status and keep it (Space.checkMode)
-  // — and whether done tasks are struck through. Optional for older payloads: archive / no.
+  // checkMode is RETIRED (2026-10-06, the day it was added): the circle now opens a status menu and each
+  // status is Open / Done / Closed (StatusDef.isDone / isClosed). Kept only because the column exists.
+  // strikeDone: whether done tasks are struck through. Optional for older payloads.
   checkMode?: 'archive' | 'status' | string;
   strikeDone?: boolean;
   customFields: CustomFieldDef[];
@@ -420,10 +423,11 @@ interface TaskStore {
   optimisticSetDescription: (taskId: string, description: string | null) => void;
 
   createStatus: (spaceId: string, name: string, color: string, id?: string) => Promise<void>;
-  updateStatus: (spaceId: string, statusId: string, patch: { name?: string; color?: string; order?: number; isDone?: boolean }) => Promise<void>;
-  // The circle in front of a task: done or not done, the way its Space says (Space.checkMode) —
-  // archive it, or set the done status and keep it in place.
-  toggleTaskDone: (taskId: string) => void;
+  updateStatus: (
+    spaceId: string,
+    statusId: string,
+    patch: { name?: string; color?: string; order?: number; isDone?: boolean; isClosed?: boolean }
+  ) => Promise<void>;
   deleteStatus: (spaceId: string, statusId: string) => Promise<void>;
   createCustomField: (
     spaceId: string,
@@ -1305,36 +1309,6 @@ export const useTaskStore = create<TaskStore>((set, get) => {
       }
     },
 
-    toggleTaskDone: (taskId) => {
-      const task = get().tasks.find((t) => t.id === taskId);
-      if (!task) return;
-      const space = get()
-        .workspaces.flatMap((w) => w.spaces)
-        .find((sp) => sp.lists.some((l) => l.id === task.listId));
-      if (space?.checkMode !== 'status') {
-        get().optimisticArchiveTask(taskId, !task.archived);
-        return;
-      }
-      // Status mode: the first done status in the Space's order (or its last status, if none is marked),
-      // and back to the first status that is not a done one. Moving into a done status throws the dust
-      // (optimisticMoveTask → lib/taskDoneDust.ts).
-      // A Space that never made its own statuses uses the app's default four, ending in Done.
-      const own = space.statuses.length
-        ? space.statuses
-        : [
-            { id: 'default-todo', name: 'To Do', color: '#8d97a5', order: 0 },
-            { id: 'default-progress', name: 'In Progress', color: '#618cd1', order: 1 },
-            { id: 'default-review', name: 'Review', color: '#9a61d1', order: 2 },
-            { id: 'default-done', name: 'Done', color: '#349f7c', order: 3, isDone: true },
-          ];
-      const ordered = [...own].sort((a, b) => a.order - b.order);
-      const doneOnes = ordered.filter((st) => st.isDone);
-      const done = doneOnes[0] ?? ordered[ordered.length - 1];
-      const isDoneNow = doneOnes.length ? doneOnes.some((st) => st.name === task.status) : task.status === done.name;
-      const open = ordered.find((st) => !(doneOnes.length ? st.isDone : st.name === done.name)) ?? ordered[0];
-      get().optimisticMoveTask(taskId, isDoneNow ? open.name : done.name);
-    },
-
     optimisticArchiveTask: (taskId, archived) => {
       const wasArchived = get().tasks.find((t) => t.id === taskId)?.archived;
       // "Done" in this app is archiving (TaskRow's circle, the doc task block's circle): completing a
@@ -1622,6 +1596,7 @@ export const useTaskStore = create<TaskStore>((set, get) => {
         if (patch.color !== undefined) oldPatch.color = oldStatus.color;
         if (patch.order !== undefined) oldPatch.order = oldStatus.order;
         if (patch.isDone !== undefined) oldPatch.isDone = !!oldStatus.isDone;
+        if (patch.isClosed !== undefined) oldPatch.isClosed = !!oldStatus.isClosed;
         useHistoryStore.getState().push({
           label: 'Update status',
           undo: () => get().updateStatus(spaceId, statusId, oldPatch),

@@ -12,9 +12,9 @@ import { hapticTap } from './haptics';
 // "Done"), or any status simply called done/complete/closed/finished/ferdig/fullført.
 const DONE_NAME = /^(done|complete|completed|closed|finished|ferdig|fullført)$/i;
 
-export function isDoneStatus(name: string, statuses: { name: string; order: number; isDone?: boolean }[]): boolean {
-  // A Space that marks its done statuses (Manage statuses) is taken at its word.
-  if (statuses.some((st) => st.isDone)) return statuses.some((st) => st.isDone && st.name === name);
+export function isDoneStatus(name: string, statuses: { name: string; order: number; isDone?: boolean; isClosed?: boolean }[]): boolean {
+  // A Space that marks its done and closed statuses (Manage statuses) is taken at its word.
+  if (statuses.some((st) => st.isDone || st.isClosed)) return statuses.some((st) => (st.isDone || st.isClosed) && st.name === name);
   if (DONE_NAME.test(name.trim())) return true;
   if (statuses.length < 2) return false;
   const last = statuses.reduce((a, b) => (b.order > a.order ? b : a));
@@ -35,8 +35,13 @@ if (typeof document !== 'undefined') {
   );
 }
 
+// Picking a closed status both sets it and archives the task — two completions from one tap. One burst.
+let lastBurstAt = 0;
+
 export function celebrateTaskDone() {
   if (!lastPress || performance.now() - lastPress.at > 1500) return;
+  if (performance.now() - lastBurstAt < 400) return;
+  lastBurstAt = performance.now();
   addPuff({ x: lastPress.x, y: lastPress.y, particles: makePuffParticles(0.45, true), calm: true });
   hapticTap();
 }

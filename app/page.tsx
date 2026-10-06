@@ -301,14 +301,14 @@ function SortableStatusRow({
   onChangeName,
   onChangeColor,
   onDelete,
-  onToggleDone,
+  onSetKind,
 }: {
   status: StatusDef;
   colorChoices: string[];
   onChangeName: (name: string) => void;
   onChangeColor: (color: string) => void;
   onDelete: () => void;
-  onToggleDone: () => void;
+  onSetKind: (kind: 'open' | 'done' | 'closed') => void;
 }) {
   const [paletteOpen, setPaletteOpen] = useState(false);
   const [nameDraft, setNameDraft] = useState(status.name);
@@ -338,17 +338,31 @@ function SortableStatusRow({
           }}
           className="flex-1 min-w-0 bg-neutral-950 border border-neutral-700 rounded-lg px-2 py-1 text-[11px] text-app-strong focus:outline-none focus:border-blue-500"
         />
-        {/* Whether this status counts as finished: what checking a task sets in "status" mode, what is
-            struck through, what the done dust celebrates. */}
-        <button
-          onClick={onToggleDone}
-          title={status.isDone ? 'Counts as done — click to make it an open status' : 'Mark as a done status'}
-          className={`shrink-0 flex items-center gap-1 h-6 px-2 rounded-full text-[10px] font-semibold cursor-pointer transition-colors ${
-            status.isDone ? 'bg-emerald-500/15 text-emerald-400' : 'text-neutral-500 hover:text-neutral-300 hover:bg-neutral-800'
-          }`}
-        >
-          <Check className="w-3 h-3" /> Done
-        </button>
+        {/* What kind of status this is: Open, Done (the task stays, ticked) or Closed (checks it away). */}
+        <div className="shrink-0 flex rounded-full bg-neutral-800/70 p-0.5">
+          {(['open', 'done', 'closed'] as const).map((k) => {
+            const kind = status.isClosed ? 'closed' : status.isDone ? 'done' : 'open';
+            const on = kind === k;
+            return (
+              <button
+                key={k}
+                onClick={() => !on && onSetKind(k)}
+                title={k === 'open' ? 'Open — still to do' : k === 'done' ? 'Done — stays in the list, ticked' : 'Closed — checks the task away (archived)'}
+                className={`h-5 px-1.5 rounded-full text-[9px] font-semibold capitalize cursor-pointer transition-colors ${
+                  on
+                    ? k === 'open'
+                      ? 'bg-neutral-700 text-app-strong'
+                      : k === 'done'
+                        ? 'bg-emerald-500/20 text-emerald-400'
+                        : 'bg-blue-500/20 text-blue-400'
+                    : 'text-neutral-500 hover:text-neutral-300'
+                }`}
+              >
+                {k}
+              </button>
+            );
+          })}
+        </div>
         <button onClick={onDelete} className="text-neutral-500 hover:text-red-400 text-xs cursor-pointer shrink-0">
           <Trash2 className="w-3.5 h-3.5" />
         </button>
@@ -8602,36 +8616,12 @@ function PageContent() {
               </button>
             </div>
             <div className="p-5 space-y-3 max-h-[70vh] overflow-y-auto">
-              {/* What the circle in front of a task does in this Space, and whether finished tasks are
-                  struck through — asked for as a choice between "en 'Check' som fjerner tasken" and
-                  "'Check' hvor du toggler, uten at den forsvinner", plus "strike through … når den er
-                  Complete eller Done". Tasks stay where they are in the list either way: no separate
-                  done section. */}
+              {/* Each status below is Open, Done or Closed (ClickUp's groups). The circle in front of a task
+                  opens these as a menu (components/StatusCircle.tsx): a Done status keeps the task in view,
+                  solid and ticked; a Closed one ("Slett") checks it away — archived, out of the list. Tasks
+                  stay in their order either way, with no separate done section. "for noen tasks trenger
+                  vi at vi ser at den er gjort, ikke bare borte". */}
               <div className="space-y-1.5">
-                <p className="text-[10px] font-semibold uppercase tracking-wider text-neutral-500">Checking a task</p>
-                {(
-                  [
-                    ['archive', 'Removes it', 'Marks it done by archiving it — it leaves the list.'],
-                    ['status', 'Toggles done', 'Sets the done status — it stays where it is. Uncheck to reopen.'],
-                  ] as const
-                ).map(([mode, label, hint]) => {
-                  const on = (currentSpace.checkMode === 'status' ? 'status' : 'archive') === mode;
-                  return (
-                    <button
-                      key={mode}
-                      onClick={() => updateSpace(currentSpace.id, { checkMode: mode })}
-                      className={`w-full text-left flex items-start gap-2.5 px-2.5 py-2 rounded-lg border cursor-pointer transition-colors ${
-                        on ? 'border-blue-500/60 bg-blue-500/10' : 'border-neutral-800 hover:border-neutral-700'
-                      }`}
-                    >
-                      <span className={`mt-0.5 w-3.5 h-3.5 rounded-full border-2 shrink-0 ${on ? 'border-blue-500 bg-blue-500 shadow-[inset_0_0_0_2px_rgb(23_23_23)]' : 'border-neutral-600'}`} />
-                      <span className="min-w-0">
-                        <span className="block text-[12px] font-semibold text-app-strong">{label}</span>
-                        <span className="block text-[11px] text-neutral-500">{hint}</span>
-                      </span>
-                    </button>
-                  );
-                })}
                 <button
                   onClick={() => updateSpace(currentSpace.id, { strikeDone: !currentSpace.strikeDone })}
                   className="w-full flex items-center gap-2.5 px-2.5 py-2 rounded-lg hover:bg-neutral-800/50 cursor-pointer"
@@ -8643,9 +8633,12 @@ function PageContent() {
                     Strike through done tasks <span className="line-through text-neutral-500">like this</span>
                   </span>
                 </button>
-                {currentSpace.checkMode === 'status' && currentSpace.statuses.length > 0 && !currentSpace.statuses.some((st) => st.isDone) && (
-                  <p className="text-[10px] text-amber-400/90 px-1">No status is marked Done below — the last one is used.</p>
-                )}
+                <p className="text-[10px] text-neutral-500 px-1 leading-relaxed">
+                  <span className="text-neutral-300">Done</span> keeps a task in the list, ticked.{' '}
+                  <span className="text-neutral-300">Closed</span> checks it away (archived).
+                  {currentSpace.statuses.length > 0 && !currentSpace.statuses.some((st) => st.isClosed) &&
+                    ' With no Closed status, the circle offers “Close task”, which does the same.'}
+                </p>
               </div>
               <p className="text-[10px] font-semibold uppercase tracking-wider text-neutral-500 pt-1">Statuses</p>
               {currentSpace.statuses.length > 0 ? (
@@ -8660,7 +8653,7 @@ function PageContent() {
                           onChangeName={(name) => updateStatus(currentSpace.id, s.id, { name })}
                           onChangeColor={(color) => updateStatus(currentSpace.id, s.id, { color })}
                           onDelete={() => setStatusToDelete({ id: s.id, name: s.name })}
-                          onToggleDone={() => updateStatus(currentSpace.id, s.id, { isDone: !s.isDone })}
+                          onSetKind={(k) => updateStatus(currentSpace.id, s.id, { isDone: k === 'done', isClosed: k === 'closed' })}
                         />
                       ))}
                     </div>

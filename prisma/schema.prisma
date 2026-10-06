@@ -323,9 +323,9 @@ model Space {
   // pickers) unless the viewer has "Archived spaces" switched on, which brings it all back to browse.
   // Nothing inside is touched, so unarchiving restores it exactly.
   archived      Boolean       @default(false)
-  // What checking a task's circle does in this Space (2026-10-06, "Edit statuses"):
-  //   "archive" — marks it done by archiving it: it leaves the list (the original behaviour);
-  //   "status"  — sets it to the Space's done status and it stays where it is, unchecking sets it back.
+  // RETIRED the same day it was added (2026-10-06): a per-Space choice of what checking a task does,
+  // superseded by the circle opening a status menu with Open / Done / Closed statuses (Status.isDone,
+  // Status.isClosed). Nothing reads it; left in place rather than dropped by another migration.
   checkMode     String        @default("archive") @map("check_mode")
   // Strike through the title of a task whose status is a done one.
   strikeDone    Boolean       @default(false) @map("strike_done")
@@ -445,6 +445,9 @@ model Status {
   // This status counts as finished: the one checking a task sets in "status" check mode, the ones
   // struck through when the Space asks for it, and what the done dust celebrates.
   isDone    Boolean  @default(false) @map("is_done")
+  // A closed status: choosing it from a task's circle checks the task away — it is archived and
+  // leaves the list (ClickUp's "Closed" group; e.g. "Slett"). A done status keeps the task in view.
+  isClosed  Boolean  @default(false) @map("is_closed")
   order     Int      @default(0)
   spaceId   String   @map("space_id")
   space     Space    @relation(fields: [spaceId], references: [id], onDelete: Cascade)

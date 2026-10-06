@@ -11774,3 +11774,31 @@ calendar to start once the keyboard is fully down, "bittelitt tregere".
   harmless to old code.
 
 **Deployed 2026-10-06 as `a2223b0`** (tag `deploy/2026-10-06_1237`). Migration ran at start after the DB snapshot.
+
+### 2026-10-06 (continued) — the circle opens a status menu (Open / Done / Closed), ClickUp's way
+
+- **Feedback:** "du har gjort riktig, i forhold til Status feltet. Men jeg ønsker at dette faktisk
+  skal gjelde for selve 'Check marken'". In ClickUp the circle opens the statuses. A done status
+  ("Ferdig") just turns the task green and keeps it, while a closed one ("Slett") "checker den helt
+  vekk". "for noen tasks trenger vi at vi ser at den er gjort, ikke bare borte".
+- **Built:**
+  - Migration `20261006140000_status_closed`: `Status.isClosed`, a plain ADD COLUMN. Statuses
+    named closed / slett / lukket / arkivert / archived / arkiver become closed and not done.
+    Verified with `migrate diff`.
+  - API PATCH/POST for statuses take `isClosed`; `StatusDef.isClosed`; updateStatus undo covers
+    it.
+  - **`components/StatusCircle.tsx`** replaces the done toggle in TaskRow (desktop and mobile). It
+    takes the task's *own* Space statuses via a selector, falling back to the defaults (To Do … Done
+    with Done marked done).
+    - The circle: open = dashed ring in the status colour; done = filled status colour with a tick;
+      closed/archived = filled with a tick.
+    - Tap → FloatingPopover with search, "Statuses" (open + done), and "Closed" (closed statuses,
+      or a built-in "Close task" = archive if the Space has none).
+    - Picking a closed status sets it and archives; picking open/done un-archives if needed.
+  - `isDoneStatus` counts done *and* closed. `celebrateTaskDone` dedupes within 400 ms, since a
+    closed pick both moves and archives.
+  - **Manage statuses:** each status row has an **Open | Done | Closed** switch (replacing the
+    "Done" pill). The "Checking a task" cards and `toggleTaskDone` are **removed**.
+    `Space.checkMode` is retired: the column stays, unused. The strike-through switch stays.
+- Struck title = Space `strikeDone` and (archived or a done/closed status).
+- Not seen in a browser. Migration in this round.

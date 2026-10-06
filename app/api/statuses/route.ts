@@ -18,6 +18,7 @@ export async function POST(req: Request) {
       color: body.color ?? '#94A3B8',
       order: body.order ?? count,
       ...(body.isDone === true ? { isDone: true } : {}),
+      ...(body.isClosed === true ? { isClosed: true } : {}),
     },
   });
   return NextResponse.json(status);
