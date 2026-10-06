@@ -1,7 +1,7 @@
 'use client';
 
 import { useState } from 'react';
-import { Check, Search, Settings2 } from 'lucide-react';
+import { Check, Search } from 'lucide-react';
 import FloatingPopover from './FloatingPopover';
 import { useTaskStore, type StatusDef, type Task } from '../store/useTaskStore';
 
@@ -17,19 +17,17 @@ import { useTaskStore, type StatusDef, type Task } from '../store/useTaskStore';
 // (archive, status unchanged), the behaviour the circle always had. Picking an open or done status for
 // an archived task brings it back.
 //
-// "Edit statuses" at the bottom opens the Manage statuses window for the task's own Space — app/page.tsx
-// listens for the siqt-edit-statuses event. Before it, the window was only reachable by right-clicking
-// the Status column header ("Hvor kan vi edite status nå?").
+// The menu holds statuses only. "Edit statuses" was here for one round and was moved to the status
+// group's "···" (and the Status column's and Space's menus): "Vi kan ikke ha den inne i sirkelen" — the
+// circle may one day close a task directly, with no menu at all.
 
 export default function StatusCircle({
   task,
   statuses,
-  spaceId,
   size,
 }: {
   task: Task;
   statuses: StatusDef[];
-  spaceId: string | null;
   size: 'sm' | 'md';
 }) {
   const [open, setOpen] = useState(false);
@@ -130,22 +128,6 @@ export default function StatusCircle({
                 {task.archived && <Check className="w-3.5 h-3.5 text-neutral-300 shrink-0" />}
               </button>
             )}
-        {spaceId && (
-          <>
-            <div className="border-t border-neutral-800 my-1" />
-            <button
-              onClick={() => {
-                setOpen(false);
-                setQuery('');
-                window.dispatchEvent(new CustomEvent('siqt-edit-statuses', { detail: { spaceId } }));
-              }}
-              className="w-full flex items-center gap-2.5 px-2 py-1.5 rounded-lg text-left text-[12px] text-neutral-400 hover:bg-neutral-800 hover:text-neutral-200 cursor-pointer"
-            >
-              <Settings2 className="w-3.5 h-3.5 shrink-0" />
-              Edit statuses
-            </button>
-          </>
-        )}
       </div>
     </FloatingPopover>
   );

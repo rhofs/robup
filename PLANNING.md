@@ -11835,3 +11835,36 @@ calendar to start once the keyboard is fully down, "bittelitt tregere".
 - The circle is wrapped in a `shrink-0 flex` span to carry the margin. Not seen in a browser.
 
 **Deployed 2026-10-06 as `d457167`** (tag `deploy/2026-10-06_1305`).
+
+### 2026-10-06 (continued) — status group "···" (Group options); Edit statuses out of the circle
+
+- **Feedback:** two ClickUp screenshots of a status group's "···" → Group options (Rename, New
+  status, Edit statuses, Collapse group, Hide status, Select all, Collapse all groups, Automate
+  status). The user wrote: "Jeg vil ha 3 prikker, som clickup, hvor jeg kan trykke 'Edit
+  [statuses]'. Vi kan ikke ha den inne i sirkelen, for om vi ønsker at den skal gå direkte til
+  'Close' og at den arkiveres, så kan ikke ha en meny knapp der." ("Close" corrected from "Done".)
+  - The circle's behaviour was **not** changed: it still opens the status menu. The remark reads as
+    a reason to keep editing out of the circle, so that a future "circle closes directly" stays
+    possible. That option is still open to discuss.
+- **Where status groups exist in Siqt:** only in a doc's List block
+  (`TaskListEmbedBlock`). The main List view is a flat table with a Status column, with no groups.
+  Grouping the main list by status like ClickUp was **not** done; it was not asked for.
+- **Built:**
+  - **Doc List block, each status group:** a "···" (Group options) with:
+    - Rename: inline in the pill. Only for the Space's own statuses, not the fallbacks. A duplicate
+      name is refused, and a collapsed group follows its new name.
+    - New status: opens Manage statuses with the name field focused.
+    - Edit statuses.
+    - Collapse/Expand group, Select all (the group's tasks), Collapse/Expand all groups.
+    - Rename, New status and Edit statuses show only when the doc is editable.
+    - **Not built:** Hide status (it needs a way to un-hide) and Automate status (no automations
+      exist).
+  - New status and Edit statuses dispatch `siqt-edit-statuses` `{spaceId, focusNew}`. The page
+    opens the window via `openStatusEditor(spaceId, focusNew)`.
+  - **Main List view:** each column header shows a "···" on hover, which opens the same menu as a
+    right-click. For Status it holds **"Edit statuses"** (renamed from "Manage statuses").
+  - **Space menu** (sidebar right-click / mobile Space menu): "Edit statuses" for that Space. This
+    is the phone's way in, since it has no column headers or groups.
+  - **Removed:** "Edit statuses" in the StatusCircle menu (added the round before), and its
+    `spaceId` prop.
+- Not seen in a browser. No migration.

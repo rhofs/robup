@@ -130,7 +130,6 @@ function TaskRowImpl({
   const spaceStatuses = useTaskStore((st) => spaceOfList(st.workspaces, task.listId)?.statuses);
   const ownStatuses = spaceStatuses && spaceStatuses.length > 0 ? spaceStatuses : DEFAULT_ROW_STATUSES;
   const strikeDone = useTaskStore((st) => !!spaceOfList(st.workspaces, task.listId)?.strikeDone);
-  const spaceId = useTaskStore((st) => spaceOfList(st.workspaces, task.listId)?.id ?? null);
   // Done = archived (closed), or in a done status. "Strike through gjennom hele oppgaven når den er
   // Complete eller Done" — a Space setting.
   const struck = strikeDone && (task.archived || isDoneStatus(task.status, ownStatuses));
@@ -345,7 +344,7 @@ function TaskRowImpl({
   );
 
   // The circle in front of the task: its status, and a menu of statuses on a tap (StatusCircle).
-  const doneToggle = <StatusCircle task={task} statuses={ownStatuses} spaceId={spaceId} size={isMobile ? 'md' : 'sm'} />;
+  const doneToggle = <StatusCircle task={task} statuses={ownStatuses} size={isMobile ? 'md' : 'sm'} />;
 
   // Mobile-only: press-and-hold the row to open the same context menu desktop gets from a
   // right-click (Open/Rename/Mark done/Delete) — there's no right-click equivalent on touch.

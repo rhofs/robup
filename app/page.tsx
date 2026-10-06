@@ -253,12 +253,27 @@ function SortableColumnHeader({
         e.preventDefault();
         onContextMenuOpen?.(e);
       }}
-      className="relative text-center flex items-center justify-center gap-1 cursor-grab active:cursor-grabbing select-none"
+      className="group/col relative text-center flex items-center justify-center gap-1 cursor-grab active:cursor-grabbing select-none"
       title="Drag to reorder, right-click for more options"
     >
       <button onClick={onToggleSort} className="hover:text-neutral-300 cursor-pointer flex items-center gap-1">
         {col.label} {sortIcon}
       </button>
+      {/* The right-click menu, also as ClickUp's "···" on hover — a menu nobody can see is one nobody
+          finds (it is where Edit statuses lives for the Status column). */}
+      {onContextMenuOpen && (
+        <button
+          onPointerDown={(e) => e.stopPropagation()}
+          onClick={(e) => {
+            e.stopPropagation();
+            onContextMenuOpen(e);
+          }}
+          title="Column options"
+          className="absolute right-2 top-1/2 -translate-y-1/2 w-5 h-5 rounded flex items-center justify-center text-neutral-500 hover:text-neutral-200 hover:bg-neutral-800 opacity-0 group-hover/col:opacity-100 transition-opacity cursor-pointer"
+        >
+          <MoreHorizontal className="w-3.5 h-3.5" />
+        </button>
+      )}
       <ColumnResizeHandle onResize={onResize} onReset={onResetWidth} />
     </div>
   );
@@ -1720,6 +1735,13 @@ function PageContent() {
   // Which Space's statuses the Manage statuses window edits: the one in view by default, or the one a
   // task belongs to when opened from that task's circle (a task in My Tasks may be from anywhere).
   const [statusMenuSpaceId, setStatusMenuSpaceId] = useState<string | null>(null);
+  // Opened from "New status" in a group's "···" menu: the name field takes the focus.
+  const [statusMenuFocusNew, setStatusMenuFocusNew] = useState(false);
+  const openStatusEditor = (spaceId: string | null, focusNew = false) => {
+    setStatusMenuSpaceId(spaceId);
+    setStatusMenuFocusNew(focusNew);
+    setStatusMenuOpen(true);
+  };
   const [newStatusName, setNewStatusName] = useState('');
   const [newStatusColor, setNewStatusColor] = useState(FIELD_COLOR_CHOICES[0]);
 
@@ -2150,12 +2172,14 @@ function PageContent() {
   };
 
   const statusSensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 5 } }));
-  // "Edit statuses" from a task's circle menu (components/StatusCircle.tsx) — the window had only been
-  // reachable by right-clicking the Status column header ("Hvor kan vi edite status nå?").
+  // "Edit statuses" / "New status" from a status group's "···" menu in a doc's List block
+  // (components/collab/TaskListEmbedBlock.tsx), for that List's Space. ("Hvor kan vi edite status nå?"
+  // — the window had only been reachable by right-clicking the Status column header.)
   useEffect(() => {
     const onEdit = (e: Event) => {
-      const spaceId = (e as CustomEvent<{ spaceId?: string }>).detail?.spaceId ?? null;
-      setStatusMenuSpaceId(spaceId);
+      const d = (e as CustomEvent<{ spaceId?: string; focusNew?: boolean }>).detail;
+      setStatusMenuSpaceId(d?.spaceId ?? null);
+      setStatusMenuFocusNew(!!d?.focusNew);
       setStatusMenuOpen(true);
     };
     window.addEventListener('siqt-edit-statuses', onEdit);
@@ -7962,6 +7986,16 @@ function PageContent() {
             <button onClick={() => startEditSpace(spaceMenu.space)} className="w-full text-left px-3 py-1.5 text-xs text-neutral-300 hover:bg-neutral-800/60 cursor-pointer flex items-center gap-2">
               <Pencil className="w-3.5 h-3.5" /> Edit appearance
             </button>
+            {/* Also the way in on a phone, which has no column headers and no status groups. */}
+            <button
+              onClick={() => {
+                openStatusEditor(spaceMenu.space.id);
+                setSpaceMenu(null);
+              }}
+              className="w-full text-left px-3 py-1.5 text-xs text-neutral-300 hover:bg-neutral-800/60 cursor-pointer flex items-center gap-2"
+            >
+              <Palette className="w-3.5 h-3.5" /> Edit statuses
+            </button>
             {canManageCurrentWorkspace && (
               <button
                 onClick={() => {
@@ -8187,13 +8221,12 @@ function PageContent() {
             {columnMenu.col.kind === 'status' && (
               <button
                 onClick={() => {
-                  setStatusMenuSpaceId(null);
-                  setStatusMenuOpen(true);
+                  openStatusEditor(null);
                   setColumnMenu(null);
                 }}
                 className="w-full text-left px-3 py-1.5 text-xs text-neutral-300 hover:bg-neutral-800/60 cursor-pointer flex items-center gap-2"
               >
-                <Palette className="w-3.5 h-3.5" /> Manage statuses
+                <Palette className="w-3.5 h-3.5" /> Edit statuses
               </button>
             )}
             {columnMenu.col.kind === 'custom' && columnMenu.col.field && (
@@ -8628,8 +8661,9 @@ function PageContent() {
         </div>
       )}
 
-      {/* ================= MANAGE STATUSES MODAL — opens from right-click on the Status column, or "Edit statuses"
-          in a task's circle menu (the siqt-edit-statuses event), for that task's own Space ================= */}
+      {/* ================= MANAGE STATUSES MODAL — "Edit statuses" in the Status column's menu (right-click or
+          "···"), in a Space's menu, or in a status group's "···" in a doc List (the siqt-edit-statuses
+          event, for that List's Space) ================= */}
       {statusMenuOpen && statusSpace && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-scrim/70 backdrop-blur-xs" onClick={() => {
                 setStatusMenuOpen(false);
@@ -8705,6 +8739,7 @@ function PageContent() {
                   value={newStatusName}
                   onChange={(e) => setNewStatusName(e.target.value)}
                   onKeyDown={(e) => e.key === 'Enter' && handleAddStatus()}
+                  autoFocus={statusMenuFocusNew}
                   placeholder="New status (e.g. Blocked)"
                   className="w-full bg-neutral-950 border border-neutral-700 rounded-lg px-2 py-1.5 text-xs text-app-strong focus:outline-none focus:border-blue-500"
                 />

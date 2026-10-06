@@ -17,6 +17,12 @@ import {
   Eye,
   EyeOff,
   Check,
+  MoreHorizontal,
+  Pencil,
+  Settings2,
+  ChevronsDownUp,
+  ChevronsUpDown,
+  CheckCheck,
 } from 'lucide-react';
 import { useTaskStore, type Task, type StatusDef, type CustomFieldDef, type HierarchySpace } from '../../store/useTaskStore';
 import TaskRow, { type ColumnDef } from '../TaskRow';
@@ -104,6 +110,7 @@ export default function TaskListEmbedBlock({ node, updateAttributes, deleteNode,
   const deleteTask = useTaskStore((s) => s.optimisticDeleteTask);
   const createTask = useTaskStore((s) => s.optimisticCreateTask);
   const createList = useTaskStore((s) => s.createList);
+  const updateStatus = useTaskStore((s) => s.updateStatus);
   const deleteList = useTaskStore((s) => s.deleteList);
   const setListVisibleColumns = useTaskStore((s) => s.setListVisibleColumns);
   const createCustomField = useTaskStore((s) => s.createCustomField);
@@ -155,6 +162,10 @@ export default function TaskListEmbedBlock({ node, updateAttributes, deleteNode,
   const [addDraft, setAddDraft] = useState('');
   const [fieldsOpen, setFieldsOpen] = useState(false);
   const [bulkStatusOpen, setBulkStatusOpen] = useState(false);
+  // A status group's "···" menu (ClickUp's "Group options"), and the group whose pill is being renamed.
+  const [groupMenu, setGroupMenu] = useState<string | null>(null);
+  const [renamingGroup, setRenamingGroup] = useState<string | null>(null);
+  const [renameDraft, setRenameDraft] = useState('');
 
   // ---- columns ----
   const listSpace = list?.space;
@@ -216,7 +227,15 @@ export default function TaskListEmbedBlock({ node, updateAttributes, deleteNode,
   // Status groups, in the Space's own order; a status no longer defined still gets a group, after.
   const groups = (() => {
     if (mode !== 'list') return [];
-    const out: { name: string; color: string; tasks: Task[] }[] = statuses.map((s) => ({ name: s.name, color: s.color, tasks: [] }));
+    // `def` is the Space's own status behind a group — absent for the built-in fallbacks and for a status
+    // that no longer exists, which therefore cannot be renamed from here.
+    const own = !!listSpace?.statuses?.length;
+    const out: { name: string; color: string; tasks: Task[]; def?: StatusDef }[] = statuses.map((s) => ({
+      name: s.name,
+      color: s.color,
+      tasks: [],
+      def: own ? s : undefined,
+    }));
     for (const t of shownTop) {
       let g = out.find((x) => x.name === t.status);
       if (!g) {
@@ -262,6 +281,28 @@ export default function TaskListEmbedBlock({ node, updateAttributes, deleteNode,
         onToggleExpand={() => setExpanded((s) => toggle(s, task.id))}
       />
     );
+  };
+
+  // Statuses are edited in the app's Manage statuses window (app/page.tsx listens), for this List's Space.
+  const editStatuses = (spaceId: string, focusNew: boolean) => {
+    setGroupMenu(null);
+    window.dispatchEvent(new CustomEvent('siqt-edit-statuses', { detail: { spaceId, focusNew } }));
+  };
+  const commitRename = (def: StatusDef) => {
+    const name = renameDraft.trim();
+    setRenamingGroup(null);
+    if (!listSpace || !name || name === def.name) return;
+    // A group per status name — two with the same name would merge into one.
+    if (statuses.some((s) => s.id !== def.id && s.name.toLowerCase() === name.toLowerCase())) return;
+    // The closed group follows its status to the new name.
+    setClosedGroups((s) => {
+      if (!s.has(def.name)) return s;
+      const n = new Set(s);
+      n.delete(def.name);
+      n.add(name);
+      return n;
+    });
+    void updateStatus(listSpace.id, def.id, { name });
   };
 
   const submitAdd = (status: string) => {
@@ -477,6 +518,7 @@ export default function TaskListEmbedBlock({ node, updateAttributes, deleteNode,
           )}
           {groups.map((g) => {
             const closed = closedGroups.has(g.name);
+            const allClosed = groups.every((x) => closedGroups.has(x.name));
             return (
               <div key={g.name}>
                 <div className="flex items-center gap-2 px-2 h-10">
@@ -490,10 +532,96 @@ export default function TaskListEmbedBlock({ node, updateAttributes, deleteNode,
                     className="flex items-center gap-1.5 h-6 px-2 rounded-md text-[11px] font-bold uppercase tracking-wide"
                     style={{ backgroundColor: `${g.color}26`, color: g.color }}
                   >
-                    <span className="w-2 h-2 rounded-full" style={{ backgroundColor: g.color }} />
-                    {g.name}
+                    <span className="w-2 h-2 rounded-full shrink-0" style={{ backgroundColor: g.color }} />
+                    {renamingGroup === g.name && g.def ? (
+                      <input
+                        autoFocus
+                        value={renameDraft}
+                        onChange={(e) => setRenameDraft(e.target.value)}
+                        onFocus={(e) => e.currentTarget.select()}
+                        onBlur={() => commitRename(g.def!)}
+                        onKeyDown={(e) => {
+                          if (e.key === 'Enter') e.currentTarget.blur();
+                          if (e.key === 'Escape') setRenamingGroup(null);
+                        }}
+                        size={Math.max(4, renameDraft.length)}
+                        className="bg-transparent uppercase font-bold tracking-wide focus:outline-none"
+                        style={{ color: g.color }}
+                      />
+                    ) : (
+                      g.name
+                    )}
                   </span>
                   <span className="text-[11px] text-neutral-500">{g.tasks.length}</span>
+                  {/* "Group options", as in ClickUp — where statuses are edited from. Not in the task's
+                      circle: "Vi kan ikke ha den inne i sirkelen". */}
+                  <FloatingPopover
+                    open={groupMenu === g.name}
+                    onClose={() => setGroupMenu(null)}
+                    panelClassName="w-52 bg-neutral-900 border border-neutral-800 rounded-xl shadow-2xl p-1.5"
+                    anchor={
+                      <button
+                        onClick={() => setGroupMenu((m) => (m === g.name ? null : g.name))}
+                        title="Group options"
+                        className="w-5 h-5 rounded flex items-center justify-center text-neutral-600 hover:text-neutral-200 hover:bg-neutral-800 cursor-pointer"
+                      >
+                        <MoreHorizontal className="w-3.5 h-3.5" />
+                      </button>
+                    }
+                  >
+                    <p className="px-2 pt-1 pb-1 text-[10px] font-semibold text-neutral-500">Group options</p>
+                    {editable && listSpace && (
+                      <>
+                        {g.def && (
+                          <GroupMenuItem
+                            icon={<Pencil className="w-3.5 h-3.5" />}
+                            onClick={() => {
+                              setGroupMenu(null);
+                              setRenameDraft(g.name);
+                              setRenamingGroup(g.name);
+                            }}
+                          >
+                            Rename
+                          </GroupMenuItem>
+                        )}
+                        <GroupMenuItem icon={<Plus className="w-3.5 h-3.5" />} onClick={() => editStatuses(listSpace.id, true)}>
+                          New status
+                        </GroupMenuItem>
+                        <GroupMenuItem icon={<Settings2 className="w-3.5 h-3.5" />} onClick={() => editStatuses(listSpace.id, false)}>
+                          Edit statuses
+                        </GroupMenuItem>
+                        <div className="border-t border-neutral-800 my-1" />
+                      </>
+                    )}
+                    <GroupMenuItem
+                      icon={closed ? <ChevronsUpDown className="w-3.5 h-3.5" /> : <ChevronsDownUp className="w-3.5 h-3.5" />}
+                      onClick={() => {
+                        setGroupMenu(null);
+                        setClosedGroups((s) => toggle(s, g.name));
+                      }}
+                    >
+                      {closed ? 'Expand group' : 'Collapse group'}
+                    </GroupMenuItem>
+                    <div className="border-t border-neutral-800 my-1" />
+                    <GroupMenuItem
+                      icon={<CheckCheck className="w-3.5 h-3.5" />}
+                      onClick={() => {
+                        setGroupMenu(null);
+                        setSelected((s) => new Set([...s, ...g.tasks.map((t) => t.id)]));
+                      }}
+                    >
+                      Select all
+                    </GroupMenuItem>
+                    <GroupMenuItem
+                      icon={allClosed ? <ChevronsUpDown className="w-3.5 h-3.5" /> : <ChevronsDownUp className="w-3.5 h-3.5" />}
+                      onClick={() => {
+                        setGroupMenu(null);
+                        setClosedGroups(allClosed ? new Set() : new Set(groups.map((x) => x.name)));
+                      }}
+                    >
+                      {allClosed ? 'Expand all groups' : 'Collapse all groups'}
+                    </GroupMenuItem>
+                  </FloatingPopover>
                   {editable && (
                     <button
                       onClick={() => {
@@ -946,5 +1074,17 @@ function Setup({
         </>
       )}
     </div>
+  );
+}
+
+function GroupMenuItem({ icon, onClick, children }: { icon: React.ReactNode; onClick: () => void; children: React.ReactNode }) {
+  return (
+    <button
+      onClick={onClick}
+      className="w-full flex items-center gap-2.5 px-2 py-1.5 rounded-lg text-left text-[12.5px] text-neutral-200 hover:bg-neutral-800 cursor-pointer"
+    >
+      <span className="text-neutral-400 shrink-0">{icon}</span>
+      {children}
+    </button>
   );
 }
