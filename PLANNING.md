@@ -11868,3 +11868,5 @@ calendar to start once the keyboard is fully down, "bittelitt tregere".
   - **Removed:** "Edit statuses" in the StatusCircle menu (added the round before), and its
     `spaceId` prop.
 - Not seen in a browser. No migration.
+
+**Deployed 2026-10-06 as `6cc77ca`** (tag `deploy/2026-10-06_1311`).
