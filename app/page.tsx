@@ -4040,6 +4040,20 @@ function PageContent() {
     setToast({ message });
     toastTimeoutRef.current = setTimeout(() => setToast(null), 3000);
   };
+  // Messages from parts of the app without a line to this page (a Planner bar refusing a dropped
+  // person says why — lib/personDrag.ts).
+  const showToastRef = useRef(showToast);
+  useEffect(() => {
+    showToastRef.current = showToast;
+  });
+  useEffect(() => {
+    const onToast = (e: Event) => {
+      const message = (e as CustomEvent<string>).detail;
+      if (typeof message === 'string' && message) showToastRef.current(message);
+    };
+    window.addEventListener('siqt-toast', onToast);
+    return () => window.removeEventListener('siqt-toast', onToast);
+  }, []);
   // A toast carrying an Undo button. Undo has always existed, but only as Ctrl+Z — which a phone
   // does not have, so on mobile every drag was final. Dragging a task is easy to do by accident
   // and easy to get wrong (dropping onto another task nests it as a subtask), and the only way

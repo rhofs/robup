@@ -31,39 +31,51 @@ export function endPersonDrag() {
   draggingPersonId = null;
 }
 
-// Drop-target wiring for one bar. `canAccept(userId)` decides whether this person can go on it;
-// `onAssign` does it. `isOver` drives the highlight, `justAssigned` a short confirmation pulse.
-export function usePersonDrop(canAccept: (userId: string) => boolean, onAssign: (userId: string) => void) {
+// Drop-target wiring for one bar. `refusal(userId)` says why this person cannot go on it, or null if
+// they can; `onAssign` does it. `isOver` drives the highlight (`refused` turns it red), `justAssigned`
+// a short confirmation pulse.
+//
+// A refused drop is still caught, and says why in a toast (the 'siqt-toast' event, shown by the
+// page). It used to be turned away silently — the browser's "not allowed" cursor and nothing else —
+// so dropping a colleague on a task in your own Personal workspace, or on a private task they cannot
+// open, looked like the feature working on some bars and not others ("det går på noen, men ikke alle").
+export function usePersonDrop(refusal: (userId: string) => string | null, onAssign: (userId: string) => void) {
   const [isOver, setIsOver] = useState(false);
+  const [refused, setRefused] = useState(false);
   const [justAssigned, setJustAssigned] = useState(false);
 
-  const accepts = (e: React.DragEvent) =>
-    e.dataTransfer.types.includes(PERSON_DRAG_TYPE) && draggingPersonId !== null && canAccept(draggingPersonId);
+  const isPerson = (e: React.DragEvent) => e.dataTransfer.types.includes(PERSON_DRAG_TYPE) && draggingPersonId !== null;
 
   return {
     isOver,
+    refused,
     justAssigned,
     dropProps: {
       onDragOver: (e: React.DragEvent) => {
-        if (!e.dataTransfer.types.includes(PERSON_DRAG_TYPE)) return;
-        if (!accepts(e)) {
-          e.dataTransfer.dropEffect = 'none';
-          return;
-        }
+        if (!isPerson(e)) return;
         e.preventDefault();
-        e.dataTransfer.dropEffect = 'copy';
+        const no = refusal(draggingPersonId!) !== null;
+        e.dataTransfer.dropEffect = no ? 'move' : 'copy';
         if (!isOver) setIsOver(true);
+        if (refused !== no) setRefused(no);
       },
       onDragLeave: (e: React.DragEvent) => {
         // dragleave also fires when moving onto a child of the bar; only a real exit counts.
         if (e.currentTarget.contains(e.relatedTarget as Node | null)) return;
         setIsOver(false);
+        setRefused(false);
       },
       onDrop: (e: React.DragEvent) => {
         setIsOver(false);
-        if (!accepts(e)) return;
+        setRefused(false);
+        if (!isPerson(e)) return;
         e.preventDefault();
         const userId = draggingPersonId!;
+        const why = refusal(userId);
+        if (why) {
+          window.dispatchEvent(new CustomEvent('siqt-toast', { detail: why }));
+          return;
+        }
         onAssign(userId);
         hapticTap();
         setJustAssigned(true);

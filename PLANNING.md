@@ -11687,3 +11687,31 @@ calendar to start once the keyboard is fully down, "bittelitt tregere".
   `task-sheet-close` (1.6 s) records closings, to see whether the IME reports a finished hide when
   the strip lingers.
 - APK clean-built and copied to `public/siqt.apk`; it must be reinstalled. Not seen on a device.
+
+**Deployed 2026-10-06 as `9a6d2b6`** (tag `deploy/2026-10-06_0832`) — the --kb overlay, with a new APK.
+
+### 2026-10-06 (continued) — Planner: drag-to-assign explains refusals; assignees on every bar
+
+- **Asked:** on desktop Planner, dragging people onto events/tasks to assign "går på noen, men ikke
+  alle". And assignees should show on the Gantt bars — "nå synes assignees bare på noen
+  task/events".
+- **Causes:**
+  - Avatars: `EventBar` never rendered assignees at all, and `TaskBar` only on the segment where the
+    task *ends* (`seg.isEndEdge`), so a multi-week task showed them in its last week only.
+  - Drops: `useTaskAssignDrop`/`useEventAssignDrop` silently refuse when the person isn't a member
+    of the bar's workspace (e.g. a colleague onto a task in your Personal workspace), when they
+    can't open a private task, or when they are already on it. Only the browser's not-allowed
+    cursor showed, which looked like the feature failing on some bars.
+- **Fix:**
+  - `usePersonDrop(refusal, onAssign)` now takes a function that returns the *reason* (or null).
+    It always accepts the drag-over; a refused bar gets a red outline (`.siqt-assign-no`), and a
+    refused drop dispatches `window` event `siqt-toast` with the reason ("X isn't in the Personal
+    workspace, so can't be put on …", "… is private, and X doesn't have access", "X is already on
+    …").
+  - page.tsx listens for `siqt-toast` and shows it through `showToast`.
+  - The rules themselves are unchanged (they match the pickers and the server).
+  - New `BarAssignees` in WeekRow (first face + "+N") on **every** segment of task **and** event
+    bars. Each bar is `.siqt-bar` with `container-type: inline-size`, and
+    `@container (max-width: 64px)` hides the faces on slivers.
+  - DayTimeline's blocks and all-day chips got the refused styling too.
+- Web-only. Not seen in a browser.

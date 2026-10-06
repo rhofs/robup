@@ -345,7 +345,7 @@ function AllDayChip({
       // else in Planner — plain-color alone isn't reliable since either can be any color.
       className={`relative w-full text-left truncate text-[11px] font-medium px-2 py-1 rounded-md border cursor-pointer transition-colors flex items-center gap-1 ${
         isEvent ? 'border-dashed' : ''
-      } ${drop ? assignDropClass(drop.isOver, drop.justAssigned) : ''}`}
+      } ${drop ? assignDropClass(drop.isOver, drop.justAssigned, drop.refused) : ''}`}
       style={{
         backgroundColor: withAlpha(color, hovered ? HOVER_BG_ALPHA : BASE_BG_ALPHA),
         borderColor: withAlpha(color, hovered ? HOVER_BORDER_ALPHA : BASE_BORDER_ALPHA),
@@ -396,9 +396,9 @@ function DayEventBlock({
   isMobile: boolean;
 }) {
   const [hovered, setHovered] = useState(false);
-  const { isOver, justAssigned, dropProps } = useEventAssignDrop(event);
+  const { isOver, refused, justAssigned, dropProps } = useEventAssignDrop(event);
   return (
-    <div {...dropProps} className={`absolute ${assignDropClass(isOver, justAssigned)}`} style={style}>
+    <div {...dropProps} className={`absolute ${assignDropClass(isOver, justAssigned, refused)}`} style={style}>
       <button
         onClick={isMobile ? () => onOpenEvent(event.id) : undefined}
         onPointerDown={isMobile ? undefined : (e) => onStartInteraction(e, event.id, 'move')}
@@ -475,9 +475,9 @@ function DayTaskBlock({
 }) {
   const [hovered, setHovered] = useState(false);
   const height = typeof style.height === 'number' ? style.height : 0;
-  const { isOver, justAssigned, dropProps } = useTaskAssignDrop(task);
+  const { isOver, refused, justAssigned, dropProps } = useTaskAssignDrop(task);
   return (
-    <div {...dropProps} className={`absolute group/block ${assignDropClass(isOver, justAssigned)}`} style={style}>
+    <div {...dropProps} className={`absolute group/block ${assignDropClass(isOver, justAssigned, refused)}`} style={style}>
       <div
         onPointerDown={isMobile ? undefined : (e) => onStartInteraction(e, task.id, 'move')}
         onPointerMove={isMobile ? undefined : (e) => onMoveInteraction(e, task.id)}

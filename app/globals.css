@@ -1123,6 +1123,24 @@ html[data-theme='light'] .siqt-task-card {
   z-index: 30;
   transition: transform 120ms ease-out;
 }
+/* A Planner bar measures itself, so the people on it (WeekRow's BarAssignees) can step aside when the
+   bar is too narrow to also show its title — a one-day sliver in a busy week. */
+.siqt-bar {
+  container-type: inline-size;
+}
+@container (max-width: 64px) {
+  .siqt-bar-people {
+    display: none;
+  }
+}
+
+/* A face held over a bar it cannot go on: a red outline, no lift. The drop then says why (a toast). */
+.siqt-assign-no {
+  outline: 2px solid rgb(239 68 68 / 0.85);
+  outline-offset: 1px;
+  border-radius: 6px;
+  z-index: 30;
+}
 .siqt-assign-pop {
   animation: siqt-assign-pop 520ms cubic-bezier(0.2, 0.8, 0.2, 1);
   border-radius: 6px;

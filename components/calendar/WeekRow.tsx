@@ -10,7 +10,7 @@ import { getISOWeek, isSameDay } from '../../lib/calendarDates';
 import { withAlpha } from '../../lib/colorAlpha';
 import { hapticTap, hapticTapStrong } from '../../lib/haptics';
 import type { ClippedSegment, DragMode, DragState } from '../../lib/ganttLayout';
-import type { Task, Event } from '../../store/useTaskStore';
+import type { Task, Event, AppUser } from '../../store/useTaskStore';
 
 
 // A stable id for a calendar day, used both as the DOM marker a drag hit-tests against and as the
@@ -788,6 +788,27 @@ export const BASE_BORDER_ALPHA = 45;
 export const HOVER_BG_ALPHA = 32;
 export const HOVER_BORDER_ALPHA = 70;
 
+// Who is on a bar, at its right end: the first face and a +N for the rest — on every piece of the bar,
+// so a task or event that runs across several weeks shows its people in each week it appears in, and
+// on events as well as tasks ("det er fint at assignees synes på den Gant baren, nå synes assignees
+// bare på noen task/events"). It used to be tasks only, and only on the piece where the task ended.
+// Hidden on a bar too narrow to give the title any room (a container query on .siqt-bar, globals.css).
+function BarAssignees({ people }: { people: AppUser[] }) {
+  if (people.length === 0) return null;
+  return (
+    <span className="siqt-bar-people flex items-center -space-x-1 shrink-0">
+      {people.slice(0, 1).map((a) => (
+        <MiniAvatar key={a.id} user={a} size={14} className="ring-1 ring-neutral-900/60" />
+      ))}
+      {people.length > 1 && (
+        <span className="w-3.5 h-3.5 rounded-full border border-neutral-900/60 bg-neutral-700 text-[7px] font-bold flex items-center justify-center text-app-strong shrink-0">
+          +{people.length - 1}
+        </span>
+      )}
+    </span>
+  );
+}
+
 function EventBar({
   event,
   seg,
@@ -812,11 +833,11 @@ function EventBar({
   isMobile: boolean;
 }) {
   const [hovered, setHovered] = useState(false);
-  const { isOver, justAssigned, dropProps } = useEventAssignDrop(event);
+  const { isOver, refused, justAssigned, dropProps } = useEventAssignDrop(event);
   return (
     <div
       {...dropProps}
-      className={`absolute ${isMobile ? 'pointer-events-none' : 'pointer-events-auto'} ${assignDropClass(isOver, justAssigned)}`}
+      className={`absolute ${isMobile ? 'pointer-events-none' : 'pointer-events-auto'} ${assignDropClass(isOver, justAssigned, refused)}`}
       style={{ ...barStyle, opacity: isDraggingThis ? 0.35 : 1 }}
     >
       <button
@@ -829,7 +850,7 @@ function EventBar({
         // Dashed border (Tasks are always solid) is the at-a-glance Task-vs-Event tell in every
         // Planner granularity, alongside the CalendarClock icon — a plain color difference alone
         // isn't reliable since either can be given any color.
-        className={`relative w-full h-full flex items-center gap-1 text-[10px] leading-none font-medium truncate cursor-grab active:cursor-grabbing select-none border border-dashed transition-colors ${
+        className={`siqt-bar relative w-full h-full flex items-center gap-1 text-[10px] leading-none font-medium truncate cursor-grab active:cursor-grabbing select-none border border-dashed transition-colors ${
           seg.isStartEdge ? 'rounded-l-md pl-2.5' : 'pl-1.5'
         } ${seg.isEndEdge ? 'rounded-r-md pr-2' : 'pr-1'}`}
         style={{
@@ -843,7 +864,8 @@ function EventBar({
         ) : (
           <CalendarClock className="w-2.5 h-2.5 shrink-0" />
         )}
-        <span className="truncate">{event.title}</span>
+        <span className="truncate flex-1">{event.title}</span>
+        <BarAssignees people={event.assignees} />
       </button>
       {/* Resizable (stretch/shrink either edge), same as a Task bar — per the user's explicit
           ask to have Events drag/resize exactly like Tasks do, desktop only. Skipped on mobile
@@ -896,11 +918,11 @@ function TaskBar({
 }) {
   const [hovered, setHovered] = useState(false);
   const assignees = task.assignees;
-  const { isOver, justAssigned, dropProps } = useTaskAssignDrop(task);
+  const { isOver, refused, justAssigned, dropProps } = useTaskAssignDrop(task);
   return (
     <div
       {...dropProps}
-      className={`absolute group/bar ${isMobile ? 'pointer-events-none' : 'pointer-events-auto'} ${assignDropClass(isOver, justAssigned)}`}
+      className={`absolute group/bar ${isMobile ? 'pointer-events-none' : 'pointer-events-auto'} ${assignDropClass(isOver, justAssigned, refused)}`}
       style={{ ...barStyle, opacity: isDraggingThis ? 0.35 : 1 }}
     >
       <div
@@ -914,7 +936,7 @@ function TaskBar({
         title={task.title}
         // "Information sitting inside the calendar" — a tinted background + colored border +
         // colored text, all derived from the one cascaded color, rather than a solid fill.
-        className={`relative h-full flex items-center gap-1 text-[10px] leading-none font-medium truncate cursor-grab active:cursor-grabbing select-none border transition-colors ${
+        className={`siqt-bar relative h-full flex items-center gap-1 text-[10px] leading-none font-medium truncate cursor-grab active:cursor-grabbing select-none border transition-colors ${
           seg.isStartEdge ? 'rounded-l-md pl-2.5' : 'pl-1.5'
         } ${seg.isEndEdge ? 'rounded-r-md pr-2' : 'pr-1'}`}
         style={{
@@ -935,18 +957,7 @@ function TaskBar({
             for the rest — same convention PersonAvatar clusters use elsewhere in this app (Office
             rooms). Kept as solid color chips (not tinted) — they're small enough that a tint would
             just read as noise, and the whole point of an avatar is the solid, recognizable color. */}
-        {seg.isEndEdge && assignees.length > 0 && (
-          <span className="flex items-center -space-x-1 shrink-0">
-            {assignees.slice(0, 1).map((a) => (
-              <MiniAvatar key={a.id} user={a} size={14} className="ring-1 ring-neutral-900/60" />
-            ))}
-            {assignees.length > 1 && (
-              <span className="w-3.5 h-3.5 rounded-full border border-neutral-900/60 bg-neutral-700 text-[7px] font-bold flex items-center justify-center text-app-strong shrink-0">
-                +{assignees.length - 1}
-              </span>
-            )}
-          </span>
-        )}
+        <BarAssignees people={assignees} />
 
         {!isMobile && seg.isStartEdge && (
           <div
