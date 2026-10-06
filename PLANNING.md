@@ -11658,3 +11658,5 @@ calendar to start once the keyboard is fully down, "bittelitt tregere".
   move focus explicitly to `document.body` before unmount, or to delay the unmount until the IME
   `siqt-keyboard` `{up:false}` event.
 - Web-only change; no new APK. Not seen on a device.
+
+**Deployed 2026-10-06 as `5e508ed`** (tag `deploy/2026-10-06_0818`).
