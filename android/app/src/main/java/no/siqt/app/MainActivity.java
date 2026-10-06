@@ -78,7 +78,7 @@ public class MainActivity extends BridgeActivity {
             WindowInsetsCompat now = ViewCompat.getRootWindowInsets(webView);
             if (now == null) return;
             boolean up = now.isVisible(WindowInsetsCompat.Type.ime());
-            setKeyboardEdge(webView, up ? edgeFor(now) : 0);
+            applyKeyboard(up ? edgeFor(now) : 0);
         }
     };
 
@@ -92,7 +92,7 @@ public class MainActivity extends BridgeActivity {
             boolean keyboardUp = insets.isVisible(WindowInsetsCompat.Type.ime()) && ime.bottom > 0;
             if (!imeAnimating) {
                 if (keyboardUp && keyboardWasUp) {
-                    setKeyboardEdge(v, edgeFor(insets));
+                    applyKeyboard(edgeFor(insets));
                 } else if (keyboardUp != keyboardWasUp) {
                     v.removeCallbacks(settleWithoutAnimation);
                     v.postDelayed(settleWithoutAnimation, 400);
@@ -140,7 +140,7 @@ public class MainActivity extends BridgeActivity {
                         // liksom litt opp på slutten før den går ned".
                         WindowInsetsCompat target = ViewCompat.getRootWindowInsets(webView);
                         hiding = target != null && !target.isVisible(WindowInsetsCompat.Type.ime());
-                        if (hiding) setKeyboardEdge(webView, 0);
+                        if (hiding && !overlayMode) applyKeyboard(0);
                     }
                     return bounds;
                 }
@@ -148,7 +148,7 @@ public class MainActivity extends BridgeActivity {
                 @NonNull
                 @Override
                 public WindowInsetsCompat onProgress(@NonNull WindowInsetsCompat insets, @NonNull List<WindowInsetsAnimationCompat> running) {
-                    if (imeAnimating && !hiding) setKeyboardEdge(webView, Math.min(edgeFor(insets), ceiling));
+                    if (imeAnimating && (overlayMode || !hiding)) applyKeyboard(Math.min(edgeFor(insets), ceiling));
                     return insets;
                 }
 
@@ -161,7 +161,7 @@ public class MainActivity extends BridgeActivity {
                     WindowInsetsCompat now = ViewCompat.getRootWindowInsets(webView);
                     if (now == null) return;
                     boolean up = now.isVisible(WindowInsetsCompat.Type.ime());
-                    setKeyboardEdge(webView, up ? edgeFor(now) : 0);
+                    applyKeyboard(up ? edgeFor(now) : 0);
                     // Tell the page the keyboard has finished moving, so what waits for it (a picker that
                     // opens once the keyboard is down) can start on the exact frame instead of guessing.
                     webView.evaluateJavascript(
@@ -193,6 +193,57 @@ public class MainActivity extends BridgeActivity {
         if (root == null) return;
         int nav = root.getInsets(WindowInsetsCompat.Type.navigationBars()).bottom;
         if (nav > 0) navBottom = nav;
+    }
+
+    // Two ways of making room for the keyboard, switched by the page (SiqtKeyboardPlugin.setOverlay):
+    //
+    //  - Normally the WebView itself is resized: its bottom edge follows the keyboard. Every screen
+    //    works with that — a chat box or a search field at the bottom stays above the keyboard.
+    //  - While a bottom sheet is open, the WebView keeps its full size and the keyboard's height is
+    //    handed to the page instead, every frame, as the CSS variable --kb; the sheet lifts itself by
+    //    it. Resizing a WebView on every frame of the keyboard's slide is heavy, and it was the
+    //    difference between the new-task card ("ikke like smooth") and the Assignees picker, during
+    //    which the keyboard does not move. Moving one sheet by a CSS value is light.
+    private boolean overlayMode = false;
+    private int reportedKb = -1;
+    // Where the keyboard's edge was last put, whichever way. A switch of mode in the middle of the
+    // keyboard's slide (the page asks as a sheet mounts, while the keyboard is already starting up)
+    // carries on from here — the window's insets at that moment already describe the END of the slide,
+    // and starting from those would jump the sheet straight to the top.
+    private int lastEdge = 0;
+
+    public void setKeyboardOverlay(boolean on) {
+        WebView webView = getBridge().getWebView();
+        overlayMode = on;
+        WindowInsetsCompat now = ViewCompat.getRootWindowInsets(webView);
+        int edge = imeAnimating
+            ? lastEdge
+            : now != null && now.isVisible(WindowInsetsCompat.Type.ime()) ? edgeFor(now) : 0;
+        if (on) {
+            setKeyboardEdge(webView, 0);
+            reportKeyboard(edge);
+        } else {
+            reportKeyboard(0);
+            setKeyboardEdge(webView, edge);
+        }
+    }
+
+    private void applyKeyboard(int edge) {
+        lastEdge = edge;
+        WebView webView = getBridge().getWebView();
+        if (overlayMode) reportKeyboard(edge);
+        else setKeyboardEdge(webView, edge);
+    }
+
+    private void reportKeyboard(int edgePx) {
+        if (edgePx == reportedKb) return;
+        reportedKb = edgePx;
+        float density = getResources().getDisplayMetrics().density;
+        int css = Math.round(edgePx / density);
+        getBridge().getWebView().evaluateJavascript(
+            "window.__siqtKb=" + css + ";document.documentElement.style.setProperty('--kb','" + css + "px')",
+            null
+        );
     }
 
     private static void setKeyboardEdge(View v, int bottom) {

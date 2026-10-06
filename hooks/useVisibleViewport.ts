@@ -2,6 +2,7 @@
 
 import { useEffect, useLayoutEffect, useState } from 'react';
 import { Capacitor } from '@capacitor/core';
+import { setKeyboardOverlay } from '../lib/keyboard';
 
 // The part of the screen actually visible: its top and height in layout-viewport pixels, from
 // window.visualViewport. For anything anchored to the bottom that must stay above the on-screen
@@ -80,11 +81,13 @@ export function useVisibleViewport(): VisibleBox | null {
     // keyboard again.
     if (sheetsOpen++ === 0) {
       if (!keyboardResizesPage) setResizesContent(true);
+      else setKeyboardOverlay(true);
       holdPage(true);
     }
     return () => {
       if (--sheetsOpen === 0) {
         if (!keyboardResizesPage) setResizesContent(false);
+        else setKeyboardOverlay(false);
         holdPage(false);
       }
     };
@@ -140,13 +143,20 @@ if (typeof window !== 'undefined') {
 // The style for a sheet layer that should sit on the visible area, following the keyboard. Where the
 // page itself is resized for the keyboard, that is simply the page — top 0, bottom 0 — and no style is
 // needed; elsewhere it is the measured visible box.
+//
+// In the Android app, while a sheet is open the page keeps its full size and the keyboard's height
+// arrives as --kb (lib/keyboard.ts, setKeyboardOverlay): the layer ends that far above the bottom.
 export function liveOverlayStyle(box: VisibleBox | null): React.CSSProperties {
-  return keyboardResizesPage ? {} : overlayStyle(box);
+  return keyboardResizesPage ? { top: 0, bottom: 'var(--kb, 0px)', height: 'auto' } : overlayStyle(box);
 }
 
 // The visible area right now, read directly (not from React state, which trails by a render).
 export function currentVisibleBox(): VisibleBox | null {
   if (typeof window === 'undefined') return null;
+  if (keyboardResizesPage) {
+    const kb = (window as unknown as { __siqtKb?: number }).__siqtKb ?? 0;
+    return { top: 0, height: window.innerHeight - kb };
+  }
   const vv = window.visualViewport;
   return vv ? { top: vv.offsetTop, height: vv.height } : { top: 0, height: window.innerHeight };
 }

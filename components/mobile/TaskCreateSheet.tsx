@@ -76,6 +76,9 @@ export default function TaskCreateSheet({
   // the keyboard only started down after it — the keyboard's top strip "henger litt før den spretter
   // ned".
   const close = () => {
+    // Temporary: measure the first few closings (lib/perfTrace.ts) — the keyboard's top bar was seen
+    // left behind after it.
+    traceMoment('task-sheet-close', { card: '[data-trace="task-card"]' }, 1600);
     (document.activeElement as HTMLElement | null)?.blur();
     onClose();
   };

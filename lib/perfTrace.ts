@@ -25,6 +25,10 @@ export function traceMoment(kind: string, selectors: Record<string, string>, dur
   const t0 = performance.now();
   const samples: Sample[] = [];
   const loaf: unknown[] = [];
+  // The native "keyboard finished moving" signals during the trace (MainActivity).
+  const keyboardEvents: { t: number; up: boolean }[] = [];
+  const onKeyboard = (e: Event) => keyboardEvents.push({ t: Math.round(performance.now() - t0), up: !!(e as CustomEvent<{ up: boolean }>).detail?.up });
+  window.addEventListener('siqt-keyboard', onKeyboard);
   let last = t0;
 
   let observer: PerformanceObserver | null = null;
@@ -62,6 +66,7 @@ export function traceMoment(kind: string, selectors: Record<string, string>, dur
       vvH: vv ? Math.round(vv.height) : null,
       vvTop: vv ? Math.round(vv.offsetTop) : null,
       scrollY: Math.round(window.scrollY),
+      kb: (window as unknown as { __siqtKb?: number }).__siqtKb ?? null,
     };
     for (const [name, sel] of Object.entries(selectors)) {
       const el = document.querySelector(sel);
@@ -84,7 +89,8 @@ export function traceMoment(kind: string, selectors: Record<string, string>, dur
     // Let the observer deliver the last entries.
     window.setTimeout(() => {
       observer?.disconnect();
-      const body = JSON.stringify({ kind, seq, ua: navigator.userAgent, dpr: window.devicePixelRatio, samples, loaf });
+      window.removeEventListener('siqt-keyboard', onKeyboard);
+      const body = JSON.stringify({ kind, seq, ua: navigator.userAgent, dpr: window.devicePixelRatio, samples, loaf, keyboardEvents });
       void fetch('/api/debug/trace', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body, keepalive: true }).catch(() => {});
     }, 300);
   };

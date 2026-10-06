@@ -11660,3 +11660,30 @@ calendar to start once the keyboard is fully down, "bittelitt tregere".
 - Web-only change; no new APK. Not seen on a device.
 
 **Deployed 2026-10-06 as `5e508ed`** (tag `deploy/2026-10-06_0818`).
+
+### 2026-10-06 (continued) — sheets: keyboard height as a CSS value instead of resizing the WebView (Android)
+
+- **Feedback:** a screenshot of what lingers after cancelling a task. It is the keyboard's *own*
+  toolbar row (mic crossed out) left sitting at the very bottom, i.e. the IME stopped just short of
+  gone. Also: the new-task card's in/out "ikke like smooth som f.eks. assignees arket".
+- **Diagnosis by comparison:** the Assignees picker is smooth because the keyboard does not move
+  while it opens. The task card rides a moving keyboard, and every frame of that resized the
+  WebView, which is heavy and happens inside the IME's own animation. That may also be what
+  disturbed the IME's hide (not proven).
+- **Change — an overlay mode** (`MainActivity.setKeyboardOverlay`, exposed as
+  `SiqtKeyboardPlugin.setOverlay({on})`, JS `lib/keyboard.ts` `setKeyboardOverlay`):
+  - While any sheet is open, `useVisibleViewport`'s refcount turns overlay on (off when the last
+    closes).
+  - In overlay mode the WebView margin stays 0. Every keyboard step (`applyKeyboard`) is instead
+    reported to the page as CSS var `--kb` and `window.__siqtKb` (CSS px, via `evaluateJavascript`,
+    deduplicated).
+  - Hides follow the progress too, since there is no WebView edge to leave a gap.
+  - A switch made mid-slide carries on from `lastEdge`, not from the root insets, which already
+    describe the end of the slide.
+  - Outside sheets, the normal resize mode keeps chat/search inputs above the keyboard.
+  - Web: `liveOverlayStyle` on Android is `{top:0, bottom:'var(--kb,0px)', height:'auto'}`, and
+    `currentVisibleBox` on Android is `innerHeight − __siqtKb`.
+- **Traces:** samples now include `kb`, plus the `siqt-keyboard` events during the window. New kind
+  `task-sheet-close` (1.6 s) records closings, to see whether the IME reports a finished hide when
+  the strip lingers.
+- APK clean-built and copied to `public/siqt.apk`; it must be reinstalled. Not seen on a device.

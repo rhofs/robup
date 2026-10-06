@@ -34,6 +34,22 @@ import com.getcapacitor.annotation.CapacitorPlugin;
 @CapacitorPlugin(name = "SiqtKeyboard")
 public class SiqtKeyboardPlugin extends Plugin {
 
+    /**
+     * While a bottom sheet is open the page asks for the keyboard's height as a CSS value (--kb) rather
+     * than a resized WebView — see MainActivity.setKeyboardOverlay. Below Android 15 the window is
+     * resized the classic way and there is nothing to switch.
+     */
+    @PluginMethod
+    public void setOverlay(PluginCall call) {
+        boolean on = Boolean.TRUE.equals(call.getBoolean("on", false));
+        getActivity().runOnUiThread(() -> {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.VANILLA_ICE_CREAM && getActivity() instanceof MainActivity) {
+                ((MainActivity) getActivity()).setKeyboardOverlay(on);
+            }
+            call.resolve();
+        });
+    }
+
     @PluginMethod
     public void hideInstant(PluginCall call) {
         getActivity().runOnUiThread(() -> {
