@@ -11639,3 +11639,5 @@ calendar to start once the keyboard is fully down, "bittelitt tregere".
   platform).
 - APK clean-built and copied to `public/siqt.apk`; it must be reinstalled. Not seen on a device.
   Tracing still on.
+
+**Deployed 2026-10-06 as `f2efb2f`** (tag `deploy/2026-10-06_0748`), with the new APK.
