@@ -22,6 +22,7 @@ import { PickSheet, Row } from './MobileQuickCreateSheet';
 import { useSheetDrag } from './sheetDrag';
 import SheetLayer from './SheetLayer';
 import { traceMoment } from '../../lib/perfTrace';
+import { hideKeyboardInstantly } from '../../lib/keyboard';
 
 // "Add Task" in a List, on a phone: a card that rises from the bottom over the dimmed list, laid out
 // after ClickUp's (the user's screenshot of theirs beside one of ours: "Kan vi få et sånt kort istedet
@@ -131,6 +132,20 @@ export default function TaskCreateSheet({
     setFrozen(currentVisibleBox());
     setReleased(false);
     setSheet(which);
+  };
+  // Except the calendar, which needs more room than the keyboard leaves: "Kalenderen må over
+  // tastaturet". In the Android app the keyboard is put away in a single frame (no slide) and the
+  // calendar rises in its place, laid out on the full height, while the card holds still — the calendar
+  // appears to come up over the keyboard. Elsewhere the keyboard cannot be dismissed without its slide,
+  // so the calendar opens above it like the other pickers.
+  const [datesOverKeyboard, setDatesOverKeyboard] = useState(false);
+  const openDates = async () => {
+    setFrozen(currentVisibleBox());
+    setReleased(false);
+    const hidden = keyboardResizesPage && (await hideKeyboardInstantly());
+    if (hidden) titleRef.current?.blur();
+    setDatesOverKeyboard(hidden);
+    setSheet('dates');
   };
   const closeSheet = () => {
     titleRef.current?.focus({ preventScroll: true });
@@ -267,7 +282,7 @@ export default function TaskCreateSheet({
             </Row>
             </div>
             <div {...keepFocus}>
-            <Row icon={CalendarDays} onClick={() => openSheet('dates')}>
+            <Row icon={CalendarDays} onClick={() => void openDates()}>
               <span className={`text-[17px] ${dates ? 'text-app-strong' : 'text-neutral-500'}`}>{dates ?? 'Set dates'}</span>
             </Row>
             </div>
@@ -299,7 +314,7 @@ export default function TaskCreateSheet({
       <AnimatePresence>
         {sheet === 'dates' && (
           <DateSheet
-            keepKeyboard
+            keepKeyboard={!datesOverKeyboard}
             start={start}
             end={due}
             endName="Due"

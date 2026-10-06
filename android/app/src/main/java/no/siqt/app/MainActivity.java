@@ -24,6 +24,7 @@ public class MainActivity extends BridgeActivity {
         // plugin list is read, so registering afterwards leaves the plugin invisible to JS with no
         // error anywhere — the call simply rejects at runtime as "not implemented".
         registerPlugin(SiqtHapticsPlugin.class);
+        registerPlugin(SiqtKeyboardPlugin.class);
         super.onCreate(savedInstanceState);
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.VANILLA_ICE_CREAM) fitWebViewAboveKeyboard();
     }
@@ -122,6 +123,7 @@ public class MainActivity extends BridgeActivity {
                 // the animation's own insets say, the edge can never pass the keyboard's final top and
                 // then fall back to it.
                 private int ceiling = Integer.MAX_VALUE;
+                private boolean hiding = false;
 
                 @NonNull
                 @Override
@@ -131,6 +133,14 @@ public class MainActivity extends BridgeActivity {
                 ) {
                     if ((animation.getTypeMask() & WindowInsetsCompat.Type.ime()) != 0) {
                         ceiling = Math.max(0, bounds.getUpperBound().bottom - navBottom);
+                        // Going down, the page's edge drops to the bottom at once instead of following the
+                        // keyboard: the keyboard is on top and covers it either way, and following a frame
+                        // behind left a strip of the window's own background showing between the falling
+                        // keyboard and the page — read as the keyboard's top bar "henger litt igjen … titter
+                        // liksom litt opp på slutten før den går ned".
+                        WindowInsetsCompat target = ViewCompat.getRootWindowInsets(webView);
+                        hiding = target != null && !target.isVisible(WindowInsetsCompat.Type.ime());
+                        if (hiding) setKeyboardEdge(webView, 0);
                     }
                     return bounds;
                 }
@@ -138,7 +148,7 @@ public class MainActivity extends BridgeActivity {
                 @NonNull
                 @Override
                 public WindowInsetsCompat onProgress(@NonNull WindowInsetsCompat insets, @NonNull List<WindowInsetsAnimationCompat> running) {
-                    if (imeAnimating) setKeyboardEdge(webView, Math.min(edgeFor(insets), ceiling));
+                    if (imeAnimating && !hiding) setKeyboardEdge(webView, Math.min(edgeFor(insets), ceiling));
                     return insets;
                 }
 
@@ -146,6 +156,7 @@ public class MainActivity extends BridgeActivity {
                 public void onEnd(@NonNull WindowInsetsAnimationCompat animation) {
                     if ((animation.getTypeMask() & WindowInsetsCompat.Type.ime()) == 0) return;
                     imeAnimating = false;
+                    hiding = false;
                     ceiling = Integer.MAX_VALUE;
                     WindowInsetsCompat now = ViewCompat.getRootWindowInsets(webView);
                     if (now == null) return;

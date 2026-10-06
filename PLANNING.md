@@ -11610,3 +11610,32 @@ calendar to start once the keyboard is fully down, "bittelitt tregere".
 - APK clean-built and copied to `public/siqt.apk`; it must be reinstalled. **Tracing still on.**
 
 **Deployed 2026-10-06 as `0e3778d`** (tag `deploy/2026-10-06_0740`), with the new APK. Traces from before 07:40Z are older builds.
+
+### 2026-10-06 (continued) — the calendar rises "over" the keyboard; no strip when the keyboard leaves
+
+- **Feedback:** "Kalenderen må over tastaturet." The screenshot showed the calendar squeezed into
+  the space above the kept keyboard, with only two weeks visible. Also: "Nå er hakkingen bedre",
+  but cancelling a task leaves the keyboard "hanging" — "Gif delen titter liksom litt opp på slutten
+  før den går ned".
+- **Strip on keyboard hide:** while the keyboard went down, the WebView edge followed it a frame
+  behind, exposing the window's own (light) background between the falling keyboard and the page.
+  - `MainActivity`'s animation `onStart` now detects a hide (the root insets' IME is not visible)
+    and drops the edge to 0 at once. `onProgress` ignores hides. The keyboard covers the page
+    either way.
+- **Calendar "over" the keyboard:** an app cannot draw over the IME window.
+  - New native **`SiqtKeyboardPlugin.hideInstant()`** (registered in MainActivity) takes control of
+    the IME animation (`controlWindowInsetsAnimation`, duration 0) and `finish(false)`es it, so the
+    keyboard vanishes in one frame without its slide. It falls back to an ordinary `hide()` if
+    control is refused, and to `InputMethodManager` below API 30.
+  - JS wrapper `lib/keyboard.ts` `hideKeyboardInstantly()` returns false off Android or without
+    the plugin.
+  - In TaskCreateSheet, `openDates()` holds the card, hides the keyboard instantly, blurs the title,
+    then opens DateSheet laid out on the full height (`keepKeyboard={!datesOverKeyboard}`), so the
+    calendar appears to rise in the keyboard's place.
+  - Closing refocuses the title in the tap, and the keyboard comes back.
+  - iOS/web: the calendar opens above the kept keyboard as before.
+  - Status/List/Assignees pickers are unchanged: they keep the keyboard.
+- **New hand-written native file:** `SiqtKeyboardPlugin.java` (see AGENTS.md on regenerating the
+  platform).
+- APK clean-built and copied to `public/siqt.apk`; it must be reinstalled. Not seen on a device.
+  Tracing still on.
