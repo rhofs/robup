@@ -11802,3 +11802,5 @@ calendar to start once the keyboard is fully down, "bittelitt tregere".
     `Space.checkMode` is retired: the column stays, unused. The strike-through switch stays.
 - Struck title = Space `strikeDone` and (archived or a done/closed status).
 - Not seen in a browser. Migration in this round.
+
+**Deployed 2026-10-06 as `e6945a5`** (tag `deploy/2026-10-06_1251`); the is_closed migration ran at start.
