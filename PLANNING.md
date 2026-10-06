@@ -11833,3 +11833,5 @@ calendar to start once the keyboard is fully down, "bittelitt tregere".
 - Desktop row: the circle now has `mr-1.5`, so the title starts 12px after it instead of the name
   cell's 6px gap. Arrow → circle stays 6px. Mobile card: `mr-0.5`, so 14px instead of 12.
 - The circle is wrapped in a `shrink-0 flex` span to carry the margin. Not seen in a browser.
+
+**Deployed 2026-10-06 as `d457167`** (tag `deploy/2026-10-06_1305`).
