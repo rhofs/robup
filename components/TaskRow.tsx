@@ -507,7 +507,8 @@ function TaskRowImpl({
             className="flex items-start gap-3 px-4 pt-4 pb-2.5 pr-16 text-sm cursor-pointer"
           >
             {selectCheckbox}
-            {doneToggle}
+            {/* A little extra air before the title ("litt mer luft fra sirkelen"): 14px instead of the gap's 12. */}
+            <span className="shrink-0 flex mr-0.5">{doneToggle}</span>
             <div className="flex-1 min-w-0">
               {editingTitle ? (
                 <input
@@ -648,7 +649,9 @@ function TaskRowImpl({
                 )}
               </span>
             )}
-            {doneToggle}
+            {/* 12px from circle to title, twice the row's 6px gap — the title started right against the
+                circle ("litt mer luft fra sirkelen og task teksten starter"). */}
+            <span className="shrink-0 flex mr-1.5">{doneToggle}</span>
             {editingTitle ? (
               <input
                 autoFocus

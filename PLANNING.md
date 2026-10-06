@@ -11826,3 +11826,10 @@ calendar to start once the keyboard is fully down, "bittelitt tregere".
   in page.tsx, 1 pre-existing in TaskRow).
 
 **Deployed 2026-10-06 as `a0caf7a`** (tag `deploy/2026-10-06_1302`).
+
+### 2026-10-06 (continued) — more air between the circle and the title
+
+- **Feedback:** "Jeg vil ha litt mer luft fra sirkelen og task teksten starter."
+- Desktop row: the circle now has `mr-1.5`, so the title starts 12px after it instead of the name
+  cell's 6px gap. Arrow → circle stays 6px. Mobile card: `mr-0.5`, so 14px instead of 12.
+- The circle is wrapped in a `shrink-0 flex` span to carry the margin. Not seen in a browser.
