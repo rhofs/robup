@@ -11608,3 +11608,5 @@ calendar to start once the keyboard is fully down, "bittelitt tregere".
     - the blur-and-wait-for-keyboard path was removed.
     - The Planner's New sheet still lets the keyboard drop for dates.
 - APK clean-built and copied to `public/siqt.apk`; it must be reinstalled. **Tracing still on.**
+
+**Deployed 2026-10-06 as `0e3778d`** (tag `deploy/2026-10-06_0740`), with the new APK. Traces from before 07:40Z are older builds.
