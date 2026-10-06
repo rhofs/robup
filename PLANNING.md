@@ -11715,3 +11715,5 @@ calendar to start once the keyboard is fully down, "bittelitt tregere".
     `@container (max-width: 64px)` hides the faces on slivers.
   - DayTimeline's blocks and all-day chips got the refused styling too.
 - Web-only. Not seen in a browser.
+
+**Deployed 2026-10-06 as `da8fe3c`** (tag `deploy/2026-10-06_0836`).
