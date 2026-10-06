@@ -73,13 +73,18 @@ export function useVisibleViewport(): VisibleBox | null {
   // A layout effect, so the setting is in place within the same commit that mounts the sheet — before
   // its field takes focus and the keyboard is asked for.
   useLayoutEffect(() => {
+    // Not in the Android app: its WebView ignores interactive-widget (the native code resizes the page
+    // instead), and changing the viewport meta as the last sheet closed is the likeliest reason the
+    // keyboard's top bar came back up after it had gone — "ut, så ligger tastaturet igjen … hele den
+    // linja er synlig", right as a sheet finished closing: a viewport change makes the engine talk to the
+    // keyboard again.
     if (sheetsOpen++ === 0) {
-      setResizesContent(true);
+      if (!keyboardResizesPage) setResizesContent(true);
       holdPage(true);
     }
     return () => {
       if (--sheetsOpen === 0) {
-        setResizesContent(false);
+        if (!keyboardResizesPage) setResizesContent(false);
         holdPage(false);
       }
     };

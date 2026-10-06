@@ -11641,3 +11641,20 @@ calendar to start once the keyboard is fully down, "bittelitt tregere".
   Tracing still on.
 
 **Deployed 2026-10-06 as `f2efb2f`** (tag `deploy/2026-10-06_0748`), with the new APK.
+
+### 2026-10-06 (continued) — keyboard's top bar lingering after the task card closes
+
+- **Feedback:** "Inn animasjonen ser ok ut nå, tror jeg." But after closing the card, the keyboard's
+  top toolbar row ("hele den linja … med tekst og alt") stays visible just above the bottom of the
+  phone. It is the IME's own strip, not a background gap, and it appears right as the sheet
+  finishes closing.
+- **Hypothesis (not confirmed):** the runtime viewport-meta change (`interactive-widget` restored
+  when the last sheet unmounts) makes Chromium reconfigure its virtual-keyboard handling and talk to
+  the IME again. The WebView never honoured that meta anyway, since the native code does the resize.
+  `useVisibleViewport` now skips the meta toggle when `keyboardResizesPage` (the Android app), and
+  keeps it for the web.
+- **If the strip persists, next suspects:** `holdPage(false)` resizing the shell at unmount, or
+  Chromium restarting input when the focused (blurred) title's DOM is removed. A try would be to
+  move focus explicitly to `document.body` before unmount, or to delay the unmount until the IME
+  `siqt-keyboard` `{up:false}` event.
+- Web-only change; no new APK. Not seen on a device.
