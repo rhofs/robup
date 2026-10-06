@@ -11824,3 +11824,5 @@ calendar to start once the keyboard is fully down, "bittelitt tregere".
     at the screen minus 32px for phones.
 - No migration. Not seen in a browser; tsc is clean and lint is unchanged from before (63 errors
   in page.tsx, 1 pre-existing in TaskRow).
+
+**Deployed 2026-10-06 as `a0caf7a`** (tag `deploy/2026-10-06_1302`).
