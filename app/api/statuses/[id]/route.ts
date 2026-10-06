@@ -18,6 +18,7 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
   if (body.name !== undefined) data.name = body.name;
   if (body.color !== undefined) data.color = body.color;
   if (body.order !== undefined) data.order = body.order;
+  if (body.isDone !== undefined) data.isDone = body.isDone === true;
 
   const updated = await prisma.status.update({ where: { id }, data });
 

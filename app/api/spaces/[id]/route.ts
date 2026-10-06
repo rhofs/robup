@@ -33,6 +33,10 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
   // Archiving is a plain field like the name: anyone who can see the Space can put it away, the same
   // as archiving a List. Nothing inside it changes, so it is fully reversible.
   if (body.archived !== undefined) data.archived = body.archived === true;
+  // How checking a task works in this Space, and whether done tasks are struck through — set in
+  // "Manage statuses" by anyone who can edit the Space, like its statuses themselves.
+  if (body.checkMode === 'archive' || body.checkMode === 'status') data.checkMode = body.checkMode;
+  if (body.strikeDone !== undefined) data.strikeDone = body.strikeDone === true;
 
   // Marking something private, or editing who it's shared with, is a stricter, separate
   // Owner/Admin-only gate on top of the plain "can you see this" check above — every other field

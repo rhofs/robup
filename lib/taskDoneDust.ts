@@ -12,7 +12,9 @@ import { hapticTap } from './haptics';
 // "Done"), or any status simply called done/complete/closed/finished/ferdig/fullført.
 const DONE_NAME = /^(done|complete|completed|closed|finished|ferdig|fullført)$/i;
 
-export function isDoneStatus(name: string, statuses: { name: string; order: number }[]): boolean {
+export function isDoneStatus(name: string, statuses: { name: string; order: number; isDone?: boolean }[]): boolean {
+  // A Space that marks its done statuses (Manage statuses) is taken at its word.
+  if (statuses.some((st) => st.isDone)) return statuses.some((st) => st.isDone && st.name === name);
   if (DONE_NAME.test(name.trim())) return true;
   if (statuses.length < 2) return false;
   const last = statuses.reduce((a, b) => (b.order > a.order ? b : a));

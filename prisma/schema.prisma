@@ -323,6 +323,12 @@ model Space {
   // pickers) unless the viewer has "Archived spaces" switched on, which brings it all back to browse.
   // Nothing inside is touched, so unarchiving restores it exactly.
   archived      Boolean       @default(false)
+  // What checking a task's circle does in this Space (2026-10-06, "Edit statuses"):
+  //   "archive" — marks it done by archiving it: it leaves the list (the original behaviour);
+  //   "status"  — sets it to the Space's done status and it stays where it is, unchecking sets it back.
+  checkMode     String        @default("archive") @map("check_mode")
+  // Strike through the title of a task whose status is a done one.
+  strikeDone    Boolean       @default(false) @map("strike_done")
   workspaceId   String        @map("workspace_id")
   workspace     Workspace     @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
   folders       Folder[]
@@ -436,6 +442,9 @@ model Status {
   id        String   @id @default(uuid())
   name      String
   color     String   @default("#94A3B8")
+  // This status counts as finished: the one checking a task sets in "status" check mode, the ones
+  // struck through when the Space asks for it, and what the done dust celebrates.
+  isDone    Boolean  @default(false) @map("is_done")
   order     Int      @default(0)
   spaceId   String   @map("space_id")
   space     Space    @relation(fields: [spaceId], references: [id], onDelete: Cascade)

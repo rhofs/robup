@@ -11717,3 +11717,58 @@ calendar to start once the keyboard is fully down, "bittelitt tregere".
 - Web-only. Not seen in a browser.
 
 **Deployed 2026-10-06 as `da8fe3c`** (tag `deploy/2026-10-06_0836`).
+
+### 2026-10-06 (continued) — templates replace/add, ClickUp row order, check mode + strike-through per Space
+
+**Asked**, with five screenshots of ClickUp and Siqt:
+- Applying a template: "replace alt" or "legge til".
+- The select box should sit left of the expand arrow, to separate selecting from checking.
+- In "Edit statuses", choose between a check that removes the task and a check that toggles done
+  and keeps it, plus optional strike-through on done tasks. No ClickUp-style separate done sections:
+  tasks keep their order and only change status.
+- Desktop rows "litt smalere vertikalt".
+- The arrow's hover box is clipped.
+- The drag grip should be invisible at the far left until hover, like the select box.
+- He also said mobile works but feels "litt uoptimalisert". Not addressed this round.
+
+**Built:**
+- **Templates.** The picker in apply mode has an "Add to subtasks | Replace all subtasks" switch
+  (`templateApplyMode`). `applyTemplateToTask(templateId, taskId, {replace})`, inside its single
+  history transaction, first sends *every* direct subtask (archived ones too) to Trash via
+  `optimisticDeleteTask`, then creates the template's. One Undo restores everything.
+- **Schema** — migration `20261006123248_status_done_and_check_mode`:
+  - `Space.checkMode` ('archive' | 'status', default 'archive');
+  - `Space.strikeDone` (default false);
+  - `Status.isDone` (default false; statuses already named done / complete(d) / closed / finished /
+    ferdig / fullført start true).
+  - **Hand-written** as three `ADD COLUMN`s instead of Prisma's generated rebuild of the Space
+    table. Verified with `migrate deploy` on a temp DB plus `migrate diff` → "No difference
+    detected".
+- **APIs:** `PATCH /api/statuses/[id]` takes `isDone`; `POST /api/statuses` takes `isDone`;
+  `PATCH /api/spaces/[id]` takes `checkMode` and `strikeDone`.
+- **Store:**
+  - `StatusDef.isDone`, `HierarchySpace.checkMode/strikeDone`; updateStatus/updateSpace undo
+    covers them.
+  - New **`toggleTaskDone(taskId)`**: archive mode → archive toggle (as before); status mode → the
+    first `isDone` status (else the last status) and back to the first non-done one (default
+    statuses as fallback).
+  - `isDoneStatus` prefers `isDone` flags when a Space has any.
+- **Manage statuses modal:** "Checking a task" — **Removes it** / **Toggles done** (radio cards); a
+  "Strike through done tasks" switch; a "Done" pill per status (`SortableStatusRow.onToggleDone`);
+  a hint when status mode has no Done status marked.
+- **TaskRow:**
+  - The done circle calls `toggleTaskDone`.
+  - `showAsDone` = status mode ? status is done : archived.
+  - Struck-through title (desktop and mobile) when the Space's `strikeDone` is on and the task is
+    done.
+  - Per-row selectors return primitives.
+- **Desktop row layout:**
+  - Order: grip (absolute in the left padding, `opacity-0` until row hover), select box (already
+    hover-only), then in the name cell: arrow slot (24 px, no negative margins → hover box no
+    longer clipped), done circle, title (`min-w-0 truncate`).
+  - The circle's own 28 px grid column was merged into the name column, so `rowGridTemplate` is
+    `20px ${name+28}px …` and the table width is unchanged. The empty header cells in the List
+    view, the task modal's subtask table and the doc block were removed.
+  - Row padding `py-2.5` → `py-1.5`.
+- Not seen in a browser. **A code rollback does not undo the migration.** The new columns are
+  harmless to old code.

@@ -7,6 +7,7 @@ import { Check, Pencil, RefreshCw, MoreHorizontal, GripVertical, Calendar, ListT
 import { useTaskStore, StatusDef, CustomFieldDef, Task } from '../store/useTaskStore';
 import { useIsMobile } from '../hooks/useIsMobile';
 import Caret from './Caret';
+import { isDoneStatus } from '../lib/taskDoneDust';
 import TaskMaterialize from './TaskMaterialize';
 import { taskPickableMembers } from '../lib/workspaceMembers';
 import AssigneePicker, { AssigneeStack } from './AssigneePicker';
@@ -82,7 +83,6 @@ function TaskRowImpl({
     optimisticSetAssignees,
     optimisticSetCustomFieldValue,
     optimisticSetDates,
-    optimisticArchiveTask,
     optimisticSetTitle,
   } = useTaskStore();
 
@@ -123,7 +123,19 @@ function TaskRowImpl({
     setDroppableRef(node);
   };
 
-  const showAsDone = task.archived;
+  // Done, the way this task's Space defines it (Manage statuses): in "status" mode a task is done when
+  // its status is a done one, and the circle toggles that status; otherwise (the original behaviour)
+  // done means archived. Read as plain values, so each row only re-renders when its own answer changes.
+  const statusMode = useTaskStore((st) => spaceOfList(st.workspaces, task.listId)?.checkMode === 'status');
+  const strikeDone = useTaskStore((st) => !!spaceOfList(st.workspaces, task.listId)?.strikeDone);
+  const statusIsDone = useTaskStore((st) => {
+    const sp = spaceOfList(st.workspaces, task.listId);
+    return sp ? isDoneStatus(task.status, sp.statuses) : false;
+  });
+  const showAsDone = statusMode ? statusIsDone : task.archived;
+  // "Strike through gjennom hele oppgaven når den er Complete eller Done" — a Space setting.
+  const struck = strikeDone && showAsDone;
+  const toggleTaskDone = useTaskStore((st) => st.toggleTaskDone);
 
   const statusColorOf = (name: string) => statuses.find((s) => s.name === name)?.color || '#94a3b8';
 
@@ -338,9 +350,9 @@ function TaskRowImpl({
     <button
       onClick={(e) => {
         e.stopPropagation();
-        optimisticArchiveTask(task.id, !task.archived);
+        toggleTaskDone(task.id);
       }}
-      title={task.archived ? 'Restore from archive' : 'Mark as done (archive)'}
+      title={statusMode ? (showAsDone ? 'Mark as not done' : 'Mark as done') : task.archived ? 'Restore from archive' : 'Mark as done (archive)'}
       className={`rounded-full border flex items-center justify-center cursor-pointer transition-all duration-300 ease-out active:scale-90 shrink-0 ${isMobile ? 'w-5 h-5' : 'w-4 h-4'} ${
         showAsDone ? 'bg-emerald-500 border-emerald-500 text-white' : 'border-neutral-600 hover:border-emerald-400'
       }`}
@@ -536,7 +548,7 @@ function TaskRowImpl({
                 // with equal claim on the eye, which is most of what made the list feel like a
                 // form. Type hierarchy is the cheapest possible fix for that and the one a flat
                 // design most depends on.
-                <span className="text-[15px] font-semibold text-app-strong leading-snug break-words">{task.title}</span>
+                <span className={`text-[15px] font-semibold leading-snug break-words ${struck ? 'line-through text-neutral-500' : 'text-app-strong'}`}>{task.title}</span>
               )}
             </div>
           </div>
@@ -569,7 +581,7 @@ function TaskRowImpl({
             })()}
         </div>
       ) : (
-        // ================= DESKTOP ROW (unchanged) =================
+        // ================= DESKTOP ROW =================
         <div
           ref={setNodeRef}
           data-task-row={task.id}
@@ -591,7 +603,9 @@ function TaskRowImpl({
           }}
           onClick={onOpen}
           onContextMenu={(e) => onContextMenu?.(e, task)}
-          className={`grid items-center px-4 py-2.5 text-xs hover:bg-neutral-800/50 transition-colors duration-150 cursor-pointer group ${
+          // A touch lower than it was (py-1.5, from 2.5): "taskene på desktop skal være litt smalere
+          // vertikalt, som clickup sin". `relative` for the drag grip, which sits in the left padding.
+          className={`relative grid items-center px-4 py-1.5 text-xs hover:bg-neutral-800/50 transition-colors duration-150 cursor-pointer group ${
             materialize ? 'siqt-mat-card' : ''
           } ${
             isOver ? 'bg-neutral-700/40 ring-1 ring-inset ring-neutral-500' : ''
@@ -611,16 +625,29 @@ function TaskRowImpl({
               
               Structural rather than conditional, so no future caller can shift the grid by leaving
               a prop out. */}
+          {/* The drag grip, at the far left in the row's own padding, invisible until the row is hovered —
+              ClickUp's way ("drag task-knappen er usynlig som select-knappen, HELT til venstre, inntil
+              vi hovrer over"). The whole row drags, as before; this only shows that it does. */}
+          <span
+            title="Drag to reorder"
+            aria-hidden
+            className="absolute left-0.5 top-1/2 -translate-y-1/2 text-neutral-500 opacity-0 group-hover:opacity-100 cursor-grab active:cursor-grabbing transition-opacity"
+          >
+            <GripVertical className="w-3.5 h-3.5" />
+          </span>
           <div className="flex items-center">{selectCheckbox}</div>
-          {doneToggle}
 
-          <div className="font-medium flex items-center gap-2 truncate pr-4 text-neutral-200" style={depth ? { paddingLeft: depth * 22 } : undefined}>
+          {/* Select box, then the arrow, then the done circle and the title — ClickUp's order. The arrow
+              between them keeps choosing (the box) and finishing (the circle) apart; they used to sit
+              side by side. Arrow and circle live in the name cell so a subtask's indent moves them
+              with its title. */}
+          <div className="min-w-0 font-medium flex items-center gap-1.5 pr-4 text-neutral-200" style={depth ? { paddingLeft: depth * 22 } : undefined}>
             {onToggleExpand && (
               // Always a slot, arrow or not, so titles line up whether or not a task has subtasks. The
               // button is 24px square — the arrow itself is small, the target is not ("litt vanskelig å
-              // treffe") — and pulled into the row's padding so it costs no width. A soft, filled
-              // rounded caret rather than a line chevron ("en annen type pil … mer moderne").
-              <span className="shrink-0 w-5 -ml-2 flex items-center justify-center">
+              // treffe") — and inside its slot, with no negative margin, so its hover square is never
+              // cut off at the cell's edge ("pil-boksen er kroppa litt, når du hovrer over").
+              <span className="shrink-0 w-6 h-6 flex items-center justify-center">
                 {subtaskCount > 0 && (
                   <button
                     onClick={(e) => {
@@ -628,26 +655,14 @@ function TaskRowImpl({
                       onToggleExpand();
                     }}
                     title={expanded ? 'Hide subtasks' : 'Show subtasks'}
-                    className="w-6 h-6 -m-0.5 rounded-md flex items-center justify-center text-neutral-500 hover:text-neutral-100 hover:bg-neutral-700/50 cursor-pointer transition-colors"
+                    className="w-6 h-6 rounded-md flex items-center justify-center text-neutral-500 hover:text-neutral-100 hover:bg-neutral-700/50 cursor-pointer transition-colors"
                   >
                     <Caret open={expanded} />
                   </button>
                 )}
               </span>
             )}
-            {/* A visible grip, on hover. The whole desktop row has always been draggable, which
-                works and says nothing — and a capability nobody can see is one nobody has. Reported
-                as there being "no way" to reorder subtasks, which was half true: the machinery was
-                there and nothing pointed at it.
-                
-                -ml-1 so it sits in the row's own padding rather than shifting the title, and the
-                column keeps its width whether or not the cursor is over it. */}
-            <span
-              title="Drag to reorder"
-              className="shrink-0 -ml-1 text-neutral-700 group-hover:text-neutral-500 cursor-grab active:cursor-grabbing transition-colors"
-            >
-              <GripVertical className="w-3.5 h-3.5" />
-            </span>
+            {doneToggle}
             {editingTitle ? (
               <input
                 autoFocus
@@ -667,7 +682,7 @@ function TaskRowImpl({
             ) : (
               <>
                 <span
-                  className="truncate hover:underline"
+                  className={`min-w-0 truncate hover:underline ${struck ? 'line-through text-neutral-500' : ''}`}
                   title="Double-click to rename"
                   onDoubleClick={(e) => {
                     e.stopPropagation();
@@ -732,6 +747,12 @@ function TaskRowImpl({
       )}
     </motion.div>
   );
+}
+
+// The Space a List belongs to, for the row's done rules.
+function spaceOfList(workspaces: ReturnType<typeof useTaskStore.getState>['workspaces'], listId: string) {
+  for (const ws of workspaces) for (const sp of ws.spaces) if (sp.lists.some((l) => l.id === listId)) return sp;
+  return undefined;
 }
 
 const TaskRow = memo(TaskRowImpl);

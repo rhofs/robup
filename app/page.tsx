@@ -301,12 +301,14 @@ function SortableStatusRow({
   onChangeName,
   onChangeColor,
   onDelete,
+  onToggleDone,
 }: {
   status: StatusDef;
   colorChoices: string[];
   onChangeName: (name: string) => void;
   onChangeColor: (color: string) => void;
   onDelete: () => void;
+  onToggleDone: () => void;
 }) {
   const [paletteOpen, setPaletteOpen] = useState(false);
   const [nameDraft, setNameDraft] = useState(status.name);
@@ -336,6 +338,17 @@ function SortableStatusRow({
           }}
           className="flex-1 min-w-0 bg-neutral-950 border border-neutral-700 rounded-lg px-2 py-1 text-[11px] text-app-strong focus:outline-none focus:border-blue-500"
         />
+        {/* Whether this status counts as finished: what checking a task sets in "status" mode, what is
+            struck through, what the done dust celebrates. */}
+        <button
+          onClick={onToggleDone}
+          title={status.isDone ? 'Counts as done — click to make it an open status' : 'Mark as a done status'}
+          className={`shrink-0 flex items-center gap-1 h-6 px-2 rounded-full text-[10px] font-semibold cursor-pointer transition-colors ${
+            status.isDone ? 'bg-emerald-500/15 text-emerald-400' : 'text-neutral-500 hover:text-neutral-300 hover:bg-neutral-800'
+          }`}
+        >
+          <Check className="w-3 h-3" /> Done
+        </button>
         <button onClick={onDelete} className="text-neutral-500 hover:text-red-400 text-xs cursor-pointer shrink-0">
           <Trash2 className="w-3.5 h-3.5" />
         </button>
@@ -1848,6 +1861,8 @@ function PageContent() {
   // Either "make a new task from this" or "add this template's subtasks to the task I am in". One
   // picker for both, because the list it shows and the rows it draws are identical — only what the
   // tap does differs, and that is a property of how it was opened.
+  // Applying a template to a task: add its subtasks to the ones there, or replace them all.
+  const [templateApplyMode, setTemplateApplyMode] = useState<'add' | 'replace'>('add');
   const [templatePicker, setTemplatePicker] = useState<
     { mode: 'create' } | { mode: 'apply'; taskId: string } | { mode: 'update'; taskId: string } | null
   >(null);
@@ -3243,7 +3258,10 @@ function PageContent() {
     });
   };
 
-  const rowGridTemplate = `20px 28px ${columnWidths.name ?? DEFAULT_COLUMN_WIDTHS.name}px ${activeColumns
+  // Select box, then the name column — which now also holds the expand arrow and the done circle (they
+  // move with a subtask's indent; TaskRow). The circle had a 28px column of its own before; the name
+  // column takes it over, so the table is exactly as wide as it was.
+  const rowGridTemplate = `20px ${(columnWidths.name ?? DEFAULT_COLUMN_WIDTHS.name) + 28}px ${activeColumns
     .map((c) => `${columnWidths[c.key] ?? 110}px`)
     .join(' ')} 32px`;
 
@@ -7505,7 +7523,6 @@ function PageContent() {
                     );
                   })()}
                 </div>
-                <div></div>
                 <div className="relative flex items-center pr-2">
                   <button onClick={() => toggleSort('name')} className="flex items-center gap-1 hover:text-neutral-300 cursor-pointer text-left">
                     Name <SortIcon field="name" />
@@ -8585,6 +8602,52 @@ function PageContent() {
               </button>
             </div>
             <div className="p-5 space-y-3 max-h-[70vh] overflow-y-auto">
+              {/* What the circle in front of a task does in this Space, and whether finished tasks are
+                  struck through — asked for as a choice between "en 'Check' som fjerner tasken" and
+                  "'Check' hvor du toggler, uten at den forsvinner", plus "strike through … når den er
+                  Complete eller Done". Tasks stay where they are in the list either way: no separate
+                  done section. */}
+              <div className="space-y-1.5">
+                <p className="text-[10px] font-semibold uppercase tracking-wider text-neutral-500">Checking a task</p>
+                {(
+                  [
+                    ['archive', 'Removes it', 'Marks it done by archiving it — it leaves the list.'],
+                    ['status', 'Toggles done', 'Sets the done status — it stays where it is. Uncheck to reopen.'],
+                  ] as const
+                ).map(([mode, label, hint]) => {
+                  const on = (currentSpace.checkMode === 'status' ? 'status' : 'archive') === mode;
+                  return (
+                    <button
+                      key={mode}
+                      onClick={() => updateSpace(currentSpace.id, { checkMode: mode })}
+                      className={`w-full text-left flex items-start gap-2.5 px-2.5 py-2 rounded-lg border cursor-pointer transition-colors ${
+                        on ? 'border-blue-500/60 bg-blue-500/10' : 'border-neutral-800 hover:border-neutral-700'
+                      }`}
+                    >
+                      <span className={`mt-0.5 w-3.5 h-3.5 rounded-full border-2 shrink-0 ${on ? 'border-blue-500 bg-blue-500 shadow-[inset_0_0_0_2px_rgb(23_23_23)]' : 'border-neutral-600'}`} />
+                      <span className="min-w-0">
+                        <span className="block text-[12px] font-semibold text-app-strong">{label}</span>
+                        <span className="block text-[11px] text-neutral-500">{hint}</span>
+                      </span>
+                    </button>
+                  );
+                })}
+                <button
+                  onClick={() => updateSpace(currentSpace.id, { strikeDone: !currentSpace.strikeDone })}
+                  className="w-full flex items-center gap-2.5 px-2.5 py-2 rounded-lg hover:bg-neutral-800/50 cursor-pointer"
+                >
+                  <span className={`w-7 h-4 rounded-full p-0.5 transition-colors shrink-0 ${currentSpace.strikeDone ? 'bg-blue-500' : 'bg-neutral-700'}`}>
+                    <span className={`block w-3 h-3 rounded-full bg-white transition-transform ${currentSpace.strikeDone ? 'translate-x-3' : ''}`} />
+                  </span>
+                  <span className="text-[12px] text-neutral-200">
+                    Strike through done tasks <span className="line-through text-neutral-500">like this</span>
+                  </span>
+                </button>
+                {currentSpace.checkMode === 'status' && currentSpace.statuses.length > 0 && !currentSpace.statuses.some((st) => st.isDone) && (
+                  <p className="text-[10px] text-amber-400/90 px-1">No status is marked Done below — the last one is used.</p>
+                )}
+              </div>
+              <p className="text-[10px] font-semibold uppercase tracking-wider text-neutral-500 pt-1">Statuses</p>
               {currentSpace.statuses.length > 0 ? (
                 <DndContext sensors={statusSensors} collisionDetection={closestCenter} onDragEnd={handleStatusDragEnd}>
                   <SortableContext items={statuses.map((s) => s.id)} strategy={verticalListSortingStrategy}>
@@ -8597,6 +8660,7 @@ function PageContent() {
                           onChangeName={(name) => updateStatus(currentSpace.id, s.id, { name })}
                           onChangeColor={(color) => updateStatus(currentSpace.id, s.id, { color })}
                           onDelete={() => setStatusToDelete({ id: s.id, name: s.name })}
+                          onToggleDone={() => updateStatus(currentSpace.id, s.id, { isDone: !s.isDone })}
                         />
                       ))}
                     </div>
@@ -9233,7 +9297,6 @@ function PageContent() {
                         className="hidden md:grid items-center px-3 py-1.5 text-[9px] font-semibold text-neutral-500 uppercase tracking-wider border-b border-neutral-800"
                         style={{ gridTemplateColumns: rowGridTemplate }}
                       >
-                        <div></div>
                         <div></div>
                         <div className="relative pr-2">
                           Name
@@ -10133,11 +10196,30 @@ function PageContent() {
           >
             <h3 className="text-sm font-semibold text-app-strong px-1 pb-1">
               {templatePicker.mode === 'apply'
-                ? 'Add a template to this task'
+                ? 'Apply a template to this task'
                 : templatePicker.mode === 'update'
                   ? 'Overwrite a template with this task'
                   : 'New from template'}
             </h3>
+            {/* Add the template's subtasks to the ones already there, or replace them all — "så alle
+                subtasks blir replacet om vi ønsker helt fresh task med kun templates subtasksa".
+                Replacing sends the old subtasks to Trash (restorable, and one Undo brings them all
+                back with the template removed). */}
+            {templatePicker.mode === 'apply' && (
+              <div className="flex rounded-xl bg-neutral-800/70 p-0.5 mx-1 mb-1.5">
+                {(['add', 'replace'] as const).map((m) => (
+                  <button
+                    key={m}
+                    onClick={() => setTemplateApplyMode(m)}
+                    className={`flex-1 h-8 rounded-lg text-[12px] font-semibold cursor-pointer transition-colors ${
+                      templateApplyMode === m ? 'bg-neutral-900 text-app-strong shadow-sm' : 'text-neutral-400 hover:text-neutral-200'
+                    }`}
+                  >
+                    {m === 'add' ? 'Add to subtasks' : 'Replace all subtasks'}
+                  </button>
+                ))}
+              </div>
+            )}
             {templates.filter((t) => t.kind === 'task').length === 0 && (
               <p className="text-[11px] text-neutral-500 px-1 py-3">
                 No templates yet. Right-click any task and choose &ldquo;Save as template&rdquo;.
@@ -10173,9 +10255,10 @@ function PageContent() {
                           return;
                         }
                         if (templatePicker.mode === 'apply') {
-                          void applyTemplateToTask(t.id, templatePicker.taskId);
+                          const replace = templateApplyMode === 'replace';
+                          void applyTemplateToTask(t.id, templatePicker.taskId, { replace });
                           setTemplatePicker(null);
-                          showToast(`Added "${t.name}"`);
+                          showToast(replace ? `Replaced the subtasks with "${t.name}"` : `Added "${t.name}"`);
                           return;
                         }
                         const listId = [...activeListIds][0] ?? currentSpace?.lists[0]?.id;

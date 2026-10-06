@@ -171,7 +171,8 @@ export default function TaskListEmbedBlock({ node, updateAttributes, deleteNode,
   const columns = visibleKeys.map((k) => availableColumns.find((c) => c.key === k)).filter((c): c is ColumnDef => !!c);
   const widths = parseWidths(list?.columnWidthsJson);
   const nameWidth = widths.name ?? NAME_WIDTH;
-  const gridTemplate = `20px 28px ${nameWidth}px ${columns.map((c) => `${widths[c.key] ?? COL_WIDTH}px`).join(' ')} 32px`;
+  // Select box, then the name column holding the arrow, the done circle and the title (TaskRow).
+  const gridTemplate = `20px ${nameWidth + 28}px ${columns.map((c) => `${widths[c.key] ?? COL_WIDTH}px`).join(' ')} 32px`;
   const minWidth = 20 + 28 + nameWidth + columns.reduce((n, c) => n + (widths[c.key] ?? COL_WIDTH), 0) + 32;
 
   // ---- rows ----
@@ -381,7 +382,6 @@ export default function TaskListEmbedBlock({ node, updateAttributes, deleteNode,
           aria-label="Select all"
         />
       </div>
-      <div />
       <div className="pl-1">Name</div>
       {columns.map((c) => (
         <div key={c.key} className="truncate pr-2">
