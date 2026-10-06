@@ -85,6 +85,8 @@ public class MainActivity extends BridgeActivity {
         WebView webView = getBridge().getWebView();
 
         ViewCompat.setOnApplyWindowInsetsListener(webView, (v, insets) -> {
+            int nav = insets.getInsets(WindowInsetsCompat.Type.navigationBars()).bottom;
+            if (nav > 0) navBottom = nav;
             Insets ime = insets.getInsets(WindowInsetsCompat.Type.ime());
             boolean keyboardUp = insets.isVisible(WindowInsetsCompat.Type.ime()) && ime.bottom > 0;
             if (!imeAnimating) {
@@ -112,12 +114,31 @@ public class MainActivity extends BridgeActivity {
                     if ((animation.getTypeMask() & WindowInsetsCompat.Type.ime()) == 0) return;
                     imeAnimating = true;
                     webView.removeCallbacks(settleWithoutAnimation);
+                    rememberNavBar(webView);
+                }
+
+                // The highest the edge may go during this animation: where the keyboard ends up (its
+                // bounds' upper value), less the navigation bar. A belt to the braces above — whatever
+                // the animation's own insets say, the edge can never pass the keyboard's final top and
+                // then fall back to it.
+                private int ceiling = Integer.MAX_VALUE;
+
+                @NonNull
+                @Override
+                public WindowInsetsAnimationCompat.BoundsCompat onStart(
+                    @NonNull WindowInsetsAnimationCompat animation,
+                    @NonNull WindowInsetsAnimationCompat.BoundsCompat bounds
+                ) {
+                    if ((animation.getTypeMask() & WindowInsetsCompat.Type.ime()) != 0) {
+                        ceiling = Math.max(0, bounds.getUpperBound().bottom - navBottom);
+                    }
+                    return bounds;
                 }
 
                 @NonNull
                 @Override
                 public WindowInsetsCompat onProgress(@NonNull WindowInsetsCompat insets, @NonNull List<WindowInsetsAnimationCompat> running) {
-                    if (imeAnimating) setKeyboardEdge(webView, edgeFor(insets));
+                    if (imeAnimating) setKeyboardEdge(webView, Math.min(edgeFor(insets), ceiling));
                     return insets;
                 }
 
@@ -125,6 +146,7 @@ public class MainActivity extends BridgeActivity {
                 public void onEnd(@NonNull WindowInsetsAnimationCompat animation) {
                     if ((animation.getTypeMask() & WindowInsetsCompat.Type.ime()) == 0) return;
                     imeAnimating = false;
+                    ceiling = Integer.MAX_VALUE;
                     WindowInsetsCompat now = ViewCompat.getRootWindowInsets(webView);
                     if (now == null) return;
                     boolean up = now.isVisible(WindowInsetsCompat.Type.ime());
@@ -142,10 +164,24 @@ public class MainActivity extends BridgeActivity {
 
     // How far up the WebView's bottom edge goes for a given keyboard position: the keyboard's height
     // less the navigation bar it covers, whose inset the page keeps (see above).
-    private static int edgeFor(WindowInsetsCompat insets) {
+    //
+    // The navigation bar's height is taken from the window as a whole and remembered, NOT from the
+    // insets handed to the animation: those sometimes report no navigation bar at all, so during some
+    // keyboard animations (every second or third opening, measured on the device) the edge went one
+    // navigation-bar height too high and then dropped back when the animation ended — the card visibly
+    // "hopper ned igjen" by 33px. The bar does not change while the keyboard moves.
+    private int navBottom = 0;
+
+    private int edgeFor(WindowInsetsCompat insets) {
         int ime = insets.getInsets(WindowInsetsCompat.Type.ime()).bottom;
-        int nav = insets.getInsets(WindowInsetsCompat.Type.navigationBars()).bottom;
-        return Math.max(0, ime - nav);
+        return Math.max(0, ime - navBottom);
+    }
+
+    private void rememberNavBar(View v) {
+        WindowInsetsCompat root = ViewCompat.getRootWindowInsets(v);
+        if (root == null) return;
+        int nav = root.getInsets(WindowInsetsCompat.Type.navigationBars()).bottom;
+        if (nav > 0) navBottom = nav;
     }
 
     private static void setKeyboardEdge(View v, int bottom) {

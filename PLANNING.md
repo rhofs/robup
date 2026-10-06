@@ -11575,3 +11575,36 @@ calendar to start once the keyboard is fully down, "bittelitt tregere".
 - APK clean-built and copied to `public/siqt.apk`; it must be reinstalled.
 
 **Deployed 2026-10-04 as `48d8dd2`** (tag `deploy/2026-10-04_2154`), with the new APK. Traces recorded before 21:54Z are from the previous build.
+
+### 2026-10-06 — traces round 2: the card's drop explained; page hold actually applied; pickers keep the keyboard
+
+- **Asked:** "Kan vi droppe å ta ned tastaturet når vi trykker på 'Set Dates', at den bare sklir
+  opp, som 'Add Assignees'." Also: the new-task entrance is better but still stutters a little and
+  "noen ganger hopper den ned igjen".
+- **Traces since `48d8dd2`** (mostly his phone, Xiaomi 2509FPN0BC, Android 16, dpr 3; a few from
+  other users):
+  - **The drop:** on the 2nd/3rd task-sheet opens (never the 1st), the WebView height went to 548
+    during the IME animation and then jumped to the correct 581 ~30 ms after it ended. The card's
+    top fell 34 px in one frame. So during some animations the edge was one nav-bar height too
+    high: the animation insets apparently report no navigation bar sometimes.
+  - **The page hold had never taken effect:** `.siqt-app-shell`'s bottom followed innerHeight
+    frame by frame. The shell is a flex item of `<body class="min-h-full flex flex-col">`, so its
+    inline px height was flex-shrunk back to the body's.
+  - **First List open:** still 50–150 ms frames at the start of the push, even with ≤ 8 cards built
+    during it. **Not solved.** Long-animation-frame entries show no attributed scripts; the
+    remaining suspects are framer `layout` projection on mount, the first paint of the newly
+    visible content, or GC.
+- **Fixes:**
+  - **MainActivity:**
+    - the nav-bar bottom inset is remembered from the listener's insets and the root insets
+      (`rememberNavBar` at `onPrepare`), never read from the animation's insets;
+    - `onStart` sets a `ceiling` = the IME bounds' upper value − nav, and `onProgress` clamps the
+      edge to it, so the edge can never pass the keyboard's final top.
+  - **`holdPage`** also sets `flex-shrink: 0`.
+  - **All task-card pickers keep the keyboard:**
+    - DateSheet, TimeDialSheet and PickSheet take `keepKeyboard`, which means the live layout box
+      plus `onMouseDownCapture` preventDefault, so nothing in them takes focus;
+    - TaskCreateSheet's openers (List button, dates row, status pill) use keepFocus;
+    - the blur-and-wait-for-keyboard path was removed.
+    - The Planner's New sheet still lets the keyboard drop for dates.
+- APK clean-built and copied to `public/siqt.apk`; it must be reinstalled. **Tracing still on.**

@@ -4,7 +4,7 @@ import SheetLayer from './SheetLayer';
 import { useSheetDrag } from './sheetDrag';
 import { useMemo, useState } from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
-import { fullViewportBox, overlayStyle, useVisibleViewport } from '../../hooks/useVisibleViewport';
+import { fullViewportBox, liveOverlayStyle, overlayStyle, useVisibleViewport } from '../../hooks/useVisibleViewport';
 import { X, ChevronUp, ChevronDown, CalendarDays, Sunrise, CalendarCheck, CalendarArrowUp } from 'lucide-react';
 import TimeDialSheet from './TimeDialSheet';
 import { hapticTap } from '../../lib/haptics';
@@ -58,7 +58,14 @@ export default function DateSheet({
   single,
   onSave,
   onClose,
+  keepKeyboard = false,
 }: {
+  // Opened over a field that keeps its keyboard (the new-task card): the sheet sits on the visible
+  // area above the keyboard, like the Assignees picker, and nothing in it takes the focus away — so the
+  // keyboard stays put instead of dropping as the calendar rises ("droppe å ta ned tastaturet når vi
+  // trykker på 'Set Dates', at den bare sklir opp, som 'Add Assignees'"). Otherwise the keyboard goes
+  // and the sheet is laid out on the full height.
+  keepKeyboard?: boolean;
   // One date instead of a range — the task row's and task modal's pickers, which set start and due
   // separately. The value is what the field is called ("Start", "Due", a custom field's name).
   single?: string;
@@ -70,8 +77,7 @@ export default function DateSheet({
   onClose: () => void;
 }) {
   const drag = useSheetDrag(onClose);
-  // No text field here: laid out on the full height, not the visible box (see fullViewportBox).
-  useVisibleViewport();
+  const visible = useVisibleViewport();
   const [start, setStart] = useState<Date | null>(() => parse(startIso));
   const [end, setEnd] = useState<Date | null>(() => parse(endIso));
   const [active, setActive] = useState<Field>(start && !end && !single ? 'end' : 'start');
@@ -168,8 +174,9 @@ export default function DateSheet({
   const timeTarget = timeFor === 'start' ? start : timeFor === 'end' ? end : null;
 
   return (
-    <SheetLayer z={90} dim={0.5} style={overlayStyle(fullViewportBox())} onClose={onClose}>
+    <SheetLayer z={90} dim={0.5} style={keepKeyboard ? liveOverlayStyle(visible) : overlayStyle(fullViewportBox())} onClose={onClose}>
       <motion.div
+        onMouseDownCapture={keepKeyboard ? (e) => e.preventDefault() : undefined}
         initial={{ y: '100%' }}
         animate={{ y: 0 }}
         exit={{ y: '100%' }}
@@ -279,6 +286,7 @@ export default function DateSheet({
       <AnimatePresence>
         {timeFor && (
           <TimeDialSheet
+            keepKeyboard={keepKeyboard}
             initial={timeTarget && hasTime(timeTarget) ? { h: timeTarget.getHours(), m: timeTarget.getMinutes() } : null}
             onClose={() => setTimeFor(null)}
             onClear={() => {

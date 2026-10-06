@@ -45,10 +45,15 @@ let sheetsOpen = 0;
 // frame of the keyboard's animation, which is what made a sheet's entrance stutter ("hakkete og
 // uoptimalisert"), and the page behind visibly reflowed under the dimming. Held, the keyboard only
 // changes the sheet layers, and the page behind does not move at all.
+//
+// flex-shrink 0 as well as the height: the shell is a flex item of <body> (a flex column), and without
+// it the browser shrank the held height straight back down to the body's — the device traces showed
+// the shell's bottom following the keyboard frame by frame, i.e. the hold had never taken effect.
 function holdPage(on: boolean) {
   const shell = document.querySelector('.siqt-app-shell') as HTMLElement | null;
   if (!shell) return;
   shell.style.height = on ? `${fullViewportBox().height}px` : '';
+  shell.style.flexShrink = on ? '0' : '';
 }
 let originalViewport: string | null = null;
 function setResizesContent(on: boolean) {

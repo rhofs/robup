@@ -7,7 +7,6 @@ import { useTaskStore, type StatusDef } from '../../store/useTaskStore';
 import { useSessionStore } from '../../store/useSessionStore';
 import {
   currentVisibleBox,
-  fullViewportBox,
   keyboardResizesPage,
   liveOverlayStyle,
   overlayStyle,
@@ -121,66 +120,17 @@ export default function TaskCreateSheet({
   // card that never moved, and only once the keyboard is back does the card follow the live box again
   // (or after a moment, if it does not come back).
   //
-  // The pickers without a text field wait for the keyboard to be gone before they rise. Opening one
-  // while the keyboard was still on its way down put the keyboard over the picker as it slid in, and
-  // the whole thing looked like a tangle ("Tastaturet havner over og går ned"). Now the tap puts the
-  // keyboard away, the card holds still in the meantime, and the picker comes up on a clear screen —
-  // a fraction of a second, the way the phone's own apps do it. Assignees, which has a search field,
-  // keeps the keyboard and opens at once.
+  // Every picker now opens with the keyboard still up — dates, status and List as well as Assignees:
+  // "droppe å ta ned tastaturet når vi trykker på 'Set Dates', at den bare sklir opp, som 'Add
+  // Assignees'". The rows and buttons that open them leave the focus in the title (keepFocus), and the
+  // pickers themselves take none (their keepKeyboard), so the keyboard never moves. The hold above is
+  // kept for the rare case where it goes anyway.
   const [frozen, setFrozen] = useState<VisibleBox | null>(null);
   const [released, setReleased] = useState(true);
-  const pendingOpen = useRef<number | null>(null);
-  useEffect(
-    () => () => {
-      if (pendingOpen.current !== null) cancelAnimationFrame(pendingOpen.current);
-    },
-    []
-  );
   const openSheet = (which: NonNullable<typeof sheet>) => {
     setFrozen(currentVisibleBox());
     setReleased(false);
-    if (which === 'people') {
-      setSheet(which);
-      return;
-    }
-    const full = fullViewportBox().height;
-    const keyboardUp = (currentVisibleBox()?.height ?? full) < full - 80;
-    (document.activeElement as HTMLElement | null)?.blur();
-    if (!keyboardUp) {
-      setSheet(which);
-      return;
-    }
-    // In the Android app the keyboard says when it has finished going down (MainActivity sends a
-    // 'siqt-keyboard' event at the end of its animation), so the picker starts on exactly that frame —
-    // "starter i det tastaturet er helt ned". Elsewhere, or if no word comes, the page's height decides:
-    // full height and unchanged for a few frames, with a ceiling so a picker always opens.
-    const started = performance.now();
-    let opened = false;
-    let lastH = -1;
-    let steady = 0;
-    const open = () => {
-      if (opened) return;
-      opened = true;
-      window.removeEventListener('siqt-keyboard', onKeyboard);
-      if (pendingOpen.current !== null) cancelAnimationFrame(pendingOpen.current);
-      pendingOpen.current = null;
-      setSheet(which);
-    };
-    const onKeyboard = (e: Event) => {
-      if (!(e as CustomEvent<{ up: boolean }>).detail?.up) open();
-    };
-    window.addEventListener('siqt-keyboard', onKeyboard);
-    const waitForKeyboard = () => {
-      const h = currentVisibleBox()?.height ?? full;
-      steady = h === lastH ? steady + 1 : 0;
-      lastH = h;
-      if ((h >= full - 4 && steady >= 3) || performance.now() - started > 900) {
-        open();
-        return;
-      }
-      pendingOpen.current = requestAnimationFrame(waitForKeyboard);
-    };
-    pendingOpen.current = requestAnimationFrame(waitForKeyboard);
+    setSheet(which);
   };
   const closeSheet = () => {
     titleRef.current?.focus({ preventScroll: true });
@@ -261,6 +211,7 @@ export default function TaskCreateSheet({
           <div className="flex items-center gap-3 px-5 pt-2">
             <button
               onPointerDown={(e) => e.stopPropagation()}
+              onMouseDown={(e) => e.preventDefault()}
               onClick={() => openSheet('list')}
               className="min-w-0 flex items-center gap-1 text-[15px] text-neutral-500 cursor-pointer"
             >
@@ -315,14 +266,17 @@ export default function TaskCreateSheet({
               )}
             </Row>
             </div>
+            <div {...keepFocus}>
             <Row icon={CalendarDays} onClick={() => openSheet('dates')}>
               <span className={`text-[17px] ${dates ? 'text-app-strong' : 'text-neutral-500'}`}>{dates ?? 'Set dates'}</span>
             </Row>
+            </div>
           </div>
         </div>
 
         <div className="flex items-center gap-3 px-4 pt-3 pb-[calc(env(safe-area-inset-bottom)+12px)] border-t border-neutral-800 mt-2 shrink-0">
           <button
+            {...keepFocus}
             onClick={() => openSheet('status')}
             className="flex items-center gap-2 h-11 pl-3 pr-4 rounded-full bg-neutral-800/80 cursor-pointer active:scale-95 transition-transform"
           >
@@ -345,6 +299,7 @@ export default function TaskCreateSheet({
       <AnimatePresence>
         {sheet === 'dates' && (
           <DateSheet
+            keepKeyboard
             start={start}
             end={due}
             endName="Due"
@@ -357,7 +312,7 @@ export default function TaskCreateSheet({
           />
         )}
         {sheet === 'list' && (
-          <PickSheet title="Create in" noKeyboard onClose={closeSheet}>
+          <PickSheet title="Create in" keepKeyboard onClose={closeSheet}>
             {spaces.map((sp) => {
               const lists = sp.lists.filter((l) => !l.archived && !l.docId);
               if (lists.length === 0) return null;
@@ -386,7 +341,7 @@ export default function TaskCreateSheet({
           </PickSheet>
         )}
         {sheet === 'status' && (
-          <PickSheet title="Status" noKeyboard onClose={closeSheet}>
+          <PickSheet title="Status" keepKeyboard onClose={closeSheet}>
             {statuses.map((s) => (
               <button
                 key={s.id}

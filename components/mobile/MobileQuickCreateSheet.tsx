@@ -85,11 +85,15 @@ export function PickSheet({
   onClose,
   children,
   noKeyboard = false,
+  keepKeyboard = false,
 }: {
   title: string;
   onClose: () => void;
   children: React.ReactNode;
   noKeyboard?: boolean;
+  // A picker of plain choices opened over a field that keeps its keyboard: taps in it leave the focus
+  // where it is, so the keyboard stays (see DateSheet's). Not for a picker with its own text field.
+  keepKeyboard?: boolean;
 }) {
   const drag = useSheetDrag(onClose);
   const visible = useVisibleViewport();
@@ -101,6 +105,7 @@ export function PickSheet({
         exit={{ y: '100%' }}
         transition={noKeyboard ? { type: 'spring', stiffness: 290, damping: 34 } : { type: 'spring', stiffness: 380, damping: 38 }}
         onClick={(e) => e.stopPropagation()}
+        onMouseDownCapture={keepKeyboard ? (e) => e.preventDefault() : undefined}
         {...drag.sheetProps}
         className="relative bg-neutral-900 rounded-t-[28px] max-h-full min-h-0 flex flex-col pb-[calc(env(safe-area-inset-bottom)+12px)]"
       >

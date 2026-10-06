@@ -4,7 +4,7 @@ import SheetLayer from './SheetLayer';
 import { useSheetDrag } from './sheetDrag';
 import { useRef, useState } from 'react';
 import { motion } from 'framer-motion';
-import { fullViewportBox, overlayStyle, useVisibleViewport } from '../../hooks/useVisibleViewport';
+import { fullViewportBox, liveOverlayStyle, overlayStyle, useVisibleViewport } from '../../hooks/useVisibleViewport';
 import { X } from 'lucide-react';
 import { hapticTap } from '../../lib/haptics';
 
@@ -29,15 +29,17 @@ export default function TimeDialSheet({
   onSave,
   onClear,
   onClose,
+  keepKeyboard = false,
 }: {
+  // See DateSheet's: opened over a field that keeps its keyboard.
+  keepKeyboard?: boolean;
   initial: { h: number; m: number } | null;
   onSave: (h: number, m: number) => void;
   onClear: () => void;
   onClose: () => void;
 }) {
   const drag = useSheetDrag(onClose);
-  // No text field here: laid out on the full height, not the visible box (see fullViewportBox).
-  useVisibleViewport();
+  const visible = useVisibleViewport();
   const [h, setH] = useState(initial?.h ?? 9);
   const [m, setM] = useState(initial?.m ?? 0);
   const [mode, setMode] = useState<'hour' | 'minute'>('hour');
@@ -76,8 +78,9 @@ export default function TimeDialSheet({
   const selectedLabel = mode === 'hour' ? String(h) : pad(m);
 
   return (
-    <SheetLayer z={95} dim={0.5} style={overlayStyle(fullViewportBox())} onClose={onClose}>
+    <SheetLayer z={95} dim={0.5} style={keepKeyboard ? liveOverlayStyle(visible) : overlayStyle(fullViewportBox())} onClose={onClose}>
       <motion.div
+        onMouseDownCapture={keepKeyboard ? (e) => e.preventDefault() : undefined}
         initial={{ y: '100%' }}
         animate={{ y: 0 }}
         exit={{ y: '100%' }}
