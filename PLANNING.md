@@ -11993,3 +11993,5 @@ calendar to start once the keyboard is fully down, "bittelitt tregere".
   - Undo for "Apply changes".
   - Old removed pieces: SortableStatusRow and the delete-status confirm in page.tsx.
 - Not seen in a browser.
+
+**Deployed 2026-10-07 as `90020af`** (tag `deploy/2026-10-07_1105`); the status_templates migration ran at start.
