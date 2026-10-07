@@ -12112,3 +12112,5 @@ calendar to start once the keyboard is fully down, "bittelitt tregere".
   - Private events cannot be repaired automatically. "Ulle og Rob HotD-kveld" is for the user to
     move with "Belongs to".
 - Not seen in a browser.
+
+**Deployed 2026-10-07 as `0dec1a4`** (tag `deploy/2026-10-07_1135`); the event repair migration ran at start, right after the start-up DB snapshot (11:35:35Z), which is the way back for that data if needed.
