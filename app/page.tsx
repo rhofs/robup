@@ -573,6 +573,8 @@ function parseVisibleColumns(json: string | null | undefined): string[] {
 }
 const ACTIVITY_PANEL_STORAGE_KEY = 'siqt.showActivityPanel';
 const COLLAPSED_SPACES_STORAGE_KEY = 'siqt.collapsedSpaces';
+// What the Planner filter hides — List ids, and the ids of List-less workspaces hidden there.
+const PLANNER_HIDDEN_STORAGE_KEY = 'siqt.plannerHidden';
 
 // Same "only persist the collapsed ones" shape as FolderTree.tsx's readCollapsedFolders —
 // Spaces default to expanded, so the minority (collapsed) is what's worth remembering.
@@ -1643,6 +1645,12 @@ function PageContent() {
 
   const [calendarVisibleListIds, setCalendarVisibleListIds] = useState<Set<string>>(new Set());
   const calendarFilterInitRef = useRef(false);
+  // Every List the Planner filter has seen, so only a List that is genuinely new joins the visible set
+  // (see the effect that seeds calendarVisibleListIds).
+  const calendarKnownListIdsRef = useRef<Set<string>>(new Set());
+  // Workspaces hidden in the Planner that have no Lists to hide — their visibility can't be read off
+  // calendarVisibleListIds, and their events still need hiding (calendarWorkspaceVisible).
+  const [calendarHiddenWorkspaceIds, setCalendarHiddenWorkspaceIds] = useState<Set<string>>(new Set());
   const [columnMenuOpen, setColumnMenuOpen] = useState(false);
   const [clearOverdueConfirmOpen, setClearOverdueConfirmOpen] = useState(false);
   const [newFieldOpen, setNewFieldOpen] = useState(false);
@@ -2413,27 +2421,40 @@ function PageContent() {
     if (isMobile && openedModalTaskId) setShowActivityPanel(false);
   }, [isMobile, openedModalTaskId]);
 
-  // Calendar filter defaults to "everything visible"; newly created lists join the visible set too.
+  // The Planner filter: everything visible, less what was hidden last time (remembered on this device,
+  // PLANNER_HIDDEN_STORAGE_KEY); a List created later joins the visible set.
+  //
+  // "Created later" is judged against every List this has seen. It used to be "any List not in the
+  // visible set", which put every hidden List back on screen the next time anything in `workspaces`
+  // changed — the filter quietly undid itself.
   useEffect(() => {
     const allListIds = workspaces.flatMap((w) => w.spaces.flatMap((s) => s.lists.map((l) => l.id)));
     if (allListIds.length === 0) return;
+    const known = calendarKnownListIdsRef.current;
     if (!calendarFilterInitRef.current) {
-      setCalendarVisibleListIds(new Set(allListIds));
       calendarFilterInitRef.current = true;
+      let hidden: { lists?: string[]; workspaces?: string[] } = {};
+      try {
+        hidden = JSON.parse(localStorage.getItem(PLANNER_HIDDEN_STORAGE_KEY) ?? '{}') ?? {};
+      } catch {}
+      const hiddenLists = new Set(hidden.lists ?? []);
+      allListIds.forEach((id) => known.add(id));
+      setCalendarVisibleListIds(new Set(allListIds.filter((id) => !hiddenLists.has(id))));
+      setCalendarHiddenWorkspaceIds(new Set(hidden.workspaces ?? []));
       return;
     }
-    setCalendarVisibleListIds((prev) => {
-      const next = new Set(prev);
-      let changed = false;
-      for (const id of allListIds) {
-        if (!next.has(id)) {
-          next.add(id);
-          changed = true;
-        }
-      }
-      return changed ? next : prev;
-    });
+    const fresh = allListIds.filter((id) => !known.has(id));
+    if (fresh.length === 0) return;
+    fresh.forEach((id) => known.add(id));
+    setCalendarVisibleListIds((prev) => new Set([...prev, ...fresh]));
   }, [workspaces]);
+  useEffect(() => {
+    if (!calendarFilterInitRef.current) return;
+    const hiddenLists = [...calendarKnownListIdsRef.current].filter((id) => !calendarVisibleListIds.has(id));
+    try {
+      localStorage.setItem(PLANNER_HIDDEN_STORAGE_KEY, JSON.stringify({ lists: hiddenLists, workspaces: [...calendarHiddenWorkspaceIds] }));
+    } catch {}
+  }, [calendarVisibleListIds, calendarHiddenWorkspaceIds]);
 
   const activeModalTaskId = modalTaskStack.length > 0 ? modalTaskStack[modalTaskStack.length - 1] : null;
   useEffect(() => {
@@ -3365,6 +3386,41 @@ function PageContent() {
     // eslint-disable-next-line react-hooks/exhaustive-deps -- isArchivedTask reads archivedSpaceListIds, listed
     [tasks, calendarVisibleListIds, showArchived, archivedSpaceListIds]
   );
+
+  // The Planner reads across every workspace you are in (tasks and events are membership-wide), so
+  // its filter has to as well: "når jeg bytter mellom 2 workspaces, ser jeg akkurat det samme … burde
+  // jeg også ha muligheten til å filtrere mellom de ulike workspacene". A workspace shows while any of
+  // its Lists does; one without Lists by its own switch.
+  const workspaceListIds = (ws: HierarchyWorkspace) => ws.spaces.flatMap((sp) => sp.lists.map((l) => l.id));
+  const calendarWorkspaceVisible = (ws: HierarchyWorkspace) => {
+    const ids = workspaceListIds(ws);
+    return ids.length ? ids.some((id) => calendarVisibleListIds.has(id)) : !calendarHiddenWorkspaceIds.has(ws.id);
+  };
+  const toggleCalendarWorkspace = (ws: HierarchyWorkspace) => {
+    const ids = workspaceListIds(ws);
+    const on = calendarWorkspaceVisible(ws);
+    setCalendarVisibleListIds((prev) => {
+      const next = new Set(prev);
+      ids.forEach((id) => (on ? next.delete(id) : next.add(id)));
+      return next;
+    });
+    setCalendarHiddenWorkspaceIds((prev) => {
+      const next = new Set(prev);
+      if (on) next.add(ws.id);
+      else next.delete(ws.id);
+      return next;
+    });
+  };
+  // Events follow the same filter: hidden with their workspace, and with their Space when every List
+  // in it is hidden. An event with no Space belongs to the workspace as a whole.
+  const calendarFilteredEvents = events.filter((e) => {
+    const ws = workspaces.find((w) => w.id === e.workspaceId);
+    if (!ws) return true;
+    if (!calendarWorkspaceVisible(ws)) return false;
+    const space = e.spaceId ? ws.spaces.find((sp) => sp.id === e.spaceId) : undefined;
+    if (!space || space.lists.length === 0) return true;
+    return space.lists.some((l) => calendarVisibleListIds.has(l.id));
+  });
 
   const toggleCalendarList = (listId: string) => {
     setCalendarVisibleListIds((prev) => {
@@ -6053,9 +6109,50 @@ function PageContent() {
               />
             ) : (
             <div className="space-y-3">
+              {/* The Planner shows every workspace you are in at once, so it can hide whole ones. The
+                  Spaces & Lists below are the current workspace's (switch it at the top to filter
+                  another's). */}
+              {activeView === 'calendar' && workspaces.length > 1 && (
+                <div className="space-y-0.5 pb-2 border-b border-neutral-800/70">
+                  <p className="px-2 pb-1 text-[10px] font-bold text-neutral-500 uppercase tracking-wider">Workspaces</p>
+                  {[...workspaces]
+                    .sort((a, b) => Number(a.isPersonal) - Number(b.isPersonal))
+                    .map((ws) => {
+                      const on = calendarWorkspaceVisible(ws);
+                      return (
+                        <button
+                          key={ws.id}
+                          onClick={() => toggleCalendarWorkspace(ws)}
+                          title={on ? `Hide ${ws.isPersonal ? 'your personal tasks' : ws.name} in the Planner` : `Show ${ws.isPersonal ? 'your personal tasks' : ws.name} in the Planner`}
+                          className="group w-full flex items-center gap-2 px-2.5 py-1.5 rounded text-xs text-left hover:bg-neutral-800/40 cursor-pointer"
+                        >
+                          <span className="relative w-3.5 h-3.5 shrink-0 flex items-center justify-center">
+                            <span
+                              className="absolute w-2 h-2 rounded-full transition group-hover:opacity-0"
+                              style={{ backgroundColor: ws.color || '#6b7280', opacity: on ? 1 : 0.25 }}
+                            />
+                            {on ? (
+                              <Eye className="absolute w-3 h-3 text-neutral-300 opacity-0 group-hover:opacity-100 transition" />
+                            ) : (
+                              <EyeOff className="absolute w-3 h-3 text-neutral-600 opacity-0 group-hover:opacity-100 transition" />
+                            )}
+                          </span>
+                          <span className={`truncate ${on ? 'text-neutral-300' : 'text-neutral-600 line-through decoration-neutral-700'}`}>
+                            {ws.isPersonal ? 'Personal' : ws.name}
+                          </span>
+                          {ws.id === currentWorkspace?.id && <span className="ml-auto shrink-0 text-[9px] text-neutral-500">current</span>}
+                        </button>
+                      );
+                    })}
+                </div>
+              )}
               <div className="flex items-center justify-between px-2">
-                <p className="text-[10px] font-bold text-neutral-500 uppercase tracking-wider">
-                  {activeView === 'calendar' ? 'Filter Spaces & Lists' : 'Spaces & Lists'}
+                <p className="text-[10px] font-bold text-neutral-500 uppercase tracking-wider truncate">
+                  {activeView === 'calendar'
+                    ? workspaces.length > 1
+                      ? `Spaces in ${currentWorkspace?.isPersonal ? 'Personal' : currentWorkspace?.name ?? 'workspace'}`
+                      : 'Filter Spaces & Lists'
+                    : 'Spaces & Lists'}
                 </p>
                 {activeView === 'calendar' && (
                   <div className="flex items-center gap-1.5">
@@ -7401,7 +7498,7 @@ function PageContent() {
               <div className="flex-1 min-h-0">
                 <CalendarView
                   tasks={calendarFilteredTasks}
-                  events={events}
+                  events={calendarFilteredEvents}
                   statuses={statuses}
                   workspaces={workspaces}
                   showWeekNumbers={!hideWeekNumbers}
@@ -10028,6 +10125,10 @@ function PageContent() {
         visibleListIds={calendarVisibleListIds}
         onToggleList={toggleCalendarList}
         onToggleSpace={toggleCalendarSpace}
+        workspaces={[...workspaces].sort((a, b) => Number(a.isPersonal) - Number(b.isPersonal))}
+        currentWorkspaceId={currentWorkspace?.id ?? null}
+        isWorkspaceVisible={calendarWorkspaceVisible}
+        onToggleWorkspace={toggleCalendarWorkspace}
       />
 
       {trashOpen && <TrashPanel onClose={() => setTrashOpen(false)} />}

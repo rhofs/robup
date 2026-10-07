@@ -2,7 +2,7 @@
 
 import { AnimatePresence, motion } from 'framer-motion';
 import { Check, X } from 'lucide-react';
-import type { HierarchySpace } from '../../store/useTaskStore';
+import type { HierarchySpace, HierarchyWorkspace } from '../../store/useTaskStore';
 import { getOrderedListIds } from '../../lib/folderTree';
 
 type Props = {
@@ -12,13 +12,30 @@ type Props = {
   visibleListIds: Set<string>;
   onToggleList: (listId: string) => void;
   onToggleSpace: (space: HierarchySpace) => void;
+  // Every workspace, since the Planner shows them all at once; `spaces` are the current one's.
+  workspaces: HierarchyWorkspace[];
+  currentWorkspaceId: string | null;
+  isWorkspaceVisible: (ws: HierarchyWorkspace) => boolean;
+  onToggleWorkspace: (ws: HierarchyWorkspace) => void;
 };
 
 // Mobile equivalent of the desktop sidebar's calendar-visibility checkboxes (FolderTree.tsx,
 // toggleCalendarList/toggleCalendarSpace in app/page.tsx) — same flat, folder-nesting-skipped
 // scope decision as MobileSpacesSheet.tsx, since this is a multi-select filter, not the full
 // Space/Folder/List tree.
-export default function MobileCalendarFilterSheet({ open, onClose, spaces, visibleListIds, onToggleList, onToggleSpace }: Props) {
+export default function MobileCalendarFilterSheet({
+  open,
+  onClose,
+  spaces,
+  visibleListIds,
+  onToggleList,
+  onToggleSpace,
+  workspaces,
+  currentWorkspaceId,
+  isWorkspaceVisible,
+  onToggleWorkspace,
+}: Props) {
+  const current = workspaces.find((w) => w.id === currentWorkspaceId);
   return (
     <AnimatePresence>
       {open && (
@@ -45,6 +62,37 @@ export default function MobileCalendarFilterSheet({ open, onClose, spaces, visib
               </button>
             </div>
             <div className="overflow-y-auto pb-2">
+              {workspaces.length > 1 && (
+                <div className="mb-4 pb-3 border-b border-neutral-800/80">
+                  <p className="px-1 pb-1 text-[11px] font-semibold uppercase tracking-wider text-neutral-500">Workspaces</p>
+                  {workspaces.map((ws) => {
+                    const on = isWorkspaceVisible(ws);
+                    return (
+                      <button
+                        key={ws.id}
+                        onClick={() => onToggleWorkspace(ws)}
+                        className="w-full flex items-center gap-2 px-1 py-2 text-[13px] font-medium rounded hover:bg-neutral-800/40 cursor-pointer"
+                      >
+                        <span
+                          className={`w-4 h-4 rounded border flex items-center justify-center shrink-0 transition ${
+                            on ? 'bg-blue-500 border-blue-500 text-white' : 'border-neutral-600'
+                          }`}
+                        >
+                          {on && <Check className="w-3 h-3" />}
+                        </span>
+                        <span className="w-2 h-2 rounded-full shrink-0" style={{ backgroundColor: ws.color || '#6b7280' }} />
+                        <span className="truncate">{ws.isPersonal ? 'Personal' : ws.name}</span>
+                        {ws.id === currentWorkspaceId && <span className="ml-auto text-[11px] font-normal text-neutral-500">current</span>}
+                      </button>
+                    );
+                  })}
+                  {current && (
+                    <p className="px-1 pt-2 text-[11px] font-semibold uppercase tracking-wider text-neutral-500">
+                      Spaces in {current.isPersonal ? 'Personal' : current.name}
+                    </p>
+                  )}
+                </div>
+              )}
               {spaces.map((space) => {
                 const orderedListIds = getOrderedListIds(space).filter((id) => !space.lists.find((l) => l.id === id)?.archived);
                 const allChecked = orderedListIds.length > 0 && orderedListIds.every((id) => visibleListIds.has(id));

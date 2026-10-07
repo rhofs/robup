@@ -11995,3 +11995,37 @@ calendar to start once the keyboard is fully down, "bittelitt tregere".
 - Not seen in a browser.
 
 **Deployed 2026-10-07 as `90020af`** (tag `deploy/2026-10-07_1105`); the status_templates migration ran at start.
+
+### 2026-10-07 — Planner: how workspaces work there, and a workspace filter
+
+- **Question:** "I planner, skilles det mellom de ulike workspacene, hvordan funker det? For når
+  jeg bytter mellom 2 workspaces, ser jeg akkurat det samme. … burde jeg også ha muligheten til å
+  filtrere mellom de ulike workspacene og…" (the message was cut off there).
+- **Answer, from the code:**
+  - The Planner is cross-workspace by design. `GET /api/tasks` and `GET /api/events` are
+    membership-wide, the filter's visible set started as *every* List in *every* workspace, and
+    events were not filtered at all. So switching workspace changed nothing on the calendar.
+  - The only things that follow the current workspace are the sidebar filter (its Spaces only) and
+    the team strip (its people). The filter therefore could not hide the other workspace at all.
+- **Bug found on the way:** the effect meant to add *newly created* Lists to the visible set added
+  every List not currently visible. Any change to `workspaces` (status edits, Space settings,
+  refetches) therefore put every hidden List back. It now tracks the Lists it has seen
+  (`calendarKnownListIdsRef`) and only adds new ones.
+- **Built:**
+  - **Workspaces** section at the top of the Planner's filter (desktop sidebar, and the mobile
+    "Filter Planner" sheet).
+    - One row per workspace, personal last as "Personal", with the eye / checkbox and "current"
+      marked.
+    - It toggles all of that workspace's Lists. A List-less workspace uses
+      `calendarHiddenWorkspaceIds`.
+    - Visibility is derived: a workspace shows while any of its Lists does.
+  - The Spaces header now reads "Spaces in <current workspace>".
+  - **Events follow the filter** (`calendarFilteredEvents`): hidden with their workspace, and with
+    their Space when all its Lists are hidden. An event without a Space follows its workspace.
+  - The filter is **remembered on the device**: localStorage `siqt.plannerHidden`, holding hidden
+    List ids and hidden List-less workspace ids. It used to reset on every load.
+- **Not done / open:**
+  - The rest of the cut-off sentence is unknown.
+  - Not decided: whether the Planner should instead follow the current workspace by default.
+    Kept cross-workspace, since that was the design.
+  - Not seen in a browser.
