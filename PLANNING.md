@@ -12029,3 +12029,5 @@ calendar to start once the keyboard is fully down, "bittelitt tregere".
   - Not decided: whether the Planner should instead follow the current workspace by default.
     Kept cross-workspace, since that was the design.
   - Not seen in a browser.
+
+**Deployed 2026-10-07 as `ee4b297`** (tag `deploy/2026-10-07_1109`).
