@@ -110,7 +110,7 @@ import { startDateColor, dueDateColor, DATE_BADGE_COLOR_HEX, startDateTooltip, d
 import ColorSwatchPicker from '../components/ColorSwatchPicker';
 import ConfirmDialog from '../components/ConfirmDialog';
 import FloatingPopover from '../components/FloatingPopover';
-import StatusGlyph, { STATUS_ICONS, statusKind } from '../components/StatusGlyph';
+import StatusEditor from '../components/StatusEditor';
 import { activeGlowStyle } from '../lib/activeGlowStyle';
 import { copyToClipboard } from '../lib/copyToClipboard';
 import { contextMenuPosition } from '../lib/contextMenuPosition';
@@ -309,107 +309,6 @@ function ColumnResizeHandle({ onResize, onReset }: { onResize: (deltaPx: number)
       title="Drag to resize, double-click to reset"
       className={`absolute top-0 right-0 h-full w-2 -mr-1 cursor-col-resize z-10 ${resizing ? 'bg-blue-500/60' : 'hover:bg-blue-500/40'}`}
     />
-  );
-}
-
-function SortableStatusRow({
-  status,
-  colorChoices,
-  onChangeName,
-  onChangeColor,
-  onDelete,
-  onSetKind,
-  onChangeIcon,
-}: {
-  status: StatusDef;
-  colorChoices: string[];
-  onChangeName: (name: string) => void;
-  onChangeColor: (color: string) => void;
-  onDelete: () => void;
-  onSetKind: (kind: 'open' | 'done' | 'closed') => void;
-  onChangeIcon: (icon: string | null) => void;
-}) {
-  const [paletteOpen, setPaletteOpen] = useState(false);
-  const [nameDraft, setNameDraft] = useState(status.name);
-  const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id: status.id });
-  const style = { transform: CSS.Transform.toString(transform), transition, opacity: isDragging ? 0.5 : 1 };
-
-  return (
-    <div ref={setNodeRef} style={style} className="space-y-1">
-      <div className="flex items-center gap-2">
-        <span {...attributes} {...listeners} className="text-neutral-600 hover:text-neutral-400 cursor-grab active:cursor-grabbing shrink-0">
-          <GripVertical className="w-3.5 h-3.5" />
-        </span>
-        {/* The status as its circle looks; a tap opens colour and icon. */}
-        <button onClick={() => setPaletteOpen((o) => !o)} title="Colour and icon" className="shrink-0 cursor-pointer rounded-full hover:scale-110 transition-transform">
-          <StatusGlyph kind={statusKind(status)} color={status.color} icon={status.icon} size={18} />
-        </button>
-        <input
-          value={nameDraft}
-          onChange={(e) => setNameDraft(e.target.value)}
-          onBlur={() => {
-            if (nameDraft.trim() && nameDraft !== status.name) onChangeName(nameDraft.trim());
-            else setNameDraft(status.name);
-          }}
-          onKeyDown={(e) => {
-            if (e.key === 'Enter') (e.target as HTMLInputElement).blur();
-          }}
-          className="flex-1 min-w-0 bg-neutral-950 border border-neutral-700 rounded-lg px-2 py-1 text-[11px] text-app-strong focus:outline-none focus:border-blue-500"
-        />
-        {/* What kind of status this is: Open, Done (the task stays, ticked) or Closed (checks it away). */}
-        <div className="shrink-0 flex rounded-full bg-neutral-800/70 p-0.5">
-          {(['open', 'done', 'closed'] as const).map((k) => {
-            const kind = status.isClosed ? 'closed' : status.isDone ? 'done' : 'open';
-            const on = kind === k;
-            return (
-              <button
-                key={k}
-                onClick={() => !on && onSetKind(k)}
-                title={k === 'open' ? 'Open — still to do' : k === 'done' ? 'Done — stays in the list, ticked' : 'Closed — checks the task away (archived)'}
-                className={`h-5 px-1.5 rounded-full text-[9px] font-semibold capitalize cursor-pointer transition-colors ${
-                  on
-                    ? k === 'open'
-                      ? 'bg-neutral-700 text-app-strong'
-                      : k === 'done'
-                        ? 'bg-emerald-500/20 text-emerald-400'
-                        : 'bg-blue-500/20 text-blue-400'
-                    : 'text-neutral-500 hover:text-neutral-300'
-                }`}
-              >
-                {k}
-              </button>
-            );
-          })}
-        </div>
-        <button onClick={onDelete} className="text-neutral-500 hover:text-red-400 text-xs cursor-pointer shrink-0">
-          <Trash2 className="w-3.5 h-3.5" />
-        </button>
-      </div>
-      {paletteOpen && (
-        <div className="pl-6 space-y-2 pb-1">
-          <ColorSwatchPicker value={status.color} onChange={onChangeColor} choices={colorChoices} size="sm" />
-          {/* The icon inside the circle. "Default" follows the kind: empty when open, solid when done, a
-              tick when closed. */}
-          <div className="flex flex-wrap gap-1">
-            {[null, ...Object.keys(STATUS_ICONS)].map((key) => {
-              const on = (status.icon ?? null) === key;
-              return (
-                <button
-                  key={key ?? 'default'}
-                  onClick={() => !on && onChangeIcon(key)}
-                  title={key ?? 'Default'}
-                  className={`w-7 h-7 rounded-lg flex items-center justify-center cursor-pointer transition-colors ${
-                    on ? 'bg-neutral-700 ring-1 ring-blue-500' : 'hover:bg-neutral-800'
-                  }`}
-                >
-                  <StatusGlyph kind={statusKind(status)} color={status.color} icon={key} size={16} />
-                </button>
-              );
-            })}
-          </div>
-        </div>
-      )}
-    </div>
   );
 }
 
@@ -816,10 +715,6 @@ function PageContent() {
     optimisticSetTitle,
     optimisticSetDescription,
     setTaskPrivacy,
-    createStatus,
-    adoptDefaultStatuses,
-    updateStatus,
-    deleteStatus,
     createCustomField,
     updateCustomField,
     deleteCustomField,
@@ -1767,8 +1662,6 @@ function PageContent() {
     setStatusMenuFocusNew(focusNew);
     setStatusMenuOpen(true);
   };
-  const [newStatusName, setNewStatusName] = useState('');
-  const [newStatusColor, setNewStatusColor] = useState(FIELD_COLOR_CHOICES[0]);
 
   // Status/assignee popovers in the modal (TaskRow has its own local versions)
   const [modalStatusOpen, setModalStatusOpen] = useState(false);
@@ -2148,7 +2041,6 @@ function PageContent() {
     optimisticSetList(taskId, targetListId);
     setFieldConflictPrompt(null);
   };
-  const [statusToDelete, setStatusToDelete] = useState<{ id: string; name: string } | null>(null);
   const [fieldNameDraft, setFieldNameDraft] = useState('');
   const [fieldOptionsDraft, setFieldOptionsDraft] = useState<{ id: string; label: string; color: string }[]>([]);
   const [fieldDateKindDraft, setFieldDateKindDraft] = useState<'deadline' | 'event'>('deadline');
@@ -2196,7 +2088,6 @@ function PageContent() {
     setFieldEditTarget(null);
   };
 
-  const statusSensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 5 } }));
   // "Edit statuses" / "New status" from a status group's "···" menu in a doc's List block
   // (components/collab/TaskListEmbedBlock.tsx), for that List's Space. ("Hvor kan vi edite status nå?"
   // — the window had only been reachable by right-clicking the Status column header.)
@@ -2210,23 +2101,6 @@ function PageContent() {
     window.addEventListener('siqt-edit-statuses', onEdit);
     return () => window.removeEventListener('siqt-edit-statuses', onEdit);
   }, []);
-
-  const handleStatusDragEnd = (event: DragEndEvent) => {
-    const currentSpace = statusSpace;
-    const statuses = statusSpaceStatuses;
-    if (!currentSpace) return;
-    const { active, over } = event;
-    if (!over || active.id === over.id) return;
-    const ids = statuses.map((s) => s.id);
-    const oldIndex = ids.indexOf(active.id as string);
-    const newIndex = ids.indexOf(over.id as string);
-    if (oldIndex === -1 || newIndex === -1) return;
-    useHistoryStore.getState().transaction('Reorder statuses', async () => {
-      await Promise.all(
-        arrayMove(statuses, oldIndex, newIndex).map((s, index) => (s.order !== index ? updateStatus(currentSpace.id, s.id, { order: index }) : null))
-      );
-    });
-  };
 
   // Bulk selection
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
@@ -3297,19 +3171,9 @@ function PageContent() {
     !mobilePersonalSpacesOpen;
 
   const statuses: StatusDef[] = currentSpace?.statuses?.length ? currentSpace.statuses : DEFAULT_STATUSES;
-  // The Space the Manage statuses window edits (see statusMenuSpaceId).
+  // The Space the Edit statuses window edits (see statusMenuSpaceId).
   const statusSpace =
     (statusMenuSpaceId ? workspaces.flatMap((w) => w.spaces).find((sp) => sp.id === statusMenuSpaceId) : undefined) ?? currentSpace;
-  const statusSpaceStatuses: StatusDef[] = statusSpace?.statuses?.length ? statusSpace.statuses : DEFAULT_STATUSES;
-  // A Space still on the built-in defaults gets them as real statuses the moment its Statuses window
-  // opens, so every row there can be edited — the window used to list the defaults read-only, with
-  // only "Create status" working ("Jeg kan ikke edite noe.. Bare lage ny?"). That also fixes the first
-  // custom status replacing the whole default set, which used to orphan every task's status.
-  const statusSpaceNeedsAdopt = statusMenuOpen && !!statusSpace && statusSpace.statuses.length === 0;
-  useEffect(() => {
-    if (statusSpaceNeedsAdopt && statusSpace) void adoptDefaultStatuses(statusSpace.id, DEFAULT_STATUSES);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [statusSpaceNeedsAdopt, statusSpace?.id]);
   // Space-wide fields (listId: null — every field created before per-List scoping existed) always
   // show; a List-scoped field only shows on the List(s) it was actually created on.
   const customFields: CustomFieldDef[] = (currentSpace?.customFields || []).filter(
@@ -3620,17 +3484,6 @@ function PageContent() {
 
   const handleDeleteField = (fieldId: string, fieldName: string) => {
     setFieldToDelete({ id: fieldId, name: fieldName });
-  };
-
-  const handleAddStatus = async () => {
-    if (!newStatusName.trim() || !statusSpace) return;
-    const spaceId = statusSpace.id;
-    // After the defaults, never instead of them.
-    if (statusSpace.statuses.length === 0) await adoptDefaultStatuses(spaceId, DEFAULT_STATUSES);
-    createStatus(spaceId, newStatusName, newStatusColor);
-    // The window stays open: it is where you see the new status land, and statuses tend to be added
-    // several at a time.
-    setNewStatusName('');
   };
 
   // Creates a task in the List on screen (or the first one there is) and returns its id — chosen here,
@@ -8731,124 +8584,21 @@ function PageContent() {
         </div>
       )}
 
-      {/* ================= MANAGE STATUSES MODAL — "Edit statuses" in the Status column's menu (right-click or
-          "···"), in a Space's menu, or in a status group's "···" in a doc List (the siqt-edit-statuses
-          event, for that List's Space) ================= */}
+      {/* ================= EDIT STATUSES (components/StatusEditor.tsx) — from "Edit statuses" in the Status
+          column's menu, the "···" beside Name, a Space's menu, or a status group's "···" in a doc List
+          (the siqt-edit-statuses event, for that List's Space) ================= */}
       {statusMenuOpen && statusSpace && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-scrim/70 backdrop-blur-xs" onClick={() => {
-                setStatusMenuOpen(false);
-                setStatusMenuSpaceId(null);
-              }}>
-          <div onClick={(e) => e.stopPropagation()} className="w-[380px] max-w-[calc(100vw-32px)] bg-neutral-900 border border-neutral-800 rounded-xl shadow-2xl overflow-hidden">
-            <div className="px-5 py-4 border-b border-neutral-800 flex items-center justify-between">
-              <h3 className="font-bold text-sm text-app-strong">Statuses · {statusSpace.name}</h3>
-              <button onClick={() => {
-                setStatusMenuOpen(false);
-                setStatusMenuSpaceId(null);
-              }} className="text-neutral-400 hover:text-app-strong cursor-pointer">
-                <X className="w-3.5 h-3.5" />
-              </button>
-            </div>
-            <div className="p-5 space-y-3 max-h-[70vh] overflow-y-auto">
-              {/* Each status below is Open, Done or Closed (ClickUp's groups). The circle in front of a task
-                  opens these as a menu (components/StatusCircle.tsx): a Done status keeps the task in view,
-                  solid and ticked; a Closed one ("Slett") checks it away — archived, out of the list. Tasks
-                  stay in their order either way, with no separate done section. "for noen tasks trenger
-                  vi at vi ser at den er gjort, ikke bare borte". */}
-              <div className="space-y-1.5">
-                {/* What tapping a task's circle does here: the status menu, or the original "close it now"
-                    ("at man kan toggle om man vil ha den 'gamle' stilen"). See Space.checkMode. */}
-                <div className="px-1">
-                  <p className="text-[10px] font-semibold uppercase tracking-wider text-neutral-500 mb-1.5">Task circle</p>
-                  <div className="flex rounded-lg bg-neutral-800/70 p-0.5">
-                    {(['menu', 'close'] as const).map((m) => {
-                      const on = (statusSpace.checkMode === 'close' ? 'close' : 'menu') === m;
-                      return (
-                        <button
-                          key={m}
-                          onClick={() => !on && updateSpace(statusSpace.id, { checkMode: m })}
-                          className={`flex-1 h-7 rounded-md text-[11.5px] font-medium cursor-pointer transition-colors ${
-                            on ? 'bg-neutral-700 text-app-strong' : 'text-neutral-400 hover:text-neutral-200'
-                          }`}
-                        >
-                          {m === 'menu' ? 'Status menu' : 'Close directly'}
-                        </button>
-                      );
-                    })}
-                  </div>
-                  <p className="text-[10px] text-neutral-500 mt-1 leading-relaxed">
-                    {statusSpace.checkMode === 'close'
-                      ? 'A tap on the circle closes the task at once (archived). Change status in the Status column or the task.'
-                      : 'A tap on the circle opens the statuses to pick from.'}
-                  </p>
-                </div>
-                <button
-                  onClick={() => updateSpace(statusSpace.id, { strikeDone: !statusSpace.strikeDone })}
-                  className="w-full flex items-center gap-2.5 px-2.5 py-2 rounded-lg hover:bg-neutral-800/50 cursor-pointer"
-                >
-                  <span className={`w-7 h-4 rounded-full p-0.5 transition-colors shrink-0 ${statusSpace.strikeDone ? 'bg-blue-500' : 'bg-neutral-700'}`}>
-                    <span className={`block w-3 h-3 rounded-full bg-white transition-transform ${statusSpace.strikeDone ? 'translate-x-3' : ''}`} />
-                  </span>
-                  <span className="text-[12px] text-neutral-200">
-                    Strike through done tasks <span className="line-through text-neutral-500">like this</span>
-                  </span>
-                </button>
-                <p className="text-[10px] text-neutral-500 px-1 leading-relaxed">
-                  <span className="text-neutral-300">Done</span> keeps a task in the list, ticked.{' '}
-                  <span className="text-neutral-300">Closed</span> checks it away (archived).
-                  {statusSpace.statuses.length > 0 && !statusSpace.statuses.some((st) => st.isClosed) &&
-                    ' With no Closed status, the circle offers “Close task”, which does the same.'}
-                </p>
-              </div>
-              <p className="text-[10px] font-semibold uppercase tracking-wider text-neutral-500 pt-1">Statuses</p>
-              {statusSpace.statuses.length > 0 ? (
-                <DndContext sensors={statusSensors} collisionDetection={closestCenter} onDragEnd={handleStatusDragEnd}>
-                  <SortableContext items={statusSpaceStatuses.map((s) => s.id)} strategy={verticalListSortingStrategy}>
-                    <div className="space-y-1.5">
-                      {statusSpaceStatuses.map((s) => (
-                        <SortableStatusRow
-                          key={s.id}
-                          status={s}
-                          colorChoices={FIELD_COLOR_CHOICES}
-                          onChangeName={(name) => updateStatus(statusSpace.id, s.id, { name })}
-                          onChangeColor={(color) => updateStatus(statusSpace.id, s.id, { color })}
-                          onDelete={() => setStatusToDelete({ id: s.id, name: s.name })}
-                          onSetKind={(k) => updateStatus(statusSpace.id, s.id, { isDone: k === 'done', isClosed: k === 'closed' })}
-                          onChangeIcon={(icon) => updateStatus(statusSpace.id, s.id, { icon })}
-                        />
-                      ))}
-                    </div>
-                  </SortableContext>
-                </DndContext>
-              ) : (
-                <>
-                  {statusSpaceStatuses.map((s) => (
-                    <div key={s.id} className="flex items-center gap-2 text-[11px] text-neutral-300 px-2 py-1 opacity-60">
-                      <StatusGlyph kind={statusKind(s)} color={s.color} size={14} />
-                      {s.name}
-                    </div>
-                  ))}
-                  {/* Only for the moment adoptDefaultStatuses takes to turn these into the Space's own. */}
-                  <p className="text-[10px] text-neutral-500 px-2">Setting up this Space&apos;s statuses…</p>
-                </>
-              )}
-              <div className="border-t border-neutral-800 pt-3 mt-1 space-y-1.5">
-                <input
-                  value={newStatusName}
-                  onChange={(e) => setNewStatusName(e.target.value)}
-                  onKeyDown={(e) => e.key === 'Enter' && handleAddStatus()}
-                  autoFocus={statusMenuFocusNew}
-                  placeholder="New status (e.g. Blocked)"
-                  className="w-full bg-neutral-950 border border-neutral-700 rounded-lg px-2 py-1.5 text-xs text-app-strong focus:outline-none focus:border-blue-500"
-                />
-                <ColorSwatchPicker value={newStatusColor} onChange={setNewStatusColor} choices={FIELD_COLOR_CHOICES} size="sm" />
-                <button onClick={handleAddStatus} className="w-full bg-blue-600 hover:bg-blue-500 text-white text-xs py-1.5 rounded cursor-pointer">
-                  Create status
-                </button>
-              </div>
-            </div>
-          </div>
-        </div>
+        <StatusEditor
+          key={statusSpace.id}
+          space={statusSpace}
+          workspaceId={workspaces.find((w) => w.spaces.some((sp) => sp.id === statusSpace.id))?.id ?? null}
+          fallback={DEFAULT_STATUSES}
+          focusNew={statusMenuFocusNew}
+          onClose={() => {
+            setStatusMenuOpen(false);
+            setStatusMenuSpaceId(null);
+          }}
+        />
       )}
 
       {/* ================= TASK / SUBTASK MODAL — less blur, feels more like a window on top ================= */}
@@ -9724,19 +9474,6 @@ function PageContent() {
             setVisibleColumns((cols) => cols.filter((c) => c !== fieldToDelete.id));
           }
           setFieldToDelete(null);
-        }}
-      />
-
-      <ConfirmDialog
-        open={!!statusToDelete}
-        title="Delete status?"
-        message={statusToDelete ? `This deletes the status "${statusToDelete.name}". Tasks using it keep the text but lose the color.` : ''}
-        onCancel={() => setStatusToDelete(null)}
-        onConfirm={() => {
-          if (statusToDelete && statusSpace) {
-            deleteStatus(statusSpace.id, statusToDelete.id);
-          }
-          setStatusToDelete(null);
         }}
       />
 

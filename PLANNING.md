@@ -11942,3 +11942,54 @@ calendar to start once the keyboard is fully down, "bittelitt tregere".
   - "muligheten for å adde templates, og eventuelt sette Default template for nye spaces/lists".
 
 **Deployed 2026-10-06 as `0feb822`** (tag `deploy/2026-10-06_1326`).
+
+### 2026-10-06/07 (continued) — Edit statuses rebuilt after ClickUp's window; status templates
+
+- **Feedback:** "Hvis du ser ClickUp sin meny for å edite statuser, sånn vil vi ha det. Vi vil også ha
+  muligheten for å adde templates, og eventuelt sette Default template for nye spaces/lists."
+  (Screenshot: ClickUp's "Edit Levering TV2 statuses".)
+- **Built: `components/StatusEditor.tsx`** replaces the old Manage statuses modal. Every entry point
+  opens it: Status column menu, "···" by Name, Space menu, doc group "···".
+  - **Left pane:**
+    - **Status template** dropdown: built-ins plus the workspace's saved ones, each with a glyph
+      preview; saved ones can be deleted. It shows "Custom" when the draft matches none.
+    - **New Spaces start with**: the workspace default. Only managers can change it; others see
+      it as text.
+    - **Task circle** (Status menu / Close directly) and the strike-through toggle. These moved
+      here from the old modal.
+  - **Right pane:** **Active / Done / Closed** sections, each with an info tip, a "+" and a dashed
+    "Add status".
+    - Rows: grip (reorder within a section), circle (opens colour + icon), uppercase name edited
+      inline, and "···" (Rename, Colour and icon, Move to <other kind>, Delete status).
+  - **Everything is a draft until "Apply changes"**, which is disabled until something changed.
+    Closing with changes asks first. "Save as template" saves the draft as it stands.
+  - **Removed statuses with tasks** get a second step, "Move tasks from removed statuses", with a
+    target per status (default: the first of the same kind, else the first Active).
+    - Every removed status is mapped even when no tasks are loaded locally, so archived or unloaded
+      tasks are covered.
+  - Validation: names non-empty and unique (case-insensitive), and at least one Active status (new
+    tasks take the first status).
+  - **A Space on the built-in defaults** edits them as a draft. Applying creates them as real
+    statuses, and renames carry the tasks along (`origName`). This replaced the previous round's
+    `adoptDefaultStatuses`-on-open, which wrote to the DB just by opening the window. That action
+    is removed.
+- **Server:**
+  - `PUT /api/spaces/[id]/statuses` applies the whole set in one transaction: task renames go
+    through placeholder names so swaps work, then delete, update and create.
+  - `GET/POST /api/status-templates`, `DELETE /api/status-templates/[id]` (also clears it as the
+    default), `PUT /api/status-templates/default` (managers only).
+  - `POST /api/spaces` creates the default template's statuses for a new Space.
+  - Store: `applySpaceStatuses` (also remaps local tasks).
+- **Migration `20261006160000_status_templates`**: table `StatusTemplate` and
+  `Workspace.default_status_template`, both additive. Verified with `migrate diff` (no
+  difference). It was renamed from Prisma's generated `20261006132753_…` so that it sorts after the
+  hand-named `140000`/`150000` ones.
+- **Built-in templates** (`lib/statusTemplates.ts`): Siqt default, Simple, Norsk (Ikke gjort /
+  Påbegynt / Ferdig (done) / Slett (closed)), Kanban, Scrum.
+- **Not built:**
+  - ClickUp's "Status type: Inherit from Space / Use custom statuses". Statuses are per Space;
+    per-List statuses would need `Status.listId`, and every place that resolves a task's statuses
+    would have to change. So "default template for new **Lists**" is not possible yet.
+  - Undo for "Apply changes".
+  - Old removed pieces: SortableStatusRow and the delete-status confirm in page.tsx.
+- Not seen in a browser.

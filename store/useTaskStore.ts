@@ -426,9 +426,14 @@ interface TaskStore {
   optimisticSetDescription: (taskId: string, description: string | null) => void;
 
   createStatus: (spaceId: string, name: string, color: string, id?: string) => Promise<void>;
-  // Turns the built-in defaults a Space shows while it has no statuses of its own into real ones, so
-  // they can be edited ("Jeg kan ikke edite noe.. Bare lage ny?"). Concurrent calls share one run.
-  adoptDefaultStatuses: (spaceId: string, defs: StatusDef[]) => Promise<void>;
+  // "Apply changes" in the Edit statuses window (components/StatusEditor.tsx): the Space's whole status
+  // set at once, plus which status names move where (renames, and removed statuses' tasks). Returns
+  // an error message, or null.
+  applySpaceStatuses: (
+    spaceId: string,
+    statuses: { id?: string; name: string; color: string; kind: 'open' | 'done' | 'closed'; icon: string | null }[],
+    rename: Record<string, string>
+  ) => Promise<string | null>;
   updateStatus: (
     spaceId: string,
     statusId: string,
@@ -720,10 +725,6 @@ interface TaskStore {
 
 // Appended to every request that loads Spaces or what is in them — see lib/archivedSpaces.ts.
 const archivedSpacesQS = () => (useTaskStore.getState().showArchivedSpaces ? '&archivedSpaces=1' : '');
-
-// adoptDefaultStatuses runs in flight, per Space — a second call joins the first instead of creating
-// the defaults twice.
-const adoptingStatuses = new Map<string, Promise<void>>();
 
 export const useTaskStore = create<TaskStore>((set, get) => {
   // Delete/restore for Space, Folder, List, Task, DocFolder, and Doc all go through the
@@ -1554,31 +1555,32 @@ export const useTaskStore = create<TaskStore>((set, get) => {
       }
     },
 
-    adoptDefaultStatuses: (spaceId, defs) => {
-      const running = adoptingStatuses.get(spaceId);
-      if (running) return running;
-      const space = get().workspaces.flatMap((w) => w.spaces).find((s) => s.id === spaceId);
-      if (!space || space.statuses.length > 0) return Promise.resolve();
-      const run = (async () => {
-        const created: StatusDef[] = [];
-        for (const d of defs) {
-          const res = await fetch('/api/statuses', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ spaceId, name: d.name, color: d.color, order: d.order, isDone: !!d.isDone, isClosed: !!d.isClosed }),
-          });
-          if (!res.ok) break;
-          created.push(await res.json());
-        }
-        set((state) => ({
+    applySpaceStatuses: async (spaceId, statuses, rename) => {
+      const res = await fetch(`/api/spaces/${spaceId}/statuses`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ statuses, rename }),
+      }).catch(() => null);
+      if (!res || !res.ok) {
+        const err = res ? await res.json().catch(() => null) : null;
+        return err?.error ?? 'Could not save the statuses — try again.';
+      }
+      const { statuses: saved } = (await res.json()) as { statuses: StatusDef[] };
+      set((state) => {
+        const space = state.workspaces.flatMap((w) => w.spaces).find((sp) => sp.id === spaceId);
+        const listIds = new Set(space?.lists.map((l) => l.id) ?? []);
+        return {
           workspaces: state.workspaces.map((ws) => ({
             ...ws,
-            spaces: ws.spaces.map((s) => (s.id === spaceId && s.statuses.length === 0 ? { ...s, statuses: created } : s)),
+            spaces: ws.spaces.map((sp) => (sp.id === spaceId ? { ...sp, statuses: saved } : sp)),
           })),
-        }));
-      })().finally(() => adoptingStatuses.delete(spaceId));
-      adoptingStatuses.set(spaceId, run);
-      return run;
+          // The same moves the server made, once per task (a swap must not apply twice).
+          tasks: state.tasks.map((t) =>
+            listIds.has(t.listId) && Object.prototype.hasOwnProperty.call(rename, t.status) ? { ...t, status: rename[t.status] } : t
+          ),
+        };
+      });
+      return null;
     },
 
     createStatus: async (spaceId, name, color, id) => {

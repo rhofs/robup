@@ -39,6 +39,10 @@ model Workspace {
   // the first letter of the name on `color`, which is the whole identity for a workspace that has
   // not uploaded anything — and for most of them that is enough.
   avatarUrl       String?  @map("avatar_url")
+  // The status set a new Space starts with: a StatusTemplate id, or a built-in one's 'builtin:<key>'
+  // (lib/statusTemplates.ts). Null = the built-in default four.
+  defaultStatusTemplate String? @map("default_status_template")
+  statusTemplates StatusTemplate[]
   spaces          Space[]
   rooms           Room[]
   events          Event[]
@@ -437,6 +441,21 @@ model List {
   isPrivate    Boolean       @default(false) @map("is_private")
   accessJson   String        @default("[]") @map("access_json")
   createdAt    DateTime      @default(now()) @map("created_at")
+}
+
+// A saved set of statuses, offered in a Space's Edit statuses window ("Save as template"; ClickUp's
+// status templates). The statuses are a JSON array of { name, color, kind: 'open'|'done'|'closed',
+// icon } in order — a template is a recipe copied into a Space, never linked to one.
+model StatusTemplate {
+  id           String    @id @default(uuid())
+  workspaceId  String    @map("workspace_id")
+  workspace    Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  name         String
+  statusesJson String    @map("statuses_json")
+  createdById  String?   @map("created_by_id")
+  createdAt    DateTime  @default(now()) @map("created_at")
+
+  @@index([workspaceId])
 }
 
 // 5. Egendefinerte statuser per Space
