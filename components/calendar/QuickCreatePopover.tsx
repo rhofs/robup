@@ -5,6 +5,7 @@ import { X, Check, MapPin } from 'lucide-react';
 import { HierarchyWorkspace, AppUser, useTaskStore } from '../../store/useTaskStore';
 import { suggestEventAttendees } from '../../lib/assigneeSuggestions';
 import DatePickerPopover from '../DatePickerPopover';
+import BelongsToPicker, { type BelongsTo } from '../BelongsToPicker';
 import FloatingPopover from '../FloatingPopover';
 import { pickableMembers } from '../../lib/workspaceMembers';
 import AssigneePicker, { PersonPill } from '../AssigneePicker';
@@ -76,7 +77,9 @@ export default function QuickCreatePopover({
   const [dueDate, setDueDate] = useState<string | null>(defaultEndDate);
 
   // Event tab fields
-  const [eventSpaceId, setEventSpaceId] = useState('');
+  // Where the event belongs: its workspace (who sees it, who can attend) and, optionally, a Space.
+  // Starts in the workspace you are in, and says so — it used to be that workspace silently.
+  const [eventHome, setEventHome] = useState<BelongsTo>({ workspaceId: activeWorkspaceId ?? '', spaceId: null });
   const [eventStart, setEventStart] = useState<string | null>(defaultStartDate);
   const [eventEnd, setEventEnd] = useState<string | null>(defaultEndDate ?? defaultStartDate);
   const [allDay, setAllDay] = useState(true);
@@ -98,7 +101,7 @@ export default function QuickCreatePopover({
       setListId('');
       setStartDate(defaultStartDate);
       setDueDate(defaultEndDate);
-      setEventSpaceId('');
+      setEventHome({ workspaceId: activeWorkspaceId ?? '', spaceId: null });
       setEventStart(defaultStartDate);
       setEventEnd(defaultEndDate ?? defaultStartDate);
       setAllDay(true);
@@ -134,21 +137,21 @@ export default function QuickCreatePopover({
   const spaces = workspaces.flatMap((w) => w.spaces).filter((s) => !s.archived);
   const selectedSpace = spaces.find((s) => s.id === spaceId);
   const canCreateTask = title.trim().length > 0 && !!spaceId && !!listId;
-  const canCreateEvent = title.trim().length > 0 && !!eventStart && !!eventEnd && !!activeWorkspaceId;
+  const canCreateEvent = title.trim().length > 0 && !!eventStart && !!eventEnd && !!eventHome.workspaceId;
 
   const handleCreate = () => {
     if (tab === 'task') {
       if (!canCreateTask) return;
       onCreateTask({ title: title.trim(), spaceId, listId, startDate, dueDate });
     } else {
-      if (!canCreateEvent || !activeWorkspaceId) return;
+      if (!canCreateEvent) return;
       onCreateEvent({
         title: title.trim(),
         startDate: eventStart!,
         endDate: eventEnd!,
         allDay,
-        spaceId: eventSpaceId || null,
-        workspaceId: activeWorkspaceId,
+        spaceId: eventHome.spaceId,
+        workspaceId: eventHome.workspaceId,
         assigneeIds,
         location: eventLocation.trim() || null,
         description: eventDescription.trim() || null,
@@ -234,11 +237,20 @@ export default function QuickCreatePopover({
                     className="w-full bg-neutral-950 border border-neutral-700 rounded-lg px-2 py-2 text-xs text-app-strong focus:outline-none focus:border-blue-500"
                   >
                     <option value="">Select a space...</option>
-                    {spaces.map((s) => (
-                      <option key={s.id} value={s.id}>
-                        {s.name}
-                      </option>
-                    ))}
+                    {/* Grouped by workspace, so it is plain where the task will live — and who sees it. */}
+                    {workspaces.map((w) => {
+                      const own = spaces.filter((s) => w.spaces.some((x) => x.id === s.id));
+                      if (!own.length) return null;
+                      return (
+                        <optgroup key={w.id} label={w.isPersonal ? 'Private (only you)' : w.name}>
+                          {own.map((s) => (
+                            <option key={s.id} value={s.id}>
+                              {s.name}
+                            </option>
+                          ))}
+                        </optgroup>
+                      );
+                    })}
                   </select>
                 </div>
 
@@ -298,19 +310,18 @@ export default function QuickCreatePopover({
               aria-hidden={tab !== 'event'}
             >
               <div className="space-y-1.5">
-                <label className="text-[10px] uppercase tracking-wide text-neutral-500 font-semibold">Space (optional, for color)</label>
-                <select
-                  value={eventSpaceId}
-                  onChange={(e) => setEventSpaceId(e.target.value)}
-                  className="w-full bg-neutral-950 border border-neutral-700 rounded-lg px-2 py-2 text-xs text-app-strong focus:outline-none focus:border-blue-500"
-                >
-                  <option value="">No space</option>
-                  {spaces.map((s) => (
-                    <option key={s.id} value={s.id}>
-                      {s.name}
-                    </option>
-                  ))}
-                </select>
+                <label className="text-[10px] uppercase tracking-wide text-neutral-500 font-semibold">Belongs to</label>
+                <BelongsToPicker
+                  full
+                  workspaces={workspaces}
+                  value={eventHome}
+                  onChange={(next) => {
+                    // Attendees come from the event's workspace — anyone not in the new one comes off.
+                    const ws = workspaces.find((w) => w.id === next.workspaceId);
+                    setAssigneeIds((ids) => ids.filter((id) => ws?.members.some((m) => m.id === id)));
+                    setEventHome(next);
+                  }}
+                />
               </div>
 
               <div className="grid grid-cols-2 gap-3">
@@ -407,12 +418,12 @@ export default function QuickCreatePopover({
                       </button>
                     }
                   >
-                    {/* The event is created in the active workspace, so only its members can attend. */}
+                    {/* Only members of the workspace the event belongs to can attend. */}
                     <AssigneePicker
                       heading="Attendees"
-                      people={pickableMembers(workspaces, users, activeWorkspaceId)}
+                      people={pickableMembers(workspaces, users, eventHome.workspaceId)}
                       selectedIds={assigneeIds}
-                      suggestedIds={suggestEventAttendees(useTaskStore.getState().events, activeWorkspaceId)}
+                      suggestedIds={suggestEventAttendees(useTaskStore.getState().events, eventHome.workspaceId)}
                       onToggle={(uid) => setAssigneeIds((prev) => (prev.includes(uid) ? prev.filter((id) => id !== uid) : [...prev, uid]))}
                       currentUserId={currentUserId}
                     />

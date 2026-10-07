@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState } from 'react';
 import { addPuff, makePuffParticles, pushCalmPuffs } from './PuffBurst';
+import { useWhere } from './whereMark';
 import { useTaskAssignDrop, useEventAssignDrop, assignDropClass } from './useAssignDrop';
 import { MiniAvatar } from '../AssigneePicker';
 import { Plus, Pin, CalendarClock } from 'lucide-react';
@@ -834,6 +835,7 @@ function EventBar({
 }) {
   const [hovered, setHovered] = useState(false);
   const { isOver, refused, justAssigned, dropProps } = useEventAssignDrop(event);
+  const where = useWhere({ event });
   return (
     <div
       {...dropProps}
@@ -846,7 +848,7 @@ function EventBar({
         onPointerUp={isMobile ? undefined : (e) => onEndInteraction(e, event.id, 'move')}
         onMouseEnter={() => setHovered(true)}
         onMouseLeave={() => setHovered(false)}
-        title={event.title}
+        title={where.tooltip}
         // Dashed border (Tasks are always solid) is the at-a-glance Task-vs-Event tell in every
         // Planner granularity, alongside the CalendarClock icon — a plain color difference alone
         // isn't reliable since either can be given any color.
@@ -864,6 +866,7 @@ function EventBar({
         ) : (
           <CalendarClock className="w-2.5 h-2.5 shrink-0" />
         )}
+        {seg.isStartEdge && where.mark}
         <span className="truncate flex-1">{event.title}</span>
         <BarAssignees people={event.assignees} />
       </button>
@@ -919,6 +922,7 @@ function TaskBar({
   const [hovered, setHovered] = useState(false);
   const assignees = task.assignees;
   const { isOver, refused, justAssigned, dropProps } = useTaskAssignDrop(task);
+  const where = useWhere({ task });
   return (
     <div
       {...dropProps}
@@ -933,7 +937,7 @@ function TaskBar({
         onPointerUp={isMobile ? undefined : (e) => onEndInteraction(e, task.id, 'move')}
         onMouseEnter={() => setHovered(true)}
         onMouseLeave={() => setHovered(false)}
-        title={task.title}
+        title={where.tooltip}
         // "Information sitting inside the calendar" — a tinted background + colored border +
         // colored text, all derived from the one cascaded color, rather than a solid fill.
         className={`siqt-bar relative h-full flex items-center gap-1 text-[10px] leading-none font-medium truncate cursor-grab active:cursor-grabbing select-none border transition-colors ${
@@ -950,6 +954,7 @@ function TaskBar({
           ...(seg.isOverflowCut ? { borderRightStyle: 'dashed' as const, borderRightWidth: 2 } : {}),
         }}
       >
+        {seg.isStartEdge && where.mark}
         <span className="truncate flex-1">{task.title}</span>
 
         {/* Assignee avatar(s) — only where there's real room (the segment's trailing edge), same

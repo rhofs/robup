@@ -12065,3 +12065,50 @@ calendar to start once the keyboard is fully down, "bittelitt tregere".
   4. A one-time data repair migration: events whose Space is in another workspace get the Space's
      workspace (this fixes "Sende Goodiebags"). Private events cannot be repaired automatically;
      "Ulle og Rob HotD-kveld" is moved by hand with the new picker.
+
+### 2026-10-07 (continued) — where things belong: "Belongs to" for events, markers, task path, data repair
+
+- **User:** "Kjør alle 5 i en runde. Sett i gang!" All five proposals from the entry above are
+  built, including the data repair migration the user approved.
+- **1. "Belongs to" for events** (`components/BelongsToPicker.tsx`).
+  - It replaces "Space (optional, for color)" in the desktop quick create, the mobile create sheet
+    (its own sheet, same grouping) and the event window.
+  - Grouping: "Private — only you" (lock) first, then each workspace with "no Space" and its Spaces
+    under it. The chip shows "Workspace › Space" or "Private — only you".
+  - Create starts on the active workspace, as before, but now visibly. Attendees follow the chosen
+    workspace: the picker offers its members, and switching drops non-members.
+- **2. Moving events.**
+  - `PATCH /api/events/[id]` accepts `workspaceId`. With a Space, the Space's workspace wins. The
+    target workspace needs membership.
+  - A move:
+    - keeps only attendees who are members of the new workspace (the window confirms first,
+      naming who comes off);
+    - takes the Google copies off the old workspace's calendars and deletes the sync rows; the
+      re-sync then creates them on the new workspace's calendars;
+    - logs "Flyttet til <workspace>" (`moved` activity kind, with an icon in EventActivityPanel).
+  - The store's `updateEvent` also derives the workspace from a Space, and takes the server's
+    assignees after a move.
+  - **Undo of a move restores the workspace but not attendees that were dropped.**
+- **3. Seeing where things belong.**
+  - Planner bars (month/week `WeekRow`, Day view chips and blocks) use `components/calendar/whereMark.tsx`:
+    - a lock in front of private items (Personal workspace);
+    - a workspace-colour dot, but only when you are in two or more shared workspaces;
+    - tooltip "Title — Workspace › Space" everywhere.
+    - Workspace colour: `workspaceColor` in `lib/whereIs.ts`, the workspace's own colour or a
+      stable one picked from its id.
+  - The task window's breadcrumb now starts with the task's **real** "Workspace › Space › List".
+    It used to show the Space open behind it, which said nothing true from the Planner or My
+    Tasks. A lock means Private; a grey lock means a private task in a shared workspace.
+  - The quick create's task Space select is grouped by workspace (optgroups). The mobile "Create
+    in" sheet has workspace headers.
+- **4. Server rule:** `POST /api/events` with a Space uses the Space's workspace, whatever was sent;
+  PATCH does the same.
+- **5. Data repair:** migration **`20261007120000_event_workspace_follows_space`** (data only)
+  sets each event's workspace to its Space's workspace where they differ.
+  - Tested on a scratch DB with fixtures: the wrong one moved; correct, Space-less and dangling
+    ones were untouched.
+  - Not touched by it: attendees from the old workspace, and Google copies, which stay on the old
+    calendar until the event is next edited.
+  - Private events cannot be repaired automatically. "Ulle og Rob HotD-kveld" is for the user to
+    move with "Belongs to".
+- Not seen in a browser.

@@ -4,7 +4,8 @@ import SheetLayer from './SheetLayer';
 import { useMemo, useState } from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
 import { fullViewportBox, liveOverlayStyle, overlayStyle, useVisibleViewport } from '../../hooks/useVisibleViewport';
-import { X, CalendarDays, MapPin, Palette, Layers, UserCircle, ChevronDown, Check, ListChecks } from 'lucide-react';
+import { X, CalendarDays, MapPin, Palette, Layers, UserCircle, ChevronDown, Check, ListChecks, Lock } from 'lucide-react';
+import { homeLabel, workspaceColor } from '../../lib/whereIs';
 import type { AppUser, HierarchyWorkspace } from '../../store/useTaskStore';
 import { useTaskStore } from '../../store/useTaskStore';
 import { useSessionStore } from '../../store/useSessionStore';
@@ -144,7 +145,9 @@ export default function MobileQuickCreateSheet({
 
   const [spaceId, setSpaceId] = useState('');
   const [listId, setListId] = useState('');
-  const [eventSpaceId, setEventSpaceId] = useState('');
+  // Where the event belongs — workspace (who sees it, who can attend) and optionally a Space. Starts in
+  // the workspace you are in, and shows it (it used to be that workspace silently).
+  const [eventHome, setEventHome] = useState<{ workspaceId: string; spaceId: string | null }>({ workspaceId: activeWorkspaceId ?? '', spaceId: null });
   const [location, setLocation] = useState('');
   const [color, setColor] = useState<string | null>(null);
   const [assigneeIds, setAssigneeIds] = useState<string[]>([]);
@@ -155,11 +158,12 @@ export default function MobileQuickCreateSheet({
   // Not archived Spaces: new work does not go into one that has been put away.
   const spaces = useMemo(() => workspaces.flatMap((w) => w.spaces).filter((s) => !s.archived), [workspaces]);
   const list = spaces.flatMap((s) => s.lists).find((l) => l.id === listId);
-  const eventSpace = spaces.find((s) => s.id === eventSpaceId);
+  const homeWs = workspaces.find((w) => w.id === eventHome.workspaceId);
+  const homeSpace = eventHome.spaceId ? homeWs?.spaces.find((s) => s.id === eventHome.spaceId) : undefined;
   const attendees = users.filter((u) => assigneeIds.includes(u.id));
 
   const isTask = tab === 'task';
-  const canCreate = isTask ? !!title.trim() && !!listId : !!title.trim() && !!start && !!activeWorkspaceId;
+  const canCreate = isTask ? !!title.trim() && !!listId : !!title.trim() && !!start && !!eventHome.workspaceId;
 
   const create = () => {
     if (!canCreate) return;
@@ -174,8 +178,8 @@ export default function MobileQuickCreateSheet({
         // All day unless a time was picked — the choice the old form made with a checkbox, made by
         // whether "Add time" was used.
         allDay: !hasTime(start) && !hasTime(eventEnd),
-        spaceId: eventSpaceId || null,
-        workspaceId: activeWorkspaceId!,
+        spaceId: eventHome.spaceId,
+        workspaceId: eventHome.workspaceId,
         assigneeIds,
         location: location.trim() || null,
         description: description.trim() || null,
@@ -275,8 +279,11 @@ export default function MobileQuickCreateSheet({
                     className="w-full bg-transparent text-[17px] text-app-strong placeholder:text-neutral-500 focus:outline-none py-2"
                   />
                 </Row>
-                <Row icon={Layers} onClick={() => setSheet('space')}>
-                  <span className={`text-[17px] ${eventSpace ? 'text-app-strong' : 'text-neutral-500'}`}>{eventSpace ? eventSpace.name : 'Space (for color)'}</span>
+                <Row icon={homeWs?.isPersonal ? Lock : Layers} onClick={() => setSheet('space')}>
+                  <span className="text-[17px] text-app-strong truncate">
+                    {homeLabel({ workspace: homeWs, space: homeSpace, personal: !!homeWs?.isPersonal })}
+                    {homeWs?.isPersonal && <span className="text-neutral-500"> — only you</span>}
+                  </span>
                 </Row>
                 <Row icon={Palette}>
                   <div className="py-2">
@@ -319,8 +326,19 @@ export default function MobileQuickCreateSheet({
         )}
         {sheet === 'list' && (
           <PickSheet title="Create in" noKeyboard onClose={() => setSheet(null)}>
-            {spaces.map((sp) => (
+            {spaces.map((sp, i) => (
               <div key={sp.id} className="pb-2">
+                {/* The workspace once, above its first Space — where the task will live, and who sees it. */}
+                {(() => {
+                  const ws = workspaces.find((w) => w.spaces.some((x) => x.id === sp.id));
+                  const prev = i > 0 ? workspaces.find((w) => w.spaces.some((x) => x.id === spaces[i - 1].id)) : undefined;
+                  return ws && ws.id !== prev?.id ? (
+                    <p className="flex items-center gap-1.5 px-2 pt-3 pb-1 text-[13px] font-semibold text-app-strong">
+                      {ws.isPersonal && <Lock className="w-3.5 h-3.5 text-amber-400" />}
+                      {ws.isPersonal ? 'Private — only you' : ws.name}
+                    </p>
+                  ) : null;
+                })()}
                 <p className="px-2 pt-2 pb-1 text-[12px] font-semibold uppercase tracking-wider text-neutral-500">{sp.name}</p>
                 {sp.lists
                   .filter((l) => !l.archived && !l.docId)
@@ -344,30 +362,55 @@ export default function MobileQuickCreateSheet({
           </PickSheet>
         )}
         {sheet === 'space' && (
-          <PickSheet title="Space" noKeyboard onClose={() => setSheet(null)}>
-            {[{ id: '', name: 'No space' }, ...spaces].map((sp) => (
-              <button
-                key={sp.id || 'none'}
-                onClick={() => {
-                  setEventSpaceId(sp.id);
+          <PickSheet title="Belongs to" noKeyboard onClose={() => setSheet(null)}>
+            {[...workspaces]
+              .sort((a, b) => Number(b.isPersonal) - Number(a.isPersonal))
+              .map((w) => {
+                const pick = (spaceId: string | null) => {
+                  // Attendees come from the event's workspace — anyone not in the new one comes off.
+                  setAssigneeIds((ids) => ids.filter((id) => w.members.some((m) => m.id === id)));
+                  setEventHome({ workspaceId: w.id, spaceId });
                   setSheet(null);
-                }}
-                className="w-full flex items-center gap-3 px-2 h-12 rounded-xl text-left active:bg-neutral-800 cursor-pointer"
-              >
-                <Layers className="w-5 h-5 text-neutral-500 shrink-0" />
-                <span className="flex-1 text-[16px] text-app-strong truncate">{sp.name}</span>
-                {sp.id === eventSpaceId && <Check className="w-5 h-5 text-blue-500" />}
-              </button>
-            ))}
+                };
+                return (
+                  <div key={w.id} className="pb-2 mb-1 border-b border-neutral-800/70 last:border-b-0">
+                    <button onClick={() => pick(null)} className="w-full flex items-center gap-3 px-2 h-12 rounded-xl text-left active:bg-neutral-800 cursor-pointer">
+                      {w.isPersonal ? (
+                        <Lock className="w-5 h-5 text-amber-400 shrink-0" />
+                      ) : (
+                        <span className="w-5 h-5 flex items-center justify-center shrink-0">
+                          <span className="w-3 h-3 rounded-full" style={{ backgroundColor: workspaceColor(w) }} />
+                        </span>
+                      )}
+                      <span className="flex-1 text-[16px] font-semibold text-app-strong truncate">{w.isPersonal ? 'Private' : w.name}</span>
+                      <span className="text-[12px] text-neutral-500">{w.isPersonal ? 'only you' : 'no Space'}</span>
+                      {eventHome.workspaceId === w.id && !eventHome.spaceId && <Check className="w-5 h-5 text-blue-500" />}
+                    </button>
+                    {w.spaces
+                      .filter((sp) => !sp.archived)
+                      .map((sp) => (
+                        <button
+                          key={sp.id}
+                          onClick={() => pick(sp.id)}
+                          className="w-full flex items-center gap-3 pl-10 pr-2 h-11 rounded-xl text-left active:bg-neutral-800 cursor-pointer"
+                        >
+                          <span className="w-2.5 h-2.5 rounded-full shrink-0" style={{ backgroundColor: sp.color || '#6b7280' }} />
+                          <span className="flex-1 text-[15px] text-neutral-200 truncate">{sp.name}</span>
+                          {sp.id === eventHome.spaceId && <Check className="w-5 h-5 text-blue-500" />}
+                        </button>
+                      ))}
+                  </div>
+                );
+              })}
           </PickSheet>
         )}
         {sheet === 'people' && (
           <PickSheet title="Attendees" onClose={() => setSheet(null)}>
             <AssigneePicker
               heading="Attendees"
-              people={pickableMembers(workspaces, users, activeWorkspaceId)}
+              people={pickableMembers(workspaces, users, eventHome.workspaceId)}
               selectedIds={assigneeIds}
-              suggestedIds={suggestEventAttendees(useTaskStore.getState().events, activeWorkspaceId)}
+              suggestedIds={suggestEventAttendees(useTaskStore.getState().events, eventHome.workspaceId)}
               onToggle={(uid) => setAssigneeIds((prev) => (prev.includes(uid) ? prev.filter((id) => id !== uid) : [...prev, uid]))}
               currentUserId={currentUserId}
               autoFocus={false}

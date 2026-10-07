@@ -36,6 +36,13 @@ export async function POST(req: Request) {
   const body = await req.json();
   const userId = await getCurrentUserId();
   if (!userId) return NextResponse.json({ error: 'Not authenticated' }, { status: 401 });
+  // An event with a Space belongs to that Space's workspace, whatever workspace it was created from
+  // (see PATCH in [id]/route.ts).
+  if (body.spaceId) {
+    const space = await prisma.space.findUnique({ where: { id: body.spaceId }, select: { workspaceId: true } });
+    if (!space) return NextResponse.json({ error: 'Space not found' }, { status: 400 });
+    body.workspaceId = space.workspaceId;
+  }
   const ctx = await getAccessContext(body.workspaceId, userId);
   if (!ctx.isMember) return NextResponse.json({ error: 'Not a workspace member' }, { status: 403 });
   // Attendees from this workspace only — see keepWorkspaceMembers.

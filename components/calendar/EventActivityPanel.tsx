@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { MessageSquare, Pencil, CalendarClock, UserCircle } from 'lucide-react';
+import { MessageSquare, Pencil, CalendarClock, UserCircle, MoveRight } from 'lucide-react';
 import { useTaskStore } from '../../store/useTaskStore';
 
 // Small, Event-scoped icon map — Event's own PATCH route (app/api/events/[id]/route.ts) only
@@ -12,6 +12,7 @@ const EVENT_ACTIVITY_ICONS: Record<string, typeof Pencil> = {
   datesChanged: CalendarClock,
   assigned: UserCircle,
   unassigned: UserCircle,
+  moved: MoveRight,
 };
 
 const timeAgo = (dateStr: string) => {

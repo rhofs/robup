@@ -397,6 +397,9 @@ interface TaskStore {
       allDay?: boolean;
       color?: string | null;
       spaceId?: string | null;
+      // Moving it to another workspace (the event window's "Belongs to"). With a Space, the Space's
+      // workspace wins — here and on the server.
+      workspaceId?: string;
     }
   ) => Promise<void>;
   optimisticSetEventAssignees: (eventId: string, assigneeIds: string[]) => Promise<void>;
@@ -1114,6 +1117,11 @@ export const useTaskStore = create<TaskStore>((set, get) => {
 
     updateEvent: async (eventId, patch) => {
       const oldEvent = get().events.find((e) => e.id === eventId);
+      if (patch.spaceId) {
+        const owner = get().workspaces.find((w) => w.spaces.some((s) => s.id === patch.spaceId));
+        if (owner) patch = { ...patch, workspaceId: owner.id };
+      }
+      const moving = !!oldEvent && patch.workspaceId !== undefined && patch.workspaceId !== oldEvent.workspaceId;
       set((state) => ({
         events: state.events.map((e) =>
           e.id === eventId
@@ -1126,11 +1134,20 @@ export const useTaskStore = create<TaskStore>((set, get) => {
             : e
         ),
       }));
-      await fetch(`/api/events/${eventId}`, {
+      const res = await fetch(`/api/events/${eventId}`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(patch),
-      });
+      }).catch(() => null);
+      // A move drops attendees who are not in the new workspace — take the server's word for who is left.
+      if (moving && res?.ok) {
+        const saved = (await res.json().catch(() => null)) as Event | null;
+        if (saved) {
+          set((state) => ({
+            events: state.events.map((e) => (e.id === eventId ? { ...e, workspaceId: saved.workspaceId, assignees: saved.assignees ?? e.assignees } : e)),
+          }));
+        }
+      }
       if (oldEvent) {
         const oldPatch: typeof patch = {};
         if (patch.title !== undefined) oldPatch.title = oldEvent.title;
@@ -1141,6 +1158,7 @@ export const useTaskStore = create<TaskStore>((set, get) => {
         if (patch.allDay !== undefined) oldPatch.allDay = oldEvent.allDay;
         if (patch.color !== undefined) oldPatch.color = oldEvent.color;
         if (patch.spaceId !== undefined) oldPatch.spaceId = oldEvent.spaceId;
+        if (patch.workspaceId !== undefined) oldPatch.workspaceId = oldEvent.workspaceId;
         useHistoryStore.getState().pushCoalesced(`event-${eventId}`, {
           label: 'Edit event',
           undo: () => get().updateEvent(eventId, oldPatch),

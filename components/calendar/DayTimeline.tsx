@@ -2,6 +2,7 @@
 
 import { useLayoutEffect, useRef, useState } from 'react';
 import { useTaskAssignDrop, useEventAssignDrop, assignDropClass } from './useAssignDrop';
+import { useWhere } from './whereMark';
 import { CalendarClock } from 'lucide-react';
 import GoogleIcon from '../icons/GoogleIcon';
 import { isSameDay } from '../../lib/calendarDates';
@@ -325,6 +326,7 @@ function AllDayChip({
   isEvent,
   fromGoogle,
   drop,
+  where,
 }: {
   label: string;
   color: string;
@@ -332,6 +334,8 @@ function AllDayChip({
   isEvent?: boolean;
   fromGoogle?: boolean;
   drop?: ReturnType<typeof useTaskAssignDrop>;
+  // Where it belongs (whereMark.tsx): the lock / workspace dot, and the hover text.
+  where?: ReturnType<typeof useWhere>;
 }) {
   const [hovered, setHovered] = useState(false);
   return (
@@ -340,7 +344,7 @@ function AllDayChip({
       onClick={onClick}
       onMouseEnter={() => setHovered(true)}
       onMouseLeave={() => setHovered(false)}
-      title={label}
+      title={where?.tooltip ?? label}
       // Dashed border + CalendarClock icon for Events, same Task-vs-Event tell as everywhere
       // else in Planner — plain-color alone isn't reliable since either can be any color.
       className={`relative w-full text-left truncate text-[11px] font-medium px-2 py-1 rounded-md border cursor-pointer transition-colors flex items-center gap-1 ${
@@ -353,6 +357,7 @@ function AllDayChip({
       }}
     >
       {isEvent && (fromGoogle ? <GoogleIcon className="w-2.5 h-2.5 shrink-0" /> : <CalendarClock className="w-2.5 h-2.5 shrink-0" />)}
+      {where?.mark}
       <span className="truncate">{label}</span>
     </button>
   );
@@ -362,12 +367,14 @@ function AllDayChip({
 // cannot be called per item inside the .map above.
 function TaskAllDayChip({ task, color, onClick }: { task: Task; color: string; onClick: () => void }) {
   const drop = useTaskAssignDrop(task);
-  return <AllDayChip label={task.title} color={color} onClick={onClick} drop={drop} />;
+  const where = useWhere({ task });
+  return <AllDayChip label={task.title} color={color} onClick={onClick} drop={drop} where={where} />;
 }
 
 function EventAllDayChip({ event, color, onClick, isEvent, fromGoogle }: { event: Event; color: string; onClick: () => void; isEvent?: boolean; fromGoogle?: boolean }) {
   const drop = useEventAssignDrop(event);
-  return <AllDayChip label={event.title} color={color} onClick={onClick} isEvent={isEvent} fromGoogle={fromGoogle} drop={drop} />;
+  const where = useWhere({ event });
+  return <AllDayChip label={event.title} color={color} onClick={onClick} isEvent={isEvent} fromGoogle={fromGoogle} drop={drop} where={where} />;
 }
 
 function DayEventBlock({
@@ -397,6 +404,7 @@ function DayEventBlock({
 }) {
   const [hovered, setHovered] = useState(false);
   const { isOver, refused, justAssigned, dropProps } = useEventAssignDrop(event);
+  const where = useWhere({ event });
   return (
     <div {...dropProps} className={`absolute ${assignDropClass(isOver, justAssigned, refused)}`} style={style}>
       <button
@@ -406,7 +414,7 @@ function DayEventBlock({
         onPointerUp={isMobile ? undefined : (e) => onEndInteraction(e, event.id, start, end)}
         onMouseEnter={() => setHovered(true)}
         onMouseLeave={() => setHovered(false)}
-        title={event.title}
+        title={where.tooltip}
         // Dashed border + CalendarClock icon — same Task-vs-Event tell as WeekRow.tsx's EventBar,
         // kept visually consistent across every Planner granularity.
         className={`relative w-full h-full rounded-md px-2.5 py-1 text-[10px] font-medium leading-tight truncate cursor-grab active:cursor-grabbing text-left border border-dashed transition-colors flex items-center gap-1 ${
@@ -423,6 +431,7 @@ function DayEventBlock({
         ) : (
           <CalendarClock className="w-2.5 h-2.5 shrink-0" />
         )}
+        {where.mark}
         <span className="truncate">{event.title}</span>
       </button>
       {/* Resize (stretch/shrink either edge), same as DayTaskBlock — the button above already
@@ -476,6 +485,7 @@ function DayTaskBlock({
   const [hovered, setHovered] = useState(false);
   const height = typeof style.height === 'number' ? style.height : 0;
   const { isOver, refused, justAssigned, dropProps } = useTaskAssignDrop(task);
+  const where = useWhere({ task });
   return (
     <div {...dropProps} className={`absolute group/block ${assignDropClass(isOver, justAssigned, refused)}`} style={style}>
       <div
@@ -485,7 +495,7 @@ function DayTaskBlock({
         onClick={isMobile ? () => onOpenTask(task.id) : undefined}
         onMouseEnter={() => setHovered(true)}
         onMouseLeave={() => setHovered(false)}
-        title={task.title}
+        title={where.tooltip}
         className={`relative h-full rounded-md px-2.5 py-1.5 text-[10px] font-medium cursor-grab active:cursor-grabbing select-none flex flex-col border transition-colors ${
           isDraggingThis ? 'opacity-70 ring-2 ring-app-strong/70' : ''
         }`}
@@ -497,7 +507,10 @@ function DayTaskBlock({
       >
         {/* leading-tight and shrink-0: in a flex column a text node will happily be squeezed below
             its own line height, which is the other half of how the title lost its descenders. */}
-        <span className="truncate leading-tight shrink-0">{task.title}</span>
+        <span className="truncate leading-tight shrink-0 flex items-center gap-1">
+          {where.mark}
+          <span className="truncate">{task.title}</span>
+        </span>
         {task.assignees.length > 0 && height >= 34 && (
           <span className="flex items-center -space-x-1 mt-0.5">
             {task.assignees.slice(0, 3).map((a) => (

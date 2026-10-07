@@ -2,6 +2,7 @@
 
 import { useState } from 'react';
 import { pickableMembers } from '../../lib/workspaceMembers';
+import BelongsToPicker from '../BelongsToPicker';
 import AssigneePicker, { PersonPill } from '../AssigneePicker';
 import { suggestEventAttendees } from '../../lib/assigneeSuggestions';
 import { X, Trash2, Check, MapPin } from 'lucide-react';
@@ -34,6 +35,7 @@ type EventDetailModalProps = {
     allDay?: boolean;
     color?: string | null;
     spaceId?: string | null;
+    workspaceId?: string;
   }) => void;
   onSetAssignees: (assigneeIds: string[]) => void;
   onDelete: () => void;
@@ -50,7 +52,6 @@ export default function EventDetailModal({ event, workspaces, users, currentUser
 
   if (!event) return null;
 
-  const spaces = workspaces.flatMap((w) => w.spaces);
   // Per-assignee sync now (see EventGoogleSync in schema.prisma) — the badge only speaks for the
   // person actually looking at it: is *this* viewer's own Google Calendar one of the ones this
   // event is mirrored to. A teammate's own sync status isn't this viewer's business to see here.
@@ -105,6 +106,30 @@ export default function EventDetailModal({ event, workspaces, users, currentUser
         </div>
 
         <div className="p-5 space-y-3 max-h-[80vh] overflow-y-auto">
+          {/* Where the event belongs — who sees it, who can be on it — and how it moves. */}
+          <div className="space-y-1.5">
+            <label className="text-[10px] uppercase tracking-wide text-neutral-500 font-semibold">Belongs to</label>
+            <BelongsToPicker
+              full
+              workspaces={workspaces}
+              value={{ workspaceId: event.workspaceId, spaceId: event.spaceId }}
+              onChange={(next) => {
+                if (next.workspaceId !== event.workspaceId) {
+                  const target = workspaces.find((w) => w.id === next.workspaceId);
+                  const leaving = event.assignees.filter((a) => !target?.members.some((m) => m.id === a.id));
+                  const where = target?.isPersonal ? 'Private' : target?.name ?? 'that workspace';
+                  if (
+                    leaving.length > 0 &&
+                    !window.confirm(
+                      `${leaving.map((a) => a.name.split(' ')[0]).join(', ')} ${leaving.length === 1 ? "isn't" : "aren't"} in ${where}, and will come off this event. Move it anyway?`
+                    )
+                  )
+                    return;
+                }
+                onUpdate({ workspaceId: next.workspaceId, spaceId: next.spaceId });
+              }}
+            />
+          </div>
           <div className="grid grid-cols-2 gap-3">
             <div className="space-y-1.5">
               <label className="text-[10px] uppercase tracking-wide text-neutral-500 font-semibold">Start</label>
@@ -154,22 +179,6 @@ export default function EventDetailModal({ event, workspaces, users, currentUser
             </span>
             All day
           </button>
-
-          <div className="space-y-1.5">
-            <label className="text-[10px] uppercase tracking-wide text-neutral-500 font-semibold">Space (for color)</label>
-            <select
-              value={event.spaceId ?? ''}
-              onChange={(e) => onUpdate({ spaceId: e.target.value || null })}
-              className="w-full bg-neutral-950 border border-neutral-700 rounded-lg px-2 py-2 text-xs text-app-strong focus:outline-none focus:border-blue-500"
-            >
-              <option value="">No space</option>
-              {spaces.map((s) => (
-                <option key={s.id} value={s.id}>
-                  {s.name}
-                </option>
-              ))}
-            </select>
-          </div>
 
           {!event.spaceId && (
             <div className="space-y-1.5">

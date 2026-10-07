@@ -2,7 +2,7 @@ import { NextResponse } from 'next/server';
 import { prisma, publicUserSelect } from '@/lib/prisma';
 import { getCurrentUserId } from '@/lib/auth/session';
 import { ensureEventAccess } from '@/lib/auth/resourceAccess';
-import { keepWorkspaceMembers } from '@/lib/auth/access';
+import { getAccessContext, keepWorkspaceMembers } from '@/lib/auth/access';
 import { syncEventForAllRelevantUsers, deleteEventGoogleSyncs } from '@/lib/google/calendarSync';
 
 // Event itself has no isPrivate of its own (workspace-scoped only), so a plain membership check
@@ -33,6 +33,28 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
   }
 
   const existing = await prisma.event.findUnique({ where: { id }, include: { assignees: true } });
+  if (!existing) return NextResponse.json({ error: 'Event not found' }, { status: 404 });
+
+  // Where the event belongs ("Belongs to" in the event window). An event with a Space always lives in
+  // that Space's workspace — the two used to be set independently (the workspace silently from
+  // whichever one happened to be active, the Space from any workspace), which filed events from one
+  // workspace's Space under another workspace, and made "private" (the Personal workspace) an
+  // accident of where you were standing. Without a Space, body.workspaceId moves it.
+  let targetWorkspaceId = existing.workspaceId;
+  if (body.spaceId !== undefined || body.workspaceId !== undefined) {
+    const spaceId: string | null = body.spaceId !== undefined ? body.spaceId : existing.spaceId;
+    if (spaceId) {
+      const space = await prisma.space.findUnique({ where: { id: spaceId }, select: { workspaceId: true } });
+      if (!space) return NextResponse.json({ error: 'Space not found' }, { status: 400 });
+      targetWorkspaceId = space.workspaceId;
+    } else if (typeof body.workspaceId === 'string' && body.workspaceId) {
+      targetWorkspaceId = body.workspaceId;
+    }
+  }
+  const moving = targetWorkspaceId !== existing.workspaceId;
+  if (moving && !(await getAccessContext(targetWorkspaceId, userId)).isMember) {
+    return NextResponse.json({ error: 'Not a member of that workspace' }, { status: 403 });
+  }
 
   const data: any = {};
   if (body.title !== undefined) data.title = body.title;
@@ -43,7 +65,16 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
   if (body.allDay !== undefined) data.allDay = body.allDay;
   if (body.color !== undefined) data.color = body.color;
   if (body.spaceId !== undefined) data.spaceId = body.spaceId;
-  if (body.assigneeIds !== undefined) {
+  if (moving) {
+    data.workspaceId = targetWorkspaceId;
+    // Attendees come from the event's workspace; whoever is not in the new one comes off (the window
+    // warns before the move). Their Google copies live on the old workspace's calendars, so those are
+    // taken down now and made afresh on the new ones by the sync below.
+    body.assigneeIds = await keepWorkspaceMembers(targetWorkspaceId, body.assigneeIds ?? existing.assignees.map((a) => a.id));
+    data.assignees = { set: body.assigneeIds.map((uid: string) => ({ id: uid })) };
+    await deleteEventGoogleSyncs(id);
+    await prisma.eventGoogleSync.deleteMany({ where: { eventId: id } });
+  } else if (body.assigneeIds !== undefined) {
     // Same workspace-membership rule as a task's assignees — see keepWorkspaceMembers.
     body.assigneeIds = await keepWorkspaceMembers(access.event.workspaceId, body.assigneeIds, existing?.assignees.map((a) => a.id));
     data.assignees = { set: body.assigneeIds.map((uid: string) => ({ id: uid })) };
@@ -61,6 +92,10 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
   // until this session's schema change), which is what backlog #12 flagged: stretching an
   // Event's date range in Planner had nowhere to log to.
   const activities: { body: string; kind: string }[] = [];
+  if (moving) {
+    const ws = await prisma.workspace.findUnique({ where: { id: targetWorkspaceId }, select: { name: true, isPersonal: true } });
+    activities.push({ body: ws?.isPersonal ? 'Flyttet til Privat' : `Flyttet til ${ws?.name ?? 'et annet workspace'}`, kind: 'moved' });
+  }
   if (!body.skipActivityLog && existing) {
     if (body.title !== undefined && body.title !== existing.title) {
       activities.push({ body: `Tittel endret til «${body.title}»`, kind: 'title' });

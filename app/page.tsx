@@ -111,6 +111,7 @@ import ColorSwatchPicker from '../components/ColorSwatchPicker';
 import ConfirmDialog from '../components/ConfirmDialog';
 import FloatingPopover from '../components/FloatingPopover';
 import StatusEditor from '../components/StatusEditor';
+import { homeLabel, homeOfTask, workspaceColor } from '../lib/whereIs';
 import { activeGlowStyle } from '../lib/activeGlowStyle';
 import { copyToClipboard } from '../lib/copyToClipboard';
 import { contextMenuPosition } from '../lib/contextMenuPosition';
@@ -8742,15 +8743,39 @@ function PageContent() {
               {/* Smaller, lower-contrast on mobile — a breadcrumb is orientation, not the main
                   content, and shouldn't compete with the task title for attention. */}
               <div className="flex items-center gap-2 text-[11px] text-neutral-500 md:text-xs md:text-neutral-400 font-mono overflow-x-auto">
-                <button onClick={() => setModalTaskStack([])} className="hover:text-blue-400 cursor-pointer shrink-0 inline-flex items-center gap-1.5">
-                  {activeSpaceId === 'everything' ? (
-                    <>
-                      <Globe className="w-3 h-3" /> Everything
-                    </>
-                  ) : (
-                    currentSpace?.name || 'Space'
-                  )}
-                </button>
+                {/* Where the task actually lives — workspace › Space › List, a lock when it is private — not
+                    whatever Space happens to be open behind it (from the Planner or My Tasks that said
+                    nothing true). "Vi må ha et system som gjør at vi vet hvilket workspace eller om det er
+                    privat." */}
+                {(() => {
+                  const root = tasks.find((t) => t.id === modalTaskStack[0]);
+                  const home = root ? homeOfTask(workspaces, root) : null;
+                  return (
+                    <button
+                      onClick={() => setModalTaskStack([])}
+                      title={home ? `${homeLabel(home)}${home.personal ? ' — only you can see it' : root?.isPrivate ? ' — private task' : ''}` : undefined}
+                      className="hover:text-blue-400 cursor-pointer shrink-0 inline-flex items-center gap-1.5"
+                    >
+                      {home?.workspace ? (
+                        <>
+                          {home.personal ? (
+                            <Lock className="w-3 h-3 text-amber-400" />
+                          ) : (
+                            <span className="w-2 h-2 rounded-full shrink-0" style={{ backgroundColor: workspaceColor(home.workspace) }} />
+                          )}
+                          {homeLabel(home)}
+                          {!home.personal && root?.isPrivate && <Lock className="w-3 h-3 text-neutral-500" />}
+                        </>
+                      ) : activeSpaceId === 'everything' ? (
+                        <>
+                          <Globe className="w-3 h-3" /> Everything
+                        </>
+                      ) : (
+                        currentSpace?.name || 'Space'
+                      )}
+                    </button>
+                  );
+                })()}
                 {modalTaskStack.map((id, idx) => {
                   const t = tasks.find((task) => task.id === id);
                   if (!t) return null;
