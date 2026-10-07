@@ -12031,3 +12031,37 @@ calendar to start once the keyboard is fully down, "bittelitt tregere".
   - Not seen in a browser.
 
 **Deployed 2026-10-07 as `ee4b297`** (tag `deploy/2026-10-07_1109`).
+
+### 2026-10-07 (continued) — events in the wrong workspace: diagnosis and proposal (nothing built)
+
+- **Report:** "Sende Goodiebags" shows under "CRRM Media" though it is under Bleep Show (a New Game
+  Media Space). "Ulle og Rob HotD-kveld" is private (Personal) but belongs in New Game Media. "Vi må
+  ha et system som gjør at vi vet hvilket workspace eller om det er privat. Kan du komme med forslag
+  til løsning?"
+- **Cause, from the code (production data not inspected):**
+  - An Event has two independent homes: `workspaceId` and an optional `spaceId`.
+  - Creating one (QuickCreatePopover, MobileQuickCreateSheet) always sets `workspaceId` to
+    whatever workspace happened to be active. This is never shown in the form.
+  - The "Space (optional, for color)" picker offers Spaces from *every* workspace, and so does the
+    event window's "Space (for color)".
+  - The API checks neither that the Space belongs to the event's workspace, nor lets the workspace
+    be changed.
+  - So: created while in CRRM Media with Space Bleep Show = workspace CRRM Media, colour from
+    Bleep Show. Created while in Personal = a private event.
+  - The workspace decides who sees the event, whose people can be attendees, and (since
+    `ee4b297`) which Planner workspace filter hides it.
+  - **Tasks cannot go wrong this way**: their workspace follows List → Space → workspace.
+- **Proposed (awaiting the user's go):**
+  1. One "Hører til" picker for events, replacing the Space picker and the hidden active
+     workspace. Grouped by workspace: "Personal — bare deg 🔒", each workspace as a whole, and its
+     Spaces under it. Picking a Space sets the workspace. It shows as a chip at the top of
+     create/edit.
+  2. Server rule: with a Space, `workspaceId` = that Space's workspace (POST and PATCH). PATCH may
+     change the workspace (member of both). Attendees who are not members of the new workspace are
+     dropped, with a warning first.
+  3. Show where things belong: "Workspace › Space" / "🔒 Privat" in the event and task windows,
+     and a small marker on Planner bars (workspace colour dot, lock for private), also in the
+     hover.
+  4. A one-time data repair migration: events whose Space is in another workspace get the Space's
+     workspace (this fixes "Sende Goodiebags"). Private events cannot be repaired automatically;
+     "Ulle og Rob HotD-kveld" is moved by hand with the new picker.
