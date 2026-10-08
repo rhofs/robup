@@ -12156,3 +12156,5 @@ calendar to start once the keyboard is fully down, "bittelitt tregere".
       there are none and it is private), starts in your profile colour, desktop and mobile. It is
       stored on the event, so changing your colour later does not recolour old events.
 - Not seen in a browser.
+
+**Deployed 2026-10-08 as `0d78ff9`** (tag `deploy/2026-10-08_1142`).
