@@ -1,3 +1,4 @@
+import { mentionsToPlainText } from '@/lib/mentions';
 import { prisma } from '@/lib/prisma';
 
 // RFC 5545 §3.3.11 — escape backslash, semicolon, comma, and newline in TEXT values.
@@ -58,7 +59,7 @@ export async function GET(_req: Request, { params }: { params: Promise<{ token: 
       `DTEND;VALUE=DATE:${icsDate(dtend)}`,
       `SUMMARY:${icsEscape(t.title)}`,
     ];
-    if (t.description) lines.push(`DESCRIPTION:${icsEscape(t.description)}`);
+    if (t.description) lines.push(`DESCRIPTION:${icsEscape(mentionsToPlainText(t.description))}`);
     lines.push('STATUS:CONFIRMED', 'END:VEVENT');
     return lines.join('\r\n');
   });

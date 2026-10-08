@@ -1,5 +1,6 @@
 'use client';
 
+import { closeOnBackdrop } from '../lib/backdrop';
 import { useCallback, useEffect, useState } from 'react';
 import { X, Layers, Folder as FolderIcon, List as ListIcon, CheckSquare, FolderOpen, FileText, CalendarDays, Undo2, Trash2 } from 'lucide-react';
 import { useTaskStore } from '../store/useTaskStore';
@@ -103,7 +104,7 @@ export default function TrashPanel({ onClose }: { onClose: () => void }) {
   }
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-scrim/70 backdrop-blur-xs" onClick={onClose}>
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-scrim/70 backdrop-blur-xs" {...closeOnBackdrop(onClose)}>
       <div
         onClick={(e) => e.stopPropagation()}
         className="w-[560px] max-h-[70vh] bg-neutral-900 border border-neutral-800 rounded-xl shadow-2xl overflow-hidden flex flex-col"

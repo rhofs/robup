@@ -1,5 +1,6 @@
 'use client';
 
+import { closeOnBackdrop } from '../lib/backdrop';
 import { useEffect, useRef, useState } from 'react';
 import { DndContext, closestCenter, PointerSensor, useSensor, useSensors, type DragEndEvent } from '@dnd-kit/core';
 import { SortableContext, useSortable, verticalListSortingStrategy, arrayMove } from '@dnd-kit/sortable';
@@ -260,7 +261,7 @@ export default function StatusEditor({
   const defaultName = tpl.defaultTemplate ? (allTemplates.find((t) => t.id === tpl.defaultTemplate)?.name ?? 'Siqt default') : 'Siqt default';
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-scrim/70 backdrop-blur-xs p-3" onClick={attemptClose}>
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-scrim/70 backdrop-blur-xs p-3" {...closeOnBackdrop(attemptClose)}>
       <div
         onClick={(e) => e.stopPropagation()}
         className="w-[760px] max-w-full max-h-[calc(100dvh-24px)] flex flex-col bg-neutral-900 border border-neutral-800 rounded-2xl shadow-2xl overflow-hidden"

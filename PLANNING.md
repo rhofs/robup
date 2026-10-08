@@ -12114,3 +12114,45 @@ calendar to start once the keyboard is fully down, "bittelitt tregere".
 - Not seen in a browser.
 
 **Deployed 2026-10-07 as `0dec1a4`** (tag `deploy/2026-10-07_1135`); the event repair migration ran at start, right after the start-up DB snapshot (11:35:35Z), which is the way back for that data if needed.
+
+### 2026-10-08 — task description grows and takes mentions; documents look like documents; selections don't close windows; profile colour
+
+- **Feedback (screenshots of a task window):**
+  - The description is a "lite vindu" that never grows. It should take @ / # for tasks and people.
+  - The Documents entry "ser bare ut som tekst", its delete cross is cropped, and deleting should
+    warn that it goes to Trash.
+  - Selecting text in the description and letting go outside the task closes the task.
+  - A profile colour, used for avatars without a picture, which should also be the default colour
+    of an event that is just yours.
+- **Built:**
+  - **Description** (`TaskDescriptionBlock` in page.tsx):
+    - It is now a `MentionTextarea`: @ for people, tasks and docs, # for tasks. The scope matches
+      task comments (the task's workspace, and on a private task only people who can open it).
+    - It grows with the text (min 120px, max 60vh, then scrolls). The caret starts at the end.
+    - Read mode renders mention chips (`MentionText`), and they jump on click.
+    - It only saves when the text changed.
+    - Google Calendar sync and the .ics feed write mentions out as plain names with the existing
+      `mentionsToPlainText`.
+    - **Mentions in a description do not notify anyone** (comments do); not built.
+  - **Documents:**
+    - `DocTab` is now a card with a file icon and the title. Unlink and delete sit *inside* the
+      card. They used to hang off its corner, where the row's `overflow-x-auto` cut them.
+    - The delete confirm already existed, but said "permanently deletes". The delete is a soft one
+      (to Trash), and the text now says so.
+  - **"No documents yet" with a document there:** the auto-select effect keyed on the document
+    *count*. A task reopened with its documents already cached reset the choice to null and never
+    chose again. Now `shownDocId` is derived (picked, else first). The doc activity-log helpers use
+    it too.
+  - **Selections no longer close windows:** `lib/backdrop.ts` `closeOnBackdrop(onClose)` closes
+    only when the press *and* the click are on the backdrop itself. The browser fires `click` on
+    the common ancestor of press and release, i.e. the backdrop.
+    - Applied to the task window, StatusEditor, EventDetailModal, QuickCreatePopover, the
+      Space/Folder/List/Doc/Field edit modals, Settings, Notifications, Trash, AccessControl and
+      the Wiki dialogs.
+    - Not applied to the small context-menu overlays.
+  - **Profile colour:** a colour row on My Profile, saved to `User.color` (the existing PATCH
+    already accepted it).
+    - Creating an event with no Space and no colour picked, where you are the only attendee (or
+      there are none and it is private), starts in your profile colour, desktop and mobile. It is
+      stored on the event, so changing your colour later does not recolour old events.
+- Not seen in a browser.

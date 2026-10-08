@@ -1,5 +1,6 @@
 'use client';
 
+import { closeOnBackdrop } from '../../lib/backdrop';
 import { useState } from 'react';
 import { X, Shield, Plus } from 'lucide-react';
 import type { HierarchyWorkspace } from '../../store/useTaskStore';
@@ -49,7 +50,7 @@ export default function WikiSettingsDialog({ workspace, onClose }: { workspace: 
   };
 
   return (
-    <div className="fixed inset-0 z-[70] flex items-center justify-center bg-scrim/70 backdrop-blur-xs p-4" onClick={onClose}>
+    <div className="fixed inset-0 z-[70] flex items-center justify-center bg-scrim/70 backdrop-blur-xs p-4" {...closeOnBackdrop(onClose)}>
       <div onClick={(e) => e.stopPropagation()} className="w-full max-w-[440px] max-h-[85vh] flex flex-col bg-neutral-900 border border-neutral-800 rounded-2xl shadow-2xl">
         <div className="px-5 py-4 border-b border-neutral-800 flex items-center justify-between shrink-0">
           <h3 className="font-semibold text-sm text-app-strong">Wiki settings</h3>

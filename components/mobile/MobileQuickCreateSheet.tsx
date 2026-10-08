@@ -165,6 +165,12 @@ export default function MobileQuickCreateSheet({
   const isTask = tab === 'task';
   const canCreate = isTask ? !!title.trim() && !!listId : !!title.trim() && !!start && !!eventHome.workspaceId;
 
+  // An event that is just yours starts in your profile colour (see QuickCreatePopover's own note).
+  const myColor = users.find((u) => u.id === currentUserId)?.color ?? null;
+  const justMine =
+    !eventHome.spaceId && (assigneeIds.length === 1 ? assigneeIds[0] === currentUserId : assigneeIds.length === 0 && !!homeWs?.isPersonal);
+  const shownColor = color ?? (justMine ? myColor : null);
+
   const create = () => {
     if (!canCreate) return;
     if (isTask) {
@@ -183,7 +189,7 @@ export default function MobileQuickCreateSheet({
         assigneeIds,
         location: location.trim() || null,
         description: description.trim() || null,
-        color,
+        color: shownColor,
       });
     }
     onClose();
@@ -287,7 +293,7 @@ export default function MobileQuickCreateSheet({
                 </Row>
                 <Row icon={Palette}>
                   <div className="py-2">
-                    <ColorSwatchPicker value={color} onChange={setColor} choices={EVENT_COLOR_CHOICES} size="md" />
+                    <ColorSwatchPicker value={shownColor} onChange={setColor} choices={EVENT_COLOR_CHOICES} size="md" />
                   </div>
                 </Row>
               </>

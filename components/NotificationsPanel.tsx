@@ -1,5 +1,6 @@
 'use client';
 
+import { closeOnBackdrop } from '../lib/backdrop';
 import { useEffect, useState } from 'react';
 import { Bell, Check } from 'lucide-react';
 import type { AppUser } from '../store/useTaskStore';
@@ -55,7 +56,7 @@ export default function NotificationsPanel({
   }, []);
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-scrim/70 backdrop-blur-xs p-3" onClick={onClose}>
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-scrim/70 backdrop-blur-xs p-3" {...closeOnBackdrop(onClose)}>
       <div
         onClick={(e) => e.stopPropagation()}
         className="w-[440px] max-w-full bg-neutral-900 border border-neutral-800 rounded-2xl shadow-2xl overflow-hidden flex flex-col"

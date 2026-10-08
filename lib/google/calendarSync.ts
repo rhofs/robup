@@ -1,4 +1,5 @@
 import { calendar_v3, google } from 'googleapis';
+import { mentionsToPlainText } from '../mentions';
 import { prisma } from '@/lib/prisma';
 import { createGoogleOAuthClient } from './oauthClient';
 
@@ -232,7 +233,7 @@ export async function syncTaskForUser(taskId: string, userId: string): Promise<v
 
   const requestBody: calendar_v3.Schema$Event = {
     summary: (task as SyncableTask).title,
-    description: (task as SyncableTask).description ?? undefined,
+    description: (task as SyncableTask).description ? mentionsToPlainText((task as SyncableTask).description!) : undefined,
     ...toGoogleAllDayFields(range!.start, range!.endInclusive),
   };
 

@@ -1,5 +1,6 @@
 'use client';
 
+import { closeOnBackdrop } from '../../lib/backdrop';
 import { useState } from 'react';
 import { pickableMembers } from '../../lib/workspaceMembers';
 import BelongsToPicker from '../BelongsToPicker';
@@ -65,7 +66,7 @@ export default function EventDetailModal({ event, workspaces, users, currentUser
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-scrim/70 backdrop-blur-xs" onClick={onClose}>
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-scrim/70 backdrop-blur-xs" {...closeOnBackdrop(onClose)}>
       <div onClick={(e) => e.stopPropagation()} className="w-[420px] bg-neutral-900 border border-neutral-800 rounded-xl shadow-2xl overflow-hidden">
         {/* Same "where did this come from" tell as the ClickUp reference screenshot (Google icon
             + "in <account email>") — shown for any event synced to Google, whether it originated

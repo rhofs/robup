@@ -1,5 +1,6 @@
 'use client';
 
+import { closeOnBackdrop } from '../../lib/backdrop';
 import { useState } from 'react';
 import { X, Bug, Lightbulb, Check } from 'lucide-react';
 import type { HierarchyWorkspace } from '../../store/useTaskStore';
@@ -41,7 +42,7 @@ export default function WikiFeedbackDialog({
   };
 
   return (
-    <div className="fixed inset-0 z-[70] flex items-center justify-center bg-scrim/70 backdrop-blur-xs p-4" onClick={onClose}>
+    <div className="fixed inset-0 z-[70] flex items-center justify-center bg-scrim/70 backdrop-blur-xs p-4" {...closeOnBackdrop(onClose)}>
       <div onClick={(e) => e.stopPropagation()} className="w-full max-w-[440px] bg-neutral-900 border border-neutral-800 rounded-2xl shadow-2xl overflow-hidden">
         <div className="px-5 py-4 border-b border-neutral-800 flex items-center justify-between">
           <h3 className="font-semibold text-sm text-app-strong flex items-center gap-2">

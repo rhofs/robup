@@ -1,5 +1,6 @@
 'use client';
 
+import { closeOnBackdrop } from '../lib/backdrop';
 import { useEffect, useRef, useState } from 'react';
 import Papa from 'papaparse';
 import { X, Settings, Check, Trash2, Plus, Link2, Upload, Share2, Download, Monitor, Sun, Moon, Smartphone, ArrowLeft, ChevronRight, Pencil, Shield, UserPlus, Users, BookOpen } from 'lucide-react';
@@ -542,7 +543,7 @@ export default function SettingsPanel({
   // Roles, Invite and Import are sub-screens rather than siblings: each is a task you go and do and
   // come back from, not a place you switch between.
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-scrim/70 backdrop-blur-xs p-3" onClick={onClose}>
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-scrim/70 backdrop-blur-xs p-3" {...closeOnBackdrop(onClose)}>
       <div
         onClick={(e) => e.stopPropagation()}
         className="w-[440px] max-w-full bg-neutral-900 border border-neutral-800 rounded-2xl shadow-2xl overflow-hidden flex flex-col"

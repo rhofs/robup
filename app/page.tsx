@@ -1,5 +1,6 @@
 'use client';
 
+import { closeOnBackdrop } from '../lib/backdrop';
 import { Suspense, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { useRouter, usePathname, useSearchParams } from 'next/navigation';
 import dynamic from 'next/dynamic';
@@ -188,15 +189,28 @@ function DocTab({
   // living, so it gets a separate "detach without destroying" affordance next to Delete.
   const canUnlink = doc.spaceId !== null && onUnlink;
 
+  // A document reads as a document: a card with its page icon, not a bare word — "'Post record debrief'
+  // ser bare ut som tekst". Unlink and delete sit inside the card; they used to hang off its corner,
+  // where the row's own scrolling cut the delete cross in half.
   return (
-    <div ref={setNodeRef} style={style} {...attributes} {...listeners} className="relative group/doc shrink-0">
+    <div
+      ref={setNodeRef}
+      style={style}
+      {...attributes}
+      {...listeners}
+      className={`group/doc shrink-0 flex items-center rounded-lg border transition-colors ${
+        isActive ? 'border-blue-500/50 bg-blue-500/10' : 'border-neutral-700 bg-neutral-900 hover:border-neutral-600'
+      }`}
+    >
       <button
         onClick={onSelect}
-        className={`text-[11px] px-2.5 py-1 rounded cursor-pointer transition ${
-          isActive ? 'bg-neutral-800 text-blue-400' : 'bg-neutral-900 text-neutral-400 hover:text-neutral-200'
+        title={isActive ? undefined : 'Open document'}
+        className={`flex items-center gap-1.5 pl-2.5 pr-1.5 py-1.5 text-[12px] font-medium cursor-pointer max-w-[220px] ${
+          isActive ? 'text-blue-400' : 'text-neutral-300 hover:text-app-strong'
         }`}
       >
-        {doc.title || 'Untitled'}
+        <FileText className="w-3.5 h-3.5 shrink-0" />
+        <span className="truncate">{doc.title || 'Untitled'}</span>
       </button>
       {canUnlink && (
         <button
@@ -205,9 +219,9 @@ function DocTab({
             onUnlink();
           }}
           title="Unlink from this task (keeps the doc in the Docs tab)"
-          className="absolute -top-1.5 -left-1.5 w-3.5 h-3.5 rounded-full bg-neutral-800 text-neutral-400 hover:text-blue-400 flex items-center justify-center opacity-0 group-hover/doc:opacity-100 cursor-pointer"
+          className="w-6 h-6 rounded-md flex items-center justify-center text-neutral-500 hover:text-blue-400 hover:bg-neutral-800 opacity-60 group-hover/doc:opacity-100 cursor-pointer"
         >
-          <Unlink className="w-2 h-2" />
+          <Unlink className="w-3 h-3" />
         </button>
       )}
       <button
@@ -215,10 +229,10 @@ function DocTab({
           e.stopPropagation();
           onDelete();
         }}
-        title="Delete"
-        className="absolute -top-1.5 -right-1.5 w-3.5 h-3.5 rounded-full bg-neutral-800 text-neutral-400 hover:text-red-400 text-[8px] flex items-center justify-center opacity-0 group-hover/doc:opacity-100 cursor-pointer"
+        title="Delete document (moves it to Trash)"
+        className="w-6 h-6 mr-1 rounded-md flex items-center justify-center text-neutral-500 hover:text-red-400 hover:bg-neutral-800 opacity-60 group-hover/doc:opacity-100 cursor-pointer"
       >
-        <X className="w-2.5 h-2.5" />
+        <X className="w-3.5 h-3.5" />
       </button>
     </div>
   );
@@ -616,22 +630,52 @@ const timeAgo = (dateStr: string | Date) => {
 // Deliberately separate from Documents: Documents are full rich-text pages (live collaborative
 // Tiptap editors, meant for specs/notes that grow over time); this is the one-paragraph "what is
 // this task" summary ClickUp itself shows directly under the title/metadata row, not another doc.
-function TaskDescriptionBlock({ value, onCommit }: { value: string | null; onCommit: (value: string | null) => void }) {
+function TaskDescriptionBlock({
+  value,
+  onCommit,
+  workspaceId,
+  allowedUserIds,
+  onJump,
+}: {
+  value: string | null;
+  onCommit: (value: string | null) => void;
+  // Scope for @ / # — the task's own workspace and, on a private task, who can open it (as comments).
+  workspaceId: string | null;
+  allowedUserIds: Set<string> | null;
+  onJump: (kind: MentionKind, id: string) => void;
+}) {
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState(value || '');
+  const ref = useRef<HTMLTextAreaElement>(null);
+
+  // The box grows with what is in it. It was three rows, fixed, however much was written ("veldig
+  // 'lite vindu' vi kan skrive i, og det blir liksom ikke større"); now it fits the text, up to most
+  // of the window, and scrolls past that.
+  useLayoutEffect(() => {
+    const el = ref.current;
+    if (!editing || !el) return;
+    el.style.height = 'auto';
+    el.style.height = `${el.scrollHeight + 2}px`;
+  }, [editing, draft]);
 
   const commit = () => {
     setEditing(false);
     const trimmed = draft.trim();
-    onCommit(trimmed || null);
+    if (trimmed !== (value ?? '').trim()) onCommit(trimmed || null);
   };
 
   if (editing) {
     return (
-      <textarea
+      <MentionTextarea
+        ref={ref}
         autoFocus
         value={draft}
         onChange={(e) => setDraft(e.target.value)}
+        onFocus={(e) => {
+          // Caret at the end, where you carry on writing — not at the very start.
+          const end = e.currentTarget.value.length;
+          e.currentTarget.setSelectionRange(end, end);
+        }}
         onBlur={commit}
         onKeyDown={(e) => {
           if (e.key === 'Escape') {
@@ -639,9 +683,10 @@ function TaskDescriptionBlock({ value, onCommit }: { value: string | null; onCom
             setEditing(false);
           }
         }}
-        rows={3}
-        placeholder="Write a description..."
-        className="w-full bg-neutral-900/60 border border-blue-500 rounded-lg px-3 py-2 text-xs text-neutral-200 focus:outline-none resize-none"
+        workspaceId={workspaceId}
+        allowedUserIds={allowedUserIds}
+        placeholder="Write a description… (@ for people, tasks and docs, # for tasks)"
+        className="w-full min-h-[120px] max-h-[60vh] overflow-y-auto bg-neutral-900/60 border border-blue-500 rounded-lg px-3 py-2 text-xs leading-relaxed text-neutral-200 focus:outline-none resize-none"
       />
     );
   }
@@ -655,7 +700,7 @@ function TaskDescriptionBlock({ value, onCommit }: { value: string | null; onCom
       className="group flex items-start gap-2 px-2 py-1.5 -mx-2 rounded hover:bg-neutral-800/40 cursor-text"
     >
       {value ? (
-        <p className="text-xs text-neutral-300 whitespace-pre-wrap flex-1">{value}</p>
+        <MentionText text={value} onJump={onJump} className="text-xs leading-relaxed text-neutral-300 whitespace-pre-wrap flex-1 min-w-0" />
       ) : (
         <p className="text-xs text-neutral-500 italic flex-1">Write a description...</p>
       )}
@@ -2486,14 +2531,12 @@ function PageContent() {
     prevSubtaskStateRef.current = { parentId: activeModalTaskId, ids: currentIds };
   }, [tasks, activeModalTaskId]);
 
-  // When docs for the active task load, auto-select the first document
+  // The document shown in the open task: the one picked, or else the first. Derived rather than set by
+  // an effect — the effect version missed a task reopened with its documents already loaded (its
+  // trigger, the number of documents, had not changed), so a task with a document said "No documents
+  // yet" until you clicked it.
   const activeTaskDocs = activeModalTaskId ? docs[activeModalTaskId] || [] : [];
-  useEffect(() => {
-    if (!activeDocId && activeTaskDocs.length > 0) {
-      setActiveDocId(activeTaskDocs[0].id);
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [activeTaskDocs.length, activeModalTaskId]);
+  const shownDocId = activeDocId && activeTaskDocs.some((d) => d.id === activeDocId) ? activeDocId : activeTaskDocs[0]?.id ?? null;
 
   const closeAllMenus = () => {
     setColumnMenuOpen(false);
@@ -5046,7 +5089,7 @@ function PageContent() {
 
   // ---- Docs (live collaborative content via CollabDocEditor; title is still a plain field) ----
   const captureDocEditBaseline = () => {
-    const doc = activeTaskDocs.find((d) => d.id === activeDocId);
+    const doc = activeTaskDocs.find((d) => d.id === shownDocId);
     if (doc) docEditBaselineRef.current = { docId: doc.id, title: doc.title, content: doc.content };
   };
 
@@ -5058,7 +5101,7 @@ function PageContent() {
   const commitDocEditActivity = (liveText?: string) => {
     useHistoryStore.getState().endCoalesce();
     const baseline = docEditBaselineRef.current;
-    const doc = activeTaskDocs.find((d) => d.id === activeDocId);
+    const doc = activeTaskDocs.find((d) => d.id === shownDocId);
     if (!baseline || !doc || baseline.docId !== doc.id || !activeModalTaskId) return;
     if (doc.title !== baseline.title) {
       logActivity(activeModalTaskId, `Dokument omdøpt til «${doc.title}»`, 'docEdited');
@@ -8312,7 +8355,7 @@ function PageContent() {
 
       {/* ================= EDIT SPACE MODAL ================= */}
       {spaceEditTarget && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-scrim/70 backdrop-blur-xs" onClick={() => setSpaceEditTarget(null)}>
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-scrim/70 backdrop-blur-xs" {...closeOnBackdrop(() => setSpaceEditTarget(null))}>
           <div onClick={(e) => e.stopPropagation()} className="w-[380px] bg-neutral-900 border border-neutral-800 rounded-xl shadow-2xl overflow-hidden">
             <div className="px-5 py-4 border-b border-neutral-800 flex items-center justify-between">
               <h3 className="font-bold text-sm text-app-strong">Edit Space</h3>
@@ -8400,7 +8443,7 @@ function PageContent() {
 
       {/* ================= EDIT FOLDER MODAL ================= */}
       {folderEditTarget && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-scrim/70 backdrop-blur-xs" onClick={() => setFolderEditTarget(null)}>
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-scrim/70 backdrop-blur-xs" {...closeOnBackdrop(() => setFolderEditTarget(null))}>
           <div onClick={(e) => e.stopPropagation()} className="w-[380px] bg-neutral-900 border border-neutral-800 rounded-xl shadow-2xl overflow-hidden">
             <div className="px-5 py-4 border-b border-neutral-800 flex items-center justify-between">
               <h3 className="font-bold text-sm text-app-strong">Edit Folder</h3>
@@ -8480,7 +8523,7 @@ function PageContent() {
 
       {/* ================= EDIT LIST MODAL ================= */}
       {listEditTarget && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-scrim/70 backdrop-blur-xs" onClick={() => setListEditTarget(null)}>
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-scrim/70 backdrop-blur-xs" {...closeOnBackdrop(() => setListEditTarget(null))}>
           <div onClick={(e) => e.stopPropagation()} className="w-[380px] bg-neutral-900 border border-neutral-800 rounded-xl shadow-2xl overflow-hidden">
             <div className="px-5 py-4 border-b border-neutral-800 flex items-center justify-between">
               <h3 className="font-bold text-sm text-app-strong">Edit List</h3>
@@ -8560,7 +8603,7 @@ function PageContent() {
 
       {/* ================= EDIT DOC (color only — icon is fixed, rename is inline) ================= */}
       {docEditTarget && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-scrim/70 backdrop-blur-xs" onClick={() => setDocEditTarget(null)}>
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-scrim/70 backdrop-blur-xs" {...closeOnBackdrop(() => setDocEditTarget(null))}>
           <div onClick={(e) => e.stopPropagation()} className="w-[380px] bg-neutral-900 border border-neutral-800 rounded-xl shadow-2xl overflow-hidden">
             <div className="px-5 py-4 border-b border-neutral-800 flex items-center justify-between">
               <h3 className="font-bold text-sm text-app-strong">Edit Doc</h3>
@@ -8600,7 +8643,7 @@ function PageContent() {
 
       {/* ================= EDIT FIELD MODAL ================= */}
       {fieldEditTarget && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-scrim/70 backdrop-blur-xs" onClick={() => setFieldEditTarget(null)}>
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-scrim/70 backdrop-blur-xs" {...closeOnBackdrop(() => setFieldEditTarget(null))}>
           <div onClick={(e) => e.stopPropagation()} className="w-[420px] bg-neutral-900 border border-neutral-800 rounded-xl shadow-2xl overflow-hidden">
             <div className="px-5 py-4 border-b border-neutral-800 flex items-center justify-between">
               <h3 className="font-bold text-sm text-app-strong">Edit field</h3>
@@ -8708,7 +8751,8 @@ function PageContent() {
           animate={{ opacity: 1 }}
           transition={{ duration: 0.15 }}
           className="fixed inset-0 z-50 flex items-center justify-center bg-scrim/55 backdrop-blur-[3px] p-6 md:p-10"
-          onClick={() => setModalTaskStack([])}
+          // Only a click that starts on the backdrop closes the task — not a text selection dragged out of it.
+          {...closeOnBackdrop(() => setModalTaskStack([]))}
         >
           {/* Plain fade-in, no shared-layout zoom from the row (dropped layoutId here — TaskRow.tsx
               keeps its own layout/layoutId untouched, that still drives its independent list-reflow
@@ -9148,8 +9192,12 @@ function PageContent() {
                     rich-text pages). Matches where ClickUp itself puts this: directly under the
                     Status/Dates/Assignees row, above everything else. */}
                 <TaskDescriptionBlock
+                  key={activeModalTask.id}
                   value={activeModalTask.description}
                   onCommit={(value) => optimisticSetDescription(activeModalTask.id, value)}
+                  workspaceId={workspaceIdForList(workspaces, activeModalTask.listId)}
+                  allowedUserIds={taskAudience(workspaces, activeModalTask)}
+                  onJump={jumpToMention}
                 />
 
                 {/* Files — anything that is not a Doc. Above Documents deliberately: a Doc is
@@ -9229,14 +9277,14 @@ function PageContent() {
                 <div className="space-y-2 pt-4 border-t border-neutral-800">
                   <h3 className="text-xs font-medium text-neutral-500 flex items-center gap-1.5"><FileText className="w-3.5 h-3.5" /> Documents</h3>
                   <div>
-                    <div className="flex items-center gap-1.5 pb-2 border-b border-neutral-800/80 overflow-x-auto">
+                    <div className="flex items-center gap-1.5 py-1 pb-2 border-b border-neutral-800/80 overflow-x-auto">
                       <DndContext sensors={docSensors} collisionDetection={closestCenter} onDragEnd={handleDocDragEnd}>
                         <SortableContext items={activeTaskDocs.map((d) => d.id)} strategy={horizontalListSortingStrategy}>
                           {activeTaskDocs.map((d) => (
                             <DocTab
                               key={d.id}
                               doc={d}
-                              isActive={activeDocId === d.id}
+                              isActive={shownDocId === d.id}
                               onSelect={() => setActiveDocId(d.id)}
                               onDelete={() => setDocToDelete({ id: d.id, title: d.title || 'Untitled' })}
                               onUnlink={
@@ -9285,22 +9333,22 @@ function PageContent() {
                       )}
                     </div>
 
-                    {activeDocId ? (
+                    {shownDocId ? (
                       <div className="pt-3 space-y-2">
                         <div className="flex items-center gap-2">
                           <input
-                            value={activeTaskDocs.find((d) => d.id === activeDocId)?.title || ''}
-                            onChange={(e) => activeModalTaskId && updateDoc(activeDocId, activeModalTaskId, { title: e.target.value })}
+                            value={activeTaskDocs.find((d) => d.id === shownDocId)?.title || ''}
+                            onChange={(e) => activeModalTaskId && updateDoc(shownDocId, activeModalTaskId, { title: e.target.value })}
                             onFocus={captureDocEditBaseline}
                             onBlur={() => commitDocEditActivity()}
                             className="flex-1 min-w-0 bg-transparent text-sm font-semibold text-app-strong focus:outline-none"
                             placeholder="Document title"
                           />
-                          <DocExportMenu docId={activeDocId} onToast={showToast} />
+                          <DocExportMenu docId={shownDocId} onToast={showToast} />
                         </div>
                         <CollabDocEditor
-                          key={activeDocId}
-                          docId={activeDocId}
+                          key={shownDocId}
+                          docId={shownDocId}
                           onJump={jumpToMention}
                           placeholder="Write notes, specs, anything..."
                           className="min-h-[8em] text-xs text-neutral-300"
@@ -9574,7 +9622,9 @@ function PageContent() {
       <ConfirmDialog
         open={!!docToDelete}
         title="Delete document?"
-        message={docToDelete ? `This permanently deletes "${docToDelete.title}".` : ''}
+        // It is a soft delete (DELETE /api/docs/[id] without ?permanent) — the old text said
+        // "permanently", which it never was.
+        message={docToDelete ? `"${docToDelete.title}" moves to Trash. You can restore it from there.` : ''}
         onCancel={() => setDocToDelete(null)}
         onConfirm={() => {
           if (docToDelete && activeModalTaskId) {

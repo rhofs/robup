@@ -5,6 +5,7 @@ import { X, Check, MapPin } from 'lucide-react';
 import { HierarchyWorkspace, AppUser, useTaskStore } from '../../store/useTaskStore';
 import { suggestEventAttendees } from '../../lib/assigneeSuggestions';
 import DatePickerPopover from '../DatePickerPopover';
+import { closeOnBackdrop } from '../../lib/backdrop';
 import BelongsToPicker, { type BelongsTo } from '../BelongsToPicker';
 import FloatingPopover from '../FloatingPopover';
 import { pickableMembers } from '../../lib/workspaceMembers';
@@ -139,6 +140,14 @@ export default function QuickCreatePopover({
   const canCreateTask = title.trim().length > 0 && !!spaceId && !!listId;
   const canCreateEvent = title.trim().length > 0 && !!eventStart && !!eventEnd && !!eventHome.workspaceId;
 
+  // An event that is just yours — no Space to take a colour from, and you the only one on it (or no
+  // one, when it is private) — starts in your own profile colour, until a colour is picked.
+  const myColor = users.find((u) => u.id === currentUserId)?.color ?? null;
+  const homeIsPersonal = !!workspaces.find((w) => w.id === eventHome.workspaceId)?.isPersonal;
+  const justMine =
+    !eventHome.spaceId && (assigneeIds.length === 1 ? assigneeIds[0] === currentUserId : assigneeIds.length === 0 && homeIsPersonal);
+  const shownEventColor = eventColor ?? (justMine ? myColor : null);
+
   const handleCreate = () => {
     if (tab === 'task') {
       if (!canCreateTask) return;
@@ -155,7 +164,7 @@ export default function QuickCreatePopover({
         assigneeIds,
         location: eventLocation.trim() || null,
         description: eventDescription.trim() || null,
-        color: eventColor,
+        color: shownEventColor,
       });
     }
     onClose();
@@ -172,7 +181,7 @@ export default function QuickCreatePopover({
     // if there's still more content than fits. Desktop keeps the original centered look.
     <div
       className="fixed inset-0 z-50 flex items-start md:items-center justify-center bg-scrim/70 backdrop-blur-xs overflow-y-auto p-4"
-      onClick={onClose}
+      {...closeOnBackdrop(onClose)}
     >
       <div
         onClick={(e) => e.stopPropagation()}
@@ -382,7 +391,7 @@ export default function QuickCreatePopover({
                   relationship the detail modal has. */}
               <div className="space-y-1.5">
                 <label className="text-[10px] uppercase tracking-wide text-neutral-500 font-semibold">Color</label>
-                <ColorSwatchPicker value={eventColor} onChange={setEventColor} choices={EVENT_COLOR_CHOICES} size="sm" />
+                <ColorSwatchPicker value={shownEventColor} onChange={setEventColor} choices={EVENT_COLOR_CHOICES} size="sm" />
               </div>
 
               <div className="space-y-1.5">

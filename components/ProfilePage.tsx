@@ -5,10 +5,13 @@ import { signOut } from 'next-auth/react';
 import { Image as ImageIcon, Pencil, Link2, Globe, AtSign, X, AlertTriangle, ChevronRight, LogOut, ShieldOff, KeyRound } from 'lucide-react';
 import { AppUser } from '../store/useTaskStore';
 import { EditableField } from './OfficePage';
+import ColorSwatchPicker from './ColorSwatchPicker';
+
+const PROFILE_COLORS = ['#618cd1', '#3b82f6', '#31a0b3', '#349f7c', '#84cc16', '#c89642', '#e0803a', '#cd6565', '#cb6798', '#9a61d1', '#6366f1', '#8d97a5'];
 
 type ProfilePageProps = {
   currentUser: AppUser | null;
-  onUpdate: (patch: { avatarUrl?: string | null; bio?: string | null; linkedinUrl?: string | null; websiteUrl?: string | null }) => void;
+  onUpdate: (patch: { avatarUrl?: string | null; bio?: string | null; linkedinUrl?: string | null; websiteUrl?: string | null; color?: string }) => void;
   // Separate from onUpdate above (which is fire-and-forget/always-optimistic, see
   // useTaskStore.ts's own updateUser) — a taken/invalid username is a real, expected outcome that
   // needs to actually reach the UI, not be silently swallowed.
@@ -37,6 +40,16 @@ export default function ProfilePage({ currentUser, onUpdate, onSetUsername }: Pr
         <div className="flex items-center gap-4">
           <AvatarEditor user={currentUser} onCommit={(url) => onUpdate({ avatarUrl: url })} />
           <div className="text-lg font-semibold text-app-strong">{currentUser.name}</div>
+        </div>
+
+        {/* Your own colour: the circle behind your initials wherever you have no picture, and the
+            colour an event starts in when it is just yours ("kanskje man velger en profilfarge, som da
+            er default om man starter event med kun seg selv i"). */}
+        <div className="space-y-1.5">
+          <p className="text-[11px] text-neutral-500">
+            Profile colour{currentUser.avatarUrl ? ' — shown where your picture is not' : ''}. Your own events start in it.
+          </p>
+          <ColorSwatchPicker value={currentUser.color} onChange={(c) => c && onUpdate({ color: c })} choices={PROFILE_COLORS} size="md" />
         </div>
 
         <BioBlock value={currentUser.bio} onCommit={(value) => onUpdate({ bio: value })} />
