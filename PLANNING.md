@@ -12158,3 +12158,17 @@ calendar to start once the keyboard is fully down, "bittelitt tregere".
 - Not seen in a browser.
 
 **Deployed 2026-10-08 as `0d78ff9`** (tag `deploy/2026-10-08_1142`).
+
+### 2026-10-08 (continued) — a task's document can be closed
+
+- **Feedback:** "Må kunne også 'lukke den', docen altså. Så den ikke alltid er oppe." Since
+  `0d78ff9` the first document always showed.
+- **Built:**
+  - Clicking the open document's card closes it. A "Close" button (chevron) also sits in the open
+    document's header, next to export.
+  - Clicking another card, or "+ New", opens that one.
+  - The closed state is **remembered per task on the device**: localStorage `siqt.closedTaskDocs`,
+    capped at 300 ids. A closed task's documents stay closed next time it is opened.
+  - With documents present but closed, nothing shows under the cards. "No documents yet" only shows
+    when there are none.
+- Not seen in a browser.

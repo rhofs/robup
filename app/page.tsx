@@ -204,7 +204,7 @@ function DocTab({
     >
       <button
         onClick={onSelect}
-        title={isActive ? undefined : 'Open document'}
+        title={isActive ? 'Close document' : 'Open document'}
         className={`flex items-center gap-1.5 pl-2.5 pr-1.5 py-1.5 text-[12px] font-medium cursor-pointer max-w-[220px] ${
           isActive ? 'text-blue-400' : 'text-neutral-300 hover:text-app-strong'
         }`}
@@ -590,6 +590,8 @@ const ACTIVITY_PANEL_STORAGE_KEY = 'siqt.showActivityPanel';
 const COLLAPSED_SPACES_STORAGE_KEY = 'siqt.collapsedSpaces';
 // What the Planner filter hides — List ids, and the ids of List-less workspaces hidden there.
 const PLANNER_HIDDEN_STORAGE_KEY = 'siqt.plannerHidden';
+// Tasks whose document section was closed — see setTaskDocClosed.
+const CLOSED_TASK_DOCS_STORAGE_KEY = 'siqt.closedTaskDocs';
 
 // Same "only persist the collapsed ones" shape as FolderTree.tsx's readCollapsedFolders —
 // Spaces default to expanded, so the minority (collapsed) is what's worth remembering.
@@ -2536,7 +2538,35 @@ function PageContent() {
   // trigger, the number of documents, had not changed), so a task with a document said "No documents
   // yet" until you clicked it.
   const activeTaskDocs = activeModalTaskId ? docs[activeModalTaskId] || [] : [];
-  const shownDocId = activeDocId && activeTaskDocs.some((d) => d.id === activeDocId) ? activeDocId : activeTaskDocs[0]?.id ?? null;
+  // A task whose document was closed ("Må kunne også 'lukke den', docen altså. Så den ikke alltid er
+  // oppe") opens with it closed next time too — remembered per task on this device.
+  const [closedDocTaskIds, setClosedDocTaskIds] = useState<Set<string>>(() => {
+    if (typeof window === 'undefined') return new Set();
+    try {
+      return new Set(JSON.parse(localStorage.getItem(CLOSED_TASK_DOCS_STORAGE_KEY) ?? '[]'));
+    } catch {
+      return new Set();
+    }
+  });
+  const setTaskDocClosed = (taskId: string, closed: boolean) => {
+    setClosedDocTaskIds((prev) => {
+      if (prev.has(taskId) === closed) return prev;
+      const next = new Set(prev);
+      if (closed) next.add(taskId);
+      else next.delete(taskId);
+      try {
+        // The most recent few hundred are plenty; the list must not grow for ever.
+        localStorage.setItem(CLOSED_TASK_DOCS_STORAGE_KEY, JSON.stringify([...next].slice(-300)));
+      } catch {}
+      return next;
+    });
+  };
+  const shownDocId =
+    activeModalTaskId && closedDocTaskIds.has(activeModalTaskId)
+      ? null
+      : activeDocId && activeTaskDocs.some((d) => d.id === activeDocId)
+        ? activeDocId
+        : activeTaskDocs[0]?.id ?? null;
 
   const closeAllMenus = () => {
     setColumnMenuOpen(false);
@@ -5114,7 +5144,10 @@ function PageContent() {
   const handleNewDoc = async () => {
     if (!activeModalTaskId) return;
     const doc = await createDoc(activeModalTaskId);
-    if (doc) setActiveDocId(doc.id);
+    if (doc) {
+      setTaskDocClosed(activeModalTaskId, false);
+      setActiveDocId(doc.id);
+    }
   };
 
   const docSensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 5 } }));
@@ -9285,7 +9318,16 @@ function PageContent() {
                               key={d.id}
                               doc={d}
                               isActive={shownDocId === d.id}
-                              onSelect={() => setActiveDocId(d.id)}
+                              // The open one's card closes it again; any other opens that one.
+                              onSelect={() => {
+                                if (!activeModalTaskId) return;
+                                if (shownDocId === d.id) {
+                                  setTaskDocClosed(activeModalTaskId, true);
+                                  return;
+                                }
+                                setTaskDocClosed(activeModalTaskId, false);
+                                setActiveDocId(d.id);
+                              }}
                               onDelete={() => setDocToDelete({ id: d.id, title: d.title || 'Untitled' })}
                               onUnlink={
                                 activeModalTaskId
@@ -9345,6 +9387,13 @@ function PageContent() {
                             placeholder="Document title"
                           />
                           <DocExportMenu docId={shownDocId} onToast={showToast} />
+                          <button
+                            onClick={() => activeModalTaskId && setTaskDocClosed(activeModalTaskId, true)}
+                            title="Close document"
+                            className="shrink-0 h-7 px-2 rounded-md flex items-center gap-1 text-[11px] text-neutral-400 hover:text-app-strong hover:bg-neutral-800 cursor-pointer"
+                          >
+                            <ChevronUp className="w-3.5 h-3.5" /> Close
+                          </button>
                         </div>
                         <CollabDocEditor
                           key={shownDocId}
@@ -9356,8 +9405,8 @@ function PageContent() {
                           onEditorBlur={commitDocEditActivity}
                         />
                       </div>
-                    ) : (
-                      <p className="text-[11px] text-neutral-500 py-4">No documents yet — press "+ New" to add one.</p>
+                    ) : activeTaskDocs.length > 0 ? null : (
+                      <p className="text-[11px] text-neutral-500 py-4">No documents yet — press &quot;+ New&quot; to add one.</p>
                     )}
                   </div>
                 </div>
