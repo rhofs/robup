@@ -12172,3 +12172,5 @@ calendar to start once the keyboard is fully down, "bittelitt tregere".
   - With documents present but closed, nothing shows under the cards. "No documents yet" only shows
     when there are none.
 - Not seen in a browser.
+
+**Deployed 2026-10-08 as `b49a19e`** (tag `deploy/2026-10-08_1147`).
