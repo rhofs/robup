@@ -12206,3 +12206,5 @@ calendar to start once the keyboard is fully down, "bittelitt tregere".
   are theirs", not "pre-filled when created". When a feature is described in terms of a *person*
   (assigned alone), implement it as a rule evaluated at display time, not a value copied once.
 - Not seen in a browser.
+
+**Deployed 2026-10-09 as `9224c23`** (tag `deploy/2026-10-09_1225`).
