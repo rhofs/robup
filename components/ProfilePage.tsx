@@ -43,11 +43,11 @@ export default function ProfilePage({ currentUser, onUpdate, onSetUsername }: Pr
         </div>
 
         {/* Your own colour: the circle behind your initials wherever you have no picture, and the
-            colour an event starts in when it is just yours ("kanskje man velger en profilfarge, som da
-            er default om man starter event med kun seg selv i"). */}
+            colour of every event you are the only one on (CalendarView's eventColorOf) — "den skal
+            automatisk gå på events som han er assignet til. Hvis han er assignet alene." */}
         <div className="space-y-1.5">
           <p className="text-[11px] text-neutral-500">
-            Profile colour{currentUser.avatarUrl ? ' — shown where your picture is not' : ''}. Your own events start in it.
+            Profile colour{currentUser.avatarUrl ? ' — shown where your picture is not' : ''}. Events where you are the only one assigned show in it.
           </p>
           <ColorSwatchPicker value={currentUser.color} onChange={(c) => c && onUpdate({ color: c })} choices={PROFILE_COLORS} size="md" />
         </div>

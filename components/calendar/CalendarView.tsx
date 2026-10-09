@@ -81,6 +81,7 @@ export default function CalendarView({ tasks, events, statuses, workspaces, show
     setCalendarGranularity: setGranularity,
     setCalendarFocusDate: setFocusDate,
     activeWorkspaceId,
+    users,
   } = useTaskStore();
   const [weekDrag, setWeekDrag] = useState<DragState | null>(null);
   // The day range currently being drawn by holding a cell and dragging across others. Lives here
@@ -189,10 +190,23 @@ export default function CalendarView({ tasks, events, statuses, workspaces, show
     return statusColorOf(task.status);
   };
 
-  // An Event's own linked Space cascades color the same way a Task's List does — falls back to
-  // the Event's own `color` field, then the fixed default, never to Status (Events have no
-  // status concept at all).
+  // An event's colour, first match wins:
+  //   1. a colour picked on the event itself (only offered while it has no Space);
+  //   2. the profile colour of the one person on it, when exactly one is — a rule, so it follows
+  //      them as they change their colour and as they are put on or taken off. "han kan velge farge,
+  //      og den skal automatisk gå på events som han er assignet til. Hvis han er assignet alene."
+  //      The first version only stamped the creator's colour onto events they made for themselves;
+  //      an event someone else put him on alone never got it;
+  //   3. its Space's colour;
+  //   4. the default.
+  // Never Status — events have none.
   const eventColorOf = (event: Event): string => {
+    if (event.color && !event.spaceId) return event.color;
+    if (event.assignees.length === 1) {
+      const only = event.assignees[0];
+      const color = users.find((u) => u.id === only.id)?.color ?? only.color;
+      if (color) return color;
+    }
     if (event.spaceId) {
       for (const ws of workspaces) {
         const space = ws.spaces.find((s) => s.id === event.spaceId);

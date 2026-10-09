@@ -183,8 +183,25 @@ export default function EventDetailModal({ event, workspaces, users, currentUser
 
           {!event.spaceId && (
             <div className="space-y-1.5">
-              <label className="text-[10px] uppercase tracking-wide text-neutral-500 font-semibold">Color</label>
+              <label className="text-[10px] uppercase tracking-wide text-neutral-500 font-semibold flex items-center gap-2">
+                Color
+                {/* Back to automatic: the one person's colour, or the default (CalendarView's eventColorOf). */}
+                {event.color && (
+                  <button
+                    onClick={() => onUpdate({ color: null })}
+                    className="normal-case tracking-normal font-normal text-[10.5px] text-blue-400 hover:text-blue-300 cursor-pointer"
+                  >
+                    Auto
+                  </button>
+                )}
+              </label>
               <ColorSwatchPicker value={event.color} onChange={(color) => onUpdate({ color })} choices={EVENT_COLOR_CHOICES} size="sm" />
+              {!event.color && event.assignees.length === 1 && (
+                <p className="text-[10.5px] text-neutral-500 flex items-center gap-1.5">
+                  <span className="w-2 h-2 rounded-full" style={{ backgroundColor: users.find((u) => u.id === event.assignees[0].id)?.color ?? event.assignees[0].color }} />
+                  Shows in {event.assignees[0].name.split(' ')[0]}&apos;s colour while they are the only one on it.
+                </p>
+              )}
             </div>
           )}
 

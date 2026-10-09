@@ -12174,3 +12174,35 @@ calendar to start once the keyboard is fully down, "bittelitt tregere".
 - Not seen in a browser.
 
 **Deployed 2026-10-08 as `b49a19e`** (tag `deploy/2026-10-08_1147`).
+
+### 2026-10-09 — profile colour on events is a rule, not a stamp (correction)
+
+- **Feedback (signed Krister Larsen, sharp):** "han kan velge farge, og … den skal automatisk gå på
+  events som han er assignet til. Hvis han er assignet alene. Og det er det ikke."
+- **What `0d78ff9` got wrong:** it read "default om man starter event med kun seg selv i" as a
+  creation default. It *stamped the creator's colour* onto an event they made for themselves.
+  - An event someone else put Krister on alone never got his colour.
+  - Existing events never got it.
+  - Changing your colour later changed nothing.
+  - The requirement is a rule about **the one assignee**, not about the creator.
+- **Built:**
+  - `eventColorOf` in `CalendarView.tsx` (the only place an event's colour is decided; Month,
+    Week, Day and the drag preview all use it), first match wins:
+    1. a colour picked on the event (only offered while it has no Space);
+    2. **the current profile colour of the one assignee, when there is exactly one**;
+    3. the Space's colour;
+    4. the default.
+  - The sole-assignee colour beats the Space colour, because that is what was asked.
+  - The create forms (desktop and mobile) no longer stamp a colour; only a picked one is stored.
+    The desktop form says "Shows in <name>'s colour while they are the only one on it".
+  - The event window says the same under Color, and gets an **"Auto"** link when a colour was
+    picked, which clears it back to the rule.
+  - The profile text is updated.
+- **Left as is:** events created between `0d78ff9` and this deploy, by someone who was their only
+  attendee (or private ones with none), have the creator's colour *stored*. They look the same
+  until that person changes colour; "Auto" in the event window releases them. No data migration
+  was run for this.
+- **Lesson:** "default for X" in a request about a person's colour meant "always, for things that
+  are theirs", not "pre-filled when created". When a feature is described in terms of a *person*
+  (assigned alone), implement it as a rule evaluated at display time, not a value copied once.
+- Not seen in a browser.
