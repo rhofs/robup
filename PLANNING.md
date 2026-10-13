@@ -12333,3 +12333,32 @@ calendar to start once the keyboard is fully down, "bittelitt tregere".
 - Not seen in a browser.
 
 **Deployed 2026-10-13 as `561adf2`** (tag `deploy/2026-10-13_1256`); the list_statuses migration ran at start. Way back for data: the Pterodactyl backup above or the 12:56:20Z start snapshot.
+
+### 2026-10-14 — idea only: grouping tasks and subtasks in My Assigned Tasks (nothing built)
+
+- **Asked (brainstorm, "ikke endre noe enda"):** group a task and its subtasks in My Assigned Tasks
+  "som i list", so 1 task with 2 assigned subtasks does not look like 3 separate tasks. It should
+  also cover owning the parent but only some subtasks, and so on.
+- **Proposed:**
+  - **Group by top-level task.**
+    - Your rows sit under it in the List's own order (the "system" order), not by date.
+    - When only subtasks are yours, the parent shows as a *muted context header* (no circle, shows
+      its owner).
+    - When only the parent is yours: one row with progress ("3/19 subtasks done"), expandable.
+    - Non-assigned subtasks hidden behind "+ N other subtasks", shown muted.
+    - Deeper levels show intermediate parents as a short inline path.
+  - Three layouts offered:
+    1. **Reuse TaskRow, as in the List view** (arrows, circle, status, dates, indent) —
+       **recommended**: consistent, and tasks can be finished from there.
+    2. Card per parent with a checklist of your subtasks (good on mobile).
+    3. Two-level grouping, List then parent.
+  - Rules to settle:
+    - A group sorts by the earliest due date among *your* rows in it.
+    - A group disappears when everything of yours in it is finished. A finished parent with open
+      subtasks of yours stays as a muted header.
+    - The header counts only your tasks.
+    - A private parent you cannot see falls back to the text path.
+  - Later option: "Group by: Task / List / Due date (Overdue/Today/This week/Later) / None", like
+    ClickUp's My Work.
+- **Open question put to the user:** should subtasks that are not yours show at all (muted, behind
+  a toggle), or only yours? Awaiting the answer before building.
