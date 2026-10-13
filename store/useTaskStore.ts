@@ -8,6 +8,7 @@ import { uploadChatFile } from '../lib/uploadChatFile';
 import { parseTaskTemplate, type AppTemplate, type TemplateKind } from '../lib/templates';
 import { useSessionStore } from './useSessionStore';
 import { celebrateTaskDone, isClosedStatus } from '../lib/taskDoneDust';
+import { statusesOfList } from '../lib/listStatuses';
 
 export type StatusDef = {
   id: string;
@@ -198,6 +199,9 @@ export type HierarchyList = {
   columnWidthsJson: string | null;
   // `{"by":"name","order":"asc"}`, or null for manual order.
   sortJson: string | null;
+  // The List's own statuses ("Use custom statuses"); empty or absent = it uses its Space's. Read
+  // through lib/listStatuses.ts, not directly, so every place agrees which set a task is in.
+  statuses?: StatusDef[];
 };
 
 export type HierarchySpace = {
@@ -435,7 +439,9 @@ interface TaskStore {
   applySpaceStatuses: (
     spaceId: string,
     statuses: { id?: string; name: string; color: string; kind: 'open' | 'done' | 'closed'; icon: string | null }[],
-    rename: Record<string, string>
+    rename: Record<string, string>,
+    // A List's own set instead of the Space's; `inherit` gives it up and goes back to the Space's.
+    target?: { listId: string; inherit?: boolean }
   ) => Promise<string | null>;
   updateStatus: (
     spaceId: string,
@@ -1212,7 +1218,7 @@ export const useTaskStore = create<TaskStore>((set, get) => {
       // closed status, not into a done one: "Når jeg trykker 'Done' status, så kommer det partikkel
       // effekt som kun 'Close' skal ha".
       if (task && oldStatus !== newStatus) {
-        const statuses = get().workspaces.flatMap((w) => w.spaces).find((sp) => sp.lists.some((l) => l.id === task.listId))?.statuses ?? [];
+        const statuses = statusesOfList(get().workspaces, task.listId) ?? [];
         if (isClosedStatus(newStatus, statuses) && !(oldStatus && isClosedStatus(oldStatus, statuses))) celebrateTaskDone(taskId);
       }
       set((state) => ({
@@ -1239,7 +1245,9 @@ export const useTaskStore = create<TaskStore>((set, get) => {
       const space = get()
         .workspaces.flatMap((w) => w.spaces)
         .find((s) => s.id === spaceId);
-      const defaultStatus = explicitStatus ?? space?.statuses?.[0]?.name ?? 'To Do';
+      // The List's own first status when it has its own, else the Space's.
+      const listStatuses = statusesOfList(get().workspaces, listId) ?? space?.statuses ?? [];
+      const defaultStatus = explicitStatus ?? [...listStatuses].sort((a, b) => a.order - b.order)[0]?.name ?? 'To Do';
 
       // `order` matters here, and its absence was a real bug rather than an omission.
       //
@@ -1573,11 +1581,11 @@ export const useTaskStore = create<TaskStore>((set, get) => {
       }
     },
 
-    applySpaceStatuses: async (spaceId, statuses, rename) => {
+    applySpaceStatuses: async (spaceId, statuses, rename, target) => {
       const res = await fetch(`/api/spaces/${spaceId}/statuses`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ statuses, rename }),
+        body: JSON.stringify({ statuses, rename, listId: target?.listId, inherit: target?.inherit === true }),
       }).catch(() => null);
       if (!res || !res.ok) {
         const err = res ? await res.json().catch(() => null) : null;
@@ -1586,11 +1594,21 @@ export const useTaskStore = create<TaskStore>((set, get) => {
       const { statuses: saved } = (await res.json()) as { statuses: StatusDef[] };
       set((state) => {
         const space = state.workspaces.flatMap((w) => w.spaces).find((sp) => sp.id === spaceId);
-        const listIds = new Set(space?.lists.map((l) => l.id) ?? []);
+        // The tasks the change reached, as on the server (lib/statusSets.ts): the one List's, or those
+        // of the Space's Lists without their own statuses.
+        const listIds = new Set(
+          target ? [target.listId] : (space?.lists.filter((l) => !l.statuses?.length).map((l) => l.id) ?? [])
+        );
         return {
           workspaces: state.workspaces.map((ws) => ({
             ...ws,
-            spaces: ws.spaces.map((sp) => (sp.id === spaceId ? { ...sp, statuses: saved } : sp)),
+            spaces: ws.spaces.map((sp) =>
+              sp.id !== spaceId
+                ? sp
+                : target
+                  ? { ...sp, lists: sp.lists.map((l) => (l.id === target.listId ? { ...l, statuses: target.inherit ? [] : saved } : l)) }
+                  : { ...sp, statuses: saved }
+            ),
           })),
           // The same moves the server made, once per task (a swap must not apply twice).
           tasks: state.tasks.map((t) =>
@@ -1622,23 +1640,33 @@ export const useTaskStore = create<TaskStore>((set, get) => {
     },
 
     updateStatus: async (spaceId, statusId, patch) => {
-      const oldStatus = get()
+      // The status is the Space's own or one List's own (lib/listStatuses.ts) — look in both.
+      const ownerSpace = get()
         .workspaces.flatMap((w) => w.spaces)
-        .find((s) => s.id === spaceId)
-        ?.statuses.find((s) => s.id === statusId);
+        .find((s) => s.id === spaceId);
+      const ownerList = ownerSpace?.lists.find((l) => l.statuses?.some((st) => st.id === statusId));
+      const oldStatus = (ownerList?.statuses ?? ownerSpace?.statuses)?.find((s) => s.id === statusId);
+      // A rename reaches the tasks this status is for: its List's, or those of the Space's Lists that
+      // do not have their own. It used to rename every task with that name, in every Space.
+      const reachedListIds = new Set(
+        ownerList ? [ownerList.id] : (ownerSpace?.lists.filter((l) => !l.statuses?.length).map((l) => l.id) ?? [])
+      );
+      const bump = (sts: StatusDef[]) => sts.map((st) => (st.id === statusId ? { ...st, ...patch } : st));
 
       set((state) => ({
         workspaces: state.workspaces.map((ws) => ({
           ...ws,
           spaces: ws.spaces.map((s) =>
-            s.id === spaceId
-              ? { ...s, statuses: s.statuses.map((st) => (st.id === statusId ? { ...st, ...patch } : st)) }
-              : s
+            s.id !== spaceId
+              ? s
+              : ownerList
+                ? { ...s, lists: s.lists.map((l) => (l.id === ownerList.id ? { ...l, statuses: bump(l.statuses ?? []) } : l)) }
+                : { ...s, statuses: bump(s.statuses) }
           ),
         })),
         tasks:
           patch.name !== undefined && oldStatus && patch.name !== oldStatus.name
-            ? state.tasks.map((t) => (t.status === oldStatus.name ? { ...t, status: patch.name! } : t))
+            ? state.tasks.map((t) => (reachedListIds.has(t.listId) && t.status === oldStatus.name ? { ...t, status: patch.name! } : t))
             : state.tasks,
       }));
 

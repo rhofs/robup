@@ -73,8 +73,10 @@ export default function MyTasksPage({ currentUser, currentWorkspace, tasks, fall
     const map = new Map<string, { path: string[]; statuses: StatusDef[] }>();
     if (!currentWorkspace) return map;
     for (const space of currentWorkspace.spaces) {
-      const statuses = space.statuses?.length ? space.statuses : fallbackStatuses;
+      const spaceStatuses = space.statuses?.length ? space.statuses : fallbackStatuses;
       for (const list of space.lists) {
+        // The List's own statuses when it has them (lib/listStatuses.ts), else the Space's.
+        const statuses = list.statuses?.length ? list.statuses : spaceStatuses;
         const folders: string[] = [];
         let folderId = list.folderId;
         for (let guard = 0; folderId && guard < 20; guard++) {

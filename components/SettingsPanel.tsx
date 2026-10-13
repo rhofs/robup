@@ -1198,14 +1198,15 @@ export default function SettingsPanel({
                 <HapticDiagnostics strength={haptics} />
               </>
             )}
-            {/* Where the app opens. Only meaningful on a phone — desktop has one tree and a
-                workspace switcher, so there is no "which tab" to choose. */}
-            {isMobile && (
+            {/* Where the app opens on a cold start, on this device — phone and desktop alike, with My
+                Assigned Tasks among the choices (lib/startPage.ts). */}
+            {(
               <>
                 <div className="text-[10px] uppercase tracking-wide text-neutral-500 px-1 pt-3 pb-1">Start page</div>
                 <div className="flex items-center gap-1 bg-neutral-950 border border-neutral-800 rounded-lg p-0.5 mb-3">
                   {([
-                    ['me', 'Me'],
+                    ['me', isMobile ? 'Me' : 'Tasks'],
+                    ['mytasks', 'Assigned'],
                     ['office', 'Office'],
                     ['planner', 'Planner'],
                   ] as const).map(([value, label]) => (

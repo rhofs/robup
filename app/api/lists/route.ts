@@ -27,5 +27,6 @@ export async function POST(req: Request) {
     // brings back the field it was silently omitting, even though the row was created correctly.
     select: { id: true, name: true, color: true, textColor: true, icon: true, spaceId: true, folderId: true, docId: true, order: true, archived: true, isPrivate: true, accessJson: true },
   });
-  return NextResponse.json(list);
+  // A new List has no statuses of its own yet — it inherits its Space's (see the workspaces payload).
+  return NextResponse.json({ ...list, statuses: [] });
 }

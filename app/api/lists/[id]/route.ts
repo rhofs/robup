@@ -54,6 +54,11 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
   if (body.columnWidthsJson !== undefined) data.columnWidthsJson = body.columnWidthsJson;
   if (body.sortJson !== undefined) data.sortJson = body.sortJson;
   if (body.spaceId !== undefined) data.spaceId = body.spaceId;
+  // A List that moves Space takes its own statuses along (Status.spaceId follows); without this they
+  // would still hang off the old Space and go when it is deleted.
+  if (typeof body.spaceId === 'string' && body.spaceId) {
+    await prisma.status.updateMany({ where: { listId: id }, data: { spaceId: body.spaceId } });
+  }
 
   // Stricter, separate Owner/Admin-only gate on top of the plain "can you see this" check above.
   if (body.isPrivate !== undefined || body.accessJson !== undefined) {

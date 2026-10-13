@@ -52,6 +52,23 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
       },
     });
 
+    // The List's own statuses come along, so its copied tasks keep meaning the same thing.
+    const ownStatuses = await tx.status.findMany({ where: { listId: id }, orderBy: { order: 'asc' } });
+    if (ownStatuses.length) {
+      await tx.status.createMany({
+        data: ownStatuses.map((s) => ({
+          name: s.name,
+          color: s.color,
+          isDone: s.isDone,
+          isClosed: s.isClosed,
+          icon: s.icon,
+          order: s.order,
+          spaceId: targetSpaceId,
+          listId: list.id,
+        })),
+      });
+    }
+
     const roots = await tx.task.findMany({
       where: { listId: id, parentId: null, deletedAt: null, archived: false },
       // In the List's own order, and each copy keeps its `order` — the same fix as the task

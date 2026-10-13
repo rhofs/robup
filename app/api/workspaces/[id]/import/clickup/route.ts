@@ -70,7 +70,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
     prisma.space.findMany({ where: { workspaceId }, select: { id: true, name: true } }),
     prisma.folder.findMany({ where: { space: { workspaceId } }, select: { id: true, name: true, spaceId: true, parentId: true } }),
     prisma.list.findMany({ where: { space: { workspaceId } }, select: { id: true, name: true, spaceId: true, folderId: true } }),
-    prisma.status.findMany({ where: { space: { workspaceId } }, select: { id: true, name: true, spaceId: true } }),
+    prisma.status.findMany({ where: { space: { workspaceId }, listId: null }, select: { id: true, name: true, spaceId: true } }),
     prisma.workspaceMembership.findMany({ where: { workspaceId }, select: { user: { select: { id: true, name: true } } } }),
   ]);
 

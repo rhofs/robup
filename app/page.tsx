@@ -1,5 +1,6 @@
 'use client';
 
+import { sortedStatusesOfList, statusesOfList } from '../lib/listStatuses';
 import { offerCompleteSubtasks } from '../lib/completeSubtasks';
 import { isDoneStatus } from '../lib/taskDoneDust';
 import { closeOnBackdrop } from '../lib/backdrop';
@@ -1717,9 +1718,13 @@ function PageContent() {
   const [statusMenuSpaceId, setStatusMenuSpaceId] = useState<string | null>(null);
   // Opened from "New status" in a group's "···" menu: the name field takes the focus.
   const [statusMenuFocusNew, setStatusMenuFocusNew] = useState(false);
-  const openStatusEditor = (spaceId: string | null, focusNew = false) => {
+  // The List it edits, when opened from one (then the window edits that List — its own statuses, or
+  // whether it inherits its Space's). Null: the Space's.
+  const [statusMenuListId, setStatusMenuListId] = useState<string | null>(null);
+  const openStatusEditor = (spaceId: string | null, focusNew = false, listId: string | null = null) => {
     setStatusMenuSpaceId(spaceId);
     setStatusMenuFocusNew(focusNew);
+    setStatusMenuListId(listId);
     setStatusMenuOpen(true);
   };
 
@@ -2156,8 +2161,7 @@ function PageContent() {
       const { tasks: all, workspaces: wss } = useTaskStore.getState();
       const parent = all.find((t) => t.id === d.taskId);
       if (!parent) return;
-      const space = wss.flatMap((w) => w.spaces).find((sp) => sp.lists.some((l) => l.id === parent.listId));
-      const own = space?.statuses?.length ? space.statuses : DEFAULT_STATUSES;
+      const own = statusesOfList(wss, parent.listId) ?? DEFAULT_STATUSES;
       const ids: string[] = [];
       const walk = (parentId: string, depth: number) => {
         if (depth > 12) return;
@@ -2179,9 +2183,10 @@ function PageContent() {
   // — the window had only been reachable by right-clicking the Status column header.)
   useEffect(() => {
     const onEdit = (e: Event) => {
-      const d = (e as CustomEvent<{ spaceId?: string; focusNew?: boolean }>).detail;
+      const d = (e as CustomEvent<{ spaceId?: string; listId?: string | null; focusNew?: boolean }>).detail;
       setStatusMenuSpaceId(d?.spaceId ?? null);
       setStatusMenuFocusNew(!!d?.focusNew);
+      setStatusMenuListId(d?.listId ?? null);
       setStatusMenuOpen(true);
     };
     window.addEventListener('siqt-edit-statuses', onEdit);
@@ -2465,6 +2470,13 @@ function PageContent() {
       // `isMobile` is known synchronously, so the trap it was working around is gone with it.
       if (isMobile) coldLaunchHomeRef.current = true;
       else setMobileSpacesOpen(true);
+    } else if (!hasHydratedFromUrlRef.current && !isMobile && searchParams.toString() === '') {
+      // Desktop's cold start goes to the Start page setting too (lib/startPage.ts). "Tasks" ('me')
+      // leaves it on the board, as before.
+      const start = readStartPage();
+      if (start === 'mytasks') setActiveView('mytasks');
+      else if (start === 'planner') setActiveView('calendar');
+      else if (start === 'office') setActiveView('office');
     }
 
     hasHydratedFromUrlRef.current = true;
@@ -2984,6 +2996,10 @@ function PageContent() {
       setActiveView('calendar');
       return;
     }
+    if (start === 'mytasks') {
+      setActiveView('mytasks');
+      return;
+    }
     if (start === 'office' && hasRealWorkspace) {
       openOfficeContext();
       return;
@@ -3297,7 +3313,14 @@ function PageContent() {
     activeSpaceId === 'everything' &&
     !mobilePersonalSpacesOpen;
 
-  const statuses: StatusDef[] = currentSpace?.statuses?.length ? currentSpace.statuses : DEFAULT_STATUSES;
+  // The open List's own statuses when exactly one List is open and it has its own, else the Space's.
+  const openListOwnStatuses =
+    activeListIds.size === 1 ? currentSpace?.lists.find((l) => activeListIds.has(l.id))?.statuses : undefined;
+  const statuses: StatusDef[] = openListOwnStatuses?.length
+    ? openListOwnStatuses
+    : currentSpace?.statuses?.length
+      ? currentSpace.statuses
+      : DEFAULT_STATUSES;
   // The Space the Edit statuses window edits (see statusMenuSpaceId).
   const statusSpace =
     (statusMenuSpaceId ? workspaces.flatMap((w) => w.spaces).find((sp) => sp.id === statusMenuSpaceId) : undefined) ?? currentSpace;
@@ -3896,12 +3919,12 @@ function PageContent() {
   // task is given a status its Space does not know. A Closed status also closes (archives), as the
   // task circle does; any other reopens an archived task.
   const bulkStatusChoices = (): StatusDef[] => {
-    const sets = new Map<string, StatusDef[]>();
+    // One entry per distinct status set — a List with its own counts as its own set.
+    const sets = new Map<StatusDef[], StatusDef[]>();
     for (const id of selectedIds) {
       const t = tasks.find((x) => x.id === id);
-      const sp = t ? workspaces.flatMap((w) => w.spaces).find((x) => x.lists.some((l) => l.id === t.listId)) : undefined;
-      const own = sp?.statuses?.length ? [...sp.statuses].sort((a, b) => a.order - b.order) : DEFAULT_STATUSES;
-      sets.set(sp?.id ?? 'none', own);
+      const own = t ? statusesOfList(workspaces, t.listId) : undefined;
+      sets.set(own ?? DEFAULT_STATUSES, own ? [...own].sort((a, b) => a.order - b.order) : DEFAULT_STATUSES);
     }
     const [first, ...rest] = [...sets.values()];
     if (!first) return [];
@@ -7736,7 +7759,8 @@ function PageContent() {
                       disabled={!currentSpace}
                       onClick={() => {
                         setListOptionsOpen(false);
-                        openStatusEditor(null);
+                        // The open List's statuses when one List is open — not the whole Space's.
+                        openStatusEditor(null, false, activeListIds.size === 1 ? [...activeListIds][0] : null);
                       }}
                       className="w-full flex items-center gap-2.5 px-2 py-1.5 rounded-lg text-left text-[12.5px] text-neutral-200 hover:bg-neutral-800 cursor-pointer disabled:opacity-50 disabled:cursor-default disabled:hover:bg-transparent"
                     >
@@ -8415,7 +8439,7 @@ function PageContent() {
             {columnMenu.col.kind === 'status' && (
               <button
                 onClick={() => {
-                  openStatusEditor(null);
+                  openStatusEditor(null, false, activeListIds.size === 1 ? [...activeListIds][0] : null);
                   setColumnMenu(null);
                 }}
                 className="w-full text-left px-3 py-1.5 text-xs text-neutral-300 hover:bg-neutral-800/60 cursor-pointer flex items-center gap-2"
@@ -8860,8 +8884,9 @@ function PageContent() {
           (the siqt-edit-statuses event, for that List's Space) ================= */}
       {statusMenuOpen && statusSpace && (
         <StatusEditor
-          key={statusSpace.id}
+          key={`${statusSpace.id}:${statusMenuListId ?? ''}`}
           space={statusSpace}
+          list={statusMenuListId ? statusSpace.lists.find((l) => l.id === statusMenuListId) : undefined}
           workspaceId={workspaces.find((w) => w.spaces.some((sp) => sp.id === statusSpace.id))?.id ?? null}
           fallback={DEFAULT_STATUSES}
           focusNew={statusMenuFocusNew}
@@ -9171,10 +9196,7 @@ function PageContent() {
                     >
                       {/* The task's own Space's statuses, not the open Space's — from the Planner or My Tasks
                           those were another Space's (or the defaults). */}
-                      {(workspaces.flatMap((w) => w.spaces).find((sp) => sp.lists.some((l) => l.id === activeModalTask.listId))?.statuses?.length
-                        ? [...workspaces.flatMap((w) => w.spaces).find((sp) => sp.lists.some((l) => l.id === activeModalTask.listId))!.statuses].sort((a, b) => a.order - b.order)
-                        : DEFAULT_STATUSES
-                      ).map((s) => (
+                      {sortedStatusesOfList(workspaces, activeModalTask.listId, DEFAULT_STATUSES).map((s) => (
                         <button
                           key={s.id}
                           onClick={() => {

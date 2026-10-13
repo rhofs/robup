@@ -28,6 +28,7 @@ import { useTaskStore, type Task, type StatusDef, type CustomFieldDef, type Hier
 import TaskRow, { type ColumnDef } from '../TaskRow';
 import FloatingPopover from '../FloatingPopover';
 import Caret from '../Caret';
+import { statusesOfList } from '../../lib/listStatuses';
 import StatusGlyph, { statusKind } from '../StatusGlyph';
 import type { TaskListEmbedExtensionOptions } from './taskListEmbedView';
 
@@ -142,11 +143,6 @@ export default function TaskListEmbedBlock({ node, updateAttributes, deleteNode,
     }
     return out;
   }, [workspaces, listId]);
-  const spaceOfList = useMemo(() => {
-    const m = new Map<string, HierarchySpace>();
-    for (const ws of workspaces) for (const sp of ws.spaces) for (const l of sp.lists) m.set(l.id, sp);
-    return m;
-  }, [workspaces]);
   const list = listId ? lists.find((l) => l.id === listId) : undefined;
   const mode: 'list' | 'tasks' | 'setup' = listId ? 'list' : pickedIds.length ? 'tasks' : 'setup';
 
@@ -224,13 +220,19 @@ export default function TaskListEmbedBlock({ node, updateAttributes, deleteNode,
     return rows;
   };
 
-  const statuses: StatusDef[] = listSpace?.statuses?.length ? listSpace.statuses : FALLBACK_STATUSES;
+  // The List's own statuses when it has them, else its Space's (lib/listStatuses.ts).
+  const ownListStatuses = listId ? workspaces.flatMap((w) => w.spaces).flatMap((sp) => sp.lists).find((l) => l.id === listId)?.statuses : undefined;
+  const statuses: StatusDef[] = ownListStatuses?.length
+    ? [...ownListStatuses].sort((a, b) => a.order - b.order)
+    : listSpace?.statuses?.length
+      ? listSpace.statuses
+      : FALLBACK_STATUSES;
   // Status groups, in the Space's own order; a status no longer defined still gets a group, after.
   const groups = (() => {
     if (mode !== 'list') return [];
     // `def` is the Space's own status behind a group — absent for the built-in fallbacks and for a status
     // that no longer exists, which therefore cannot be renamed from here.
-    const own = !!listSpace?.statuses?.length;
+    const own = !!ownListStatuses?.length || !!listSpace?.statuses?.length;
     const out: { name: string; color: string; tasks: Task[]; def?: StatusDef }[] = statuses.map((s) => ({
       name: s.name,
       color: s.color,
@@ -261,8 +263,7 @@ export default function TaskListEmbedBlock({ node, updateAttributes, deleteNode,
   const allShownSelected = shownTop.length > 0 && shownTop.every((t) => selected.has(t.id));
 
   const renderRow = ({ task, depth, subtaskCount }: { task: Task; depth: number; subtaskCount: number }) => {
-    const sp = spaceOfList.get(task.listId);
-    const rowStatuses = mode === 'list' ? statuses : sp?.statuses?.length ? sp.statuses : FALLBACK_STATUSES;
+    const rowStatuses = mode === 'list' ? statuses : statusesOfList(workspaces, task.listId) ?? FALLBACK_STATUSES;
     return (
       <TaskRow
         key={task._localId || task.id}
@@ -284,10 +285,11 @@ export default function TaskListEmbedBlock({ node, updateAttributes, deleteNode,
     );
   };
 
-  // Statuses are edited in the app's Manage statuses window (app/page.tsx listens), for this List's Space.
+  // Statuses are edited in the app's Edit statuses window (app/page.tsx listens), for this List — its
+  // own statuses, or, while it inherits, a choice between its Space's and its own.
   const editStatuses = (spaceId: string, focusNew: boolean) => {
     setGroupMenu(null);
-    window.dispatchEvent(new CustomEvent('siqt-edit-statuses', { detail: { spaceId, focusNew } }));
+    window.dispatchEvent(new CustomEvent('siqt-edit-statuses', { detail: { spaceId, listId, focusNew } }));
   };
   const commitRename = (def: StatusDef) => {
     const name = renameDraft.trim();
@@ -752,6 +754,7 @@ export default function TaskListEmbedBlock({ node, updateAttributes, deleteNode,
               setAddDraft('');
               // Straight into typing the first task, in the Space's own first status.
               const sp = workspaces.flatMap((w) => w.spaces).find((x) => x.id === spaceId);
+              // A new List has no statuses of its own yet, so its Space's are the ones.
               setAddingIn(sp?.statuses?.[0]?.name ?? FALLBACK_STATUSES[0].name);
             }}
             onCancel={mode === 'setup' ? undefined : () => setSetupOpen(false)}

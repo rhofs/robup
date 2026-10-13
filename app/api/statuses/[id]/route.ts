@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { getCurrentUserId } from '@/lib/auth/session';
 import { ensureSpaceAccess } from '@/lib/auth/resourceAccess';
+import { inheritingListIds } from '@/lib/statusSets';
 
 export async function PATCH(req: Request, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
@@ -24,10 +25,12 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
 
   const updated = await prisma.status.update({ where: { id }, data });
 
+  // A rename moves the tasks filed under the old name — only those this status is for: its List's
+  // when it is a List's own, else those of the Space's Lists that do not have their own.
   if (body.name !== undefined && body.name !== existing.name) {
-    const lists = await prisma.list.findMany({ where: { spaceId: existing.spaceId }, select: { id: true } });
+    const listIds = existing.listId ? [existing.listId] : await inheritingListIds(existing.spaceId);
     await prisma.task.updateMany({
-      where: { status: existing.name, listId: { in: lists.map((l) => l.id) } },
+      where: { status: existing.name, listId: { in: listIds } },
       data: { status: body.name },
     });
   }

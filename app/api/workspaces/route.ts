@@ -32,9 +32,11 @@ export async function GET(req: Request) {
           },
           lists: {
             where: { deletedAt: null },
-            select: { id: true, name: true, color: true, textColor: true, icon: true, folderId: true, docId: true, order: true, archived: true, isPrivate: true, accessJson: true, visibleColumnsJson: true, columnWidthsJson: true, sortJson: true },
+            // `statuses`: the List's own, when it has chosen custom ones (empty = the Space's).
+            select: { id: true, name: true, color: true, textColor: true, icon: true, folderId: true, docId: true, order: true, archived: true, isPrivate: true, accessJson: true, visibleColumnsJson: true, columnWidthsJson: true, sortJson: true, statuses: { orderBy: { order: 'asc' } } },
           },
-          statuses: { orderBy: { order: 'asc' } },
+          // The Space's own set only — a List's own statuses come with that List above.
+          statuses: { where: { listId: null }, orderBy: { order: 'asc' } },
           customFields: true,
           // Space.docs is already scoped by the spaceId foreign key — task-scoped docs (spaceId
           // null) never come back here, they stay reachable only via /api/tasks/[id]/docs.

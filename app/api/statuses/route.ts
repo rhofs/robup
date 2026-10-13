@@ -9,7 +9,8 @@ export async function POST(req: Request) {
   if (!userId) return NextResponse.json({ error: 'Not authenticated' }, { status: 401 });
   if (!(await ensureSpaceAccess(body.spaceId, userId))) return NextResponse.json({ error: 'Not authorized for this space' }, { status: 403 });
 
-  const count = await prisma.status.count({ where: { spaceId: body.spaceId } });
+  // A Space status (listId null); a List's own come through app/api/spaces/[id]/statuses.
+  const count = await prisma.status.count({ where: { spaceId: body.spaceId, listId: null } });
   const status = await prisma.status.create({
     data: {
       ...(body.id ? { id: body.id } : {}),

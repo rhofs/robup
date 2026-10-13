@@ -43,6 +43,10 @@ model Workspace {
   // (lib/statusTemplates.ts). Null = the built-in default four.
   defaultStatusTemplate String? @map("default_status_template")
   statusTemplates StatusTemplate[]
+  // Whether the built-in status templates have been copied in as this workspace's own rows — done
+  // the first time its templates are listed, so they can be deleted like any other ("De kan godt være
+  // standard i starten på nye workspaces, men vi har lyst til å kunne slette de").
+  statusTemplatesSeeded Boolean @default(false) @map("status_templates_seeded")
   spaces          Space[]
   rooms           Room[]
   events          Event[]
@@ -389,6 +393,8 @@ model Folder {
 model List {
   id           String        @id @default(uuid())
   name         String
+  // This List's own statuses, when it has chosen custom ones (Status.listId); empty = the Space's.
+  statuses     Status[]
   color        String?
   // Independent from `color` above — colors the sidebar name text specifically; the icon/dot
   // keeps using `color` alone. Null falls back to `color`, so nothing changes for existing rows.
@@ -475,7 +481,13 @@ model Status {
   order     Int      @default(0)
   spaceId   String   @map("space_id")
   space     Space    @relation(fields: [spaceId], references: [id], onDelete: Cascade)
+  // Set on a List's own statuses ("Use custom statuses" in Edit statuses); null on the Space's, which
+  // every List without its own inherits. A List has its own set exactly when rows point at it.
+  listId    String?  @map("list_id")
+  list      List?    @relation(fields: [listId], references: [id], onDelete: Cascade)
   createdAt DateTime @default(now()) @map("created_at")
+
+  @@index([listId])
 }
 
 // 6. Egendefinerte felt/kolonner per Space

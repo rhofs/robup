@@ -8,7 +8,7 @@ import { CSS } from '@dnd-kit/utilities';
 import { X, Plus, GripVertical, MoreHorizontal, Info, ChevronDown, Trash2, Pencil, Check, ArrowRight } from 'lucide-react';
 import FloatingPopover from './FloatingPopover';
 import StatusGlyph, { STATUS_ICONS } from './StatusGlyph';
-import { useTaskStore, type HierarchySpace, type StatusDef } from '../store/useTaskStore';
+import { useTaskStore, type HierarchyList, type HierarchySpace, type StatusDef } from '../store/useTaskStore';
 import { BUILTIN_STATUS_TEMPLATES, type StatusKindName, type StatusTemplateDef, type TemplateStatus } from '../lib/statusTemplates';
 
 // The Edit statuses window, built after ClickUp's "Edit <List> statuses" (the user's screenshot: "sånn
@@ -21,8 +21,12 @@ import { BUILTIN_STATUS_TEMPLATES, type StatusKindName, type StatusTemplateDef, 
 // a removed status should go — tasks are filed under a status *name*, so a status that disappears
 // without that question would strand them.
 //
-// Not ClickUp's (yet): its "Status type: Inherit from Space / Use custom statuses" — statuses here
-// belong to the Space and every List in it shares them.
+// Opened from a List, it edits that List: "Status type" chooses between inheriting its Space's statuses
+// and keeping custom ones of its own (Status.listId). While it inherits, the Space's statuses show
+// read-only, and changing them is a separate, explicit step ("Edit <Space> statuses") — applying in a
+// List used to change the statuses of every List in the Space, which was reported as a critical bug:
+// "når vi endrer custom status i en liste, og applier, så applier han det for hele workspacet"
+// (2026-10-13). Opened from a Space (its menu), it edits the Space's statuses.
 
 type Draft = {
   key: string;
@@ -49,12 +53,16 @@ const kindOf = (s: { isDone?: boolean; isClosed?: boolean }): StatusKindName => 
 let keySeq = 0;
 const newKey = () => `new-${++keySeq}`;
 
-function draftFrom(space: HierarchySpace, fallback: StatusDef[]): Draft[] {
-  const own = [...(space.statuses ?? [])].sort((a, b) => a.order - b.order);
+// Rows for a status set. `keepIds`: they are the saved statuses being edited (a Space's own, or a List's
+// own); otherwise they are a starting point — the built-in defaults, or a List's first custom set copied
+// from its Space — and only their names carry over (origName: the tasks filed under them follow).
+function draftFrom(statuses: StatusDef[] | undefined, fallback: StatusDef[], keepIds: boolean): Draft[] {
+  const own = [...(statuses ?? [])].sort((a, b) => a.order - b.order);
   const src = own.length ? own : fallback;
+  const ids = keepIds && own.length > 0;
   return src.map((s) => ({
-    key: own.length ? s.id : newKey(),
-    id: own.length ? s.id : undefined,
+    key: ids ? s.id : newKey(),
+    id: ids ? s.id : undefined,
     origName: s.name,
     name: s.name,
     color: s.color,
@@ -70,16 +78,19 @@ const same = (a: { name: string; color: string; kind: string; icon?: string | nu
 // Draft in the order it is saved: Active, then Done, then Closed, each in its own order.
 const ordered = (d: Draft[]) => KINDS.flatMap((k) => d.filter((x) => x.kind === k.kind));
 
-type TemplatesState = { templates: StatusTemplateDef[]; defaultTemplate: string | null; canSetDefault: boolean };
+type TemplatesState = { loaded: boolean; templates: StatusTemplateDef[]; defaultTemplate: string | null; canSetDefault: boolean };
 
 export default function StatusEditor({
   space,
+  list,
   workspaceId,
   fallback,
   focusNew = false,
   onClose,
 }: {
   space: HierarchySpace;
+  // The List it was opened from, if any — then it edits that List (see the note at the top).
+  list?: HierarchyList;
   workspaceId: string | null;
   // The built-in statuses a Space without its own shows (page.tsx's DEFAULT_STATUSES).
   fallback: StatusDef[];
@@ -90,13 +101,24 @@ export default function StatusEditor({
   const updateSpace = useTaskStore((s) => s.updateSpace);
   const allTasks = useTaskStore((s) => s.tasks);
 
-  // Built once, together: opened from "New status", the window starts with an empty Active row to type in.
+  // What "Apply" saves: the Space's statuses, or the List's. A List that has its own starts on them;
+  // one that inherits starts on "Inherit", showing its Space's.
+  const listHadOwn = !!list?.statuses?.length;
+  const [target, setTarget] = useState<'space' | 'list'>(list ? 'list' : 'space');
+  // "New status" from a List that inherits starts its own set — there is nowhere else to add one.
+  const [listCustom, setListCustom] = useState(listHadOwn || (!!list && focusNew));
+  const editing = target === 'space' || listCustom;
+  // The Space's statuses as rows (read-only while a List inherits, and the base when it goes custom).
+  const spaceRows = () => draftFrom(space.statuses, fallback, true);
+
+  // Built once, together: opened from "New status", the window starts with an empty Active row to type
+  // in — which, in a List that inherits, means starting its own set.
   const [boot] = useState(() => {
-    const init = draftFrom(space, fallback);
     const extra: Draft | null = focusNew ? { key: newKey(), name: '', color: COLORS[1], kind: 'open', icon: null } : null;
+    const init = list ? (listHadOwn ? draftFrom(list.statuses, fallback, true) : draftFrom(space.statuses, fallback, false)) : spaceRows();
     return { init, extra };
   });
-  const initial = boot.init;
+  const [initial, setInitial] = useState<Draft[]>(boot.init);
   const [draft, setDraft] = useState<Draft[]>(() => (boot.extra ? [...boot.init, boot.extra] : boot.init));
   const [focusKey, setFocusKey] = useState<string | null>(boot.extra?.key ?? null);
   const [checkMode, setCheckMode] = useState<'menu' | 'close'>(space.checkMode === 'close' ? 'close' : 'menu');
@@ -105,7 +127,7 @@ export default function StatusEditor({
   const [targets, setTargets] = useState<Record<string, string>>({});
   const [error, setError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
-  const [tpl, setTpl] = useState<TemplatesState>({ templates: [], defaultTemplate: null, canSetDefault: false });
+  const [tpl, setTpl] = useState<TemplatesState>({ loaded: false, templates: [], defaultTemplate: null, canSetDefault: false });
   const [tplMenu, setTplMenu] = useState(false);
   const [defaultMenu, setDefaultMenu] = useState(false);
   const [saveTplOpen, setSaveTplOpen] = useState(false);
@@ -118,7 +140,7 @@ export default function StatusEditor({
     fetch(`/api/status-templates?workspaceId=${encodeURIComponent(workspaceId)}`)
       .then((r) => (r.ok ? r.json() : null))
       .then((d) => {
-        if (alive && d) setTpl({ templates: d.templates ?? [], defaultTemplate: d.defaultTemplate ?? null, canSetDefault: !!d.canSetDefault });
+        if (alive && d) setTpl({ loaded: true, templates: d.templates ?? [], defaultTemplate: d.defaultTemplate ?? null, canSetDefault: !!d.canSetDefault });
       })
       .catch(() => {});
     return () => {
@@ -126,16 +148,47 @@ export default function StatusEditor({
     };
   }, [workspaceId]);
 
-  const allTemplates: StatusTemplateDef[] = [...BUILTIN_STATUS_TEMPLATES, ...tpl.templates];
+  // The built-in templates are copied into each workspace as its own (deletable) templates the first
+  // time they are listed (app/api/status-templates), so once loaded the list is just the workspace's.
+  const allTemplates: StatusTemplateDef[] = tpl.loaded ? tpl.templates : BUILTIN_STATUS_TEMPLATES;
   const asTemplate = (d: Draft[]): TemplateStatus[] => ordered(d).map(({ name, color, kind, icon }) => ({ name: name.trim(), color, kind, icon }));
-  const current = asTemplate(draft);
+  // What is on screen: the draft, or — while a List inherits — its Space's statuses.
+  const shownRows = editing ? draft : spaceRows();
+  const current = asTemplate(shownRows);
   const matching = allTemplates.find((t) => same(t.statuses, current));
   const settingsDirty = checkMode !== (space.checkMode === 'close' ? 'close' : 'menu') || strikeDone !== !!space.strikeDone;
   // Content, or which saved status sits where (a removed status re-added under the same name is a new
   // status, not the old one).
   const initialKeys = ordered(initial).map((d) => d.key);
-  const statusesDirty = !same(current, asTemplate(initial)) || ordered(draft).some((d, i) => d.key !== initialKeys[i]);
+  const draftChanged = !same(asTemplate(draft), asTemplate(initial)) || ordered(draft).some((d, i) => d.key !== initialKeys[i]);
+  // For a List: whether it switched between inheriting and its own set.
+  const typeChanged = target === 'list' && listCustom !== listHadOwn;
+  const statusesDirty = typeChanged || (editing && draftChanged);
   const dirty = statusesDirty || settingsDirty;
+
+  // Switching what the window edits. Each switch starts from what is saved for that choice.
+  const useCustom = () => {
+    if (listCustom) return;
+    setListCustom(true);
+    // Its own saved set if it had one; else a copy of the Space's to start from.
+    const rows = listHadOwn ? draftFrom(list!.statuses, fallback, true) : draftFrom(space.statuses, fallback, false);
+    setInitial(listHadOwn ? rows : draftFrom(space.statuses, fallback, false).map((r, i) => ({ ...r, key: rows[i].key })));
+    setDraft(rows);
+  };
+  const useInherit = () => setListCustom(false);
+  const editSpaceInstead = () => {
+    const rows = spaceRows();
+    setTarget('space');
+    setInitial(rows);
+    setDraft(rows);
+  };
+  const backToList = () => {
+    setTarget('list');
+    const rows = listHadOwn ? draftFrom(list!.statuses, fallback, true) : draftFrom(space.statuses, fallback, false);
+    setInitial(rows);
+    setDraft(rows);
+    setListCustom(listHadOwn);
+  };
 
   const patch = (key: string, p: Partial<Draft>) => setDraft((d) => d.map((x) => (x.key === key ? { ...x, ...p } : x)));
   const remove = (key: string) => setDraft((d) => d.filter((x) => x.key !== key));
@@ -148,8 +201,15 @@ export default function StatusEditor({
 
   const chooseTemplate = (t: StatusTemplateDef) => {
     setTplMenu(false);
+    // A template in a List that inherits gives it its own set.
+    let base = initial;
+    if (target === 'list' && !listCustom) {
+      base = listHadOwn ? draftFrom(list!.statuses, fallback, true) : draftFrom(space.statuses, fallback, false);
+      setInitial(base);
+      setListCustom(true);
+    }
     // A status of the same name keeps its identity — and its tasks — instead of being removed and made anew.
-    const pool = [...initial];
+    const pool = [...base];
     setDraft(
       t.statuses.map((s) => {
         const i = pool.findIndex((p) => p.name.toLowerCase() === s.name.toLowerCase());
@@ -171,14 +231,24 @@ export default function StatusEditor({
   };
   const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 4 } }));
 
+  // The tasks a change here reaches: this List's, or those of the Space's Lists without their own.
+  const listIds = new Set(target === 'list' ? [list!.id] : space.lists.filter((l) => !l.statuses?.length).map((l) => l.id));
+  // A List going back to inheriting: its own statuses whose names its Space does not have.
+  const goingBack = target === 'list' && listHadOwn && !listCustom;
+  const goneByInherit = goingBack
+    ? draftFrom(list!.statuses, fallback, true).filter((r) => !shownRows.some((sr) => sr.name === r.name))
+    : [];
   // Removed statuses, by the name their tasks are filed under — and how many tasks that is, here.
-  const listIds = new Set(space.lists.map((l) => l.id));
-  const removed = initial
-    .filter((i) => i.origName && !draft.some((d) => d.key === i.key))
-    .map((i) => ({ ...i, count: allTasks.filter((t) => listIds.has(t.listId) && t.status === i.origName).length }));
+  const removed = (goingBack ? goneByInherit : editing ? initial.filter((i) => i.origName && !draft.some((d) => d.key === i.key)) : []).map((i) => ({
+    ...i,
+    count: allTasks.filter((t) => listIds.has(t.listId) && t.status === i.origName).length,
+  }));
+  // The statuses tasks can be moved to.
+  const destinations = goingBack ? ordered(shownRows) : ordered(draft);
   const defaultTarget = (r: Draft, list: Draft[]) => (list.find((d) => d.kind === r.kind) ?? list.find((d) => d.kind === 'open') ?? list[0])?.name.trim() ?? '';
 
   const validate = (): string | null => {
+    if (!editing) return null;
     const names = draft.map((d) => d.name.trim());
     if (names.some((n) => !n)) return 'Every status needs a name.';
     const lower = names.map((n) => n.toLowerCase());
@@ -191,21 +261,23 @@ export default function StatusEditor({
     const problem = validate();
     if (problem) return setError(problem);
     setError(null);
-    const list = ordered(draft);
+    const rows = ordered(draft);
     if (!confirmed && removed.some((r) => r.count > 0)) {
-      setTargets(Object.fromEntries(removed.map((r) => [r.origName!, defaultTarget(r, list)])));
+      setTargets(Object.fromEntries(removed.map((r) => [r.origName!, defaultTarget(r, destinations)])));
       setStep('migrate');
       return;
     }
     setSaving(true);
-    if (statusesDirty || !space.statuses?.length) {
+    const savesStatuses = target === 'list' ? statusesDirty : statusesDirty || !space.statuses?.length;
+    if (savesStatuses) {
       const rename: Record<string, string> = {};
-      for (const d of list) if (d.origName && d.origName !== d.name.trim()) rename[d.origName] = d.name.trim();
-      for (const r of removed) rename[r.origName!] = targets[r.origName!] ?? defaultTarget(r, list);
+      if (editing) for (const d of rows) if (d.origName && d.origName !== d.name.trim()) rename[d.origName] = d.name.trim();
+      for (const r of removed) rename[r.origName!] = targets[r.origName!] ?? defaultTarget(r, destinations);
       const err = await applySpaceStatuses(
         space.id,
-        list.map((d) => ({ id: d.id, name: d.name.trim(), color: d.color, kind: d.kind, icon: d.icon })),
-        rename
+        editing ? rows.map((d) => ({ id: d.id, name: d.name.trim(), color: d.color, kind: d.kind, icon: d.icon })) : [],
+        rename,
+        target === 'list' ? { listId: list!.id, inherit: !listCustom } : undefined
       );
       if (err) {
         setSaving(false);
@@ -258,7 +330,7 @@ export default function StatusEditor({
     if (!res || !res.ok) return setError('Could not change the default template.');
     setTpl((s) => ({ ...s, defaultTemplate: id }));
   };
-  const defaultName = tpl.defaultTemplate ? (allTemplates.find((t) => t.id === tpl.defaultTemplate)?.name ?? 'Siqt default') : 'Siqt default';
+  const defaultName = tpl.defaultTemplate ? (allTemplates.find((t) => t.id === tpl.defaultTemplate)?.name ?? 'Standard') : 'Standard (To Do … Done)';
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-scrim/70 backdrop-blur-xs p-3" {...closeOnBackdrop(attemptClose)}>
@@ -268,7 +340,7 @@ export default function StatusEditor({
       >
         <div className="px-5 h-14 shrink-0 border-b border-neutral-800 flex items-center justify-between gap-3">
           <h3 className="font-semibold text-[15px] text-app-strong truncate">
-            Edit <span className="underline decoration-dashed decoration-neutral-600 underline-offset-4">{space.name}</span> statuses
+            Edit <span className="underline decoration-dashed decoration-neutral-600 underline-offset-4">{target === 'list' ? list!.name : space.name}</span> statuses
           </h3>
           <button onClick={attemptClose} className="w-8 h-8 rounded-full flex items-center justify-center text-neutral-400 hover:text-app-strong hover:bg-neutral-800 cursor-pointer">
             <X className="w-4 h-4" />
@@ -297,7 +369,7 @@ export default function StatusEditor({
                       onChange={(e) => setTargets((t) => ({ ...t, [r.origName!]: e.target.value }))}
                       className="bg-neutral-950 border border-neutral-700 rounded-lg px-2 py-1.5 text-[12px] text-app-strong focus:outline-none focus:border-blue-500 cursor-pointer max-w-[45%]"
                     >
-                      {ordered(draft).map((d) => (
+                      {destinations.map((d) => (
                         <option key={d.key} value={d.name.trim()}>
                           {d.name.trim()}
                         </option>
@@ -311,6 +383,44 @@ export default function StatusEditor({
           <div className="flex-1 min-h-0 overflow-y-auto md:overflow-hidden flex flex-col md:flex-row">
             {/* ---- Left: template and settings ---- */}
             <div className="md:w-[250px] shrink-0 md:border-r border-b md:border-b-0 border-neutral-800 p-5 space-y-5 md:overflow-y-auto">
+              {/* A List chooses: its Space's statuses, or its own. */}
+              {list && target === 'list' && (
+                <div>
+                  <p className="flex items-center gap-1.5 text-[12px] text-neutral-400 mb-2">
+                    Status type
+                    <span title="A List can follow its Space's statuses, or have its own that only it uses." className="text-neutral-600 cursor-help">
+                      <Info className="w-3 h-3" />
+                    </span>
+                  </p>
+                  {(
+                    [
+                      [false, `Inherit from Space`],
+                      [true, 'Use custom statuses'],
+                    ] as const
+                  ).map(([custom, label]) => (
+                    <button
+                      key={label}
+                      onClick={custom ? useCustom : useInherit}
+                      className="w-full flex items-center gap-2.5 py-1.5 text-left cursor-pointer"
+                    >
+                      <span
+                        className={`w-4 h-4 rounded-full border-2 flex items-center justify-center shrink-0 ${
+                          listCustom === custom ? 'border-blue-500' : 'border-neutral-600'
+                        }`}
+                      >
+                        {listCustom === custom && <span className="w-2 h-2 rounded-full bg-blue-500" />}
+                      </span>
+                      <span className={`text-[13px] ${listCustom === custom ? 'text-app-strong' : 'text-neutral-400'}`}>{label}</span>
+                    </button>
+                  ))}
+                </div>
+              )}
+              {/* Editing the Space's statuses after starting from a List — a way back. */}
+              {list && target === 'space' && (
+                <button onClick={backToList} className="text-[12px] text-blue-400 hover:text-blue-300 cursor-pointer">
+                  ← Back to {list.name}
+                </button>
+              )}
               <div>
                 <p className="text-[12px] text-neutral-400 mb-2">Status template</p>
                 <FloatingPopover
@@ -327,9 +437,16 @@ export default function StatusEditor({
                     </button>
                   }
                 >
-                  <TemplateGroup label="Built-in" templates={BUILTIN_STATUS_TEMPLATES} selected={matching?.id} onPick={chooseTemplate} />
-                  {tpl.templates.length > 0 && (
-                    <TemplateGroup label="Saved" templates={tpl.templates} selected={matching?.id} onPick={chooseTemplate} onDelete={deleteTemplate} />
+                  {/* All deletable once loaded — the built-in ones are the workspace's own copies by then. */}
+                  <TemplateGroup
+                    label="Templates"
+                    templates={allTemplates}
+                    selected={matching?.id}
+                    onPick={chooseTemplate}
+                    onDelete={tpl.loaded ? deleteTemplate : undefined}
+                  />
+                  {tpl.loaded && allTemplates.length === 0 && (
+                    <p className="px-2 py-1.5 text-[11.5px] text-neutral-500">No templates. Save these statuses as one below.</p>
                   )}
                 </FloatingPopover>
               </div>
@@ -351,12 +468,20 @@ export default function StatusEditor({
                       </button>
                     }
                   >
+                    {/* No template: a new Space has no statuses of its own and shows the standard four. */}
+                    <button
+                      onClick={() => setDefault(null)}
+                      className="w-full flex items-center gap-2 px-2 py-1.5 rounded-lg text-left text-[12.5px] text-neutral-200 hover:bg-neutral-800 cursor-pointer"
+                    >
+                      <span className="flex-1 truncate">Standard (To Do … Done)</span>
+                      {!tpl.defaultTemplate && <Check className="w-3.5 h-3.5 text-neutral-300 shrink-0" />}
+                    </button>
                     {allTemplates.map((t) => {
-                      const on = (tpl.defaultTemplate ?? 'builtin:default') === t.id;
+                      const on = tpl.defaultTemplate === t.id;
                       return (
                         <button
                           key={t.id}
-                          onClick={() => setDefault(t.id === 'builtin:default' ? null : t.id)}
+                          onClick={() => setDefault(t.id)}
                           className="w-full flex items-center gap-2 px-2 py-1.5 rounded-lg text-left text-[12.5px] text-neutral-200 hover:bg-neutral-800 cursor-pointer"
                         >
                           <span className="flex-1 truncate">{t.name}</span>
@@ -404,6 +529,39 @@ export default function StatusEditor({
 
             {/* ---- Right: the statuses ---- */}
             <div className="flex-1 min-w-0 p-5 space-y-5 md:overflow-y-auto">
+              {!editing ? (
+                // A List that inherits: its Space's statuses, read-only. Changing them is its own
+                // explicit step, and says what it reaches.
+                <>
+                  <div className="rounded-xl border border-neutral-800 bg-neutral-950/40 p-3.5 space-y-2.5">
+                    <p className="text-[12.5px] text-neutral-300 leading-relaxed">
+                      <span className="font-semibold text-app-strong">{list!.name}</span> uses the statuses of the Space{' '}
+                      <span className="font-semibold text-app-strong">{space.name}</span>. To change them for this List only, choose{' '}
+                      <span className="text-app-strong">Use custom statuses</span>.
+                    </p>
+                    <button onClick={editSpaceInstead} className="text-[12px] text-blue-400 hover:text-blue-300 cursor-pointer">
+                      Edit {space.name}&apos;s statuses instead — every List in it that uses them
+                    </button>
+                  </div>
+                  {KINDS.map(({ kind, label }) => {
+                    const rows = shownRows.filter((d) => d.kind === kind);
+                    if (rows.length === 0) return null;
+                    return (
+                      <div key={kind}>
+                        <p className="text-[12px] text-neutral-400 mb-2">{label}</p>
+                        <div className="space-y-1.5">
+                          {rows.map((d) => (
+                            <div key={d.key} className="flex items-center gap-2.5 h-9 px-3 rounded-lg border border-neutral-800 bg-neutral-900/60">
+                              <StatusGlyph kind={d.kind} color={d.color} icon={d.icon} size={16} />
+                              <span className="text-[12.5px] font-bold uppercase tracking-wide text-neutral-400">{d.name}</span>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    );
+                  })}
+                </>
+              ) : (
               <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={onDragEnd}>
                 {KINDS.map(({ kind, label, info }) => {
                   const rows = draft.filter((d) => d.kind === kind);
@@ -444,13 +602,22 @@ export default function StatusEditor({
                   );
                 })}
               </DndContext>
+              )}
             </div>
           </div>
         )}
 
         <div className="shrink-0 border-t border-neutral-800 px-5 py-3 flex flex-wrap items-center gap-2">
           <p className={`flex-1 min-w-[160px] text-[11.5px] ${error ? 'text-red-400' : 'text-neutral-500'}`}>
-            {error ?? notice ?? (step === 'migrate' ? '' : 'Shared by every List in this Space.')}
+            {error ??
+              notice ??
+              (step === 'migrate'
+                ? ''
+                : target === 'space'
+                  ? `Applies to every List in ${space.name} that does not use its own statuses.`
+                  : listCustom
+                    ? `Only ${list!.name} uses these.`
+                    : `${list!.name} follows ${space.name}.`)}
           </p>
           {step === 'migrate' ? (
             <>

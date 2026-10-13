@@ -12264,3 +12264,70 @@ calendar to start once the keyboard is fully down, "bittelitt tregere".
 - Not seen in a browser.
 
 **Deployed 2026-10-13 as `a86ddd5`** (tag `deploy/2026-10-13_1244`).
+
+### 2026-10-13 (continued) — round B: statuses per List (the critical one), deletable built-in templates, start page
+
+- **Critical report:** "når vi endrer custom status i en liste, og applier, så applier han det for hele
+  workspacet … inne på lista to do … det er da inni der at de endringene må endres."
+  - Read from the code: there was no cross-Space leak. Statuses were per **Space**, so a change
+    made "in" a List reached every List in that Space; the user expects them per List.
+  - This is ClickUp's "Inherit from Space / Use custom statuses", deferred on 2026-10-06/07.
+- **Built:**
+  - **Schema:** `Status.listId` (null = a Space status; set = that List's own) plus `List.statuses`
+    relation, and `Workspace.statusTemplatesSeeded`.
+    - Migration **`20261013130000_list_statuses`** is hand-written as ADD COLUMNs. Prisma wanted to
+      rebuild Status *and* Workspace.
+    - Verified with `migrate diff` (no difference), and that deleting a List cascades its own
+      statuses.
+  - **`lib/statusSets.ts`** `applyStatusSet` is the one place a set is saved. **Which tasks a change
+    reaches:**
+    - a Space's set reaches only Lists *without* their own;
+    - a List's set reaches only that List;
+    - "inherit" deletes the List's own and remaps its tasks onto the Space's names.
+    - **Tested on a scratch DB with fixtures**: List custom rename touched only that List; Space
+      rename touched only the inheriting List; going back to inherit remapped correctly.
+  - `PUT /api/spaces/[id]/statuses` takes `listId` and `inherit`.
+  - Status rename `PATCH /api/statuses/[id]` is now scoped the same way. It used to rename tasks in
+    every List of the Space; the store's `updateStatus` renamed in **every Space**.
+  - Other server changes:
+    - Workspaces payload: Space `statuses` = `listId: null` only; each List carries `statuses`.
+    - `POST /api/lists` returns `statuses: []`.
+    - Moving a List to another Space moves its statuses' `spaceId`.
+    - Duplicating a List copies its own statuses.
+    - Wiki feedback and ClickUp import respect the List/Space split.
+  - **Client: `lib/listStatuses.ts`** `statusesOfList` (the List's own, else the Space's) is used
+    everywhere a task's statuses matter:
+    - TaskRow / StatusCircle, the task window picker, bulk status (sets keyed per status set),
+      the subtask offer, My Assigned Tasks;
+    - the doc List block, `optimisticMoveTask` (dust), new tasks' first status, and the page's
+      `statuses` when exactly one List is open.
+  - **StatusEditor:**
+    - Opened from a List (Status column menu, "···" by Name with one List open, a doc block's
+      group "···"), it edits **that List**.
+    - Left: "Status type", either Inherit from Space or Use custom statuses.
+    - While inheriting, the Space's statuses show **read-only** with "Edit <Space>'s statuses
+      instead — every List in it that uses them", an explicit switch with "← Back to <List>".
+    - Going custom starts from a copy of the Space's set, with task names carried over. Picking a
+      template while inheriting goes custom.
+    - Going back to inherit asks where tasks in names the Space lacks should go.
+    - The title and footer say what is being edited and what it reaches.
+    - The Space menu's "Edit statuses" still edits the Space.
+  - **Deletable built-in templates:**
+    - `GET /api/status-templates` copies the built-ins into the workspace as its own rows the first
+      time. It claims the `statusTemplatesSeeded` flag first, so concurrent opens can't
+      double-seed, and moves a `builtin:` default onto its copy.
+    - The window lists them all as one deletable "Templates" group.
+    - The "New Spaces start with" menu gets "Standard (To Do … Done)" = no template.
+  - **Start page** (`lib/startPage.ts`, per device, as it was designed):
+    - New choice **'mytasks' ("Assigned")**. The setting now shows on desktop too ("Tasks /
+      Assigned / Office / Planner"; "Me" on phones).
+    - Desktop cold start (empty URL) now follows it; phones did already.
+- **Not done / known gaps:**
+  - Moving or pasting a task into a List with a different status set keeps its status name, which
+    may not exist there (as across Spaces before).
+  - "Default template for new **Lists**" is still not offered: new Lists inherit.
+  - The individual status POST/PATCH/DELETE routes stay Space-oriented (the window doesn't use
+    them).
+- **Backups before deploy:** Pterodactyl `before-2026-10-13-round-B-list-statuses` (uuid 27d488ee…,
+  728 MB, successful), plus `deploy:prod`'s own snapshot at start.
+- Not seen in a browser.
