@@ -12262,3 +12262,5 @@ calendar to start once the keyboard is fully down, "bittelitt tregere".
   It is a full copy of the server's files, prisma/siqt.db included. It comes on top of the DB
   snapshot `deploy:prod` takes at every start and the daily off-site copy.
 - Not seen in a browser.
+
+**Deployed 2026-10-13 as `a86ddd5`** (tag `deploy/2026-10-13_1244`).
