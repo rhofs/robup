@@ -1,5 +1,6 @@
 'use client';
 
+import { offerCompleteSubtasks } from '../lib/completeSubtasks';
 import { memo, useEffect, useState } from 'react';
 import { motion } from 'framer-motion';
 import { useDraggable, useDroppable } from '@dnd-kit/core';
@@ -135,7 +136,8 @@ function TaskRowImpl({
   // Complete eller Done" — a Space setting.
   const struck = strikeDone && (task.archived || isDoneStatus(task.status, ownStatuses));
 
-  const statusColorOf = (name: string) => statuses.find((s) => s.name === name)?.color || '#94a3b8';
+  // The task's own statuses first; the list's (passed in) only for a status its Space no longer has.
+  const statusColorOf = (name: string) => (ownStatuses.find((s) => s.name === name) ?? statuses.find((s) => s.name === name))?.color || '#94a3b8';
 
   const toggleAssignee = (userId: string) => {
     const current = task.assignees.map((a) => a.id);
@@ -240,12 +242,15 @@ function TaskRowImpl({
             </button>
           }
         >
-          {statuses.map((s) => (
+          {/* The task's own Space's statuses — not the ones of whatever Space is open around it (in
+              Everything or My Tasks those are someone else's). */}
+          {ownStatuses.map((s) => (
             <button
               key={s.id}
               onClick={() => {
                 optimisticMoveTask(task.id, s.name);
                 setStatusOpen(false);
+                if (s.isDone || s.isClosed) offerCompleteSubtasks(task.id, s.name, false);
               }}
               className="w-full flex items-center gap-2 text-[11px] text-neutral-300 px-2 py-1 rounded hover:bg-neutral-800/60 cursor-pointer"
             >

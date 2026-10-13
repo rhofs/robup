@@ -12208,3 +12208,57 @@ calendar to start once the keyboard is fully down, "bittelitt tregere".
 - Not seen in a browser.
 
 **Deployed 2026-10-09 as `9224c23`** (tag `deploy/2026-10-09_1225`).
+
+### 2026-10-13 — user feedback batch, round A (no schema change)
+
+- **Feedback (voice, from users):**
+  1. Change the status of several selected tasks at once (ClickUp's action bar).
+  2. My Assigned Tasks should hide closed/finished tasks.
+  3. My Assigned Tasks as an optional start view (desktop and mobile).
+  4. Duplicating a task scrambles its subtask order ("Det må ligge i akkurat samme rekkefølge … fordi
+     det er et system").
+  5. My Assigned Tasks should show a subtask's whole path, not just "Thumbnail".
+  6. **Critical:** "custom status" changes apply to the whole Space/workspace instead of the List they
+     were made in.
+  7. Finishing a task should offer to finish its subtasks.
+  8. Built-in status templates should be deletable (standard in new workspaces).
+  9. My Assigned Tasks sortable by due date, start date and when assigned.
+  - Mid-round: "viktig at du backer opp før du eventuelt gjør noe som kan breake."
+- **Round A (this deploy) = 1, 2, 4, 5, 7, 9.** Round B, which has schema changes, = 3, 6, 8.
+- **Built:**
+  - **Bulk status** (1): a "Status" button in the selected-tasks action bar.
+    - It offers the statuses all selected tasks' Spaces share: one Space gives its statuses; several
+      give only names common to all; none in common gives a note.
+    - Closed also archives and others reopen, as the circle does. It is one undo step, with a toast.
+  - **My Assigned Tasks** (2, 5, 9, `components/MyTasksPage.tsx`):
+    - Archived and done/closed tasks (`isDoneStatus` against the task's *own* Space statuses) are
+      hidden, behind a "Show finished (N)" toggle.
+    - Each row shows the full path "Space › Folders › List › parent tasks".
+    - Sort: Due date / Start date / Recently assigned / Newest. Undated last. The sort and toggle
+      are remembered in localStorage.
+    - Status colours come from the task's own Space; they used to come from the open Space's.
+    - "Recently assigned" uses `GET /api/me/assigned-at`. There is no timestamp on the implicit
+      m2m, so it takes the latest `task_assigned` notification for me, or a "Tildelt: …" activity
+      naming me, falling back to createdAt.
+  - **Duplicate order** (4): `tasks/[id]/duplicate` and `lists/[id]/duplicate` now read children
+    ordered by `order`, `createdAt` and copy `order`. Both used unordered `findMany` and created
+    copies with no order.
+    - Side effect: a duplicated top-level task now sits right after its original (same `order`,
+      later `createdAt`).
+    - Task templates were already sequential.
+  - **Finish subtasks too** (7): `lib/completeSubtasks.ts` `offerCompleteSubtasks` is fired from
+    the task circle (done/closed/close-directly), TaskRow's Status column and the task window's
+    status picker.
+    - The page counts unfinished descendants and shows a ConfirmDialog: "Complete subtasks" /
+      "Leave them". It sets the same status, archives if the parent was closed, and is one undo
+      step.
+    - Not offered from bulk changes.
+  - **Found and fixed on the way:** the task window's status picker and TaskRow's Status column
+    offered the *open* Space's statuses (wrong in Planner, My Tasks and Everything). They now use
+    the task's own.
+- **Backup before deploy:** Pterodactyl server backup `before-2026-10-13-round-A` (uuid ec092396…,
+  726 MB, successful). Infrastructure note: the panel allows 10 backups per server, created via
+  `POST /api/client/servers/$PTERO_SERVER/backups` with the key in `~/.config/siqt/pterodactyl.env`.
+  It is a full copy of the server's files, prisma/siqt.db included. It comes on top of the DB
+  snapshot `deploy:prod` takes at every start and the daily off-site copy.
+- Not seen in a browser.

@@ -1,5 +1,7 @@
 'use client';
 
+import { offerCompleteSubtasks } from '../lib/completeSubtasks';
+import { isDoneStatus } from '../lib/taskDoneDust';
 import { closeOnBackdrop } from '../lib/backdrop';
 import { Suspense, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { useRouter, usePathname, useSearchParams } from 'next/navigation';
@@ -33,6 +35,7 @@ import {
   ClipboardList,
   MoreHorizontal,
   Settings2,
+  CircleDot,
   House as HouseIcon,
   UserCircle,
   LogOut,
@@ -112,6 +115,7 @@ import ColorSwatchPicker from '../components/ColorSwatchPicker';
 import ConfirmDialog from '../components/ConfirmDialog';
 import FloatingPopover from '../components/FloatingPopover';
 import StatusEditor from '../components/StatusEditor';
+import StatusGlyph, { statusKind } from '../components/StatusGlyph';
 import { homeLabel, homeOfTask, workspaceColor } from '../lib/whereIs';
 import { activeGlowStyle } from '../lib/activeGlowStyle';
 import { copyToClipboard } from '../lib/copyToClipboard';
@@ -2144,6 +2148,32 @@ function PageContent() {
     setFieldEditTarget(null);
   };
 
+  // A task finished by hand offers the same for its unfinished subtasks (lib/completeSubtasks.ts).
+  const [subtaskOffer, setSubtaskOffer] = useState<{ taskId: string; statusName: string | null; close: boolean; ids: string[] } | null>(null);
+  useEffect(() => {
+    const onOffer = (e: Event) => {
+      const d = (e as CustomEvent<{ taskId: string; statusName: string | null; close: boolean }>).detail;
+      const { tasks: all, workspaces: wss } = useTaskStore.getState();
+      const parent = all.find((t) => t.id === d.taskId);
+      if (!parent) return;
+      const space = wss.flatMap((w) => w.spaces).find((sp) => sp.lists.some((l) => l.id === parent.listId));
+      const own = space?.statuses?.length ? space.statuses : DEFAULT_STATUSES;
+      const ids: string[] = [];
+      const walk = (parentId: string, depth: number) => {
+        if (depth > 12) return;
+        for (const t of all) {
+          if (t.parentId !== parentId || t.deletedAt) continue;
+          if (!t.archived && !isDoneStatus(t.status, own)) ids.push(t.id);
+          walk(t.id, depth + 1);
+        }
+      };
+      walk(d.taskId, 0);
+      if (ids.length) setSubtaskOffer({ ...d, ids });
+    };
+    window.addEventListener('siqt-complete-subtasks', onOffer);
+    return () => window.removeEventListener('siqt-complete-subtasks', onOffer);
+  }, []);
+
   // "Edit statuses" / "New status" from a status group's "···" menu in a doc's List block
   // (components/collab/TaskListEmbedBlock.tsx), for that List's Space. ("Hvor kan vi edite status nå?"
   // — the window had only been reachable by right-clicking the Status column header.)
@@ -2161,6 +2191,7 @@ function PageContent() {
   // Bulk selection
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [bulkMoveOpen, setBulkMoveOpen] = useState(false);
+  const [bulkStatusOpen, setBulkStatusOpen] = useState(false);
 
   // Docs (sub-tab in the modal) — content itself now lives in each doc's own Yjs document,
   // synced live via components/collab/CollabDocEditor.tsx; only which doc is selected is local state.
@@ -2575,6 +2606,7 @@ function PageContent() {
     setSpaceMenu(null);
     setFolderMenu(null);
     setBulkMoveOpen(false);
+    setBulkStatusOpen(false);
   };
 
   // Falls back to the first non-personal workspace only while activeWorkspaceId hasn't resolved
@@ -3857,6 +3889,37 @@ function PageContent() {
     // One toast for the whole batch, and one undo — the transaction above already groups them, so
     // the offer matches what pressing it actually does.
     showUndoableToast(`${count} ${count === 1 ? 'task' : 'tasks'} ${archived ? 'done' : 'reopened'}`);
+  };
+  // A status for every selected task at once — "hvis du har markert flere, så kan du endre alle
+  // samtidig" (ClickUp's action bar). The choices are the statuses the selected tasks share: their
+  // Space's own when they are all in one Space, else only names every one of their Spaces has, so no
+  // task is given a status its Space does not know. A Closed status also closes (archives), as the
+  // task circle does; any other reopens an archived task.
+  const bulkStatusChoices = (): StatusDef[] => {
+    const sets = new Map<string, StatusDef[]>();
+    for (const id of selectedIds) {
+      const t = tasks.find((x) => x.id === id);
+      const sp = t ? workspaces.flatMap((w) => w.spaces).find((x) => x.lists.some((l) => l.id === t.listId)) : undefined;
+      const own = sp?.statuses?.length ? [...sp.statuses].sort((a, b) => a.order - b.order) : DEFAULT_STATUSES;
+      sets.set(sp?.id ?? 'none', own);
+    }
+    const [first, ...rest] = [...sets.values()];
+    if (!first) return [];
+    return first.filter((st) => rest.every((other) => other.some((o) => o.name === st.name)));
+  };
+  const bulkSetStatus = (st: StatusDef) => {
+    const ids = [...selectedIds];
+    useHistoryStore.getState().transaction(`Set status "${st.name}"`, () => {
+      for (const id of ids) {
+        const t = tasks.find((x) => x.id === id);
+        if (!t) continue;
+        if (t.status !== st.name) optimisticMoveTask(id, st.name);
+        if (st.isClosed && !t.archived) optimisticArchiveTask(id, true);
+        if (!st.isClosed && t.archived) optimisticArchiveTask(id, false);
+      }
+    });
+    setBulkStatusOpen(false);
+    showUndoableToast(`${ids.length} ${ids.length === 1 ? 'task' : 'tasks'} set to ${st.name}`);
   };
   const bulkDelete = () => {
     if (!window.confirm(`Delete ${selectedIds.size} tasks? This cannot be undone.`)) return;
@@ -7369,7 +7432,7 @@ function PageContent() {
                 currentUser={users.find((u) => u.id === currentUserId) ?? null}
                 currentWorkspace={currentWorkspace}
                 tasks={tasks}
-                statuses={statuses}
+                fallbackStatuses={DEFAULT_STATUSES}
                 onOpenTask={(id) => setModalTaskStack([id])}
               />
             ) : activeView === 'directMessages' ? (
@@ -7935,7 +7998,41 @@ function PageContent() {
             <button
               onClick={(e) => {
                 e.stopPropagation();
+                setBulkStatusOpen((o) => !o);
+                setBulkMoveOpen(false);
+              }}
+              className="text-xs text-neutral-300 hover:text-app-strong px-2 py-1 rounded hover:bg-neutral-800 cursor-pointer flex items-center gap-1.5"
+            >
+              <CircleDot className="w-3.5 h-3.5" /> Status
+            </button>
+            {bulkStatusOpen && (
+              <div onClick={(e) => e.stopPropagation()} className="absolute z-20 bottom-9 left-1/2 -translate-x-1/2 w-56 bg-neutral-900 border border-neutral-800 rounded-xl shadow-xl p-1.5 max-h-72 overflow-y-auto">
+                <p className="px-2 pt-1 pb-1 text-[10px] font-semibold text-neutral-500">Set status for {selectedIds.size}</p>
+                {(() => {
+                  const choices = bulkStatusChoices();
+                  if (choices.length === 0) {
+                    return <p className="px-2 py-1.5 text-[11px] text-neutral-500">These tasks are in Spaces with no statuses in common.</p>;
+                  }
+                  return choices.map((st) => (
+                    <button
+                      key={st.id}
+                      onClick={() => bulkSetStatus(st)}
+                      className="w-full flex items-center gap-2.5 px-2 py-1.5 rounded-lg text-left hover:bg-neutral-800 cursor-pointer"
+                    >
+                      <StatusGlyph kind={statusKind(st)} color={st.color} icon={st.icon} size={14} />
+                      <span className="flex-1 truncate text-[11px] font-bold uppercase tracking-wide text-neutral-200">{st.name}</span>
+                    </button>
+                  ));
+                })()}
+              </div>
+            )}
+          </div>
+          <div className="relative">
+            <button
+              onClick={(e) => {
+                e.stopPropagation();
                 setBulkMoveOpen(!bulkMoveOpen);
+                setBulkStatusOpen(false);
               }}
               className="text-xs text-neutral-300 hover:text-app-strong px-2 py-1 rounded hover:bg-neutral-800 cursor-pointer flex items-center gap-1.5"
             >
@@ -9072,12 +9169,18 @@ function PageContent() {
                         </button>
                       }
                     >
-                      {statuses.map((s) => (
+                      {/* The task's own Space's statuses, not the open Space's — from the Planner or My Tasks
+                          those were another Space's (or the defaults). */}
+                      {(workspaces.flatMap((w) => w.spaces).find((sp) => sp.lists.some((l) => l.id === activeModalTask.listId))?.statuses?.length
+                        ? [...workspaces.flatMap((w) => w.spaces).find((sp) => sp.lists.some((l) => l.id === activeModalTask.listId))!.statuses].sort((a, b) => a.order - b.order)
+                        : DEFAULT_STATUSES
+                      ).map((s) => (
                         <button
                           key={s.id}
                           onClick={() => {
                             optimisticMoveTask(activeModalTask.id, s.name);
                             setModalStatusOpen(false);
+                            if (s.isDone || s.isClosed) offerCompleteSubtasks(activeModalTask.id, s.name, false);
                           }}
                           className="w-full flex items-center gap-2 text-[11px] text-neutral-300 px-2 py-1 rounded hover:bg-neutral-800/60 cursor-pointer"
                         >
@@ -9665,6 +9768,34 @@ function PageContent() {
             optimisticSetDates(t.id, t.startDate ? new Date(t.startDate).toISOString() : null, null);
           }
           setClearOverdueConfirmOpen(false);
+        }}
+      />
+
+      <ConfirmDialog
+        open={!!subtaskOffer}
+        title="Complete the subtasks too?"
+        message={
+          subtaskOffer
+            ? `${subtaskOffer.ids.length} ${subtaskOffer.ids.length === 1 ? 'subtask is' : 'subtasks are'} not finished yet. ${
+                subtaskOffer.statusName ? `Set ${subtaskOffer.ids.length === 1 ? 'it' : 'them'} to ${subtaskOffer.statusName}` : `Close ${subtaskOffer.ids.length === 1 ? 'it' : 'them'}`
+              }${subtaskOffer.statusName && subtaskOffer.close ? ' and close them' : ''} as well?`
+            : ''
+        }
+        confirmLabel="Complete subtasks"
+        cancelLabel="Leave them"
+        danger={false}
+        onCancel={() => setSubtaskOffer(null)}
+        onConfirm={() => {
+          if (subtaskOffer) {
+            const { ids, statusName, close } = subtaskOffer;
+            useHistoryStore.getState().transaction('Complete subtasks', () => {
+              for (const id of ids) {
+                if (statusName) optimisticMoveTask(id, statusName);
+                if (close) optimisticArchiveTask(id, true);
+              }
+            });
+          }
+          setSubtaskOffer(null);
         }}
       />
 

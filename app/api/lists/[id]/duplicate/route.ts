@@ -54,10 +54,13 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
 
     const roots = await tx.task.findMany({
       where: { listId: id, parentId: null, deletedAt: null, archived: false },
+      // In the List's own order, and each copy keeps its `order` — the same fix as the task
+      // duplicate route: unordered reads came out in whatever order the database liked.
+      orderBy: [{ order: 'asc' }, { createdAt: 'asc' }],
       select: {
         id: true, title: true, description: true, status: true, priority: true, startDate: true,
         dueDate: true, calendarLane: true, customFieldValues: true, isPrivate: true,
-        accessJson: true, assignees: { select: { id: true } },
+        accessJson: true, order: true, assignees: { select: { id: true } },
       },
     });
 
@@ -72,6 +75,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
           dueDate: node.dueDate,
           calendarLane: node.calendarLane,
           customFieldValues: node.customFieldValues,
+          order: node.order,
           isPrivate: node.isPrivate,
           accessJson: node.accessJson,
           listId: list.id,
@@ -81,10 +85,11 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
       });
       const children = await tx.task.findMany({
         where: { parentId: node.id, deletedAt: null, archived: false },
+        orderBy: [{ order: 'asc' }, { createdAt: 'asc' }],
         select: {
           id: true, title: true, description: true, status: true, priority: true, startDate: true,
           dueDate: true, calendarLane: true, customFieldValues: true, isPrivate: true,
-          accessJson: true, assignees: { select: { id: true } },
+          accessJson: true, order: true, assignees: { select: { id: true } },
         },
       });
       for (const child of children) await copyTask(child, copy.id);

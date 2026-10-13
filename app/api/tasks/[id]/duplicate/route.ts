@@ -28,6 +28,7 @@ type TaskNode = {
   dueDate: Date | null;
   calendarLane: number | null;
   customFieldValues: string;
+  order: number;
   isPrivate: boolean;
   accessJson: string;
   assignees: { id: string }[];
@@ -45,7 +46,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
     select: {
       id: true, title: true, description: true, status: true, priority: true, startDate: true,
       dueDate: true, calendarLane: true, customFieldValues: true, isPrivate: true, accessJson: true,
-      listId: true, parentId: true, assignees: { select: { id: true } },
+      listId: true, parentId: true, order: true, assignees: { select: { id: true } },
     },
   });
   if (!source || (await prisma.task.findUnique({ where: { id }, select: { deletedAt: true } }))?.deletedAt) {
@@ -79,6 +80,10 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
           dueDate: node.dueDate,
           calendarLane: node.calendarLane,
           customFieldValues: node.customFieldValues,
+          // Subtasks keep their place: "Det må ligge i akkurat samme rekkefølge som vi har satt opp,
+          // fordi det er et system." The children were read in no particular order and created
+          // without one, so a duplicated episode's checklist came out shuffled.
+          order: node.order,
           isPrivate: node.isPrivate,
           accessJson: node.accessJson,
           listId,
@@ -92,10 +97,11 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
       // need them.
       const children = await tx.task.findMany({
         where: { parentId: node.id, deletedAt: null },
+        orderBy: [{ order: 'asc' }, { createdAt: 'asc' }],
         select: {
           id: true, title: true, description: true, status: true, priority: true, startDate: true,
           dueDate: true, calendarLane: true, customFieldValues: true, isPrivate: true,
-          accessJson: true, assignees: { select: { id: true } },
+          accessJson: true, order: true, assignees: { select: { id: true } },
         },
       });
       for (const child of children) await copyNode(child, listId, copy.id, child.title);

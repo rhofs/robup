@@ -1,5 +1,6 @@
 'use client';
 
+import { offerCompleteSubtasks } from '../lib/completeSubtasks';
 import { useState } from 'react';
 import { Check, Search } from 'lucide-react';
 import FloatingPopover from './FloatingPopover';
@@ -58,10 +59,12 @@ export default function StatusCircle({
     if (s === null || s.isClosed) {
       if (s && task.status !== s.name) moveTask(task.id, s.name);
       if (!task.archived) archiveTask(task.id, true);
+      offerCompleteSubtasks(task.id, s?.name ?? null, true);
       return;
     }
     if (task.archived) archiveTask(task.id, false);
     if (task.status !== s.name) moveTask(task.id, s.name);
+    if (s.isDone) offerCompleteSubtasks(task.id, s.name, false);
   };
 
   const dim = size === 'md' ? 'w-5 h-5' : 'w-4 h-4';
@@ -103,6 +106,7 @@ export default function StatusCircle({
             e.stopPropagation();
             if (mode === 'close') {
               archiveTask(task.id, !task.archived);
+              if (!task.archived) offerCompleteSubtasks(task.id, null, true);
               return;
             }
             setOpen((o) => !o);
