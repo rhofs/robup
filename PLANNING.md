@@ -12369,3 +12369,5 @@ calendar to start once the keyboard is fully down, "bittelitt tregere".
     the client name are replaced. It is `noindex`.
   - It is temporary, like `public/ideas/logo.html`; remove both once decided.
   - Suggested combination: option 3 on desktop, with option 2 as its phone form.
+
+**Deployed as `712bdd2`** (tag `deploy/2026-10-13_1350`), the ideas page only.
