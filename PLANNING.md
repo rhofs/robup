@@ -12331,3 +12331,5 @@ calendar to start once the keyboard is fully down, "bittelitt tregere".
 - **Backups before deploy:** Pterodactyl `before-2026-10-13-round-B-list-statuses` (uuid 27d488ee…,
   728 MB, successful), plus `deploy:prod`'s own snapshot at start.
 - Not seen in a browser.
+
+**Deployed 2026-10-13 as `561adf2`** (tag `deploy/2026-10-13_1256`); the list_statuses migration ran at start. Way back for data: the Pterodactyl backup above or the 12:56:20Z start snapshot.
