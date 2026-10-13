@@ -12371,3 +12371,5 @@ calendar to start once the keyboard is fully down, "bittelitt tregere".
   - Suggested combination: option 3 on desktop, with option 2 as its phone form.
 
 **Deployed as `712bdd2`** (tag `deploy/2026-10-13_1350`), the ideas page only.
+- Correction: `/ideas/*` is **not** public — `proxy.ts` redirects anyone not logged in to /login (curl:
+  307 → /login). The ideas pages are only reachable signed in.
