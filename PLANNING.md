@@ -12362,3 +12362,10 @@ calendar to start once the keyboard is fully down, "bittelitt tregere".
     ClickUp's My Work.
 - **Open question put to the user:** should subtasks that are not yours show at all (muted, behind
   a toggle), or only yours? Awaiting the answer before building.
+- **Illustration (2026-10-14):** sketches of options 2 (card with checklist, desktop and phone) and 3
+  (List → parent → subtasks, with columns) at **`public/ideas/my-assigned.html`**
+  (siqt.no/ideas/my-assigned.html).
+  - It uses neutral sample names: the page is public, so real people's names, production codes and
+    the client name are replaced. It is `noindex`.
+  - It is temporary, like `public/ideas/logo.html`; remove both once decided.
+  - Suggested combination: option 3 on desktop, with option 2 as its phone form.

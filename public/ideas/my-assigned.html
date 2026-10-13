@@ -1,0 +1,357 @@
+<!doctype html>
+<html lang="no">
+<head>
+<meta charset="utf-8" />
+<meta name="robots" content="noindex" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>My Assigned Tasks – ideer</title>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet" />
+<style>
+  :root {
+    --bg: #f4f4f5;
+    --panel: #ffffff;
+    --panel-2: #fafafa;
+    --line: #e7e7ea;
+    --line-strong: #d6d6db;
+    --text: #18181b;
+    --text-2: #52525b;
+    --muted: #8a8a93;
+    --faint: #b4b4bb;
+    --accent: #3b82f6;
+    --red: #cd6565;
+    --amber: #c89642;
+    --green: #349f7c;
+    --violet: #9a61d1;
+    --note-bg: #fff7e6;
+    --note-line: #f2d49b;
+    --note-text: #7a5a1c;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #0f0f11;
+      --panel: #18181b;
+      --panel-2: #1d1d21;
+      --line: #2a2a30;
+      --line-strong: #36363d;
+      --text: #f4f4f5;
+      --text-2: #c4c4cc;
+      --muted: #8b8b95;
+      --faint: #5c5c66;
+      --note-bg: #2a2213;
+      --note-line: #5a4520;
+      --note-text: #e6c37d;
+    }
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--text);
+    font: 14px/1.45 Inter, system-ui, -apple-system, Segoe UI, sans-serif;
+    padding: 32px 16px 64px;
+  }
+  .wrap { max-width: 1180px; margin: 0 auto; }
+  h1 { font-size: 22px; margin: 0 0 6px; letter-spacing: -0.01em; }
+  .lead { color: var(--text-2); margin: 0 0 28px; max-width: 760px; }
+  .option { margin-bottom: 56px; }
+  .option-head { display: flex; align-items: baseline; gap: 12px; margin-bottom: 4px; }
+  .badge { font-size: 12px; font-weight: 700; color: #fff; background: var(--accent); border-radius: 999px; padding: 2px 10px; }
+  h2 { font-size: 18px; margin: 0; }
+  .sub { color: var(--text-2); margin: 0 0 16px; max-width: 760px; }
+  .row-2 { display: grid; grid-template-columns: minmax(0, 1fr) 300px; gap: 28px; align-items: start; }
+  @media (max-width: 900px) { .row-2 { grid-template-columns: 1fr; } }
+
+  /* App frame */
+  .frame { background: var(--panel); border: 1px solid var(--line); border-radius: 14px; overflow: hidden; box-shadow: 0 1px 2px rgba(0,0,0,.04); }
+  .frame-top { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 14px 18px; border-bottom: 1px solid var(--line); flex-wrap: wrap; }
+  .frame-title { font-weight: 600; font-size: 15px; }
+  .tools { display: flex; gap: 8px; flex-wrap: wrap; }
+  .tool { font-size: 12px; color: var(--text-2); border: 1px solid var(--line-strong); border-radius: 8px; padding: 4px 9px; background: var(--panel); }
+  .tool b { color: var(--text); font-weight: 600; }
+  .frame-body { padding: 16px 18px 20px; }
+  .count { font-size: 11px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; color: var(--muted); margin: 0 0 12px; }
+
+  /* Status glyphs */
+  .ring { width: 15px; height: 15px; border-radius: 50%; border: 2px dashed currentColor; flex: none; display: inline-block; }
+  .disc { width: 15px; height: 15px; border-radius: 50%; background: currentColor; flex: none; display: inline-block; }
+  .c-red { color: var(--red); } .c-amber { color: var(--amber); } .c-green { color: var(--green); }
+  .pill { font-size: 10.5px; font-weight: 700; letter-spacing: .04em; text-transform: uppercase; border-radius: 6px; padding: 3px 8px; white-space: nowrap; }
+  .p-red { color: var(--red); background: color-mix(in srgb, var(--red) 14%, transparent); }
+  .p-amber { color: var(--amber); background: color-mix(in srgb, var(--amber) 16%, transparent); }
+  .p-green { color: var(--green); background: color-mix(in srgb, var(--green) 14%, transparent); }
+  .date { font-size: 12px; color: var(--muted); white-space: nowrap; }
+  .date.late { color: var(--red); }
+  .av { width: 22px; height: 22px; border-radius: 50%; color: #fff; font-size: 9.5px; font-weight: 700; display: inline-flex; align-items: center; justify-content: center; flex: none; }
+  .av-rh { background: #6366f1; } .av-kl { background: #0f9488; } .av-cl { background: #3b82f6; } .av-ul { background: #10b981; } .av-la { background: #ec4899; }
+  .you { font-size: 10px; font-weight: 700; color: var(--accent); background: color-mix(in srgb, var(--accent) 12%, transparent); border-radius: 999px; padding: 1px 7px; }
+  .path { font-size: 11.5px; color: var(--muted); }
+
+  /* ===== Option 2: cards ===== */
+  .cards { display: grid; gap: 12px; }
+  .card { border: 1px solid var(--line); border-radius: 12px; background: var(--panel); overflow: hidden; }
+  .card-head { padding: 12px 14px 10px; border-bottom: 1px solid var(--line); background: var(--panel-2); }
+  .card-head .path { margin-bottom: 6px; display: block; }
+  .card-title { display: flex; align-items: center; gap: 9px; }
+  .card-title .name { font-weight: 600; font-size: 14.5px; flex: 1; min-width: 0; }
+  .card-title.context .name { color: var(--muted); font-weight: 500; }
+  .owner { display: flex; align-items: center; gap: 6px; font-size: 11.5px; color: var(--muted); }
+  .progress { display: flex; align-items: center; gap: 8px; margin-top: 9px; font-size: 11.5px; color: var(--muted); }
+  .bar { flex: 1; max-width: 220px; height: 5px; border-radius: 999px; background: var(--line); overflow: hidden; }
+  .bar i { display: block; height: 100%; background: var(--green); border-radius: 999px; }
+  .check { display: flex; align-items: center; gap: 10px; padding: 9px 14px; border-top: 1px solid var(--line); }
+  .check:first-child { border-top: 0; }
+  .check .name { flex: 1; min-width: 0; }
+  .more { padding: 8px 14px 10px; font-size: 12px; color: var(--muted); border-top: 1px dashed var(--line); }
+  .more span { color: var(--accent); }
+
+  /* Phone */
+  .phone { width: 300px; border: 1px solid var(--line-strong); border-radius: 34px; padding: 12px; background: var(--panel); box-shadow: 0 10px 30px rgba(0,0,0,.08); }
+  .phone-screen { border-radius: 24px; background: var(--bg); padding: 14px 10px 18px; min-height: 520px; }
+  .phone-bar { display: flex; justify-content: space-between; font-size: 11px; color: var(--muted); padding: 0 6px 10px; }
+  .phone h3 { font-size: 16px; margin: 2px 6px 10px; }
+  .phone .card { border-radius: 16px; margin-bottom: 10px; }
+  .phone .card-head { padding: 11px 12px 9px; }
+  .phone .card-title .name { font-size: 13.5px; }
+  .phone .check { padding: 10px 12px; font-size: 13px; }
+  .phone .ring, .phone .disc { width: 18px; height: 18px; }
+
+  /* ===== Option 3: grouped ===== */
+  .grid { display: grid; grid-template-columns: minmax(0, 1fr) 120px 90px 70px; align-items: center; }
+  .thead { font-size: 10.5px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; color: var(--muted); padding: 0 12px 8px; }
+  .list-group { border: 1px solid var(--line); border-radius: 12px; margin-bottom: 14px; overflow: hidden; }
+  .list-head { display: flex; align-items: center; gap: 9px; padding: 10px 12px; background: var(--panel-2); border-bottom: 1px solid var(--line); font-weight: 600; }
+  .list-head .caret { color: var(--muted); font-size: 11px; width: 12px; }
+  .list-head .dot { width: 9px; height: 9px; border-radius: 50%; }
+  .list-head .space { color: var(--muted); font-weight: 500; }
+  .list-head .n { margin-left: 4px; font-size: 11px; color: var(--muted); font-weight: 600; background: var(--line); border-radius: 999px; padding: 1px 7px; }
+  .tr { padding: 8px 12px; border-top: 1px solid var(--line); }
+  .tr:first-of-type { border-top: 0; }
+  .cell-name { display: flex; align-items: center; gap: 9px; min-width: 0; }
+  .cell-name .name { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .caret-s { color: var(--muted); font-size: 10px; width: 12px; flex: none; }
+  .tr.parent .name { font-weight: 600; }
+  .tr.context .name { color: var(--muted); font-weight: 500; }
+  .tr.child .cell-name { padding-left: 22px; position: relative; }
+  .tr.child .cell-name::before { content: ""; position: absolute; left: 6px; top: -9px; bottom: 50%; border-left: 1.5px solid var(--line-strong); border-bottom: 1.5px solid var(--line-strong); width: 10px; border-bottom-left-radius: 6px; }
+  .tr.others { color: var(--muted); font-size: 12px; }
+  .tr.others .cell-name { padding-left: 34px; }
+  .tr.others span.link { color: var(--accent); }
+  .ctx-tag { font-size: 10px; color: var(--muted); border: 1px solid var(--line-strong); border-radius: 999px; padding: 0 6px; white-space: nowrap; }
+  .who { display: flex; justify-content: flex-start; }
+
+  /* Notes */
+  .notes { display: grid; gap: 10px; }
+  .note { background: var(--note-bg); border: 1px solid var(--note-line); color: var(--note-text); border-radius: 10px; padding: 10px 12px; font-size: 12.5px; }
+  .note b { color: inherit; }
+  .legend { display: flex; gap: 16px; flex-wrap: wrap; font-size: 12px; color: var(--text-2); margin: 0 0 14px; }
+  .legend span { display: inline-flex; align-items: center; gap: 6px; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>My Assigned Tasks – to måter å gruppere på</h1>
+  <p class="lead">Skisser, ikke ferdig design. Eksemplene viser tre tilfeller. Du har hovedtasken og noen subtasks (Ep12). Du har bare subtasks, og hovedtasken eies av en annen (Ep14). Du har bare hovedtasken (Ep15).</p>
+
+  <div class="legend">
+    <span><span class="ring c-red"></span> Ikke gjort</span>
+    <span><span class="ring c-amber"></span> Påbegynt</span>
+    <span><span class="disc c-green"></span> Ferdig</span>
+    <span><span class="you">deg</span> tildelt deg</span>
+    <span style="color:var(--muted)">Grå tittel = kontekst, ikke din</span>
+  </div>
+
+  <!-- ================= OPTION 2 ================= -->
+  <section class="option">
+    <div class="option-head"><span class="badge">2</span><h2>Kort med sjekkliste</h2></div>
+    <p class="sub">Ett kort per hovedtask. Det du er tildelt, ligger som en sjekkliste i kortet, i samme rekkefølge som dere har satt opp. Kortet leses som «dette er jobben min på Ep12». Det er kompakt og passer særlig godt på mobil.</p>
+
+    <div class="row-2">
+      <div class="frame">
+        <div class="frame-top">
+          <div class="frame-title">My Assigned Tasks</div>
+          <div class="tools"><span class="tool">Sort: <b>Due date</b></span><span class="tool">✓ Show finished (4)</span></div>
+        </div>
+        <div class="frame-body">
+          <p class="count">In New Game Media · 6 tasks</p>
+          <div class="cards">
+
+            <!-- Case A: parent + subtasks yours -->
+            <div class="card">
+              <div class="card-head">
+                <span class="path">Serie › Levering</span>
+                <div class="card-title">
+                  <span class="ring c-amber"></span>
+                  <span class="name">Ep12 – Frityr</span>
+                  <span class="you">deg</span>
+                  <span class="pill p-amber">Påbegynt</span>
+                  <span class="date">30. okt</span>
+                </div>
+                <div class="progress"><span class="bar"><i style="width:37%"></i></span> 7/19 subtasks ferdig</div>
+              </div>
+              <div class="check"><span class="ring c-red"></span><span class="name">Thumbnail</span><span class="pill p-red">Ikke gjort</span><span class="date late">27. okt</span></div>
+              <div class="check"><span class="ring c-amber"></span><span class="name">Grading</span><span class="pill p-amber">Påbegynt</span><span class="date">28. okt</span></div>
+              <div class="more">+ 16 andre subtasks · <span>vis</span></div>
+            </div>
+
+            <!-- Case B: only subtasks yours -->
+            <div class="card">
+              <div class="card-head">
+                <span class="path">Serie › Levering</span>
+                <div class="card-title context">
+                  <span class="name">Ep14 – Matnyheter</span>
+                  <span class="owner"><span class="av av-kl">KL</span> eid av KL</span>
+                </div>
+              </div>
+              <div class="check"><span class="ring c-red"></span><span class="name">Thumbnail</span><span class="pill p-red">Ikke gjort</span><span class="date">13. nov</span></div>
+              <div class="check"><span class="ring c-red"></span><span class="name">Lydmiks</span><span class="pill p-red">Ikke gjort</span><span class="date">14. nov</span></div>
+              <div class="more">+ 17 andre subtasks · <span>vis</span></div>
+            </div>
+
+            <!-- Case C: only parent yours -->
+            <div class="card">
+              <div class="card-head" style="border-bottom:0">
+                <span class="path">Serie › Levering</span>
+                <div class="card-title">
+                  <span class="ring c-red"></span>
+                  <span class="name">Ep15 – Jul</span>
+                  <span class="you">deg</span>
+                  <span class="pill p-red">Ikke gjort</span>
+                  <span class="date">20. nov</span>
+                </div>
+                <div class="progress"><span class="bar"><i style="width:0%"></i></span> 0/19 subtasks · ingen er dine · <span style="color:var(--accent)">vis</span></div>
+              </div>
+            </div>
+
+          </div>
+        </div>
+      </div>
+
+      <!-- Phone -->
+      <div class="phone">
+        <div class="phone-screen">
+          <div class="phone-bar"><span>09:41</span><span>●●●</span></div>
+          <h3>My Assigned Tasks</h3>
+          <div class="card">
+            <div class="card-head">
+              <span class="path">Levering</span>
+              <div class="card-title">
+                <span class="ring c-amber"></span>
+                <span class="name">Ep12 – Frityr</span>
+                <span class="you">deg</span>
+              </div>
+            </div>
+            <div class="check"><span class="ring c-red"></span><span class="name">Thumbnail</span><span class="date late">27. okt</span></div>
+            <div class="check"><span class="ring c-amber"></span><span class="name">Grading</span><span class="date">28. okt</span></div>
+          </div>
+          <div class="card">
+            <div class="card-head">
+              <span class="path">Levering</span>
+              <div class="card-title context">
+                <span class="name">Ep14 – Matnyheter</span>
+                <span class="av av-kl">KL</span>
+              </div>
+            </div>
+            <div class="check"><span class="ring c-red"></span><span class="name">Thumbnail</span><span class="date">13. nov</span></div>
+            <div class="check"><span class="ring c-red"></span><span class="name">Lydmiks</span><span class="date">14. nov</span></div>
+          </div>
+          <div class="card">
+            <div class="card-head" style="border-bottom:0">
+              <span class="path">Administrativt › To-Do</span>
+              <div class="card-title">
+                <span class="ring c-red"></span>
+                <span class="name">Bestille utstyr</span>
+                <span class="you">deg</span>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="notes" style="margin-top:14px">
+      <div class="note"><b>Fint:</b> det er tydelig hva som er ditt og hvor det hører hjemme, uten å gjenta hele stien på hver subtask. Du kan krysse av rett i kortet.</div>
+      <div class="note"><b>Svakhet:</b> mange korte kort tar mer høyde enn rader. Datoene til hovedtask og subtasks står også på hver sitt sted.</div>
+    </div>
+  </section>
+
+  <!-- ================= OPTION 3 ================= -->
+  <section class="option">
+    <div class="option-head"><span class="badge">3</span><h2>Gruppert på to nivåer: List → hovedtask → subtasks</h2></div>
+    <p class="sub">Øverst grupperes det etter List, som i List-visningen, med sammenleggbare grupper. Under ligger hovedtaskene, med dine subtasks innrykket. Det gir mest oversikt med mange episoder og flere Lists samtidig.</p>
+
+    <div class="frame">
+      <div class="frame-top">
+        <div class="frame-title">My Assigned Tasks</div>
+        <div class="tools"><span class="tool">Group: <b>List</b></span><span class="tool">Sort: <b>Due date</b></span><span class="tool">✓ Show finished (4)</span></div>
+      </div>
+      <div class="frame-body">
+        <div class="grid thead"><span>Name</span><span>Status</span><span>Due</span><span>Owner</span></div>
+
+        <!-- List group 1 -->
+        <div class="list-group">
+          <div class="list-head"><span class="caret">▾</span><span class="dot" style="background:#ef4444"></span><span class="space">Serie ›</span> Levering <span class="n">5 dine</span></div>
+
+          <div class="grid tr parent">
+            <div class="cell-name"><span class="caret-s">▾</span><span class="ring c-amber"></span><span class="name">Ep12 – Frityr</span><span class="you">deg</span></div>
+            <span><span class="pill p-amber">Påbegynt</span></span><span class="date">30. okt</span><span class="who"><span class="av av-rh">RH</span></span>
+          </div>
+          <div class="grid tr child">
+            <div class="cell-name"><span class="ring c-red"></span><span class="name">Thumbnail</span></div>
+            <span><span class="pill p-red">Ikke gjort</span></span><span class="date late">27. okt</span><span class="who"><span class="av av-rh">RH</span></span>
+          </div>
+          <div class="grid tr child">
+            <div class="cell-name"><span class="ring c-amber"></span><span class="name">Grading</span></div>
+            <span><span class="pill p-amber">Påbegynt</span></span><span class="date">28. okt</span><span class="who"><span class="av av-rh">RH</span></span>
+          </div>
+          <div class="grid tr others"><div class="cell-name">+ 16 andre subtasks · <span class="link">vis</span></div><span></span><span></span><span></span></div>
+
+          <div class="grid tr parent context">
+            <div class="cell-name"><span class="caret-s">▾</span><span class="name">Ep14 – Matnyheter</span><span class="ctx-tag">kontekst</span></div>
+            <span><span class="pill p-amber" style="opacity:.55">Påbegynt</span></span><span class="date">13. nov</span><span class="who"><span class="av av-kl">KL</span></span>
+          </div>
+          <div class="grid tr child">
+            <div class="cell-name"><span class="ring c-red"></span><span class="name">Thumbnail</span></div>
+            <span><span class="pill p-red">Ikke gjort</span></span><span class="date">13. nov</span><span class="who"><span class="av av-rh">RH</span></span>
+          </div>
+          <div class="grid tr child">
+            <div class="cell-name"><span class="ring c-red"></span><span class="name">Lydmiks</span></div>
+            <span><span class="pill p-red">Ikke gjort</span></span><span class="date">14. nov</span><span class="who"><span class="av av-rh">RH</span></span>
+          </div>
+
+          <div class="grid tr parent">
+            <div class="cell-name"><span class="caret-s">▸</span><span class="ring c-red"></span><span class="name">Ep15 – Jul</span><span class="you">deg</span><span class="path">0/19</span></div>
+            <span><span class="pill p-red">Ikke gjort</span></span><span class="date">20. nov</span><span class="who"><span class="av av-rh">RH</span></span>
+          </div>
+        </div>
+
+        <!-- List group 2 -->
+        <div class="list-group">
+          <div class="list-head"><span class="caret">▾</span><span class="dot" style="background:#c89642"></span><span class="space">Administrativt ›</span> To-Do <span class="n">2 dine</span></div>
+          <div class="grid tr parent">
+            <div class="cell-name"><span class="caret-s"></span><span class="ring c-red"></span><span class="name">Bestille utstyr</span><span class="you">deg</span></div>
+            <span><span class="pill p-red">Ikke gjort</span></span><span class="date">31. okt</span><span class="who"><span class="av av-rh">RH</span></span>
+          </div>
+          <div class="grid tr parent">
+            <div class="cell-name"><span class="caret-s"></span><span class="ring c-amber"></span><span class="name">Sende faktura</span><span class="you">deg</span></div>
+            <span><span class="pill p-amber">Påbegynt</span></span><span class="date">4. nov</span><span class="who"><span class="av av-rh">RH</span></span>
+          </div>
+        </div>
+
+        <!-- Collapsed group -->
+        <div class="list-group" style="margin-bottom:0">
+          <div class="list-head" style="border-bottom:0"><span class="caret">▸</span><span class="dot" style="background:#3b82f6"></span><span class="space">Prosjekt B ›</span> Opptak <span class="n">3 dine</span></div>
+        </div>
+      </div>
+    </div>
+
+    <div class="notes" style="margin-top:14px">
+      <div class="note"><b>Fint:</b> samme rader og kolonner som i List-visningen, så det føles kjent. Grupper kan legges sammen, og det skalerer til mange Lists og episoder.</div>
+      <div class="note"><b>Svakhet:</b> det blir mer struktur og høyde når du bare har noen få tasks. På mobil må kolonnene foldes til kort, og da ender det nær variant 2.</div>
+    </div>
+  </section>
+
+  <p class="sub" style="font-size:12.5px">En mulig kombinasjon: variant 3 på desktop, og variant 2 som mobilutgaven av den samme grupperingen.</p>
+</div>
+</body>
+</html>
