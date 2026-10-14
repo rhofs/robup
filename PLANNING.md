@@ -12509,3 +12509,5 @@ calendar to start once the keyboard is fully down, "bittelitt tregere".
     - The due-date colour badges in the task tab are gone with the old pickers.
 - Not seen in a browser. The event *window* (EventDetailModal) still has the old pickers; only
   creation was asked about.
+
+**Deployed 2026-10-14 as `90f4389`** (tag `deploy/2026-10-14_1317`).
