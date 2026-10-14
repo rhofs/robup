@@ -12511,3 +12511,25 @@ calendar to start once the keyboard is fully down, "bittelitt tregere".
   creation was asked about.
 
 **Deployed 2026-10-14 as `90f4389`** (tag `deploy/2026-10-14_1317`).
+
+### 2026-10-14 (continued) — design pass on Planner's New event/task sheet
+
+- **Feedback (screenshot):** "'Belongs To' er veldig tett på Workspacen, kan vi få mer luft, gå over
+  designet og få det så bra som mulig generelt på det arket. Så alt gir mening."
+- **Cause of the cramped "Belongs to":** `FloatingPopover` wraps its anchor in an `inline-block`, so
+  the picker shrank to its text and sat *beside* its inline label. `FloatingPopover` now takes
+  `block` (anchor full width); `BelongsToPicker full` uses it and gets a 40px field.
+- **The sheet now** (`components/calendar/QuickCreatePopover.tsx`, desktop):
+  - Header: a segmented "New event | New task" control plus close (it was "New" plus underline
+    tabs).
+  - The title is large and unlabelled, first.
+  - Every field is a `Field`: its label on its own line above, an optional hint on the right, and
+    `space-y-5` between fields. All inputs are 40px with 13px text.
+  - **Event order — when, who sees it, who, where, details:** Dates *, Belongs to (hint "Who can
+    see it"), Attendees ("+ Add people" pill instead of a bare "+"), Location, Description, Color.
+  - **Task:** Where * (Space + List side by side), then Dates.
+  - The automatic-colour note moved into the Color label's hint ("Auto: Victor's colour"). It no
+    longer needs a reserved empty line.
+  - The footer is always in view: what is missing on the left, then Cancel and Create.
+  - Width is 460px, with rounded-2xl and an inner scroll.
+- Not seen in a browser.

@@ -53,12 +53,13 @@ export default function BelongsToPicker({
     <FloatingPopover
       open={open}
       onClose={() => setOpen(false)}
+      block={full}
       panelClassName="w-72 max-h-[60vh] overflow-y-auto bg-neutral-900 border border-neutral-800 rounded-xl shadow-2xl p-1.5"
       anchor={
         <button
           type="button"
           onClick={() => setOpen((o) => !o)}
-          className={`${full ? 'w-full' : 'max-w-full'} h-9 px-2.5 rounded-lg border border-neutral-700 hover:border-neutral-600 bg-neutral-950 flex items-center gap-2 text-left cursor-pointer`}
+          className={`${full ? 'w-full h-10 px-3' : 'max-w-full h-9 px-2.5'} rounded-lg border border-neutral-700 hover:border-neutral-600 bg-neutral-950 flex items-center gap-2 text-left cursor-pointer`}
         >
           {ws?.isPersonal ? (
             <Lock className="w-3.5 h-3.5 text-amber-400 shrink-0" />

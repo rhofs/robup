@@ -173,108 +173,93 @@ export default function QuickCreatePopover({
 
   const canCreate = tab === 'task' ? canCreateTask : canCreateEvent;
 
+  // The field styles every input on the sheet shares.
+  const inputCls =
+    'w-full h-10 bg-neutral-950 border border-neutral-700 rounded-lg px-3 text-[13px] text-app-strong placeholder:text-neutral-500 focus:outline-none focus:border-blue-500';
+
   return (
-    // items-start (not items-center) on mobile, plus the card's own overflow-y-auto/max-height: a
-    // vertically-centered fixed-height modal gets pushed half off-screen by the on-screen keyboard
-    // once a field is focused (the keyboard shrinks the *visual* viewport, but centering happens
-    // against the full layout viewport) — anchoring near the top means the title field (the very
-    // first one) stays visible above the keyboard regardless, and the card can scroll internally
-    // if there's still more content than fits. Desktop keeps the original centered look.
+    // Top-anchored (on desktop too): centred, the window moved up and down every time its height
+    // changed (attendees added), pulling the open attendee list along with it. On a phone it also keeps
+    // the title above the keyboard; the card scrolls inside if it outgrows the screen.
     <div
-      // Top-anchored on desktop too: centred, the window moved up and down every time its height
-      // changed (attendees added), pulling the open attendee list along with it.
       className="fixed inset-0 z-50 flex items-start justify-center bg-scrim/70 backdrop-blur-xs overflow-y-auto p-4 md:pt-[8vh]"
       {...closeOnBackdrop(onClose)}
     >
       <div
         onClick={(e) => e.stopPropagation()}
-        className="w-full max-w-[420px] my-6 md:my-0 max-h-[85vh] bg-neutral-900 border border-neutral-800 rounded-xl shadow-2xl overflow-y-auto"
+        className="w-full max-w-[460px] my-6 md:my-0 max-h-[85vh] flex flex-col bg-neutral-900 border border-neutral-800 rounded-2xl shadow-2xl overflow-hidden"
       >
-        <div className="px-5 py-4 border-b border-neutral-800 flex items-center justify-between">
-          <h3 className="font-bold text-sm text-app-strong">New</h3>
-          <button onClick={onClose} className="text-neutral-400 hover:text-app-strong cursor-pointer">
-            <X className="w-3.5 h-3.5" />
+        {/* Header: what is being made — Event or Task — and the way out. */}
+        <div className="shrink-0 px-5 pt-4 pb-3 flex items-center justify-between gap-3">
+          <div className="flex rounded-lg bg-neutral-800/70 p-0.5">
+            {(['event', 'task'] as const).map((t) => (
+              <button
+                key={t}
+                onClick={() => setTab(t)}
+                className={`h-8 px-4 rounded-md text-[12.5px] font-semibold cursor-pointer transition-colors ${
+                  tab === t ? 'bg-neutral-900 text-app-strong shadow-sm' : 'text-neutral-400 hover:text-neutral-200'
+                }`}
+              >
+                {t === 'task' ? 'New task' : 'New event'}
+              </button>
+            ))}
+          </div>
+          <button onClick={onClose} title="Close" className="w-8 h-8 rounded-full flex items-center justify-center text-neutral-400 hover:text-app-strong hover:bg-neutral-800 cursor-pointer">
+            <X className="w-4 h-4" />
           </button>
         </div>
 
-        <div className="px-5 pt-4 flex items-center gap-1 border-b border-neutral-800">
-          {(['event', 'task'] as const).map((t) => (
-            <button
-              key={t}
-              onClick={() => setTab(t)}
-              className={`px-3 py-2 text-xs font-medium cursor-pointer border-b-2 -mb-px transition ${
-                tab === t ? 'text-blue-400 border-blue-500' : 'text-neutral-500 border-transparent hover:text-neutral-300'
-              }`}
-            >
-              {t === 'task' ? 'Task' : 'Event'}
-            </button>
-          ))}
-        </div>
+        <div className="flex-1 min-h-0 overflow-y-auto px-5 pb-5 space-y-5">
+          {/* The title leads, large and unlabelled — it is the thing being made. */}
+          <input
+            autoFocus
+            value={title}
+            onChange={(e) => setTitle(e.target.value)}
+            onKeyDown={(e) => e.key === 'Enter' && canCreate && handleCreate()}
+            placeholder={tab === 'task' ? 'Task title' : 'Event title'}
+            className="w-full h-12 bg-neutral-950 border border-neutral-700 rounded-xl px-3.5 text-[15px] font-medium text-app-strong placeholder:text-neutral-500 placeholder:font-normal focus:outline-none focus:border-blue-500"
+          />
 
-        <div className="p-5 space-y-3">
-          <div className="space-y-1.5">
-            <label className="text-[10px] uppercase tracking-wide text-neutral-500 font-semibold">Title</label>
-            <input
-              autoFocus
-              value={title}
-              onChange={(e) => setTitle(e.target.value)}
-              onKeyDown={(e) => e.key === 'Enter' && canCreate && handleCreate()}
-              placeholder={tab === 'task' ? 'Task title...' : 'Event title...'}
-              className="w-full bg-neutral-950 border border-neutral-700 rounded-lg px-3 py-2 text-xs text-app-strong focus:outline-none focus:border-blue-500"
-            />
-          </div>
-
-          {/* Both panels are rendered, stacked in one grid cell, with the inactive one
-              `invisible`. The popover is then always as tall as the taller of the two, so switching
-              tabs changes what is in the box and not the size of the box — reported as it jumping
-              and shrinking on the way from Event to Task.
-              
-              `invisible` rather than `hidden`: visibility:hidden keeps the element's space, which is
-              the whole point here, and takes its fields out of the tab order for free, which
-              `opacity-0` would not. */}
+          {/* Both panels are rendered, stacked in one grid cell, with the inactive one `invisible`,
+              so switching between Event and Task changes what is in the box and not the size of the
+              box. `invisible` rather than `hidden`: it keeps the space and drops the fields from the
+              tab order. */}
           <div className="grid">
-            <div
-              className={`col-start-1 row-start-1 space-y-3 ${tab === 'task' ? '' : 'invisible'}`}
-              aria-hidden={tab !== 'task'}
-            >
-              <div className="grid grid-cols-2 gap-3">
-                <div className="space-y-1.5">
-                  <label className="text-[10px] uppercase tracking-wide text-neutral-500 font-semibold">Space *</label>
+            {/* ---- Task: where it goes, then when ---- */}
+            <div className={`col-start-1 row-start-1 space-y-5 ${tab === 'task' ? '' : 'invisible'}`} aria-hidden={tab !== 'task'}>
+              <Field label="Where" required>
+                <div className="grid grid-cols-2 gap-2">
                   <select
                     value={spaceId}
                     onChange={(e) => {
                       setSpaceId(e.target.value);
                       setListId('');
                     }}
-                    className="w-full bg-neutral-950 border border-neutral-700 rounded-lg px-2 py-2 text-xs text-app-strong focus:outline-none focus:border-blue-500"
+                    className={`${inputCls} px-2.5 cursor-pointer`}
                   >
-                    <option value="">Select a space...</option>
+                    <option value="">Space…</option>
                     {/* Grouped by workspace, so it is plain where the task will live — and who sees it. */}
                     {workspaces.map((w) => {
-                      const own = spaces.filter((s) => w.spaces.some((x) => x.id === s.id));
+                      const own = spaces.filter((sp) => w.spaces.some((x) => x.id === sp.id));
                       if (!own.length) return null;
                       return (
                         <optgroup key={w.id} label={w.isPersonal ? 'Private (only you)' : w.name}>
-                          {own.map((s) => (
-                            <option key={s.id} value={s.id}>
-                              {s.name}
+                          {own.map((sp) => (
+                            <option key={sp.id} value={sp.id}>
+                              {sp.name}
                             </option>
                           ))}
                         </optgroup>
                       );
                     })}
                   </select>
-                </div>
-
-                <div className="space-y-1.5">
-                  <label className="text-[10px] uppercase tracking-wide text-neutral-500 font-semibold">List *</label>
                   <select
                     value={listId}
                     onChange={(e) => setListId(e.target.value)}
                     disabled={!selectedSpace}
-                    className="w-full bg-neutral-950 border border-neutral-700 rounded-lg px-2 py-2 text-xs text-app-strong focus:outline-none focus:border-blue-500 disabled:opacity-40 disabled:cursor-not-allowed"
+                    className={`${inputCls} px-2.5 cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed`}
                   >
-                    <option value="">{selectedSpace ? 'Select a list...' : 'Pick a space first'}</option>
+                    <option value="">{selectedSpace ? 'List…' : 'Pick a Space first'}</option>
                     {selectedSpace?.lists.filter((l) => !l.docId && !l.archived).map((l) => (
                       <option key={l.id} value={l.id}>
                         {l.name}
@@ -282,22 +267,32 @@ export default function QuickCreatePopover({
                     ))}
                   </select>
                 </div>
-              </div>
+              </Field>
 
-              <DatesField
-                start={startDate}
-                end={dueDate}
-                endName="Due"
-                onOpen={(time) => setDateDialog({ for: 'task', time })}
-                onClearTime={(which) => (which === 'start' ? setStartDate(dropTime(startDate)) : setDueDate(dropTime(dueDate)))}
-              />
+              <Field label="Dates">
+                <DatesField
+                  start={startDate}
+                  end={dueDate}
+                  endName="Due"
+                  onOpen={(time) => setDateDialog({ for: 'task', time })}
+                  onClearTime={(which) => (which === 'start' ? setStartDate(dropTime(startDate)) : setDueDate(dropTime(dueDate)))}
+                />
+              </Field>
             </div>
-            <div
-              className={`col-start-1 row-start-1 space-y-3 ${tab === 'event' ? '' : 'invisible'}`}
-              aria-hidden={tab !== 'event'}
-            >
-              <div className="space-y-1.5">
-                <label className="text-[10px] uppercase tracking-wide text-neutral-500 font-semibold">Belongs to</label>
+
+            {/* ---- Event: when, where it belongs, who, where, and the details ---- */}
+            <div className={`col-start-1 row-start-1 space-y-5 ${tab === 'event' ? '' : 'invisible'}`} aria-hidden={tab !== 'event'}>
+              <Field label="Dates" required>
+                <DatesField
+                  start={eventStart}
+                  end={eventEnd}
+                  endName="End"
+                  onOpen={(time) => setDateDialog({ for: 'event', time })}
+                  onClearTime={(which) => (which === 'start' ? setEventStart(dropTime(eventStart)) : setEventEnd(dropTime(eventEnd)))}
+                />
+              </Field>
+
+              <Field label="Belongs to" hint="Who can see it">
                 <BelongsToPicker
                   full
                   workspaces={workspaces}
@@ -309,69 +304,9 @@ export default function QuickCreatePopover({
                     setEventHome(next);
                   }}
                 />
-              </div>
+              </Field>
 
-              <DatesField
-                start={eventStart}
-                end={eventEnd}
-                endName="End"
-                required
-                onOpen={(time) => setDateDialog({ for: 'event', time })}
-                onClearTime={(which) => (which === 'start' ? setEventStart(dropTime(eventStart)) : setEventEnd(dropTime(eventEnd)))}
-              />
-
-              <div className="space-y-1.5">
-                <label className="text-[10px] uppercase tracking-wide text-neutral-500 font-semibold flex items-center gap-1">
-                  <MapPin className="w-3 h-3" /> Location
-                </label>
-                <LocationAutocompleteInput
-                  value={eventLocation}
-                  onChange={setEventLocation}
-                  placeholder="Add a location..."
-                  className="w-full bg-neutral-950 border border-neutral-700 rounded-lg px-3 py-2 text-xs text-app-strong focus:outline-none focus:border-blue-500"
-                />
-                {eventLocation.trim() && (
-                  <a
-                    href={googleMapsSearchUrl(eventLocation.trim())}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    onClick={(e) => e.stopPropagation()}
-                    className="inline-flex items-center gap-1 text-[10px] text-blue-400 hover:text-blue-300"
-                  >
-                    <MapPin className="w-2.5 h-2.5" /> View on Google Maps
-                  </a>
-                )}
-              </div>
-
-              {/* Color and Description mirror EventDetailModal's own fields so nothing new
-                  appears only after the event already exists. Color sits next to the Space
-                  selector's purpose (Space cascades a color when none is set explicitly), same
-                  relationship the detail modal has. */}
-              <div className="space-y-1.5">
-                <label className="text-[10px] uppercase tracking-wide text-neutral-500 font-semibold">Color</label>
-                <ColorSwatchPicker value={eventColor} onChange={setEventColor} choices={EVENT_COLOR_CHOICES} size="sm" />
-                {/* Always takes its line, shown or not — appearing and disappearing as people were added
-                    made the window grow and shrink every other time ("arket blir større og mindre
-                    annenhver gang"). */}
-                <p className={`text-[10.5px] text-neutral-500 flex items-center gap-1.5 min-h-[16px] ${soloPerson ? '' : 'invisible'}`}>
-                  <span className="w-2 h-2 rounded-full" style={{ backgroundColor: soloPerson?.color }} />
-                  {soloPerson ? `Shows in ${soloPerson.name.split(' ')[0]}'s colour while they are the only one on it.` : '—'}
-                </p>
-              </div>
-
-              <div className="space-y-1.5">
-                <label className="text-[10px] uppercase tracking-wide text-neutral-500 font-semibold">Description</label>
-                <textarea
-                  value={eventDescription}
-                  onChange={(e) => setEventDescription(e.target.value)}
-                  rows={2}
-                  placeholder="Add a description..."
-                  className="w-full bg-neutral-950 border border-neutral-700 rounded-lg px-3 py-2 text-xs text-app-strong focus:outline-none focus:border-blue-500 resize-none"
-                />
-              </div>
-
-              <div className="space-y-1.5">
-                <label className="text-[10px] uppercase tracking-wide text-neutral-500 font-semibold">Attendees</label>
+              <Field label="Attendees">
                 <div className="flex items-center gap-1.5 flex-wrap">
                   {users
                     .filter((u) => assigneeIds.includes(u.id))
@@ -385,10 +320,9 @@ export default function QuickCreatePopover({
                     anchor={
                       <button
                         onClick={() => setAssigneePickerOpen((o) => !o)}
-                        title="Add attendee"
-                        className="w-6 h-6 rounded-full border border-dashed border-neutral-600 text-neutral-500 hover:border-blue-400 hover:text-blue-400 text-xs flex items-center justify-center cursor-pointer"
+                        className="inline-flex items-center gap-1.5 h-8 px-3 rounded-full border border-dashed border-neutral-600 text-[12px] text-neutral-400 hover:border-blue-400 hover:text-blue-400 cursor-pointer"
                       >
-                        +
+                        <Plus className="w-3.5 h-3.5" /> {assigneeIds.length ? 'Add' : 'Add people'}
                       </button>
                     }
                   >
@@ -403,17 +337,66 @@ export default function QuickCreatePopover({
                     />
                   </FloatingPopover>
                 </div>
-              </div>
+              </Field>
+
+              <Field label="Location" icon={<MapPin className="w-3 h-3" />}>
+                <LocationAutocompleteInput value={eventLocation} onChange={setEventLocation} placeholder="Add a location" className={inputCls} />
+                {eventLocation.trim() && (
+                  <a
+                    href={googleMapsSearchUrl(eventLocation.trim())}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    onClick={(e) => e.stopPropagation()}
+                    className="inline-flex items-center gap-1 mt-1.5 text-[11px] text-blue-400 hover:text-blue-300"
+                  >
+                    <MapPin className="w-3 h-3" /> View on Google Maps
+                  </a>
+                )}
+              </Field>
+
+              {/* Description and Color mirror EventDetailModal's own fields, so nothing new appears only
+                  after the event exists. */}
+              <Field label="Description">
+                <textarea
+                  value={eventDescription}
+                  onChange={(e) => setEventDescription(e.target.value)}
+                  rows={3}
+                  placeholder="Add a description"
+                  className="w-full bg-neutral-950 border border-neutral-700 rounded-lg px-3 py-2.5 text-[13px] text-app-strong placeholder:text-neutral-500 focus:outline-none focus:border-blue-500 resize-none"
+                />
+              </Field>
+
+              {/* The automatic colour is said in the label's own line, so it never changes the height
+                  ("arket blir større og mindre annenhver gang" was a line here coming and going). */}
+              <Field
+                label="Color"
+                hint={
+                  soloPerson ? (
+                    <span className="inline-flex items-center gap-1.5">
+                      <span className="w-2 h-2 rounded-full" style={{ backgroundColor: soloPerson.color }} />
+                      Auto: {soloPerson.name.split(' ')[0]}&apos;s colour
+                    </span>
+                  ) : undefined
+                }
+              >
+                <ColorSwatchPicker value={eventColor} onChange={setEventColor} choices={EVENT_COLOR_CHOICES} size="sm" />
+              </Field>
             </div>
           </div>
         </div>
 
-        <div className="p-5 pt-0">
+        {/* Footer, always in view. */}
+        <div className="shrink-0 border-t border-neutral-800 px-5 py-3 flex items-center justify-end gap-2">
+          <span className="mr-auto text-[11px] text-neutral-500">
+            {tab === 'task' && !canCreateTask ? 'Title, Space and List are needed' : tab === 'event' && !canCreateEvent ? 'Title and a date are needed' : ''}
+          </span>
+          <button onClick={onClose} className="h-9 px-4 rounded-lg text-[13px] text-neutral-300 hover:bg-neutral-800 cursor-pointer">
+            Cancel
+          </button>
           <button
             onClick={handleCreate}
             disabled={!canCreate}
-            title={tab === 'task' && !canCreate ? 'Title, Space, and List are all required' : ''}
-            className="w-full bg-blue-600 hover:bg-blue-500 disabled:bg-neutral-800 disabled:text-neutral-500 disabled:cursor-not-allowed text-white text-xs py-2.5 rounded font-medium cursor-pointer transition"
+            className="h-9 px-5 rounded-lg bg-blue-600 hover:bg-blue-500 disabled:bg-neutral-800 disabled:text-neutral-500 disabled:cursor-not-allowed text-white text-[13px] font-semibold cursor-pointer transition"
           >
             {tab === 'task' ? 'Create task' : 'Create event'}
           </button>
@@ -445,6 +428,37 @@ export default function QuickCreatePopover({
   );
 }
 
+// One labelled field of the sheet: the label on its own line above — always above, never beside — so
+// every field reads the same way ("'Belongs To' er veldig tett på Workspacen").
+function Field({
+  label,
+  icon,
+  hint,
+  required = false,
+  children,
+}: {
+  label: string;
+  icon?: React.ReactNode;
+  hint?: React.ReactNode;
+  required?: boolean;
+  children: React.ReactNode;
+}) {
+  return (
+    <div>
+      <div className="flex items-center gap-1.5 mb-2 min-h-[16px]">
+        <span className="flex items-center gap-1 text-[10.5px] font-semibold uppercase tracking-wider text-neutral-500">
+          {icon}
+          {label}
+          {required && <span className="text-neutral-600">*</span>}
+        </span>
+        {hint && <span className="ml-auto text-[11px] text-neutral-500">{hint}</span>}
+      </div>
+      {children}
+    </div>
+  );
+}
+
+
 const parseIso = (iso: string | null) => (iso ? new Date(iso) : null);
 const hasTime = (iso: string | null) => {
   const d = parseIso(iso);
@@ -474,14 +488,12 @@ function DatesField({
   start,
   end,
   endName,
-  required = false,
   onOpen,
   onClearTime,
 }: {
   start: string | null;
   end: string | null;
   endName: 'Due' | 'End';
-  required?: boolean;
   onOpen: (time?: 'start' | 'end') => void;
   onClearTime: (which: 'start' | 'end') => void;
 }) {
@@ -506,15 +518,14 @@ function DatesField({
     );
   };
   return (
-    <div className="space-y-1.5">
-      <label className="text-[10px] uppercase tracking-wide text-neutral-500 font-semibold">Dates{required ? ' *' : ''}</label>
+    <div className="space-y-2">
       <button
         onClick={() => onOpen()}
         className="w-full h-10 px-3 rounded-lg bg-neutral-950 border border-neutral-700 hover:border-neutral-600 flex items-center gap-2.5 text-left cursor-pointer"
       >
         <CalendarDays className="w-4 h-4 text-neutral-500 shrink-0" />
         {start || end ? (
-          <span className="text-[12.5px] text-app-strong truncate">
+          <span className="text-[13px] text-app-strong truncate">
             {start && (
               <>
                 <span className="text-neutral-500">Start</span> {fmtDay(start)}
@@ -528,7 +539,7 @@ function DatesField({
             )}
           </span>
         ) : (
-          <span className="text-[12.5px] text-neutral-500">Set dates</span>
+          <span className="text-[13px] text-neutral-500">Set dates</span>
         )}
       </button>
       {(start || end) && (

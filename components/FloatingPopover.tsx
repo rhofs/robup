@@ -10,6 +10,8 @@ type FloatingPopoverProps = {
   align?: 'left' | 'right';
   panelClassName?: string;
   children: ReactNode;
+  // The anchor takes the full width of its container (a form field), instead of shrinking to fit.
+  block?: boolean;
 };
 
 const MARGIN = 6;
@@ -21,6 +23,7 @@ export default function FloatingPopover({
   align = 'left',
   panelClassName = '',
   children,
+  block = false,
 }: FloatingPopoverProps) {
   const anchorRef = useRef<HTMLDivElement>(null);
   const panelRef = useRef<HTMLDivElement>(null);
@@ -104,7 +107,7 @@ export default function FloatingPopover({
 
   return (
     <>
-      <div ref={anchorRef} className="inline-block">
+      <div ref={anchorRef} className={block ? 'block w-full' : 'inline-block'}>
         {anchor}
       </div>
       {open &&
