@@ -3416,6 +3416,73 @@ function PageContent() {
   }, [filteredTasks, visibleTaskCount, subtasksByParent, expandedTaskIds, isMobile, boardPushing]);
 
 
+  // One row of the List view.
+  const renderListRow = (task: Task, depth: number, subtaskCount: number, animateEntrance: boolean) => (
+    <TaskRow
+      key={task._localId || task.id}
+      task={task}
+      materialize={materializeTaskId === task.id}
+      depth={depth}
+      subtaskCount={subtaskCount}
+      expanded={expandedTaskIds.has(task.id)}
+      onToggleExpand={isMobile ? undefined : () => toggleTaskExpanded(task.id)}
+      navScope={navScope}
+      dropIndicator={taskDropIndicator?.targetId === task.id ? taskDropIndicator.position : null}
+      onOpen={() => setModalTaskStack([task.id])}
+      columns={activeColumns}
+      gridTemplate={rowGridTemplate}
+      statuses={statuses}
+      selectable={!isMobile || selectionMode}
+      isSelected={selectedIds.has(task.id)}
+      onToggleSelect={(e) => toggleSelect(task.id, e.shiftKey)}
+      onContextMenu={openTaskMenu}
+      autoFocusRename={renamingTaskId === task.id}
+      onRenameHandled={() => setRenamingTaskId(null)}
+      animateEntrance={animateEntrance}
+    />
+  );
+
+  // A task's subtasks, folded out: the box rolls down and uncovers them as it goes, and rolls back up
+  // when folded — "kan den heller rulle ned og reveale etter hvert som den ruller ned". They used to
+  // come in as separate rows each fading and sliding, and leave shrinking and blurring. The slot itself
+  // stays while its task is in the list (an empty div when folded), so it is the box inside that comes
+  // and goes, in its own AnimatePresence, in the normal flow — the rows below follow it smoothly.
+  // Nested subtasks fold out the same way, one slot inside another.
+  const renderSubtaskSlot = (parent: Task, depth: number): React.ReactNode => {
+    const children = subtasksByParent.get(parent.id) ?? [];
+    const open = !isMobile && depth < 12 && expandedTaskIds.has(parent.id) && children.length > 0;
+    return (
+      // border-0: the list's divide-y would give this slot a line of its own even when folded.
+      <div key={`subs-${parent._localId || parent.id}`} className="border-0">
+        <AnimatePresence initial={false}>
+          {open && (
+            <motion.div
+              key="reveal"
+              initial={{ height: 0 }}
+              animate={{ height: 'auto' }}
+              exit={{ height: 0 }}
+              transition={{ duration: Math.min(0.42, 0.18 + children.length * 0.03), ease: [0.22, 0.8, 0.3, 1] }}
+              style={{ overflow: 'hidden' }}
+              // Lines between the subtasks; under the last one for a top-level task (its own row
+              // already has the line above), above them for nested ones (their row has none).
+              className={`divide-y divide-neutral-800/50 ${depth === 1 ? 'border-b' : 'border-t'} border-neutral-800/50`}
+            >
+              {children.map((c) => {
+                const grandchildren = subtasksByParent.get(c.id)?.length ?? 0;
+                return (
+                  <div key={c._localId || c.id}>
+                    {renderListRow(c, depth, grandchildren, false)}
+                    {grandchildren > 0 && renderSubtaskSlot(c, depth + 1)}
+                  </div>
+                );
+              })}
+            </motion.div>
+          )}
+        </AnimatePresence>
+      </div>
+    );
+  };
+
   // Scoped to whatever's currently visible/filtered in the board (filteredTasks), not the whole
   // workspace — the "Clear overdue" toolbar button below only ever touches what's on screen, so
   // its effect is predictable. `dueDateColor` (same util driving the date badges' red state) is
@@ -7767,29 +7834,16 @@ function PageContent() {
                       This defers that work rather than deleting it: closing the sheet still has to
                       render the board. But by then a destination has been chosen and the render is
                       not competing with the tap that is being animated. */}
-                  {listRows.map(({ task, depth, subtaskCount }) => (
-                    <TaskRow
-                      key={task._localId || task.id}
-                      task={task}
-                      materialize={materializeTaskId === task.id}
-                      depth={depth}
-                      subtaskCount={subtaskCount}
-                      expanded={expandedTaskIds.has(task.id)}
-                      onToggleExpand={isMobile ? undefined : () => toggleTaskExpanded(task.id)}
-                      navScope={navScope}
-                      dropIndicator={taskDropIndicator?.targetId === task.id ? taskDropIndicator.position : null}
-                      onOpen={() => setModalTaskStack([task.id])}
-                      columns={activeColumns}
-                      gridTemplate={rowGridTemplate}
-                      statuses={statuses}
-                      selectable={!isMobile || selectionMode}
-                      isSelected={selectedIds.has(task.id)}
-                      onToggleSelect={(e) => toggleSelect(task.id, e.shiftKey)}
-                      onContextMenu={openTaskMenu}
-                      autoFocusRename={renamingTaskId === task.id}
-                      onRenameHandled={() => setRenamingTaskId(null)}
-                    />
-                  ))}
+                  {/* Top-level rows are this AnimatePresence's own children, so a task leaving the list
+                      keeps its exit. A task's subtasks are not rows of their own here: they sit in a
+                      slot after it (renderSubtaskSlot) that rolls down to reveal them and back up. */}
+                  {listRows
+                    .filter((r) => r.depth === 0)
+                    .flatMap(({ task, subtaskCount }) => [
+                      renderListRow(task, 0, subtaskCount, true),
+                      // Phones do not fold subtasks out; an empty slot there would only add a gap.
+                      subtaskCount > 0 && !isMobile ? renderSubtaskSlot(task, 1) : null,
+                    ])}
                 </AnimatePresence>
                 )}
                 {/* Loads the next page when scrolled into view. A sentinel plus IntersectionObserver

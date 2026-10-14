@@ -12561,3 +12561,27 @@ calendar to start once the keyboard is fully down, "bittelitt tregere".
 - Not seen in a browser.
 
 **Deployed 2026-10-14 as `2232183`** (tag `deploy/2026-10-14_1353`).
+
+### 2026-10-14 (continued) — subtasks roll down when a task is folded out
+
+- **Feedback:** the way subtasks come in and out when a task expands is "litt stygg". "Kan den heller
+  rulle ned og reveale etter hvert som den ruller ned".
+- **Before:** expanded subtasks were rows in the flat `listRows`, each a TaskRow with its own entrance
+  (fade and slide up) and exit (shrink and blur) inside the list's popLayout AnimatePresence.
+- **Built (List view, desktop):**
+  - Top-level rows are still the AnimatePresence's direct children, so a task leaving keeps its exit.
+  - After each task with subtasks comes a **slot** (`renderSubtaskSlot`): a plain div that stays
+    mounted, containing its own `AnimatePresence initial={false}` with a box that animates
+    `height 0 → auto` and back, `overflow: hidden`.
+    - The rows inside have no entrance of their own (`animateEntrance={false}`), so the box
+      uncovers them as it grows, and the rows below follow it in the normal flow.
+    - Duration is 0.18 s + 0.03 s per subtask, capped at 0.42 s.
+    - Nested subtasks use a slot inside the slot.
+  - `renderListRow` holds the shared TaskRow props.
+  - `listRows` still drives shift-click order.
+  - Dividers: the slot is `border-0` (the list's `divide-y` would otherwise draw a line for a folded
+    slot). The box draws lines between its rows, plus one under them (top level) or above them
+    (nested).
+  - Phones don't fold subtasks out, so no slot is rendered there.
+- Not seen in a browser. Watch: drag-reordering subtasks inside an open box, since rows now sit in
+  nested divs.
