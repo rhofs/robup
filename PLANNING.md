@@ -12585,3 +12585,5 @@ calendar to start once the keyboard is fully down, "bittelitt tregere".
   - Phones don't fold subtasks out, so no slot is rendered there.
 - Not seen in a browser. Watch: drag-reordering subtasks inside an open box, since rows now sit in
   nested divs.
+
+**Deployed 2026-10-14 as `ad74945`** (tag `deploy/2026-10-14_1408`).
