@@ -12373,3 +12373,28 @@ calendar to start once the keyboard is fully down, "bittelitt tregere".
 **Deployed as `712bdd2`** (tag `deploy/2026-10-13_1350`), the ideas page only.
 - Correction: `/ideas/*` is **not** public — `proxy.ts` redirects anyone not logged in to /login (curl:
   307 → /login). The ideas pages are only reachable signed in.
+
+### 2026-10-14 (continued) — My Assigned Tasks as cards with a checklist (option 2, built)
+
+- **User:** "Jeg liker 2. Kan vi få den igjennom?" Option 2 from `public/ideas/my-assigned.html`.
+- **Built (`components/MyTasksPage.tsx`):**
+  - **One card per top-level task.** The head is the highest ancestor this person can see.
+  - **Head:** the full path (Space › Folders › List) above the title.
+    - If the head is yours: StatusCircle (respects the Space's "close directly" mode), "you" chip,
+      status pill and date.
+    - If not: muted title with the owners' avatars.
+    - Clicking the title opens the task.
+  - **Progress bar:** done / total of the head's *direct* subtasks.
+  - **Your tasks under it form a checklist in the List's own tree order** (not the sort order),
+    each with a working circle.
+    - A sub-subtask shows the subtasks between it and the head as a small path line.
+  - **Others' subtasks** sit behind "+ N other subtasks · show", muted, no circle, with their
+    assignees. When only the head is yours, "· show" sits on the progress line.
+  - **Sorting** orders cards by the best value among *your* items in the card (due/start ascending,
+    assigned/newest descending). Undated cards go last, ties keep List order.
+  - **Finished:** "Show finished" and its count work as before. A finished head with open subtasks
+    of yours stays as a muted, struck-through header.
+  - Same layout on phone and desktop, with bigger rows and circles on phones. The pill is hidden on
+    very narrow screens.
+- Not seen in a browser. The ideas pages (`public/ideas/logo.html`, `my-assigned.html`) can go now
+  that this is decided; they have not been removed yet.
