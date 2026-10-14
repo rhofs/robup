@@ -12629,3 +12629,5 @@ calendar to start once the keyboard is fully down, "bittelitt tregere".
   - Risk to watch: the bigger 36px slot means more layout shift under the pointer; the sticky
     anchor is what stops that from looping.
   - The overlay is wide when heading for the sidebar.
+
+**Deployed 2026-10-14 as `6d9dffb`** (tag `deploy/2026-10-14_1442`).
