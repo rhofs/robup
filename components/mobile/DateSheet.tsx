@@ -8,6 +8,7 @@ import { fullViewportBox, liveOverlayStyle, overlayStyle, useVisibleViewport } f
 import { X, ChevronUp, ChevronDown, CalendarDays, Sunrise, CalendarCheck, CalendarArrowUp } from 'lucide-react';
 import TimeDialSheet from './TimeDialSheet';
 import { hapticTap } from '../../lib/haptics';
+import { closeOnBackdrop } from '../../lib/backdrop';
 
 // "Choose dates" on a phone, modelled on ClickUp's (the user's screenshots): two fields at the top —
 // start and due (or end, for an event) — the one being set outlined; quick picks under them; a month
@@ -17,6 +18,10 @@ import { hapticTap } from '../../lib/haptics';
 // is two taps. A day before the start, picked for the end, swaps them rather than making an
 // impossible range. Values in and out are ISO strings, midnight meaning "no time" — the same
 // convention every other date in the app uses (see DatePickerPopover's hasTime).
+//
+// `dialog`: the same picker as a centred window, for desktop — Planner's New event/task uses it, so
+// choosing dates there works the way it does on the phone ("hvordan man velger dato/tid er mer lik sånn
+// som den er på mobil", 2026-10-14). Slightly smaller type; no drag handle.
 
 type Field = 'start' | 'end';
 
@@ -59,6 +64,8 @@ export default function DateSheet({
   onSave,
   onClose,
   keepKeyboard = false,
+  dialog = false,
+  initialTimeFor,
 }: {
   // Opened over a field that keeps its keyboard (the new-task card): the sheet sits on the visible
   // area above the keyboard, like the Assignees picker, and nothing in it takes the focus away — so the
@@ -75,6 +82,9 @@ export default function DateSheet({
   endName?: 'Due' | 'End';
   onSave: (start: string | null, end: string | null) => void;
   onClose: () => void;
+  dialog?: boolean;
+  // Open straight on a field's clock face (desktop's "Add time" under the dates).
+  initialTimeFor?: 'start' | 'end';
 }) {
   const drag = useSheetDrag(onClose);
   const visible = useVisibleViewport();
@@ -86,7 +96,7 @@ export default function DateSheet({
     const d = start ?? end ?? today;
     return new Date(d.getFullYear(), d.getMonth(), 1);
   });
-  const [timeFor, setTimeFor] = useState<Field | null>(null);
+  const [timeFor, setTimeFor] = useState<Field | null>(initialTimeFor ?? null);
 
   const days = useMemo(() => {
     const first = new Date(month.getFullYear(), month.getMonth(), 1);
@@ -131,13 +141,13 @@ export default function DateSheet({
     return (
       <div
         onClick={() => setActive(which)}
-        className={`flex items-center gap-3 h-14 px-4 rounded-2xl border-2 cursor-pointer transition ${
+        className={`flex items-center gap-3 ${dialog ? 'h-12' : 'h-14'} px-4 rounded-2xl border-2 cursor-pointer transition ${
           isActive ? 'border-app-strong' : 'border-neutral-800'
         }`}
       >
         {value ? (
           <>
-            <span className="flex-1 text-[17px] text-app-strong">
+            <span className={`flex-1 ${dialog ? 'text-[14px]' : 'text-[17px]'} text-app-strong`}>
               {name} {fmt(value)}
             </span>
             <button
@@ -156,7 +166,7 @@ export default function DateSheet({
                 e.stopPropagation();
                 setTimeFor(which);
               }}
-              className="text-[16px] text-neutral-400 font-medium cursor-pointer pl-1"
+              className={`${dialog ? 'text-[13px] hover:text-app-strong' : 'text-[16px]'} text-neutral-400 font-medium cursor-pointer pl-1`}
             >
               {hasTime(value) ? 'Time' : 'Add time'}
             </button>
@@ -164,7 +174,7 @@ export default function DateSheet({
         ) : (
           <>
             <CalendarDays className="w-5 h-5 text-neutral-500 shrink-0" />
-            <span className="flex-1 text-[17px] text-neutral-500">Set {name.toLowerCase()} date</span>
+            <span className={`flex-1 ${dialog ? 'text-[14px]' : 'text-[17px]'} text-neutral-500`}>Set {name.toLowerCase()} date</span>
           </>
         )}
       </div>
@@ -173,21 +183,11 @@ export default function DateSheet({
 
   const timeTarget = timeFor === 'start' ? start : timeFor === 'end' ? end : null;
 
-  return (
-    <SheetLayer z={90} dim={0.5} style={keepKeyboard ? liveOverlayStyle(visible) : overlayStyle(fullViewportBox())} onClose={onClose}>
-      <motion.div
-        onMouseDownCapture={keepKeyboard ? (e) => e.preventDefault() : undefined}
-        initial={{ y: '100%' }}
-        animate={{ y: 0 }}
-        exit={{ y: '100%' }}
-        // A touch slower than the other sheets — still quick, but it should be seen arriving.
-        transition={{ type: 'spring', stiffness: 290, damping: 34 }}
-        onClick={(e) => e.stopPropagation()}
-        {...drag.sheetProps}
-        className="relative bg-neutral-900 rounded-t-[28px] max-h-full min-h-0 flex flex-col pb-[calc(env(safe-area-inset-bottom)+12px)]"
-      >
-        <div {...drag.handleProps} className="relative flex items-center justify-center px-5 pt-5 pb-3 shrink-0">
-          <span className="absolute top-2 left-1/2 -translate-x-1/2 w-10 h-1 rounded-full bg-neutral-700" />
+  // Header, fields, quick picks, month and Clear/Save — the same in the sheet and the dialog.
+  const body = () => (
+    <>
+        <div {...(dialog ? {} : drag.handleProps)} className="relative flex items-center justify-center px-5 pt-5 pb-3 shrink-0">
+          {!dialog && <span className="absolute top-2 left-1/2 -translate-x-1/2 w-10 h-1 rounded-full bg-neutral-700" />}
           <h3 className="text-[17px] font-semibold text-app-strong">{single ? 'Choose date' : 'Choose dates'}</h3>
           <button onClick={onClose} className="absolute right-4 w-9 h-9 rounded-full bg-neutral-800 flex items-center justify-center text-neutral-400 cursor-pointer">
             <X className="w-4 h-4" />
@@ -203,7 +203,7 @@ export default function DateSheet({
               <button
                 key={q.label}
                 onClick={() => choose(q.date)}
-                className="shrink-0 flex items-center gap-1.5 h-10 px-3.5 rounded-xl border border-neutral-800 text-[15px] text-app-strong cursor-pointer active:bg-neutral-800"
+                className={`shrink-0 flex items-center gap-1.5 ${dialog ? 'h-8 px-3 text-[13px] hover:bg-neutral-800' : 'h-10 px-3.5 text-[15px]'} rounded-xl border border-neutral-800 text-app-strong cursor-pointer active:bg-neutral-800`}
               >
                 <q.icon className="w-4 h-4 text-neutral-400" /> {q.label}
               </button>
@@ -240,10 +240,10 @@ export default function DateSheet({
                   <button
                     key={d.toISOString()}
                     onClick={() => choose(d)}
-                    className={`relative h-12 flex items-center justify-center cursor-pointer ${between ? 'bg-blue-500/10' : ''}`}
+                    className={`relative ${dialog ? 'h-10' : 'h-12'} flex items-center justify-center cursor-pointer ${between ? 'bg-blue-500/10' : ''}`}
                   >
                     <span
-                      className={`w-10 h-10 rounded-full flex items-center justify-center text-[17px] font-medium transition ${
+                      className={`${dialog ? 'w-8 h-8 text-[14px] hover:ring-1 hover:ring-neutral-600' : 'w-10 h-10 text-[17px]'} rounded-full flex items-center justify-center font-medium transition ${
                         isStart || isEnd
                           ? 'bg-blue-600 text-white'
                           : isToday
@@ -270,42 +270,81 @@ export default function DateSheet({
               setActive('start');
             }}
             disabled={!start && !end}
-            className="h-12 rounded-2xl border border-neutral-700 text-[15px] font-semibold text-neutral-400 disabled:opacity-40 cursor-pointer"
+            className={`${dialog ? 'h-10 text-[13.5px]' : 'h-12 text-[15px]'} rounded-2xl border border-neutral-700 font-semibold text-neutral-400 disabled:opacity-40 cursor-pointer`}
           >
             Clear
           </button>
           <button
             onClick={() => onSave(start ? start.toISOString() : null, end ? end.toISOString() : null)}
-            className="h-12 rounded-2xl bg-app-strong text-neutral-900 text-[15px] font-semibold cursor-pointer"
+            className={`${dialog ? 'h-10 text-[13.5px]' : 'h-12 text-[15px]'} rounded-2xl bg-app-strong text-neutral-900 font-semibold cursor-pointer`}
           >
             Save
           </button>
         </div>
-      </motion.div>
+    </>
+  );
 
-      <AnimatePresence>
-        {timeFor && (
-          <TimeDialSheet
-            keepKeyboard={keepKeyboard}
-            initial={timeTarget && hasTime(timeTarget) ? { h: timeTarget.getHours(), m: timeTarget.getMinutes() } : null}
-            onClose={() => setTimeFor(null)}
-            onClear={() => {
-              const set = timeFor === 'start' ? setStart : setEnd;
-              if (timeTarget) set(startOfDay(timeTarget));
-              setTimeFor(null);
-            }}
-            onSave={(h, m) => {
-              const set = timeFor === 'start' ? setStart : setEnd;
-              const base = timeTarget ?? today;
-              const d = startOfDay(base);
-              // 00:00 is how "no time" is stored, so a chosen midnight is kept one minute past it.
-              d.setHours(h, h === 0 && m === 0 ? 1 : m);
-              set(d);
-              setTimeFor(null);
-            }}
-          />
-        )}
-      </AnimatePresence>
+  const timeDial = (
+    <AnimatePresence>
+      {timeFor && (
+        <TimeDialSheet
+          dialog={dialog}
+          keepKeyboard={keepKeyboard}
+          initial={timeTarget && hasTime(timeTarget) ? { h: timeTarget.getHours(), m: timeTarget.getMinutes() } : null}
+          onClose={() => setTimeFor(null)}
+          onClear={() => {
+            const set = timeFor === 'start' ? setStart : setEnd;
+            if (timeTarget) set(startOfDay(timeTarget));
+            setTimeFor(null);
+          }}
+          onSave={(h, m) => {
+            const set = timeFor === 'start' ? setStart : setEnd;
+            const base = timeTarget ?? today;
+            const d = startOfDay(base);
+            // 00:00 is how "no time" is stored, so a chosen midnight is kept one minute past it.
+            d.setHours(h, h === 0 && m === 0 ? 1 : m);
+            set(d);
+            setTimeFor(null);
+          }}
+        />
+      )}
+    </AnimatePresence>
+  );
+
+  if (dialog) {
+    return (
+      <div className="fixed inset-0 z-[90] flex items-center justify-center bg-scrim/60 p-4" {...closeOnBackdrop(onClose)}>
+        <motion.div
+          initial={{ opacity: 0, scale: 0.97, y: 8 }}
+          animate={{ opacity: 1, scale: 1, y: 0 }}
+          exit={{ opacity: 0, scale: 0.97, y: 8 }}
+          transition={{ duration: 0.16 }}
+          onClick={(e) => e.stopPropagation()}
+          className="w-full max-w-[380px] max-h-[92vh] bg-neutral-900 border border-neutral-800 rounded-2xl shadow-2xl flex flex-col overflow-hidden pb-3"
+        >
+          {body()}
+        </motion.div>
+        {timeDial}
+      </div>
+    );
+  }
+
+  return (
+    <SheetLayer z={90} dim={0.5} style={keepKeyboard ? liveOverlayStyle(visible) : overlayStyle(fullViewportBox())} onClose={onClose}>
+      <motion.div
+        onMouseDownCapture={keepKeyboard ? (e) => e.preventDefault() : undefined}
+        initial={{ y: '100%' }}
+        animate={{ y: 0 }}
+        exit={{ y: '100%' }}
+        // A touch slower than the other sheets — still quick, but it should be seen arriving.
+        transition={{ type: 'spring', stiffness: 290, damping: 34 }}
+        onClick={(e) => e.stopPropagation()}
+        {...drag.sheetProps}
+        className="relative bg-neutral-900 rounded-t-[28px] max-h-full min-h-0 flex flex-col pb-[calc(env(safe-area-inset-bottom)+12px)]"
+      >
+        {body()}
+      </motion.div>
+      {timeDial}
     </SheetLayer>
   );
 }

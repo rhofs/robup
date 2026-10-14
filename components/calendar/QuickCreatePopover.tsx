@@ -1,10 +1,11 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { X, Check, MapPin } from 'lucide-react';
+import { AnimatePresence } from 'framer-motion';
+import { X, MapPin, CalendarDays, Clock, Plus } from 'lucide-react';
 import { HierarchyWorkspace, AppUser, useTaskStore } from '../../store/useTaskStore';
 import { suggestEventAttendees } from '../../lib/assigneeSuggestions';
-import DatePickerPopover from '../DatePickerPopover';
+import DateSheet from '../mobile/DateSheet';
 import { closeOnBackdrop } from '../../lib/backdrop';
 import BelongsToPicker, { type BelongsTo } from '../BelongsToPicker';
 import FloatingPopover from '../FloatingPopover';
@@ -13,7 +14,6 @@ import AssigneePicker, { PersonPill } from '../AssigneePicker';
 import { useSessionStore } from '../../store/useSessionStore';
 import ColorSwatchPicker from '../ColorSwatchPicker';
 import { EVENT_COLOR_CHOICES } from './EventDetailModal';
-import { startDateColor, dueDateColor, DATE_BADGE_COLOR_HEX, startDateTooltip, dueDateTooltip } from '../../lib/dateBadgeColor';
 import { googleMapsSearchUrl } from '../../lib/googleMapsUrl';
 import LocationAutocompleteInput from '../LocationAutocompleteInput';
 import MobileQuickCreateSheet from '../mobile/MobileQuickCreateSheet';
@@ -83,7 +83,9 @@ export default function QuickCreatePopover({
   const [eventHome, setEventHome] = useState<BelongsTo>({ workspaceId: activeWorkspaceId ?? '', spaceId: null });
   const [eventStart, setEventStart] = useState<string | null>(defaultStartDate);
   const [eventEnd, setEventEnd] = useState<string | null>(defaultEndDate ?? defaultStartDate);
-  const [allDay, setAllDay] = useState(true);
+  // The phone's date picker as a window (DateSheet `dialog`) — for the event's dates or the task's, and
+  // opened straight on a field's clock when "Add time" under the dates was pressed.
+  const [dateDialog, setDateDialog] = useState<{ for: 'event' | 'task'; time?: 'start' | 'end' } | null>(null);
   const [eventLocation, setEventLocation] = useState('');
   const [assigneeIds, setAssigneeIds] = useState<string[]>([]);
   const [assigneePickerOpen, setAssigneePickerOpen] = useState(false);
@@ -105,7 +107,7 @@ export default function QuickCreatePopover({
       setEventHome({ workspaceId: activeWorkspaceId ?? '', spaceId: null });
       setEventStart(defaultStartDate);
       setEventEnd(defaultEndDate ?? defaultStartDate);
-      setAllDay(true);
+      setDateDialog(null);
       setEventLocation('');
       setAssigneeIds([]);
       setEventDescription('');
@@ -138,7 +140,8 @@ export default function QuickCreatePopover({
   const spaces = workspaces.flatMap((w) => w.spaces).filter((s) => !s.archived);
   const selectedSpace = spaces.find((s) => s.id === spaceId);
   const canCreateTask = title.trim().length > 0 && !!spaceId && !!listId;
-  const canCreateEvent = title.trim().length > 0 && !!eventStart && !!eventEnd && !!eventHome.workspaceId;
+  // An event needs a start; with no end it ends the same day.
+  const canCreateEvent = title.trim().length > 0 && !!eventStart && !!eventHome.workspaceId;
 
   // With no colour picked, an event with exactly one person on it shows in that person's profile
   // colour — worked out when it is drawn (CalendarView's eventColorOf), not stamped on it here, so it
@@ -154,8 +157,9 @@ export default function QuickCreatePopover({
       onCreateEvent({
         title: title.trim(),
         startDate: eventStart!,
-        endDate: eventEnd!,
-        allDay,
+        endDate: eventEnd ?? eventStart!,
+        // All day unless a time was added — as on the phone, where a time is what makes it timed.
+        allDay: !hasTime(eventStart) && !hasTime(eventEnd ?? eventStart),
         spaceId: eventHome.spaceId,
         workspaceId: eventHome.workspaceId,
         assigneeIds,
@@ -177,7 +181,9 @@ export default function QuickCreatePopover({
     // first one) stays visible above the keyboard regardless, and the card can scroll internally
     // if there's still more content than fits. Desktop keeps the original centered look.
     <div
-      className="fixed inset-0 z-50 flex items-start md:items-center justify-center bg-scrim/70 backdrop-blur-xs overflow-y-auto p-4"
+      // Top-anchored on desktop too: centred, the window moved up and down every time its height
+      // changed (attendees added), pulling the open attendee list along with it.
+      className="fixed inset-0 z-50 flex items-start justify-center bg-scrim/70 backdrop-blur-xs overflow-y-auto p-4 md:pt-[8vh]"
       {...closeOnBackdrop(onClose)}
     >
       <div
@@ -278,38 +284,13 @@ export default function QuickCreatePopover({
                 </div>
               </div>
 
-              <div className="grid grid-cols-2 gap-3">
-                <div className="space-y-1.5">
-                  <label className="text-[10px] uppercase tracking-wide text-neutral-500 font-semibold">Start date</label>
-                  <div className="bg-neutral-950 border border-neutral-700 rounded-lg px-1 py-0.5 inline-block">
-                    <DatePickerPopover
-                      value={startDate}
-                      onChange={setStartDate}
-                      placeholder="Not set"
-                      badgeColorHex={(() => {
-                        const c = startDateColor(startDate, dueDate);
-                        return c ? DATE_BADGE_COLOR_HEX[c] : undefined;
-                      })()}
-                      tooltip={startDateTooltip(startDate)}
-                    />
-                  </div>
-                </div>
-                <div className="space-y-1.5">
-                  <label className="text-[10px] uppercase tracking-wide text-neutral-500 font-semibold">Due date</label>
-                  <div className="bg-neutral-950 border border-neutral-700 rounded-lg px-1 py-0.5 inline-block">
-                    <DatePickerPopover
-                      value={dueDate}
-                      onChange={setDueDate}
-                      placeholder="Not set"
-                      badgeColorHex={(() => {
-                        const c = dueDateColor(dueDate);
-                        return c ? DATE_BADGE_COLOR_HEX[c] : undefined;
-                      })()}
-                      tooltip={dueDateTooltip(dueDate)}
-                    />
-                  </div>
-                </div>
-              </div>
+              <DatesField
+                start={startDate}
+                end={dueDate}
+                endName="Due"
+                onOpen={(time) => setDateDialog({ for: 'task', time })}
+                onClearTime={(which) => (which === 'start' ? setStartDate(dropTime(startDate)) : setDueDate(dropTime(dueDate)))}
+              />
             </div>
             <div
               className={`col-start-1 row-start-1 space-y-3 ${tab === 'event' ? '' : 'invisible'}`}
@@ -330,34 +311,14 @@ export default function QuickCreatePopover({
                 />
               </div>
 
-              <div className="grid grid-cols-2 gap-3">
-                <div className="space-y-1.5">
-                  <label className="text-[10px] uppercase tracking-wide text-neutral-500 font-semibold">Start *</label>
-                  <div className="bg-neutral-950 border border-neutral-700 rounded-lg px-1 py-0.5 inline-block">
-                    <DatePickerPopover value={eventStart} onChange={setEventStart} placeholder="Not set" />
-                  </div>
-                </div>
-                <div className="space-y-1.5">
-                  <label className="text-[10px] uppercase tracking-wide text-neutral-500 font-semibold">End *</label>
-                  <div className="bg-neutral-950 border border-neutral-700 rounded-lg px-1 py-0.5 inline-block">
-                    <DatePickerPopover value={eventEnd} onChange={setEventEnd} placeholder="Not set" />
-                  </div>
-                </div>
-              </div>
-
-              <button
-                onClick={() => setAllDay((v) => !v)}
-                className="flex items-center gap-2 text-[11px] text-neutral-400 hover:text-neutral-200 cursor-pointer"
-              >
-                <span
-                  className={`w-3.5 h-3.5 rounded-xs border flex items-center justify-center transition ${
-                    allDay ? 'bg-blue-500/20 border-blue-500/60 text-blue-400' : 'border-neutral-600'
-                  }`}
-                >
-                  {allDay && <Check className="w-2.5 h-2.5" />}
-                </span>
-                All day
-              </button>
+              <DatesField
+                start={eventStart}
+                end={eventEnd}
+                endName="End"
+                required
+                onOpen={(time) => setDateDialog({ for: 'event', time })}
+                onClearTime={(which) => (which === 'start' ? setEventStart(dropTime(eventStart)) : setEventEnd(dropTime(eventEnd)))}
+              />
 
               <div className="space-y-1.5">
                 <label className="text-[10px] uppercase tracking-wide text-neutral-500 font-semibold flex items-center gap-1">
@@ -389,12 +350,13 @@ export default function QuickCreatePopover({
               <div className="space-y-1.5">
                 <label className="text-[10px] uppercase tracking-wide text-neutral-500 font-semibold">Color</label>
                 <ColorSwatchPicker value={eventColor} onChange={setEventColor} choices={EVENT_COLOR_CHOICES} size="sm" />
-                {soloPerson && (
-                  <p className="text-[10.5px] text-neutral-500 flex items-center gap-1.5">
-                    <span className="w-2 h-2 rounded-full" style={{ backgroundColor: soloPerson.color }} />
-                    Shows in {soloPerson.name.split(' ')[0]}&apos;s colour while they are the only one on it.
-                  </p>
-                )}
+                {/* Always takes its line, shown or not — appearing and disappearing as people were added
+                    made the window grow and shrink every other time ("arket blir større og mindre
+                    annenhver gang"). */}
+                <p className={`text-[10.5px] text-neutral-500 flex items-center gap-1.5 min-h-[16px] ${soloPerson ? '' : 'invisible'}`}>
+                  <span className="w-2 h-2 rounded-full" style={{ backgroundColor: soloPerson?.color }} />
+                  {soloPerson ? `Shows in ${soloPerson.name.split(' ')[0]}'s colour while they are the only one on it.` : '—'}
+                </p>
               </div>
 
               <div className="space-y-1.5">
@@ -457,6 +419,124 @@ export default function QuickCreatePopover({
           </button>
         </div>
       </div>
+      <AnimatePresence>
+        {dateDialog && (
+          <DateSheet
+            dialog
+            initialTimeFor={dateDialog.time}
+            start={dateDialog.for === 'event' ? eventStart : startDate}
+            end={dateDialog.for === 'event' ? eventEnd : dueDate}
+            endName={dateDialog.for === 'event' ? 'End' : 'Due'}
+            onClose={() => setDateDialog(null)}
+            onSave={(st, en) => {
+              if (dateDialog.for === 'event') {
+                setEventStart(st);
+                setEventEnd(en);
+              } else {
+                setStartDate(st);
+                setDueDate(en);
+              }
+              setDateDialog(null);
+            }}
+          />
+        )}
+      </AnimatePresence>
+    </div>
+  );
+}
+
+const parseIso = (iso: string | null) => (iso ? new Date(iso) : null);
+const hasTime = (iso: string | null) => {
+  const d = parseIso(iso);
+  return !!d && (d.getHours() !== 0 || d.getMinutes() !== 0);
+};
+// The same date with no time (midnight is how "no time" is stored).
+const dropTime = (iso: string | null) => {
+  const d = parseIso(iso);
+  if (!d) return iso;
+  d.setHours(0, 0, 0, 0);
+  return d.toISOString();
+};
+const fmtDay = (iso: string) => {
+  const d = new Date(iso);
+  return `${d.getDate()}/${d.getMonth() + 1}/${String(d.getFullYear()).slice(2)}`;
+};
+const fmtTime = (iso: string) => {
+  const d = new Date(iso);
+  return `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`;
+};
+
+// One "Dates" field, as on the phone: a tap opens the date picker (DateSheet as a window) for the
+// range. Under it, once a date is chosen, its time — "Add time" straight to the clock, without going
+// into the dates first ("under datoene så står det 'Add time' når man har valgt dato, så man ikke må
+// inn på selve datoen") — or the time it has, with a cross to take it off.
+function DatesField({
+  start,
+  end,
+  endName,
+  required = false,
+  onOpen,
+  onClearTime,
+}: {
+  start: string | null;
+  end: string | null;
+  endName: 'Due' | 'End';
+  required?: boolean;
+  onOpen: (time?: 'start' | 'end') => void;
+  onClearTime: (which: 'start' | 'end') => void;
+}) {
+  const timeChip = (which: 'start' | 'end', iso: string | null, name: string) => {
+    if (!iso) return null;
+    return hasTime(iso) ? (
+      <span className="inline-flex items-center gap-1 h-7 pl-2 pr-1 rounded-lg bg-neutral-800/70 text-[11.5px] text-neutral-200">
+        <button onClick={() => onOpen(which)} className="inline-flex items-center gap-1.5 cursor-pointer">
+          <Clock className="w-3 h-3 text-neutral-400" /> {name} {fmtTime(iso)}
+        </button>
+        <button onClick={() => onClearTime(which)} title="Remove time" className="w-5 h-5 rounded flex items-center justify-center text-neutral-500 hover:text-app-strong cursor-pointer">
+          <X className="w-3 h-3" />
+        </button>
+      </span>
+    ) : (
+      <button
+        onClick={() => onOpen(which)}
+        className="inline-flex items-center gap-1 h-7 px-2 rounded-lg border border-dashed border-neutral-700 text-[11.5px] text-neutral-400 hover:text-app-strong hover:border-neutral-500 cursor-pointer"
+      >
+        <Plus className="w-3 h-3" /> Add {name.toLowerCase()} time
+      </button>
+    );
+  };
+  return (
+    <div className="space-y-1.5">
+      <label className="text-[10px] uppercase tracking-wide text-neutral-500 font-semibold">Dates{required ? ' *' : ''}</label>
+      <button
+        onClick={() => onOpen()}
+        className="w-full h-10 px-3 rounded-lg bg-neutral-950 border border-neutral-700 hover:border-neutral-600 flex items-center gap-2.5 text-left cursor-pointer"
+      >
+        <CalendarDays className="w-4 h-4 text-neutral-500 shrink-0" />
+        {start || end ? (
+          <span className="text-[12.5px] text-app-strong truncate">
+            {start && (
+              <>
+                <span className="text-neutral-500">Start</span> {fmtDay(start)}
+              </>
+            )}
+            {start && end && <span className="text-neutral-600"> → </span>}
+            {end && (
+              <>
+                <span className="text-neutral-500">{endName}</span> {fmtDay(end)}
+              </>
+            )}
+          </span>
+        ) : (
+          <span className="text-[12.5px] text-neutral-500">Set dates</span>
+        )}
+      </button>
+      {(start || end) && (
+        <div className="flex flex-wrap items-center gap-1.5">
+          {timeChip('start', start, 'Start')}
+          {timeChip('end', end, endName)}
+        </div>
+      )}
     </div>
   );
 }

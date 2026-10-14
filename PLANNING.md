@@ -12481,3 +12481,31 @@ calendar to start once the keyboard is fully down, "bittelitt tregere".
 - Not seen in a browser. In particular, `DocFormatPanel`'s fit inside the task window is unverified.
 
 **Deployed 2026-10-14 as `faee18c`** (tag `deploy/2026-10-14_1224`).
+
+### 2026-10-14 (continued) — Planner's New event/task: steady height, "Add time" under the dates, the phone's date picker
+
+- **Feedback (three screenshots):**
+  - Picking attendees in Planner's New event made the window grow and shrink every other time.
+  - Wanted "Add time" under the dates once a date is chosen, without going into the date first.
+  - Wanted picking dates and times to work like on the phone.
+- **Cause of the jumping:** the "Shows in X's colour while they are the only one on it" hint
+  appeared with exactly one attendee and went with two, so the height alternated. The window was
+  also vertically centred on desktop, so every height change moved it, and the open attendee list
+  with it.
+- **Built:**
+  - The hint now always takes its line (`invisible` when there is nothing to say).
+  - The New window is top-anchored on desktop too (`md:pt-[8vh]`), so growth only goes downward.
+  - **DateSheet and TimeDialSheet take `dialog`**: the same picker as a centred window on desktop
+    (smaller type, no drag handle). DateSheet's body is shared between sheet and dialog, and it
+    takes `initialTimeFor` to open straight on a field's clock.
+  - **QuickCreatePopover (desktop):** the Start/End (or Start/Due) DatePickerPopovers and the "All
+    day" checkbox are replaced by one **"Dates" field**: "Start 14/10/26 → End 15/10/26", or "Set
+    dates".
+    - It opens the phone's picker as a window.
+    - Under it, once dates are chosen: "+ Add start time" / "+ Add end time" open the clock directly.
+      A set time shows as a chip with a cross to remove it.
+    - **All day is now derived** (no time = all day), as on the phone.
+    - An event with no end ends on its start day.
+    - The due-date colour badges in the task tab are gone with the old pickers.
+- Not seen in a browser. The event *window* (EventDetailModal) still has the old pickers; only
+  creation was asked about.

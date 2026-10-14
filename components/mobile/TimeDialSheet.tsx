@@ -7,6 +7,7 @@ import { motion } from 'framer-motion';
 import { fullViewportBox, liveOverlayStyle, overlayStyle, useVisibleViewport } from '../../hooks/useVisibleViewport';
 import { X } from 'lucide-react';
 import { hapticTap } from '../../lib/haptics';
+import { closeOnBackdrop } from '../../lib/backdrop';
 
 // "Pick time": a 24-hour clock face, modelled on ClickUp's (the user's screenshot). Hours on two
 // rings — 1–12 outside, 13–23 and 0 inside, each under the hour it shares a position with — then
@@ -30,7 +31,10 @@ export default function TimeDialSheet({
   onClear,
   onClose,
   keepKeyboard = false,
+  dialog = false,
 }: {
+  // A centred window instead of a bottom sheet — desktop (see DateSheet's own `dialog`).
+  dialog?: boolean;
   // See DateSheet's: opened over a field that keeps its keyboard.
   keepKeyboard?: boolean;
   initial: { h: number; m: number } | null;
@@ -77,21 +81,10 @@ export default function TimeDialSheet({
       : pointAt(m / 5, OUTER);
   const selectedLabel = mode === 'hour' ? String(h) : pad(m);
 
-  return (
-    <SheetLayer z={95} dim={0.5} style={keepKeyboard ? liveOverlayStyle(visible) : overlayStyle(fullViewportBox())} onClose={onClose}>
-      <motion.div
-        onMouseDownCapture={keepKeyboard ? (e) => e.preventDefault() : undefined}
-        initial={{ y: '100%' }}
-        animate={{ y: 0 }}
-        exit={{ y: '100%' }}
-        // A touch slower than the other sheets — still quick, but it should be seen arriving.
-        transition={{ type: 'spring', stiffness: 290, damping: 34 }}
-        onClick={(e) => e.stopPropagation()}
-        {...drag.sheetProps}
-        className="relative bg-neutral-900 rounded-t-[28px] max-h-full overflow-y-auto pb-[calc(env(safe-area-inset-bottom)+12px)]"
-      >
-        <div {...drag.handleProps} className="relative flex items-center justify-center px-5 pt-5 pb-3">
-          <span className="absolute top-2 left-1/2 -translate-x-1/2 w-10 h-1 rounded-full bg-neutral-700" />
+  const inner = (
+    <>
+        <div {...(dialog ? {} : drag.handleProps)} className="relative flex items-center justify-center px-5 pt-5 pb-3">
+          {!dialog && <span className="absolute top-2 left-1/2 -translate-x-1/2 w-10 h-1 rounded-full bg-neutral-700" />}
           <h3 className="text-[17px] font-semibold text-app-strong">Pick time</h3>
           <button onClick={onClose} className="absolute right-4 w-9 h-9 rounded-full bg-neutral-800 flex items-center justify-center text-neutral-400 cursor-pointer">
             <X className="w-4 h-4" />
@@ -183,6 +176,40 @@ export default function TimeDialSheet({
             Save
           </button>
         </div>
+    </>
+  );
+
+  if (dialog) {
+    return (
+      <div className="fixed inset-0 z-[95] flex items-center justify-center bg-scrim/50 p-4" {...closeOnBackdrop(onClose)}>
+        <motion.div
+          initial={{ opacity: 0, scale: 0.97, y: 8 }}
+          animate={{ opacity: 1, scale: 1, y: 0 }}
+          exit={{ opacity: 0, scale: 0.97, y: 8 }}
+          transition={{ duration: 0.16 }}
+          onClick={(e) => e.stopPropagation()}
+          className="w-full max-w-[360px] max-h-[92vh] overflow-y-auto bg-neutral-900 border border-neutral-800 rounded-2xl shadow-2xl pb-5"
+        >
+          {inner}
+        </motion.div>
+      </div>
+    );
+  }
+
+  return (
+    <SheetLayer z={95} dim={0.5} style={keepKeyboard ? liveOverlayStyle(visible) : overlayStyle(fullViewportBox())} onClose={onClose}>
+      <motion.div
+        onMouseDownCapture={keepKeyboard ? (e) => e.preventDefault() : undefined}
+        initial={{ y: '100%' }}
+        animate={{ y: 0 }}
+        exit={{ y: '100%' }}
+        // A touch slower than the other sheets — still quick, but it should be seen arriving.
+        transition={{ type: 'spring', stiffness: 290, damping: 34 }}
+        onClick={(e) => e.stopPropagation()}
+        {...drag.sheetProps}
+        className="relative bg-neutral-900 rounded-t-[28px] max-h-full overflow-y-auto pb-[calc(env(safe-area-inset-bottom)+12px)]"
+      >
+        {inner}
       </motion.div>
     </SheetLayer>
   );
