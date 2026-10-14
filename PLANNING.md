@@ -12533,3 +12533,5 @@ calendar to start once the keyboard is fully down, "bittelitt tregere".
   - The footer is always in view: what is missing on the left, then Cancel and Create.
   - Width is 460px, with rounded-2xl and an inner scroll.
 - Not seen in a browser.
+
+**Deployed 2026-10-14 as `9d0f17f`** (tag `deploy/2026-10-14_1327`).
