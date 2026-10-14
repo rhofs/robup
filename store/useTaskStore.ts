@@ -2712,6 +2712,44 @@ export const useTaskStore = create<TaskStore>((set, get) => {
       const before = get()
         .tasks.filter((t) => t.listId === get().tasks.find((x) => x.id === draggedId)?.listId)
         .map((t) => ({ id: t.id, order: t.order ?? 0 }));
+
+      // The move shows at once, then the server's answer settles it. Waiting for the server first
+      // left the task sitting in its old place after the drop and then jumping — a large part of why
+      // dragging felt clumsy (2026-10-14). The preview is only the client's guess (the server still
+      // decides, from its own rows: see the comment on reorderTaskRelativeTo in app/page.tsx), so it
+      // is made only when the guess is easy — same List, same parent — and is put back if the server
+      // says no.
+      const all = get().tasks;
+      const dragged = all.find((t) => t.id === draggedId);
+      const target = all.find((t) => t.id === targetId);
+      let previewed = false;
+      if (dragged && target && dragged.listId === target.listId && (dragged.parentId ?? null) === (target.parentId ?? null)) {
+        const siblings = all
+          .filter((t) => t.listId === target.listId && (t.parentId ?? null) === (target.parentId ?? null) && !t.deletedAt)
+          .sort((a, b) =>
+            baseline
+              ? baseline.indexOf(a.id) - baseline.indexOf(b.id)
+              : (a.order ?? 0) - (b.order ?? 0) || new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime()
+          )
+          .map((t) => t.id)
+          .filter((id) => id !== draggedId);
+        const at = siblings.indexOf(targetId);
+        if (at !== -1) {
+          siblings.splice(position === 'above' ? at : at + 1, 0, draggedId);
+          applyOrder(siblings);
+          previewed = true;
+        }
+      }
+      const putBack = () => {
+        if (!previewed) return;
+        set((state) => ({
+          tasks: state.tasks.map((t) => {
+            const was = before.find((b) => b.id === t.id);
+            return was ? { ...t, order: was.order } : t;
+          }),
+        }));
+      };
+
       let res: Response;
       try {
         res = await fetch('/api/tasks/reorder', {
@@ -2720,14 +2758,20 @@ export const useTaskStore = create<TaskStore>((set, get) => {
           body: JSON.stringify({ draggedId, targetId, position, ...(baseline ? { baseline } : {}) }),
         });
       } catch {
-        // A thrown fetch is a dropped connection. Nothing was written, and nothing local changed
-        // yet, so there is nothing to put back — just say no.
+        // A thrown fetch is a dropped connection. Nothing was written; the preview goes back.
+        putBack();
         return false;
       }
-      if (!res.ok) return false;
+      if (!res.ok) {
+        putBack();
+        return false;
+      }
       const data = await res.json().catch(() => null);
       const ids: string[] = Array.isArray(data?.ids) ? data.ids : [];
-      if (ids.length === 0) return false;
+      if (ids.length === 0) {
+        putBack();
+        return false;
+      }
       applyOrder(ids);
 
       const previousIds = [...before].sort((a, b) => a.order - b.order).map((b) => b.id);

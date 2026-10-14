@@ -2,8 +2,8 @@
 
 import { statusesOfList } from '../lib/listStatuses';
 import { offerCompleteSubtasks } from '../lib/completeSubtasks';
-import { memo, useEffect, useState } from 'react';
-import { motion } from 'framer-motion';
+import { memo, useEffect, useLayoutEffect, useRef, useState } from 'react';
+import { AnimatePresence, motion } from 'framer-motion';
 import { useDraggable, useDroppable } from '@dnd-kit/core';
 import { Check, Pencil, RefreshCw, MoreHorizontal, GripVertical, Calendar, ListTree } from 'lucide-react';
 import { useTaskStore, StatusDef, CustomFieldDef, Task } from '../store/useTaskStore';
@@ -47,6 +47,14 @@ type TaskRowProps = {
   // is what distinguishes "this will reorder" from "this will nest as a subtask", which is
   // otherwise the same gesture on the same target.
   dropIndicator?: 'above' | 'below' | null;
+  // A task is being dragged over the middle of this row, to become its subtask (app/page.tsx decides).
+  nestTarget?: boolean;
+  // This row was just dropped here: where the dragged card was let go, so the row can glide from
+  // there into its place instead of appearing in it.
+  landingFrom?: { left: number; top: number } | null;
+  // A drop is happening right now — the gap closes at once instead of animating shut, so the row
+  // landing in it does not first get pushed down by it.
+  dropping?: boolean;
   // Subtasks shown in place, ClickUp-style (desktop List view): how deep this row sits under the
   // List's own tasks, how many open subtasks it has, and whether they are showing. A row with
   // subtasks gets an arrow before its title and a count after it; either one toggles them.
@@ -74,6 +82,9 @@ function TaskRowImpl({
   animateEntrance = true,
   navScope,
   dropIndicator,
+  nestTarget = false,
+  landingFrom = null,
+  dropping = false,
   depth = 0,
   subtaskCount = 0,
   expanded = false,
@@ -121,11 +132,57 @@ function TaskRowImpl({
   }, [autoFocusRename]);
 
   const { attributes, listeners, setNodeRef: setDraggableRef, isDragging } = useDraggable({ id: task.id });
-  const { setNodeRef: setDroppableRef, isOver } = useDroppable({ id: `task:${task.id}` });
+  const { setNodeRef: setDroppableRef } = useDroppable({ id: `task:${task.id}` });
+  const rowEl = useRef<HTMLElement | null>(null);
   const setNodeRef = (node: HTMLElement | null) => {
     setDraggableRef(node);
     setDroppableRef(node);
+    rowEl.current = node;
   };
+
+  // Landing: the row is already in its new place (the reorder is applied at once), so it is moved back
+  // to where the dragged card was released and glides home from there — the card settling into the
+  // slot. Web Animations on the row element itself, so it does not tangle with Framer's own layout
+  // animation on the wrapper (switched off for this row while it lands, below).
+  //
+  // Re-run when the row's place changes during the landing (the order is applied in its own render,
+  // and the server's answer can move it again a moment later): it then carries on from wherever it is
+  // on screen at that instant — read before the running glide is cancelled — so it never restarts.
+  const landingAnim = useRef<Animation | null>(null);
+  useLayoutEffect(() => {
+    const el = rowEl.current;
+    if (!landingFrom || !el) return;
+    let from = landingFrom;
+    if (landingAnim.current) {
+      const now = el.getBoundingClientRect();
+      from = { left: now.left, top: now.top };
+      landingAnim.current.cancel();
+      landingAnim.current = null;
+    }
+    const r = el.getBoundingClientRect();
+    const dx = from.left - r.left;
+    const dy = from.top - r.top;
+    if (Math.abs(dx) < 1 && Math.abs(dy) < 1) return;
+    el.style.zIndex = '20';
+    const anim = el.animate(
+      [
+        { transform: `translate(${dx}px, ${dy}px) scale(1.02)`, boxShadow: '0 14px 34px rgba(0,0,0,0.28)' },
+        { transform: 'translate(0, 0) scale(1)', boxShadow: '0 0 0 rgba(0,0,0,0)' },
+      ],
+      { duration: 260, easing: 'cubic-bezier(0.2, 0.8, 0.2, 1)' }
+    );
+    landingAnim.current = anim;
+    anim.onfinish = () => {
+      if (landingAnim.current === anim) landingAnim.current = null;
+      el.style.zIndex = '';
+    };
+  }, [landingFrom, task.order, depth]);
+  useEffect(
+    () => () => {
+      landingAnim.current?.cancel();
+    },
+    []
+  );
 
   // This task's own Space's statuses (the row may be showing in My Tasks or Everything, among others'),
   // for the circle's menu and for what counts as done. The defaults where a Space has none of its own.
@@ -369,7 +426,9 @@ function TaskRowImpl({
 
   return (
     <motion.div
-      layout
+      // Off while this row lands from a drop — it glides from where the card was let go (see the
+      // landing effect), and Framer would otherwise animate it from its old place at the same time.
+      layout={!landingFrom}
       layoutId={`task-${navScope}-${task.id}`}
       // A materialising task brings its own entrance (the card's CSS, under the dust), so the plain
       // slide-up is left out for it.
@@ -387,11 +446,13 @@ function TaskRowImpl({
           real space instead means the two rows visibly move apart as you approach, which is the
           answer to "am I going between these" before you have to read anything. The line then just
           says which gap. */}
-      {dropIndicator === 'above' && (
-        <div className="h-7 -mb-1 flex items-center px-1" aria-hidden>
-          <span className="h-1 w-full rounded-full bg-blue-500 shadow-[0_0_0_3px_rgba(59,130,246,0.18)]" />
-        </div>
-      )}
+      {/* The slot the task will land in: the rows part to make room for it (the height animates open,
+          and shut again as the pointer moves on, so moving between gaps is one smooth motion), with
+          a soft outline where it will go. It replaced a thin line in a fixed 28px gap that popped in
+          and out. */}
+      <AnimatePresence initial={false} custom={dropping}>
+        {dropIndicator === 'above' && <DropSlot key="slot-above" />}
+      </AnimatePresence>
       {isMobile ? (
         // ================= MOBILE ROW — a "card," not a table row: checkbox + title on top
         // (title wraps instead of truncating), status/assignee/dates/custom fields always visible
@@ -451,7 +512,7 @@ function TaskRowImpl({
           // top-left corner, so the colour reads as light on the card rather than paint on its edge.
           className={`siqt-task-card relative overflow-hidden rounded-2xl ${materialize ? 'siqt-mat-card' : ''} ${
             isSelected ? 'ring-1 ring-inset ring-blue-500/60' : ''
-          } ${isOver ? 'ring-1 ring-inset ring-neutral-500' : ''} ${isDragging ? 'opacity-40' : ''}`}
+          } ${nestTarget ? 'ring-2 ring-inset ring-blue-500/70' : ''} ${isDragging ? DRAG_GHOST : ''}`}
         >
           <span
             aria-hidden
@@ -608,8 +669,8 @@ function TaskRowImpl({
           className={`relative grid items-center px-4 py-1.5 text-xs hover:bg-neutral-800/50 transition-colors duration-150 cursor-pointer group ${
             materialize ? 'siqt-mat-card' : ''
           } ${
-            isOver ? 'bg-neutral-700/40 ring-1 ring-inset ring-neutral-500' : ''
-          } ${isDragging ? 'opacity-40' : ''} ${isSelected ? 'bg-neutral-700/30' : ''}`}
+            nestTarget ? 'bg-blue-500/10 ring-2 ring-inset ring-blue-500/70 rounded-md' : ''
+          } ${isDragging ? DRAG_GHOST : ''} ${isSelected ? 'bg-neutral-700/30' : ''}`}
           style={{ gridTemplateColumns: gridTemplate }}
         >
           {/* A cell, always — even when there is no checkbox to put in it.
@@ -742,11 +803,9 @@ function TaskRowImpl({
           </div>
         </div>
       )}
-      {dropIndicator === 'below' && (
-        <div className="h-7 -mt-1 flex items-center px-1" aria-hidden>
-          <span className="h-1 w-full rounded-full bg-blue-500 shadow-[0_0_0_3px_rgba(59,130,246,0.18)]" />
-        </div>
-      )}
+      <AnimatePresence initial={false} custom={dropping}>
+        {dropIndicator === 'below' && <DropSlot key="slot-below" />}
+      </AnimatePresence>
     </motion.div>
   );
 }
@@ -766,3 +825,31 @@ function spaceOfList(workspaces: ReturnType<typeof useTaskStore.getState>['works
 
 const TaskRow = memo(TaskRowImpl);
 export default TaskRow;
+
+// Where a dragged task came from, while it is away: an empty outlined slot rather than a faded copy
+// of the row, so there is one task on screen — the one in your hand.
+const DRAG_GHOST = '[&>*]:opacity-0 bg-neutral-800/20 outline-1 outline-dashed outline-neutral-600/70 -outline-offset-2 rounded-md';
+
+// The landing slot for a dragged task (TaskRow's drop indicator).
+function DropSlot() {
+  return (
+    <motion.div
+      aria-hidden
+      // `custom` from the AnimatePresence: true during a drop, when the slot closes at once.
+      variants={{
+        hidden: { height: 0, opacity: 0 },
+        shown: { height: 36, opacity: 1 },
+        gone: (dropping: boolean) => (dropping ? { height: 0, opacity: 0, transition: { duration: 0 } } : { height: 0, opacity: 0 }),
+      }}
+      initial="hidden"
+      animate="shown"
+      exit="gone"
+      transition={{ duration: 0.16, ease: [0.2, 0.8, 0.2, 1] }}
+      className="overflow-hidden px-1"
+    >
+      <div className="h-full py-1">
+        <div className="h-full rounded-md border-2 border-dashed border-blue-500/50 bg-blue-500/[0.07]" />
+      </div>
+    </motion.div>
+  );
+}

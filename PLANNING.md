@@ -12587,3 +12587,45 @@ calendar to start once the keyboard is fully down, "bittelitt tregere".
   nested divs.
 
 **Deployed 2026-10-14 as `ad74945`** (tag `deploy/2026-10-14_1408`).
+
+### 2026-10-14 (continued) — drag and sort made to feel modern
+
+- **Feedback:** "selve dra og sorter føles litt klumsete og ikke moderne … noe vi kan fikse?"
+- **What made it clumsy (read from the code):**
+  - The dragged thing was a small pill with the title, not the row.
+  - The original row stayed on screen at 40% opacity.
+  - A fixed 28px gap with a thin line popped in and out.
+  - On drop the pill vanished, and the row stayed in its old place until the server answered, then
+    jumped (the reorder was not optimistic).
+- **Kept as is:** all the hit-testing that previous rounds tuned against real bugs. That covers the
+  sticky anchor, the gap probes, canonical "above the next row", sibling rows scoped to their own
+  list, sorted-list baseline, and the middle-of-row = nest split. Only the look and timing changed.
+- **Built:**
+  - **`components/DraggedTaskCard.tsx`** in the DragOverlay is the row lifted: the source row's
+    width (capped at 640), status glyph, title, subtask count, avatars and due date.
+    - It scales to 1.02 with a growing shadow.
+    - Over the middle of a task it shows a blue "Make a subtask of '…'" chip, and its border turns
+      blue.
+  - **Source row** while away: an empty dashed slot (`DRAG_GHOST`, children hidden), not a faded copy.
+  - **Drop slot** (`DropSlot` in TaskRow): a 36px dashed blue slot whose height animates open, and
+    shut as the pointer moves on, so moving between gaps is one motion.
+    - On the actual drop it closes instantly (AnimatePresence `custom` = dropping), so the landing
+      row is not pushed.
+  - **Nest target:** the row being nested into gets a blue ring and tint. This is the new
+    `taskNestTargetId`, set in the indicator effect's middle-of-row branch; it replaces the
+    `isOver` grey ring.
+  - **Optimistic reorder:** `reorderTaskByGesture` now applies a preview at once when dragged and
+    target share List and parent.
+    - It is put back if the server refuses or the fetch fails.
+    - The server's sequence still settles it.
+  - **Landing:** on a reorder drop, the card's released position becomes `landingTask.from`. The
+    row, already in its new place, glides there from that point with a Web Animations FLIP
+    (`translate` + `scale 1.02→1` + shadow, 260ms).
+    - Framer's `layout` is off for that row while it lands.
+    - If the row's place changes mid-landing (order applied in a later render, or the server
+      answer), the glide continues from the row's current visual position, never restarting.
+  - Applies to List rows and the task window's subtask rows.
+- Not seen in a browser.
+  - Risk to watch: the bigger 36px slot means more layout shift under the pointer; the sticky
+    anchor is what stops that from looping.
+  - The overlay is wide when heading for the sidebar.

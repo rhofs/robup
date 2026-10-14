@@ -118,6 +118,7 @@ import ColorSwatchPicker from '../components/ColorSwatchPicker';
 import ConfirmDialog from '../components/ConfirmDialog';
 import FloatingPopover from '../components/FloatingPopover';
 import StatusEditor from '../components/StatusEditor';
+import DraggedTaskCard from '../components/DraggedTaskCard';
 import StatusGlyph, { statusKind } from '../components/StatusGlyph';
 import { homeLabel, homeOfTask, workspaceColor } from '../lib/whereIs';
 import { activeGlowStyle } from '../lib/activeGlowStyle';
@@ -3428,6 +3429,9 @@ function PageContent() {
       onToggleExpand={isMobile ? undefined : () => toggleTaskExpanded(task.id)}
       navScope={navScope}
       dropIndicator={taskDropIndicator?.targetId === task.id ? taskDropIndicator.position : null}
+      nestTarget={taskNestTargetId === task.id}
+      landingFrom={landingTask?.id === task.id ? landingTask.from : null}
+      dropping={!!landingTask}
       onOpen={() => setModalTaskStack([task.id])}
       columns={activeColumns}
       gridTemplate={rowGridTemplate}
@@ -3987,6 +3991,14 @@ function PageContent() {
     )
   );
   const [activeDragTask, setActiveDragTask] = useState<Task | null>(null);
+  // The row a dragged task is over the middle of — dropping makes it a subtask of that one.
+  const [taskNestTargetId, setTaskNestTargetId] = useState<string | null>(null);
+  // The dragged card, so it can be drawn as the row it is (its width) and so the drop knows where it
+  // was let go (the landing glide in TaskRow).
+  const dragCardRef = useRef<HTMLDivElement | null>(null);
+  const [dragCardWidth, setDragCardWidth] = useState<number | null>(null);
+  // A task just dropped into a new place, and where its card was released.
+  const [landingTask, setLandingTask] = useState<{ id: string; from: { left: number; top: number } } | null>(null);
   const [activeDragEntity, setActiveDragEntity] = useState<{
     kind: 'folder' | 'list' | 'space' | 'person' | 'room' | 'docfolder' | 'spacedoc';
     name: string;
@@ -4194,11 +4206,13 @@ function PageContent() {
       if (!el || !targetId || targetId === activeDragTask.id) {
         anchorY = null;
         setTaskDropIndicator(null);
+        setTaskNestTargetId(null);
         return;
       }
       if (forced) {
         anchorY = e.clientY;
         setTaskDropIndicator(canonical(targetId, forced));
+        setTaskNestTargetId(null);
         return;
       }
       const rect = el.getBoundingClientRect();
@@ -4210,14 +4224,18 @@ function PageContent() {
       if (y < safeEdge) {
         anchorY = e.clientY;
         setTaskDropIndicator(canonical(targetId, 'above'));
+        setTaskNestTargetId(null);
       } else if (y > rect.height - safeEdge) {
         anchorY = e.clientY;
         setTaskDropIndicator(canonical(targetId, 'below'));
+        setTaskNestTargetId(null);
       } else {
         // Nesting is a decision too, and it also has to stick: without an anchor here the middle of
         // a row re-decides on every event, which is where the loop started.
         anchorY = e.clientY;
         setTaskDropIndicator(null);
+        // Said out loud now: the row lights up blue, and the dragged card says what will happen.
+        setTaskNestTargetId(targetId);
       }
     };
 
@@ -4676,6 +4694,10 @@ function PageContent() {
     }
 
     const task = tasks.find((t) => t.id === draggedId) || null;
+    // The card in your hand is the row itself — as wide as it was (within reason, so it does not cover
+    // the sidebar it may be headed for).
+    const rowRect = document.querySelector(`[data-task-row="${draggedId}"]`)?.getBoundingClientRect();
+    setDragCardWidth(rowRect ? Math.min(rowRect.width, 640) : null);
     setActiveDragTask(task);
   };
 
@@ -4886,7 +4908,9 @@ function PageContent() {
     const droppedDocIndicator = docDropIndicator;
     const droppedListIndicator = listDropIndicator;
     const droppedTaskIndicator = taskDropIndicator;
+    const releasedAt = dragCardRef.current?.getBoundingClientRect();
     setActiveDragTask(null);
+    setTaskNestTargetId(null);
     setActiveDragEntity(null);
     setSpaceDropIndicator(null);
     spaceOverRef.current = null;
@@ -4918,6 +4942,12 @@ function PageContent() {
     // A non-null taskDropIndicator is itself proof this was a task drag — the effect that sets it
     // only runs while one is in flight — so no separate check is needed.
     if (droppedTaskIndicator && droppedTaskIndicator.targetId !== draggedId) {
+      // The row lands from where its card was let go (TaskRow's landing glide); the reorder below is
+      // shown at once, so the row is already in its new place for the glide to finish in.
+      if (releasedAt) {
+        setLandingTask({ id: draggedId, from: { left: releasedAt.left, top: releasedAt.top } });
+        setTimeout(() => setLandingTask((l) => (l?.id === draggedId ? null : l)), 320);
+      }
       void reorderTaskRelativeTo(draggedId, droppedTaskIndicator.targetId, droppedTaskIndicator.position).then(
         (moved) => {
           if (moved) showUndoableToast('Task moved');
@@ -9585,6 +9615,9 @@ function PageContent() {
                             // would land, and there was nothing to tell you the difference between
                             // reordering and nesting. Reported as "det kommer ingen indikasjon".
                             dropIndicator={taskDropIndicator?.targetId === sub.id ? taskDropIndicator.position : null}
+                            nestTarget={taskNestTargetId === sub.id}
+                            landingFrom={landingTask?.id === sub.id ? landingTask.from : null}
+                            dropping={!!landingTask}
                             onContextMenu={openTaskMenu}
                             autoFocusRename={renamingTaskId === sub.id}
                             onRenameHandled={() => setRenamingTaskId(null)}
@@ -9951,12 +9984,7 @@ function PageContent() {
       />
 
       <DragOverlay dropAnimation={null}>
-        {activeDragTask && (
-          <div className="flex items-center gap-2 px-3 py-2 rounded bg-neutral-900 border border-blue-500 shadow-2xl text-xs text-neutral-200 max-w-xs">
-            <span className="w-2.5 h-2.5 rounded-full shrink-0" style={{ backgroundColor: statusColor(activeDragTask.status) }}></span>
-            <span className="truncate font-medium">{activeDragTask.title}</span>
-          </div>
-        )}
+        {activeDragTask && <DraggedTaskCard task={activeDragTask} width={dragCardWidth} cardRef={dragCardRef} nestUnder={tasks.find((t) => t.id === taskNestTargetId)?.title ?? null} />}
         {activeDragEntity && (
           <div
             className="flex items-center gap-2 px-3 py-2 rounded bg-neutral-900 border shadow-2xl text-xs text-neutral-200 max-w-xs"
