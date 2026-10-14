@@ -12398,3 +12398,5 @@ calendar to start once the keyboard is fully down, "bittelitt tregere".
     very narrow screens.
 - Not seen in a browser. The ideas pages (`public/ideas/logo.html`, `my-assigned.html`) can go now
   that this is decided; they have not been removed yet.
+
+**Deployed 2026-10-14 as `dc23d6b`** (tag `deploy/2026-10-14_0720`).
