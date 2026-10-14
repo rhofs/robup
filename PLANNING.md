@@ -12443,3 +12443,5 @@ calendar to start once the keyboard is fully down, "bittelitt tregere".
       takes it.
     - Deleting a task template now asks first; it was instant.
 - Not seen in a browser. No migration.
+
+**Deployed 2026-10-14 as `740d11f`** (tag `deploy/2026-10-14_0751`).
