@@ -1,5 +1,6 @@
 'use client';
 
+import TaskTemplateEditor from '../components/TaskTemplateEditor';
 import { sortedStatusesOfList, statusesOfList } from '../lib/listStatuses';
 import { offerCompleteSubtasks } from '../lib/completeSubtasks';
 import { isDoneStatus } from '../lib/taskDoneDust';
@@ -123,7 +124,7 @@ import { copyToClipboard } from '../lib/copyToClipboard';
 import { contextMenuPosition } from '../lib/contextMenuPosition';
 import { formatBytes } from '../lib/formatBytes';
 import AttachmentPreview, { type PreviewFile } from '../components/AttachmentPreview';
-import { parseTaskTemplate } from '../lib/templates';
+import { parseTaskTemplate, type AppTemplate } from '../lib/templates';
 import DocExportMenu from '../components/collab/DocExportMenu';
 import TaskRow, { ColumnDef } from '../components/TaskRow';
 import FolderTree, { FOLDER_ICON_CHOICES, FOLDER_ICON_MAP } from '../components/FolderTree';
@@ -1885,6 +1886,8 @@ function PageContent() {
   // tap does differs, and that is a property of how it was opened.
   // Applying a template to a task: add its subtasks to the ones there, or replace them all.
   const [templateApplyMode, setTemplateApplyMode] = useState<'add' | 'replace'>('add');
+  // The task template open in TaskTemplateEditor (the pencil in the template picker).
+  const [editingTaskTemplate, setEditingTaskTemplate] = useState<AppTemplate | null>(null);
   const [templatePicker, setTemplatePicker] = useState<
     { mode: 'create' } | { mode: 'apply'; taskId: string } | { mode: 'update'; taskId: string } | null
   >(null);
@@ -10553,8 +10556,20 @@ function PageContent() {
                           : 'No subtasks'}
                       </span>
                     </button>
+                    {/* Edit in place — name, task, subtasks — rather than delete and save anew. */}
                     <button
-                      onClick={() => activeWorkspaceId && void deleteTemplate(activeWorkspaceId, t.id)}
+                      onClick={() => setEditingTaskTemplate(t)}
+                      title="Edit template"
+                      className="shrink-0 w-8 h-8 rounded-lg flex items-center justify-center text-neutral-600 hover:text-app-strong hover:bg-neutral-800 cursor-pointer md:opacity-0 md:group-hover:opacity-100 transition"
+                    >
+                      <Pencil className="w-3.5 h-3.5" />
+                    </button>
+                    <button
+                      onClick={() => {
+                        if (!activeWorkspaceId) return;
+                        if (!window.confirm(`Delete the template "${t.name}"? Tasks already made from it keep what they have.`)) return;
+                        void deleteTemplate(activeWorkspaceId, t.id);
+                      }}
                       title="Delete template"
                       className="shrink-0 w-8 h-8 rounded-lg flex items-center justify-center text-neutral-600 hover:text-red-400 hover:bg-neutral-800 cursor-pointer md:opacity-0 md:group-hover:opacity-100 transition"
                     >
@@ -10565,6 +10580,18 @@ function PageContent() {
               })}
           </div>
         </div>
+      )}
+
+      {editingTaskTemplate && (
+        <TaskTemplateEditor
+          template={editingTaskTemplate}
+          onClose={() => setEditingTaskTemplate(null)}
+          onSave={async (name, payload) => {
+            if (!activeWorkspaceId) throw new Error('No workspace');
+            await updateTemplate(activeWorkspaceId, editingTaskTemplate.id, payload, name);
+            showToast(`Updated "${name}"`);
+          }}
+        />
       )}
 
       {previewFile && <AttachmentPreview file={previewFile} onClose={() => setPreviewFile(null)} />}

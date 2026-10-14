@@ -12416,3 +12416,30 @@ calendar to start once the keyboard is fully down, "bittelitt tregere".
 - Not seen in a browser.
 
 **Deployed 2026-10-14 as `d57695e`** (tag `deploy/2026-10-14_0745`).
+
+### 2026-10-14 (continued) — templates can be edited in place
+
+- **Asked:** "Kan du fikse så man kan redigere alle typer templates, status, tasks osv. Så man ikke
+  trenger å slette, for så lage ny."
+- **Template kinds in use:** status templates (`StatusTemplate`) and task templates (`Template`,
+  kind 'task'). Doc templates (`Template` kind 'doc', `parseDocTemplate`) exist in code but nothing
+  in the UI makes or uses them, so there was nothing to edit.
+- **Built:**
+  - **Status templates:** a pencil on each template in Edit statuses → Status template opens it *in
+    the same window*: name plus the full Active/Done/Closed editor.
+    - "Save template" calls the new `PATCH /api/status-templates/[id]` (`{name?, statuses?}`,
+      members). Cancel returns to the Space/List draft untouched.
+    - It is in the same window rather than a stacked dialog because the rows' colour/icon popovers
+      are `FloatingPopover` at z-50 and would land under a higher overlay.
+    - The Active/Done/Closed editor was extracted into `StatusSections` (plus `validateRows`),
+      shared by Space/List editing and template editing.
+    - The template edit and delete buttons are always visible on phones (no hover there).
+  - **Task templates:** a pencil in the template picker (New from template / Apply / Update) opens
+    `components/TaskTemplateEditor.tsx`.
+    - It edits the name, the task title, the description and the subtask checklist: add, rename,
+      drag to reorder, remove. Enter adds the next step; Backspace on an empty row removes it.
+    - It keeps the stored status, since status names belong to a Space or List.
+    - The workspace templates PATCH now accepts an optional `name`; the store's `updateTemplate`
+      takes it.
+    - Deleting a task template now asks first; it was instant.
+- Not seen in a browser. No migration.

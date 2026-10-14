@@ -48,8 +48,8 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
 }
 
 // Overwrite an existing template with a new snapshot — "update existing template" rather than
-// saving a second one with a similar name. The name is left alone: someone updating a template is
-// keeping the thing it is called and changing what is inside it.
+// saving a second one with a similar name. The name changes only when one is sent: updating from a
+// task keeps it; editing the template (components/TaskTemplateEditor.tsx) may rename it.
 export async function PATCH(req: Request, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
   const userId = await getCurrentUserId();
@@ -64,9 +64,11 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
   }
 
   // workspaceId in the where clause, so a template in another workspace cannot be overwritten by id.
+  const name = typeof body.name === 'string' ? body.name.trim().slice(0, 120) : undefined;
+  if (name === '') return NextResponse.json({ error: 'A name is required' }, { status: 400 });
   const result = await prisma.template.updateMany({
     where: { id: body.templateId, workspaceId: id },
-    data: { payloadJson: JSON.stringify(body.payload ?? {}) },
+    data: { payloadJson: JSON.stringify(body.payload ?? {}), ...(name ? { name } : {}) },
   });
   if (result.count === 0) return NextResponse.json({ error: 'Template not found' }, { status: 404 });
 

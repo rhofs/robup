@@ -190,15 +190,6 @@ export default function StatusEditor({
     setListCustom(listHadOwn);
   };
 
-  const patch = (key: string, p: Partial<Draft>) => setDraft((d) => d.map((x) => (x.key === key ? { ...x, ...p } : x)));
-  const remove = (key: string) => setDraft((d) => d.filter((x) => x.key !== key));
-  const add = (kind: StatusKindName) => {
-    const key = newKey();
-    const used = new Set(draft.map((d) => d.color));
-    setDraft((d) => [...d, { key, name: '', color: COLORS.find((c) => !used.has(c)) ?? COLORS[0], kind, icon: null }]);
-    setFocusKey(key);
-  };
-
   const chooseTemplate = (t: StatusTemplateDef) => {
     setTplMenu(false);
     // A template in a List that inherits gives it its own set.
@@ -219,18 +210,6 @@ export default function StatusEditor({
     );
   };
 
-  const onDragEnd = (e: DragEndEvent) => {
-    const { active, over } = e;
-    if (!over || active.id === over.id) return;
-    setDraft((d) => {
-      const from = d.findIndex((x) => x.key === active.id);
-      const to = d.findIndex((x) => x.key === over.id);
-      if (from < 0 || to < 0 || d[from].kind !== d[to].kind) return d;
-      return arrayMove(d, from, to);
-    });
-  };
-  const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 4 } }));
-
   // The tasks a change here reaches: this List's, or those of the Space's Lists without their own.
   const listIds = new Set(target === 'list' ? [list!.id] : space.lists.filter((l) => !l.statuses?.length).map((l) => l.id));
   // A List going back to inheriting: its own statuses whose names its Space does not have.
@@ -247,15 +226,7 @@ export default function StatusEditor({
   const destinations = goingBack ? ordered(shownRows) : ordered(draft);
   const defaultTarget = (r: Draft, list: Draft[]) => (list.find((d) => d.kind === r.kind) ?? list.find((d) => d.kind === 'open') ?? list[0])?.name.trim() ?? '';
 
-  const validate = (): string | null => {
-    if (!editing) return null;
-    const names = draft.map((d) => d.name.trim());
-    if (names.some((n) => !n)) return 'Every status needs a name.';
-    const lower = names.map((n) => n.toLowerCase());
-    if (new Set(lower).size !== lower.length) return 'Two statuses have the same name.';
-    if (!draft.some((d) => d.kind === 'open')) return 'Keep at least one Active status — new tasks start there.';
-    return null;
-  };
+  const validate = (): string | null => (editing ? validateRows(draft) : null);
 
   const apply = async (confirmed: boolean) => {
     const problem = validate();
@@ -312,6 +283,37 @@ export default function StatusEditor({
     setNotice(`Saved as template “${t.name}”.`);
   };
 
+  // Editing a status template in place — its name and statuses — instead of deleting it and saving a
+  // new one ("så man kan redigere alle typer templates … så man ikke trenger å slette, for så lage ny").
+  // While it is open the window shows the template, and the Space/List draft waits untouched.
+  const [tplEdit, setTplEdit] = useState<{ id: string; name: string } | null>(null);
+  const [tplDraft, setTplDraft] = useState<Draft[]>([]);
+  const [tplFocusKey, setTplFocusKey] = useState<string | null>(null);
+  const [tplError, setTplError] = useState<string | null>(null);
+  const startEditTemplate = (t: StatusTemplateDef) => {
+    setTplMenu(false);
+    setTplError(null);
+    setTplEdit({ id: t.id, name: t.name });
+    setTplDraft(t.statuses.map((st) => ({ key: newKey(), name: st.name, color: st.color, kind: st.kind, icon: st.icon ?? null })));
+  };
+  const saveEditedTemplate = async () => {
+    if (!tplEdit) return;
+    const name = tplEdit.name.trim();
+    if (!name) return setTplError('The template needs a name.');
+    const problem = validateRows(tplDraft);
+    if (problem) return setTplError(problem);
+    const statuses = asTemplate(tplDraft);
+    const res = await fetch(`/api/status-templates/${tplEdit.id}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ name, statuses }),
+    }).catch(() => null);
+    if (!res || !res.ok) return setTplError('Could not save the template.');
+    setTpl((st) => ({ ...st, templates: st.templates.map((x) => (x.id === tplEdit.id ? { ...x, name, statuses } : x)) }));
+    setTplEdit(null);
+    setNotice(`Template “${name}” updated.`);
+  };
+
   const deleteTemplate = async (t: StatusTemplateDef) => {
     if (!window.confirm(`Delete the template “${t.name}”? Spaces already using its statuses keep them.`)) return;
     const res = await fetch(`/api/status-templates/${t.id}`, { method: 'DELETE' }).catch(() => null);
@@ -340,14 +342,32 @@ export default function StatusEditor({
       >
         <div className="px-5 h-14 shrink-0 border-b border-neutral-800 flex items-center justify-between gap-3">
           <h3 className="font-semibold text-[15px] text-app-strong truncate">
-            Edit <span className="underline decoration-dashed decoration-neutral-600 underline-offset-4">{target === 'list' ? list!.name : space.name}</span> statuses
+            {tplEdit ? (
+              'Edit status template'
+            ) : (
+              <>
+                Edit <span className="underline decoration-dashed decoration-neutral-600 underline-offset-4">{target === 'list' ? list!.name : space.name}</span> statuses
+              </>
+            )}
           </h3>
           <button onClick={attemptClose} className="w-8 h-8 rounded-full flex items-center justify-center text-neutral-400 hover:text-app-strong hover:bg-neutral-800 cursor-pointer">
             <X className="w-4 h-4" />
           </button>
         </div>
 
-        {step === 'migrate' ? (
+        {tplEdit ? (
+          <div className="flex-1 min-h-0 overflow-y-auto p-5 space-y-5">
+            <div>
+              <p className="text-[12px] text-neutral-400 mb-2">Template name</p>
+              <input
+                value={tplEdit.name}
+                onChange={(e) => setTplEdit({ ...tplEdit, name: e.target.value })}
+                className="w-full max-w-sm bg-neutral-950 border border-neutral-700 rounded-lg px-3 py-2 text-[13px] text-app-strong focus:outline-none focus:border-blue-500"
+              />
+            </div>
+            <StatusSections draft={tplDraft} setDraft={setTplDraft} focusKey={tplFocusKey} setFocusKey={setTplFocusKey} />
+          </div>
+        ) : step === 'migrate' ? (
           <div className="flex-1 min-h-0 overflow-y-auto p-5 space-y-4">
             <div>
               <p className="text-[14px] font-semibold text-app-strong">Move tasks from removed statuses</p>
@@ -444,6 +464,7 @@ export default function StatusEditor({
                     selected={matching?.id}
                     onPick={chooseTemplate}
                     onDelete={tpl.loaded ? deleteTemplate : undefined}
+                    onEdit={tpl.loaded ? startEditTemplate : undefined}
                   />
                   {tpl.loaded && allTemplates.length === 0 && (
                     <p className="px-2 py-1.5 text-[11.5px] text-neutral-500">No templates. Save these statuses as one below.</p>
@@ -562,52 +583,27 @@ export default function StatusEditor({
                   })}
                 </>
               ) : (
-              <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={onDragEnd}>
-                {KINDS.map(({ kind, label, info }) => {
-                  const rows = draft.filter((d) => d.kind === kind);
-                  return (
-                    <div key={kind}>
-                      <div className="flex items-center justify-between mb-2">
-                        <p className="flex items-center gap-1.5 text-[12px] text-neutral-400">
-                          {label}
-                          <span title={info} className="text-neutral-600 cursor-help">
-                            <Info className="w-3 h-3" />
-                          </span>
-                        </p>
-                        <button onClick={() => add(kind)} title={`Add a ${label} status`} className="w-6 h-6 rounded-md flex items-center justify-center text-neutral-400 hover:text-app-strong hover:bg-neutral-800 cursor-pointer">
-                          <Plus className="w-4 h-4" />
-                        </button>
-                      </div>
-                      <SortableContext items={rows.map((r) => r.key)} strategy={verticalListSortingStrategy}>
-                        <div className="space-y-1.5">
-                          {rows.map((d) => (
-                            <DraftRow
-                              key={d.key}
-                              d={d}
-                              autoFocus={focusKey === d.key}
-                              onFocused={() => setFocusKey(null)}
-                              onChange={(p) => patch(d.key, p)}
-                              onRemove={() => remove(d.key)}
-                            />
-                          ))}
-                          <button
-                            onClick={() => add(kind)}
-                            className="w-full h-9 rounded-lg border border-dashed border-neutral-700 hover:border-neutral-500 flex items-center justify-center gap-2 text-[12.5px] text-neutral-500 hover:text-neutral-300 cursor-pointer"
-                          >
-                            <Plus className="w-3.5 h-3.5" /> Add status
-                          </button>
-                        </div>
-                      </SortableContext>
-                    </div>
-                  );
-                })}
-              </DndContext>
+              <StatusSections draft={draft} setDraft={setDraft} focusKey={focusKey} setFocusKey={setFocusKey} />
               )}
             </div>
           </div>
         )}
 
         <div className="shrink-0 border-t border-neutral-800 px-5 py-3 flex flex-wrap items-center gap-2">
+          {tplEdit ? (
+            <>
+              <p className={`flex-1 min-w-[160px] text-[11.5px] ${tplError ? 'text-red-400' : 'text-neutral-500'}`}>
+                {tplError ?? 'Changes the template only — Spaces and Lists already using these statuses keep theirs.'}
+              </p>
+              <button onClick={() => setTplEdit(null)} className="h-9 px-4 rounded-lg border border-neutral-700 text-[13px] text-app-strong hover:bg-neutral-800 cursor-pointer">
+                Cancel
+              </button>
+              <button onClick={saveEditedTemplate} className="h-9 px-4 rounded-lg bg-blue-600 hover:bg-blue-500 text-white text-[13px] font-medium cursor-pointer">
+                Save template
+              </button>
+            </>
+          ) : (
+          <>
           <p className={`flex-1 min-w-[160px] text-[11.5px] ${error ? 'text-red-400' : 'text-neutral-500'}`}>
             {error ??
               notice ??
@@ -673,9 +669,97 @@ export default function StatusEditor({
               </button>
             </>
           )}
+          </>
+          )}
         </div>
       </div>
     </div>
+  );
+}
+
+// The rules a status set must meet before it is saved — a Space's, a List's or a template's.
+function validateRows(rows: Draft[]): string | null {
+  const names = rows.map((d) => d.name.trim());
+  if (names.some((n) => !n)) return 'Every status needs a name.';
+  const lower = names.map((n) => n.toLowerCase());
+  if (new Set(lower).size !== lower.length) return 'Two statuses have the same name.';
+  if (!rows.some((d) => d.kind === 'open')) return 'Keep at least one Active status — new tasks start there.';
+  return null;
+}
+
+// The Active / Done / Closed sections with their rows — the editing half of the window, shared by a
+// Space's or List's statuses and by editing a status template.
+function StatusSections({
+  draft,
+  setDraft,
+  focusKey,
+  setFocusKey,
+}: {
+  draft: Draft[];
+  setDraft: React.Dispatch<React.SetStateAction<Draft[]>>;
+  focusKey: string | null;
+  setFocusKey: (key: string | null) => void;
+}) {
+  const patch = (key: string, p: Partial<Draft>) => setDraft((d) => d.map((x) => (x.key === key ? { ...x, ...p } : x)));
+  const remove = (key: string) => setDraft((d) => d.filter((x) => x.key !== key));
+  const add = (kind: StatusKindName) => {
+    const key = newKey();
+    const used = new Set(draft.map((d) => d.color));
+    setDraft((d) => [...d, { key, name: '', color: COLORS.find((c) => !used.has(c)) ?? COLORS[0], kind, icon: null }]);
+    setFocusKey(key);
+  };
+  const onDragEnd = (e: DragEndEvent) => {
+    const { active, over } = e;
+    if (!over || active.id === over.id) return;
+    setDraft((d) => {
+      const from = d.findIndex((x) => x.key === active.id);
+      const to = d.findIndex((x) => x.key === over.id);
+      if (from < 0 || to < 0 || d[from].kind !== d[to].kind) return d;
+      return arrayMove(d, from, to);
+    });
+  };
+  const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 4 } }));
+  return (
+    <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={onDragEnd}>
+      {KINDS.map(({ kind, label, info }) => {
+        const rows = draft.filter((d) => d.kind === kind);
+        return (
+          <div key={kind}>
+            <div className="flex items-center justify-between mb-2">
+              <p className="flex items-center gap-1.5 text-[12px] text-neutral-400">
+                {label}
+                <span title={info} className="text-neutral-600 cursor-help">
+                  <Info className="w-3 h-3" />
+                </span>
+              </p>
+              <button onClick={() => add(kind)} title={`Add a ${label} status`} className="w-6 h-6 rounded-md flex items-center justify-center text-neutral-400 hover:text-app-strong hover:bg-neutral-800 cursor-pointer">
+                <Plus className="w-4 h-4" />
+              </button>
+            </div>
+            <SortableContext items={rows.map((r) => r.key)} strategy={verticalListSortingStrategy}>
+              <div className="space-y-1.5">
+                {rows.map((d) => (
+                  <DraftRow
+                    key={d.key}
+                    d={d}
+                    autoFocus={focusKey === d.key}
+                    onFocused={() => setFocusKey(null)}
+                    onChange={(p) => patch(d.key, p)}
+                    onRemove={() => remove(d.key)}
+                  />
+                ))}
+                <button
+                  onClick={() => add(kind)}
+                  className="w-full h-9 rounded-lg border border-dashed border-neutral-700 hover:border-neutral-500 flex items-center justify-center gap-2 text-[12.5px] text-neutral-500 hover:text-neutral-300 cursor-pointer"
+                >
+                  <Plus className="w-3.5 h-3.5" /> Add status
+                </button>
+              </div>
+            </SortableContext>
+          </div>
+        );
+      })}
+    </DndContext>
   );
 }
 
@@ -685,12 +769,14 @@ function TemplateGroup({
   selected,
   onPick,
   onDelete,
+  onEdit,
 }: {
   label: string;
   templates: StatusTemplateDef[];
   selected?: string;
   onPick: (t: StatusTemplateDef) => void;
   onDelete?: (t: StatusTemplateDef) => void;
+  onEdit?: (t: StatusTemplateDef) => void;
 }) {
   return (
     <div className="mb-1">
@@ -708,11 +794,20 @@ function TemplateGroup({
               ))}
             </span>
           </button>
+          {onEdit && (
+            <button
+              onClick={() => onEdit(t)}
+              title="Edit template"
+              className="w-7 h-7 rounded-md flex items-center justify-center text-neutral-500 hover:text-app-strong md:opacity-0 md:group-hover/tpl:opacity-100 cursor-pointer"
+            >
+              <Pencil className="w-3.5 h-3.5" />
+            </button>
+          )}
           {onDelete && (
             <button
               onClick={() => onDelete(t)}
               title="Delete template"
-              className="w-7 h-7 mr-1 rounded-md flex items-center justify-center text-neutral-500 hover:text-red-400 opacity-0 group-hover/tpl:opacity-100 cursor-pointer"
+              className="w-7 h-7 mr-1 rounded-md flex items-center justify-center text-neutral-500 hover:text-red-400 md:opacity-0 md:group-hover/tpl:opacity-100 cursor-pointer"
             >
               <Trash2 className="w-3.5 h-3.5" />
             </button>
