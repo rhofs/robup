@@ -7453,7 +7453,10 @@ function PageContent() {
             ) : activeView === 'mytasks' ? (
               <MyTasksPage
                 currentUser={users.find((u) => u.id === currentUserId) ?? null}
-                currentWorkspace={currentWorkspace}
+                workspaces={workspaces}
+                // A real workspace, never the personal one, even right after My Tasks made that one
+                // active — everything there is yours anyway ("default bør være workspacen, ikke privat").
+                defaultWorkspaceId={realSheetWorkspace?.id ?? currentWorkspace?.id ?? null}
                 tasks={tasks}
                 fallbackStatuses={DEFAULT_STATUSES}
                 onOpenTask={(id) => setModalTaskStack([id])}

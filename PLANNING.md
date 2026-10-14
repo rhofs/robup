@@ -12400,3 +12400,17 @@ calendar to start once the keyboard is fully down, "bittelitt tregere".
   that this is decided; they have not been removed yet.
 
 **Deployed 2026-10-14 as `dc23d6b`** (tag `deploy/2026-10-14_0720`).
+
+### 2026-10-14 (continued) — My Assigned Tasks opens on the real workspace, not Private
+
+- **Report:** "Om jeg går til 'My Tasks' så 'My assigned tasks', så ser jeg kun mine private ting …
+  default bør være workspacen, ikke privat. For alt er jo assigned til meg, når jeg har det privat?"
+- **Cause:** the page was scoped to the *active* workspace. "My Tasks" makes the personal workspace
+  active, so My Assigned Tasks right after it showed only private tasks.
+- **Built:**
+  - `MyTasksPage` now takes all workspaces plus `defaultWorkspaceId` = page.tsx's
+    `realSheetWorkspace` (the current workspace if real, else the last real one, else the first
+    real one).
+  - The header's "In <workspace>" is a dropdown listing the real workspaces, then "Private". The
+    pick lasts for the visit.
+- Not seen in a browser.

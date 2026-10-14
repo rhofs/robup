@@ -26,7 +26,10 @@ import StatusCircle from './StatusCircle';
 // What is finished stays out (archived, or in a Done or Closed status), behind "Show finished".
 type MyTasksPageProps = {
   currentUser: AppUser | null;
-  currentWorkspace: HierarchyWorkspace | undefined;
+  workspaces: HierarchyWorkspace[];
+  // Where it opens: the real workspace in use (page.tsx's realSheetWorkspace) — not the personal one,
+  // which "My Tasks" makes active and where everything is yours by definition. The header switches.
+  defaultWorkspaceId: string | null;
   tasks: Task[];
   // The statuses a Space without its own shows (page.tsx's DEFAULT_STATUSES).
   fallbackStatuses: StatusDef[];
@@ -73,8 +76,12 @@ type Card = {
   sortValue: number;
 };
 
-export default function MyTasksPage({ currentUser, currentWorkspace, tasks, fallbackStatuses, onOpenTask }: MyTasksPageProps) {
+export default function MyTasksPage({ currentUser, workspaces: allWorkspaces, defaultWorkspaceId, tasks, fallbackStatuses, onOpenTask }: MyTasksPageProps) {
   const isMobile = useIsMobile();
+  // Picked in the header for this visit; otherwise the default.
+  const [pickedWorkspaceId, setPickedWorkspaceId] = useState<string | null>(null);
+  const currentWorkspace =
+    allWorkspaces.find((w) => w.id === (pickedWorkspaceId ?? defaultWorkspaceId)) ?? allWorkspaces.find((w) => !w.isPersonal) ?? allWorkspaces[0];
   const [sort, setSort] = useState<SortKey>(() => (readLocal(SORT_KEY) as SortKey) || 'due');
   const [showDone, setShowDone] = useState(() => readLocal(SHOW_DONE_KEY) === '1');
   const [assignedAt, setAssignedAt] = useState<Record<string, string>>({});
@@ -265,9 +272,24 @@ export default function MyTasksPage({ currentUser, currentWorkspace, tasks, fall
         </div>
       </div>
 
-      <h3 className="text-xs font-bold text-neutral-400 uppercase tracking-wider">
-        In {currentWorkspace?.name ?? 'this workspace'} ({shownCount})
-      </h3>
+      <div className="flex items-center gap-2 text-xs font-bold text-neutral-400 uppercase tracking-wider">
+        <span>In</span>
+        {/* Which workspace — the real ones first, Private last. */}
+        <select
+          value={currentWorkspace?.id ?? ''}
+          onChange={(e) => setPickedWorkspaceId(e.target.value)}
+          className="bg-transparent border-b border-dashed border-neutral-600 text-xs font-bold uppercase tracking-wider text-neutral-300 focus:outline-none cursor-pointer"
+        >
+          {[...allWorkspaces]
+            .sort((a, b) => Number(a.isPersonal) - Number(b.isPersonal))
+            .map((w) => (
+              <option key={w.id} value={w.id}>
+                {w.isPersonal ? 'Private' : w.name}
+              </option>
+            ))}
+        </select>
+        <span>({shownCount})</span>
+      </div>
 
       {ordered.length === 0 ? (
         <div className="text-[11px] text-neutral-500 px-1 py-4 text-center border border-dashed border-neutral-800 rounded">
