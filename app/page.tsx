@@ -38,6 +38,7 @@ import {
   MoreHorizontal,
   Settings2,
   CircleDot,
+  Minus,
   House as HouseIcon,
   UserCircle,
   LogOut,
@@ -3812,15 +3813,36 @@ function PageContent() {
   };
 
   // ---- Bulk-valg ----
-  const toggleSelect = (taskId: string) => {
-    setSelectedIds((prev) => {
-      const next = new Set(prev);
-      if (next.has(taskId)) next.delete(taskId);
-      else next.add(taskId);
-      return next;
-    });
+  // Shift-click selects every row between the last box ticked and this one, both included, in the order
+  // the rows are on screen — subtasks folded out under their task included ("om jeg holder shift, så
+  // selecter jeg alle tasks mellom og inkludert den første og siste jeg trykker").
+  const lastSelectedIdRef = useRef<string | null>(null);
+  const toggleSelect = (taskId: string, shift = false) => {
+    const order = listRows.map((r) => r.task.id);
+    const anchor = lastSelectedIdRef.current;
+    if (shift && anchor && anchor !== taskId && order.includes(anchor) && order.includes(taskId)) {
+      const [from, to] = [order.indexOf(anchor), order.indexOf(taskId)].sort((a, b) => a - b);
+      const range = order.slice(from, to + 1);
+      setSelectedIds((prev) => new Set([...prev, ...range]));
+    } else {
+      setSelectedIds((prev) => {
+        const next = new Set(prev);
+        if (next.has(taskId)) next.delete(taskId);
+        else next.add(taskId);
+        return next;
+      });
+    }
+    lastSelectedIdRef.current = taskId;
   };
-  const clearSelection = () => setSelectedIds(new Set());
+  const clearSelection = () => {
+    lastSelectedIdRef.current = null;
+    setSelectedIds(new Set());
+  };
+  // The header's "Select all": every task in the list, or none.
+  const selectAllShown = (all: boolean) => {
+    lastSelectedIdRef.current = null;
+    setSelectedIds(all ? new Set(filteredTasks.map((t) => t.id)) : new Set());
+  };
 
   const bulkArchive = (archived: boolean) => {
     const count = selectedIds.size;
@@ -7642,15 +7664,17 @@ function PageContent() {
                 <div className="flex items-center">
                   {filteredTasks.length > 0 && (() => {
                     const allSelected = filteredTasks.every((t) => selectedIds.has(t.id));
+                    // Some but not all: the same solid box with a dash; a click then selects them all.
+                    const someSelected = !allSelected && filteredTasks.some((t) => selectedIds.has(t.id));
                     return (
                       <button
-                        onClick={() => (allSelected ? clearSelection() : setSelectedIds(new Set(filteredTasks.map((t) => t.id))))}
+                        onClick={() => selectAllShown(!allSelected)}
                         title={allSelected ? 'Deselect all' : 'Select all'}
                         className={`w-3.5 h-3.5 rounded border flex items-center justify-center cursor-pointer transition ${
-                          allSelected ? 'bg-blue-500 border-blue-500 text-white' : 'border-neutral-600 hover:border-neutral-400'
+                          allSelected || someSelected ? 'bg-blue-500 border-blue-500 text-white' : 'border-neutral-600 hover:border-neutral-400'
                         }`}
                       >
-                        {allSelected && <Check className="w-2.5 h-2.5" />}
+                        {allSelected ? <Check className="w-2.5 h-2.5" strokeWidth={3} /> : someSelected ? <Minus className="w-2.5 h-2.5" strokeWidth={3} /> : null}
                       </button>
                     );
                   })()}
@@ -7760,7 +7784,7 @@ function PageContent() {
                       statuses={statuses}
                       selectable={!isMobile || selectionMode}
                       isSelected={selectedIds.has(task.id)}
-                      onToggleSelect={() => toggleSelect(task.id)}
+                      onToggleSelect={(e) => toggleSelect(task.id, e.shiftKey)}
                       onContextMenu={openTaskMenu}
                       autoFocusRename={renamingTaskId === task.id}
                       onRenameHandled={() => setRenamingTaskId(null)}

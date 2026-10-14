@@ -12535,3 +12535,27 @@ calendar to start once the keyboard is fully down, "bittelitt tregere".
 - Not seen in a browser.
 
 **Deployed 2026-10-14 as `9d0f17f`** (tag `deploy/2026-10-14_1327`).
+
+### 2026-10-14 (continued) — shift-click range selection; one solid checkbox style
+
+- **Feedback (screenshot of a List with a task folded out):**
+  - "om jeg holder shift, så selecter jeg alle tasks mellom og inkludert den første og siste jeg
+    trykker". Also across the subtasks of a folded-out task.
+  - The header "Select all" box (solid blue) and the row boxes (pale tint) should match, solid
+    everywhere.
+- **Built:**
+  - `TaskRow`'s `onToggleSelect` now receives `{ shiftKey }`, and the box's mousedown blocks text
+    selection on shift.
+  - **List view** (`toggleSelect(id, shift)` in page.tsx): shift-click adds every row from the last
+    ticked box to this one, inclusive, in on-screen order (`listRows`, so folded-out subtasks
+    count). The anchor resets on clear and on "Select all".
+  - **Doc List block:** the same, in on-screen order across open status groups (closed groups
+    skipped).
+  - **Checkboxes:** a ticked row box is now solid `bg-blue-500` with a white tick (it was
+    `bg-blue-500/20`).
+    - The List view's header box shows a dash when only some are selected.
+    - The doc block's native `<input type=checkbox>` header became the same solid button with the
+      same dash state.
+- **Not covered:** subtasks inside the task window are not selectable at all (no checkboxes there),
+  so there is no shift-click there.
+- Not seen in a browser.

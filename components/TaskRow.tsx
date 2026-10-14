@@ -36,7 +36,8 @@ type TaskRowProps = {
   statuses: StatusDef[];
   selectable?: boolean;
   isSelected?: boolean;
-  onToggleSelect?: () => void;
+  // shiftKey: select the range from the last box ticked to this one (the list decides what "between" is).
+  onToggleSelect?: (e: { shiftKey: boolean }) => void;
   onContextMenu?: (e: React.MouseEvent, task: Task) => void;
   autoFocusRename?: boolean;
   onRenameHandled?: () => void;
@@ -330,21 +331,27 @@ function TaskRowImpl({
     return null;
   };
 
+  // Solid blue when ticked — the same box as "Select all" above the list, which already was; this one
+  // was a pale tint and the two did not match ("Den med 'solid blå' matcher resten av appen best").
   const selectCheckbox = selectable ? (
     <button
+      // Shift-click selects a range; without this the browser also selects the text in between.
+      onMouseDown={(e) => {
+        if (e.shiftKey) e.preventDefault();
+      }}
       onClick={(e) => {
         e.stopPropagation();
-        onToggleSelect?.();
+        onToggleSelect?.({ shiftKey: e.shiftKey });
       }}
-      className={`rounded-xs border flex items-center justify-center cursor-pointer transition shrink-0 ${isMobile ? 'w-4 h-4' : 'w-3.5 h-3.5'} ${
+      className={`rounded border flex items-center justify-center cursor-pointer transition shrink-0 ${isMobile ? 'w-4 h-4' : 'w-3.5 h-3.5'} ${
         isSelected
-          ? 'bg-blue-500/20 border-blue-500/60 text-blue-400 opacity-100'
+          ? 'bg-blue-500 border-blue-500 text-white opacity-100'
           : isMobile
             ? 'border-neutral-600 opacity-100'
             : 'border-neutral-600 opacity-0 group-hover:opacity-100'
       }`}
     >
-      {isSelected && <Check className={isMobile ? 'w-3 h-3' : 'w-2.5 h-2.5'} />}
+      {isSelected && <Check className={isMobile ? 'w-3 h-3' : 'w-2.5 h-2.5'} strokeWidth={3} />}
     </button>
   ) : (
     <div></div>

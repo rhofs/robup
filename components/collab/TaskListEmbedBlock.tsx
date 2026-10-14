@@ -1,6 +1,6 @@
 'use client';
 
-import { useMemo, useState } from 'react';
+import { useMemo, useRef, useState } from 'react';
 import { NodeViewWrapper, type ReactNodeViewProps } from '@tiptap/react';
 import {
   ListChecks,
@@ -17,6 +17,7 @@ import {
   Eye,
   EyeOff,
   Check,
+  Minus,
   MoreHorizontal,
   Pencil,
   Settings2,
@@ -261,6 +262,26 @@ export default function TaskListEmbedBlock({ node, updateAttributes, deleteNode,
   };
   const selectedIds = [...selected].filter((id) => allTasks.some((t) => t.id === id));
   const allShownSelected = shownTop.length > 0 && shownTop.every((t) => selected.has(t.id));
+  const someShownSelected = !allShownSelected && shownTop.some((t) => selected.has(t.id));
+
+  // Shift-click selects the rows between the last box ticked and this one, as they are on screen —
+  // folded-out subtasks included, folded-away groups not. Same rule as the List view (app/page.tsx).
+  const lastSelectedRef = useRef<string | null>(null);
+  const toggleRow = (id: string, shift: boolean) => {
+    const order =
+      mode === 'list'
+        ? groups.filter((g) => !closedGroups.has(g.name)).flatMap((g) => flatten(g.tasks).map((r) => r.task.id))
+        : flatten(shownTop).map((r) => r.task.id);
+    const anchor = lastSelectedRef.current;
+    if (shift && anchor && anchor !== id && order.includes(anchor) && order.includes(id)) {
+      const [from, to] = [order.indexOf(anchor), order.indexOf(id)].sort((a, b) => a - b);
+      const range = order.slice(from, to + 1);
+      setSelected((s) => new Set([...s, ...range]));
+    } else {
+      setSelected((s) => toggle(s, id));
+    }
+    lastSelectedRef.current = id;
+  };
 
   const renderRow = ({ task, depth, subtaskCount }: { task: Task; depth: number; subtaskCount: number }) => {
     const rowStatuses = mode === 'list' ? statuses : statusesOfList(workspaces, task.listId) ?? FALLBACK_STATUSES;
@@ -275,7 +296,7 @@ export default function TaskListEmbedBlock({ node, updateAttributes, deleteNode,
         statuses={rowStatuses}
         selectable
         isSelected={selected.has(task.id)}
-        onToggleSelect={() => setSelected((s) => toggle(s, task.id))}
+        onToggleSelect={(e) => toggleRow(task.id, e.shiftKey)}
         animateEntrance={false}
         depth={depth}
         subtaskCount={subtaskCount}
@@ -418,13 +439,20 @@ export default function TaskListEmbedBlock({ node, updateAttributes, deleteNode,
       style={{ gridTemplateColumns: gridTemplate }}
     >
       <div className="flex items-center">
-        <input
-          type="checkbox"
-          checked={allShownSelected}
-          onChange={() => setSelected(allShownSelected ? new Set() : new Set(shownTop.map((t) => t.id)))}
-          className="w-3.5 h-3.5 accent-blue-500 cursor-pointer"
+        {/* The same solid box as the rows' (TaskRow) and the List view's; a dash when only some are. */}
+        <button
+          onClick={() => {
+            lastSelectedRef.current = null;
+            setSelected(allShownSelected ? new Set() : new Set(shownTop.map((t) => t.id)));
+          }}
           aria-label="Select all"
-        />
+          title={allShownSelected ? 'Deselect all' : 'Select all'}
+          className={`w-3.5 h-3.5 rounded border flex items-center justify-center cursor-pointer transition ${
+            allShownSelected || someShownSelected ? 'bg-blue-500 border-blue-500 text-white' : 'border-neutral-600 hover:border-neutral-400'
+          }`}
+        >
+          {allShownSelected ? <Check className="w-2.5 h-2.5" strokeWidth={3} /> : someShownSelected ? <Minus className="w-2.5 h-2.5" strokeWidth={3} /> : null}
+        </button>
       </div>
       <div className="pl-1">Name</div>
       {columns.map((c) => (
