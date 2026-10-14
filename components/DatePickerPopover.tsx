@@ -22,6 +22,11 @@ type DatePickerPopoverProps = {
   // What the date is, for the phone's "Choose date" sheet ("Start 29/9/26"). The desktop popover
   // has no field label and does not use it.
   label?: string;
+  // Says which date it is next to the value ("Start 13 Oct"), and while unset shows the placeholder
+  // as an empty slot (dashed) — in the task window, where two bare "Not set"s said nothing about which
+  // was which ("kan vi indikere at det er start date/due date? Men at det fortsatt viser at det ikke er
+  // satt?"). Off by default: in a row's column the column header says it.
+  showLabel?: boolean;
 };
 
 const WEEKDAY_LABELS = ['Mo', 'Tu', 'We', 'Th', 'Fr', 'Sa', 'Su'];
@@ -66,7 +71,7 @@ const formatShort = (d: Date) => {
 // The text input right next to it still accepts anything (e.g. 14:07), this is just a shortcut.
 const TIME_OPTIONS = Array.from({ length: 96 }, (_, i) => `${pad(Math.floor(i / 4))}:${pad((i % 4) * 15)}`);
 
-export default function DatePickerPopover({ value, onChange, placeholder = 'Not set', align = 'left', badgeColorHex, tooltip, label = 'Date' }: DatePickerPopoverProps) {
+export default function DatePickerPopover({ value, onChange, placeholder = 'Not set', align = 'left', badgeColorHex, tooltip, label = 'Date', showLabel = false }: DatePickerPopoverProps) {
   const [open, setOpen] = useState(false);
   const isMobile = useIsMobile();
   const [showTimeInput, setShowTimeInput] = useState(false);
@@ -123,12 +128,13 @@ export default function DatePickerPopover({ value, onChange, placeholder = 'Not 
           ? badgeColorHex
             ? 'hover:bg-neutral-800/70'
             : 'text-neutral-300 hover:bg-neutral-800/70 hover:text-app-strong'
-          : 'text-neutral-500 hover:bg-neutral-800/70 hover:text-neutral-300'
+          : `text-neutral-500 hover:bg-neutral-800/70 hover:text-neutral-300 ${showLabel ? 'border border-dashed border-neutral-700' : ''}`
       }`}
       style={selected && badgeColorHex ? { color: badgeColorHex } : undefined}
     >
       {selected ? (
         <span className="inline-flex items-baseline gap-1.5 tabular-nums">
+          {showLabel && <span className="text-[9.5px] uppercase tracking-wide text-neutral-500 font-semibold">{label}</span>}
           <span>{formatShort(selected)}</span>
           {hasTime && (
             <span className="text-[9px] text-neutral-500">

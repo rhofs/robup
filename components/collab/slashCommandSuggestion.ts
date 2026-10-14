@@ -225,7 +225,7 @@ function fileCommand(onRequestFile: () => void): SlashCommandItem {
 
 // spaceId/docId come from the extension's own options (see slashCommandExtension.ts), not a
 // closure captured at module scope — this factory is called fresh per editor instance.
-export function createSlashCommandSuggestion(opts: { spaceId?: string; docId: string; onRequestImage?: () => void; onRequestFile?: () => void }): Partial<SuggestionOptions<SlashCommandItem>> {
+export function createSlashCommandSuggestion(opts: { spaceId?: string; docId: string; onRequestImage?: () => void; onRequestFile?: () => void; noTaskList?: boolean }): Partial<SuggestionOptions<SlashCommandItem>> {
   const items = spaceIdAwareItems(opts);
 
   return {
@@ -276,8 +276,8 @@ export function createSlashCommandSuggestion(opts: { spaceId?: string; docId: st
 
 // Menu order: Suggestions (checklist, tasks, subpages, divider, quote), then Text, then Media — the
 // list component groups consecutive items by section, so this order is the menu's order.
-function spaceIdAwareItems(opts: { spaceId?: string; docId: string; onRequestImage?: () => void; onRequestFile?: () => void }): SlashCommandItem[] {
-  const base = baseCommands();
+function spaceIdAwareItems(opts: { spaceId?: string; docId: string; onRequestImage?: () => void; onRequestFile?: () => void; noTaskList?: boolean }): SlashCommandItem[] {
+  const base = baseCommands().filter((i) => !(opts.noTaskList && i.id === 'task-list'));
   const suggestions = base.filter((i) => i.section === 'Suggestions');
   if (opts.spaceId) suggestions.splice(2, 0, newSubpageCommand(opts.spaceId, opts.docId), subpagesIndexCommand(opts.docId));
   const media: SlashCommandItem[] = [];

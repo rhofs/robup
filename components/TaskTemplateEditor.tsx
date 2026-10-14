@@ -7,6 +7,7 @@ import { CSS } from '@dnd-kit/utilities';
 import { GripVertical, Plus, X } from 'lucide-react';
 import { closeOnBackdrop } from '../lib/backdrop';
 import { parseTaskTemplate, type AppTemplate, type TaskTemplatePayload } from '../lib/templates';
+import RichDescriptionEditor from './RichDescriptionEditor';
 
 // Editing a task template in place — its name, the task it makes, and its subtask checklist (add,
 // rename, reorder, remove) — instead of deleting it and saving a new one from a task ("så man kan
@@ -116,15 +117,13 @@ export default function TaskTemplateEditor({
               className="w-full bg-neutral-950 border border-neutral-700 rounded-lg px-3 py-2 text-[13px] text-app-strong placeholder:text-neutral-600 focus:outline-none focus:border-blue-500"
             />
           </label>
-          <label className="block">
+          <div>
             <span className="block text-[12px] text-neutral-400 mb-1.5">Description</span>
-            <textarea
-              value={description}
-              onChange={(e) => setDescription(e.target.value)}
-              rows={3}
-              className="w-full bg-neutral-950 border border-neutral-700 rounded-lg px-3 py-2 text-[13px] text-app-strong focus:outline-none focus:border-blue-500 resize-y"
-            />
-          </label>
+            {/* The same formatting a task's description has (RichDescriptionEditor), so it comes out as written. */}
+            <div className="px-3">
+              <RichDescriptionEditor compact value={description || null} onCommit={(html) => setDescription(html ?? '')} placeholder="Description a new task from this template gets" />
+            </div>
+          </div>
 
           <div>
             <div className="flex items-center justify-between mb-1.5">

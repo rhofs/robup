@@ -16,6 +16,8 @@ export type SlashCommandOptions = {
   docId: string;
   onRequestImage?: () => void;
   onRequestFile?: () => void;
+  // Leave out the live "Task list" block — for editors that are not Docs (a task's description).
+  noTaskList?: boolean;
 };
 
 // No persistent Node needed — every command runs editor operations immediately (or, for New
@@ -26,7 +28,7 @@ export const SlashCommand = Extension.create<SlashCommandOptions>({
   name: 'slashCommand',
 
   addOptions() {
-    return { spaceId: undefined, docId: '', onRequestImage: undefined, onRequestFile: undefined };
+    return { spaceId: undefined, docId: '', onRequestImage: undefined, onRequestFile: undefined, noTaskList: false };
   },
 
   addProseMirrorPlugins() {

@@ -12445,3 +12445,37 @@ calendar to start once the keyboard is fully down, "bittelitt tregere".
 - Not seen in a browser. No migration.
 
 **Deployed 2026-10-14 as `740d11f`** (tag `deploy/2026-10-14_0751`).
+
+### 2026-10-14 (continued) — task description with Docs' formatting; labelled dates in the task window
+
+- **Feedback (screenshot of a task):**
+  - "Mangler masse formatering for beskrivelsen. Bold etc. Fonts osv. Kan du fikse så vi har det
+    samme som i docs?"
+  - The dates read "Not set – Not set": "kan vi indikere at det er start date/due date … men at det
+    fortsatt viser at det ikke er satt?"
+- **Built:**
+  - **`components/RichDescriptionEditor.tsx`** is a Tiptap editor with Docs' extensions and formatting
+    UI:
+    - `DocFormatPanel` (bold/italic/underline/strike, headings, lists, alignment, font, size,
+      colour, highlight, code);
+    - "/" slash menu, minus the live Task-list block (new `noTaskList` option on `SlashCommand`);
+    - checklists, quote, divider, code block;
+    - "@" mentions (Docs' mention node and suggestion);
+    - Ctrl/⌘-click opens links.
+  - Left out from Docs: comments, subpages, images/files, and the collab room.
+  - **It is not collaborative**: a description is one field, saved as HTML on blur when changed.
+  - Used in the task window, replacing `TaskDescriptionBlock` (removed). The task template editor
+    uses its compact form (no side panel).
+  - **Storage:** `Task.description` now holds HTML for edited descriptions.
+    - `lib/richText.ts`: `isRichHtml` (starts with a block tag); `plainToHtml` turns old plain-text
+      descriptions (with `@[..](kind:id)` tokens) into paragraphs and mention nodes when opened;
+      `richToPlainText` feeds Google Calendar and the .ics feed.
+    - Old descriptions convert the first time they are saved; nothing is migrated in bulk.
+    - **Rollback caveat:** code from before this deploy would show the HTML of edited descriptions
+      as raw text.
+    - Backup taken first: Pterodactyl `before-2026-10-14-rich-descriptions` (uuid 0d1030be…,
+      successful).
+  - **Dates:** `DatePickerPopover` takes `showLabel`. In the task window (desktop and phone) an unset
+    date reads "Start date" / "Due date" in a dashed empty slot, and a set one shows a small
+    START/DUE label before the date.
+- Not seen in a browser. In particular, `DocFormatPanel`'s fit inside the task window is unverified.

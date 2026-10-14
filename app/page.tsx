@@ -170,6 +170,8 @@ import UpdateReloader from '../components/UpdateReloader';
 // Client-only: HocuspocusProvider needs `window.location` and a real WebSocket, neither available
 // during SSR — a live collaborative editor has no reason to render server-side anyway.
 const CollabDocEditor = dynamic(() => import('../components/collab/CollabDocEditor'), { ssr: false });
+// Client-only for the same reason: a Tiptap editor.
+const RichDescriptionEditor = dynamic(() => import('../components/RichDescriptionEditor'), { ssr: false });
 import type { MentionKind } from '../lib/mentions';
 
 function DocTab({
@@ -630,92 +632,6 @@ const timeAgo = (dateStr: string | Date) => {
   const days = Math.floor(hrs / 24);
   return `${days}d ago`;
 };
-
-// Task modal's own free-text description (Task.description — already existed in the schema/API,
-// never had a UI until now). Same click-to-edit-textarea shape SpaceHome.tsx's DescriptionBlock
-// already established for Space.description — kept as its own small copy rather than sharing that
-// component, since the two are tied to different store actions/types with nothing else in common.
-// Deliberately separate from Documents: Documents are full rich-text pages (live collaborative
-// Tiptap editors, meant for specs/notes that grow over time); this is the one-paragraph "what is
-// this task" summary ClickUp itself shows directly under the title/metadata row, not another doc.
-function TaskDescriptionBlock({
-  value,
-  onCommit,
-  workspaceId,
-  allowedUserIds,
-  onJump,
-}: {
-  value: string | null;
-  onCommit: (value: string | null) => void;
-  // Scope for @ / # — the task's own workspace and, on a private task, who can open it (as comments).
-  workspaceId: string | null;
-  allowedUserIds: Set<string> | null;
-  onJump: (kind: MentionKind, id: string) => void;
-}) {
-  const [editing, setEditing] = useState(false);
-  const [draft, setDraft] = useState(value || '');
-  const ref = useRef<HTMLTextAreaElement>(null);
-
-  // The box grows with what is in it. It was three rows, fixed, however much was written ("veldig
-  // 'lite vindu' vi kan skrive i, og det blir liksom ikke større"); now it fits the text, up to most
-  // of the window, and scrolls past that.
-  useLayoutEffect(() => {
-    const el = ref.current;
-    if (!editing || !el) return;
-    el.style.height = 'auto';
-    el.style.height = `${el.scrollHeight + 2}px`;
-  }, [editing, draft]);
-
-  const commit = () => {
-    setEditing(false);
-    const trimmed = draft.trim();
-    if (trimmed !== (value ?? '').trim()) onCommit(trimmed || null);
-  };
-
-  if (editing) {
-    return (
-      <MentionTextarea
-        ref={ref}
-        autoFocus
-        value={draft}
-        onChange={(e) => setDraft(e.target.value)}
-        onFocus={(e) => {
-          // Caret at the end, where you carry on writing — not at the very start.
-          const end = e.currentTarget.value.length;
-          e.currentTarget.setSelectionRange(end, end);
-        }}
-        onBlur={commit}
-        onKeyDown={(e) => {
-          if (e.key === 'Escape') {
-            setDraft(value || '');
-            setEditing(false);
-          }
-        }}
-        workspaceId={workspaceId}
-        allowedUserIds={allowedUserIds}
-        placeholder="Write a description… (@ for people, tasks and docs, # for tasks)"
-        className="w-full min-h-[120px] max-h-[60vh] overflow-y-auto bg-neutral-900/60 border border-blue-500 rounded-lg px-3 py-2 text-xs leading-relaxed text-neutral-200 focus:outline-none resize-none"
-      />
-    );
-  }
-
-  return (
-    <div
-      onClick={() => {
-        setDraft(value || '');
-        setEditing(true);
-      }}
-      className="group flex items-start gap-2 px-2 py-1.5 -mx-2 rounded hover:bg-neutral-800/40 cursor-text"
-    >
-      {value ? (
-        <MentionText text={value} onJump={onJump} className="text-xs leading-relaxed text-neutral-300 whitespace-pre-wrap flex-1 min-w-0" />
-      ) : (
-        <p className="text-xs text-neutral-500 italic flex-1">Write a description...</p>
-      )}
-      <Pencil className="w-3 h-3 text-neutral-600 opacity-0 group-hover:opacity-100 shrink-0 mt-0.5" />
-    </div>
-  );
-}
 
 export default function Home() {
   return (
@@ -9229,6 +9145,8 @@ function PageContent() {
                         <DatePickerPopover
                           value={activeModalTask.startDate}
                           label="Start"
+                          showLabel
+                          placeholder="Start date"
                           onChange={(iso) =>
                             optimisticSetDates(
                               activeModalTask.id,
@@ -9246,6 +9164,8 @@ function PageContent() {
                         <DatePickerPopover
                           value={activeModalTask.dueDate}
                           label="Due"
+                          showLabel
+                          placeholder="Due date"
                           onChange={(iso) =>
                             optimisticSetDates(
                               activeModalTask.id,
@@ -9267,6 +9187,8 @@ function PageContent() {
                       <DatePickerPopover
                         value={activeModalTask.startDate}
                         label="Start"
+                        showLabel
+                        placeholder="Start date"
                         onChange={(iso) =>
                           optimisticSetDates(
                             activeModalTask.id,
@@ -9284,6 +9206,8 @@ function PageContent() {
                       <DatePickerPopover
                         value={activeModalTask.dueDate}
                         label="Due"
+                        showLabel
+                        placeholder="Due date"
                         onChange={(iso) =>
                           optimisticSetDates(
                             activeModalTask.id,
@@ -9355,12 +9279,11 @@ function PageContent() {
                 {/* Description — a plain free-text summary, distinct from Documents below (full
                     rich-text pages). Matches where ClickUp itself puts this: directly under the
                     Status/Dates/Assignees row, above everything else. */}
-                <TaskDescriptionBlock
+                {/* The same editor and formatting as Docs (components/RichDescriptionEditor.tsx). */}
+                <RichDescriptionEditor
                   key={activeModalTask.id}
                   value={activeModalTask.description}
                   onCommit={(value) => optimisticSetDescription(activeModalTask.id, value)}
-                  workspaceId={workspaceIdForList(workspaces, activeModalTask.listId)}
-                  allowedUserIds={taskAudience(workspaces, activeModalTask)}
                   onJump={jumpToMention}
                 />
 
