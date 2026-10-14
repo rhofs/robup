@@ -12559,3 +12559,5 @@ calendar to start once the keyboard is fully down, "bittelitt tregere".
 - **Not covered:** subtasks inside the task window are not selectable at all (no checkboxes there),
   so there is no shift-click there.
 - Not seen in a browser.
+
+**Deployed 2026-10-14 as `2232183`** (tag `deploy/2026-10-14_1353`).
