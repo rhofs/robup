@@ -12479,3 +12479,5 @@ calendar to start once the keyboard is fully down, "bittelitt tregere".
     date reads "Start date" / "Due date" in a dashed empty slot, and a set one shows a small
     START/DUE label before the date.
 - Not seen in a browser. In particular, `DocFormatPanel`'s fit inside the task window is unverified.
+
+**Deployed 2026-10-14 as `faee18c`** (tag `deploy/2026-10-14_1224`).
