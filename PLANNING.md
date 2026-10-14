@@ -12414,3 +12414,5 @@ calendar to start once the keyboard is fully down, "bittelitt tregere".
   - The header's "In <workspace>" is a dropdown listing the real workspaces, then "Private". The
     pick lasts for the visit.
 - Not seen in a browser.
+
+**Deployed 2026-10-14 as `d57695e`** (tag `deploy/2026-10-14_0745`).
