@@ -3,7 +3,7 @@
 import { statusesOfList } from '../lib/listStatuses';
 import { offerCompleteSubtasks } from '../lib/completeSubtasks';
 import { memo, useEffect, useLayoutEffect, useRef, useState } from 'react';
-import { AnimatePresence, motion } from 'framer-motion';
+import { motion } from 'framer-motion';
 import { useDraggable, useDroppable } from '@dnd-kit/core';
 import { Check, Pencil, RefreshCw, MoreHorizontal, GripVertical, Calendar, ListTree } from 'lucide-react';
 import { useTaskStore, StatusDef, CustomFieldDef, Task } from '../store/useTaskStore';
@@ -81,10 +81,8 @@ function TaskRowImpl({
   onRenameHandled,
   animateEntrance = true,
   navScope,
-  dropIndicator,
   nestTarget = false,
   landingFrom = null,
-  dropping = false,
   depth = 0,
   subtaskCount = 0,
   expanded = false,
@@ -439,20 +437,10 @@ function TaskRowImpl({
       className="relative"
     >
       {materialize && <TaskMaterialize seed={task.id} radius={isMobile ? 16 : 8} />}
-      {/* The gap IS the indication, and the line only names it.
-          
-          A 2px line between two rows that sit flush against each other asks you to aim at a seam —
-          you had to be exactly right, and there was nothing to tell you when you were. Opening a
-          real space instead means the two rows visibly move apart as you approach, which is the
-          answer to "am I going between these" before you have to read anything. The line then just
-          says which gap. */}
-      {/* The slot the task will land in: the rows part to make room for it (the height animates open,
-          and shut again as the pointer moves on, so moving between gaps is one smooth motion), with
-          a soft outline where it will go. It replaced a thin line in a fixed 28px gap that popped in
-          and out. */}
-      <AnimatePresence initial={false} custom={dropping}>
-        {dropIndicator === 'above' && <DropSlot key="slot-above" />}
-      </AnimatePresence>
+      {/* No gap opens in the list for a dragged task any more (it once did: "the gap IS the
+          indication"). The insertion is a line drawn over the seam (app/page.tsx, taskDropLine) and
+          chosen by row middles, so nothing has to be aimed at precisely — and the rows never move
+          under the pointer that is aiming at them, which is what made the gap pick the wrong row. */}
       {isMobile ? (
         // ================= MOBILE ROW — a "card," not a table row: checkbox + title on top
         // (title wraps instead of truncating), status/assignee/dates/custom fields always visible
@@ -803,9 +791,7 @@ function TaskRowImpl({
           </div>
         </div>
       )}
-      <AnimatePresence initial={false} custom={dropping}>
-        {dropIndicator === 'below' && <DropSlot key="slot-below" />}
-      </AnimatePresence>
+
     </motion.div>
   );
 }
@@ -829,27 +815,3 @@ export default TaskRow;
 // Where a dragged task came from, while it is away: an empty outlined slot rather than a faded copy
 // of the row, so there is one task on screen — the one in your hand.
 const DRAG_GHOST = '[&>*]:opacity-0 bg-neutral-800/20 outline-1 outline-dashed outline-neutral-600/70 -outline-offset-2 rounded-md';
-
-// The landing slot for a dragged task (TaskRow's drop indicator).
-function DropSlot() {
-  return (
-    <motion.div
-      aria-hidden
-      // `custom` from the AnimatePresence: true during a drop, when the slot closes at once.
-      variants={{
-        hidden: { height: 0, opacity: 0 },
-        shown: { height: 36, opacity: 1 },
-        gone: (dropping: boolean) => (dropping ? { height: 0, opacity: 0, transition: { duration: 0 } } : { height: 0, opacity: 0 }),
-      }}
-      initial="hidden"
-      animate="shown"
-      exit="gone"
-      transition={{ duration: 0.16, ease: [0.2, 0.8, 0.2, 1] }}
-      className="overflow-hidden px-1"
-    >
-      <div className="h-full py-1">
-        <div className="h-full rounded-md border-2 border-dashed border-blue-500/50 bg-blue-500/[0.07]" />
-      </div>
-    </motion.div>
-  );
-}

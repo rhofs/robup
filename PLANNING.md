@@ -2483,6 +2483,17 @@ Picked up right after the office's "merged single island" popup-menu work (previ
 
 ## Known bugs / things to remember
 
+- **Never open a gap in a list to show where a dragged item will land** (2026-10-15). A gap pushes
+  the rows under the pointer, so the very next measurement reads a list that has just moved. Every
+  earlier task-drag version fought this feedback loop (sticky anchors, gap probes, canonical gaps),
+  and the 36px slot of 2026-10-14 made it visibly wrong ("jeg holder over den tasken under, også er
+  det den over som er markert").
+  - Draw the insertion as an overlay line in the seam (`taskDropLine`).
+  - Choose the place by sibling row middles (above the first sibling whose middle is below the
+    pointer).
+  - Only offer places the server accepts (same List and parent).
+  - Make nesting a deliberate hold (dwell), not a band you cross.
+
 - **A Zustand selector that constructs a new object/array literal inline (instead of returning a reference already stable in the store) can cause an infinite React render loop, not just wasted re-renders.** Zustand's hook (built on `useSyncExternalStore`) re-invokes the selector on every store update and compares the result by reference; a selector that never returns a stable reference makes React conclude the snapshot is perpetually "unstable." Hit this in `app/page.tsx`'s `activeChatChannelLabel` (built `{kind, text}` inline) — reproduced live as "This page couldn't load" every time a DM was opened, diagnosed from a repeating `up`/`ud` React-internals stack in the browser console. Fix: select a plain reference (`.find()`'s result, or `null`) and derive anything object-shaped in a downstream `useMemo` instead.
 
 - **dnd-kit gotcha**: `useDraggable`/`useDroppable` bind to the *nearest ancestor* `DndContext` by React-tree position, not by id-naming intent. Fix: one shared `DndContext` for all sidebar/task dragging, dispatch in `onDragEnd` by inspecting the dragged id's prefix (`task id`, `list-drag:`, `folder-drag:`, `space-drag:`).
@@ -12631,3 +12642,41 @@ calendar to start once the keyboard is fully down, "bittelitt tregere".
   - The overlay is wide when heading for the sidebar.
 
 **Deployed 2026-10-14 as `6d9dffb`** (tag `deploy/2026-10-14_1442`).
+
+### 2026-10-15 — task drag made accurate: line in the seam, siblings only, hold to nest
+
+- **Report (screenshot):** "Drag and drop på desktop er veldig unøyaktig … jeg holder over den tasken
+  under, også er det den over som er markert, i det minste burde det jo være mellomrommet som er
+  markert. Kan vi fikse så dette føles mer smooth og er mer nøyaktig?"
+- **Causes:**
+  1. Targeting read the raw pointer, while the eye follows the card, which hangs wherever the row
+     was grabbed.
+  2. The drop slot from the round before (36px, animated) pushed rows under the pointer, so
+     targeting chased a moving list.
+  3. Middle-of-row nested instantly.
+  4. Lines were offered between rows the server would refuse (different parent), e.g. among a
+     folded-out task's subtasks.
+- **Rewrote the drop-target effect (app/page.tsx):**
+  - The rows come from the dragged row's own list (`data-task-list` on the board's list and the
+    task window's subtask list), and live rects are measured on every move. Nothing moves while
+    aiming.
+  - **Reorder:** among siblings only (same List and parent as the dragged task), above the first
+    sibling whose middle is below the pointer, else below the last sibling's whole block (its
+    folded-out subtasks included).
+    - A no-op position (where it already is) shows no line.
+  - **Nest:** hold still over the middle 40% of a task for 350ms. It lights up, and the card says
+    "Make a subtask of …".
+    - Until then the line shows the plain drop.
+    - The task cannot nest into itself or its own subtree.
+    - On drop, nesting happens only if the hold chose that row (`droppedNestTarget`). A drop over a
+      row with neither line nor highlight does nothing; it used to nest.
+  - Leaving the list (more than 24px beside it, or more than 40px above or below) clears everything,
+    so drops on the sidebar's Lists work as before.
+  - **Line:** `taskDropLine` is a fixed overlay (3px blue with a ring dot at the left) that springs
+    from seam to seam. TaskRow's DropSlot gaps are removed.
+  - **Card centred on the pointer:** `centerOverlayOnPointer` is a DragOverlay modifier that moves
+    the card vertically so its middle is at the pointer.
+  - Unchanged: the lifted card, the empty source slot, the optimistic reorder and the landing glide.
+- Not seen in a browser.
+  - The line is positioned from rects measured at the last pointer move, so scrolling the list with
+    the wheel without moving the pointer leaves it stale until the next move.

@@ -22,9 +22,10 @@ import {
   type DragEndEvent,
   type DragStartEvent,
   type DragOverEvent,
+  type Modifier,
 } from '@dnd-kit/core';
 import { SortableContext, horizontalListSortingStrategy, verticalListSortingStrategy, arrayMove, useSortable } from '@dnd-kit/sortable';
-import { CSS } from '@dnd-kit/utilities';
+import { CSS, getEventCoordinates } from '@dnd-kit/utilities';
 import {
   Globe,
   List as ListIcon,
@@ -633,6 +634,17 @@ const timeAgo = (dateStr: string | Date) => {
   if (hrs < 24) return `${hrs}h ago`;
   const days = Math.floor(hrs / 24);
   return `${days}d ago`;
+};
+
+// The dragged card sits centred (vertically) on the pointer, wherever on the row it was grabbed — so
+// what you see and what is measured are one place (the task drop-target effect measures the pointer).
+const centerOverlayOnPointer: Modifier = ({ activatorEvent, draggingNodeRect, transform }) => {
+  if (!activatorEvent || !draggingNodeRect) return transform;
+  const at = getEventCoordinates(activatorEvent);
+  if (!at) return transform;
+  const grabbedAt = at.y - draggingNodeRect.top;
+  const half = Math.min(draggingNodeRect.height, 36) / 2;
+  return { ...transform, y: transform.y + grabbedAt - half };
 };
 
 export default function Home() {
@@ -3993,6 +4005,9 @@ function PageContent() {
   const [activeDragTask, setActiveDragTask] = useState<Task | null>(null);
   // The row a dragged task is over the middle of — dropping makes it a subtask of that one.
   const [taskNestTargetId, setTaskNestTargetId] = useState<string | null>(null);
+  // The insertion line while dragging a task — drawn fixed over the list, in the seam (see the
+  // drop-target effect); nothing in the list moves to show it.
+  const [taskDropLine, setTaskDropLine] = useState<{ top: number; left: number; width: number } | null>(null);
   // The dragged card, so it can be drawn as the row it is (its width) and so the drop knows where it
   // was let go (the landing glide in TaskRow).
   const dragCardRef = useRef<HTMLDivElement | null>(null);
@@ -4085,162 +4100,170 @@ function PageContent() {
   // useful and both reachable from the same gesture, so the row is split rather than one of them
   // being dropped: edges reorder, centre nests, and the visible line is what tells you which you
   // are about to get. Without a dead zone, nesting would become almost unhittable on a phone.
+  // Where a dragged task will go, worked out on every pointer move. Rewritten 2026-10-15 after "Drag
+  // and drop på desktop er veldig unøyaktig … jeg holder over den tasken under, også er det den over
+  // som er markert":
+  //
+  //   - Nothing on the page moves while you aim. The insertion is shown by a line that glides into the
+  //     seam (`taskDropLine`, drawn fixed over the list), not by a gap opened in the list — a gap
+  //     pushes the rows under the pointer, and the next measurement then reads a world that has just
+  //     moved, which is what kept picking the wrong row (and why every earlier version needed sticky
+  //     anchors and probes).
+  //   - Only real places are offered. The server reorders only among siblings — same List, same
+  //     parent (app/api/tasks/reorder) — so the line only ever sits between siblings: above the first
+  //     sibling whose middle is below the pointer, the rule every sortable list uses. Folded-out
+  //     subtasks of a sibling belong to its block, so aiming at them means "after that task".
+  //   - Nesting asks for intent: hold still over the middle of a task for a moment (NEST_DWELL_MS) and
+  //     it lights up as the parent-to-be; until then the line shows where a plain drop would go. It
+  //     used to nest the instant the pointer crossed a row's middle, which is how tasks kept landing
+  //     inside each other.
+  //   - The dragged card is centred on the pointer (centerCardOnPointer on the DndContext), so the card
+  //     you see and the point being measured are the same place.
   useEffect(() => {
     if (!activeDragTask) return;
-    // Thirds: top third reorders above, bottom third reorders below, middle third nests.
-    //
-    // 0.22 was tuned for the board, where the cards are spaced apart and the GAP between them does
-    // most of the reordering work — the in-row bands only have to catch what the gap misses. The
-    // subtask list inside a task has no gaps: its rows sit flush, so the bands are the only target
-    // there, and a 22% band on a 38px row is 8px. Reported as subtasks only ever nesting.
-    //
-    // Equal thirds is the answer that needs no tuning per surface: it is the same proportion on a
-    // tall card and a compact row, and neither behaviour has to be won at the other's expense.
-    const REORDER_EDGE_FRACTION = 0.33;
-    // Bands in pixels as well as a fraction. 30% of a mobile card is roughly 24px; 30% of a compact
-    // desktop row is about 11px at each edge, which is a target you hit by luck with a mouse in
-    // motion. The fraction was tuned on the taller of the two rows and quietly became unusable on
-    // the other.
-    // Modest edges, because the GAP between cards is now a reliable target in its own right.
-    //
-    // The floor was raised to 20px when reordering was the hard one, and that inverted the problem:
-    // on a 50px row it left 20 above, 20 below and 10 in the middle, so nesting became the thing you
-    // could not hit. Reported immediately, which is what a fix that trades one failure for its
-    // mirror image deserves.
-    //
-    // The row body is nesting's territory and the space between rows is reordering's. Splitting them
-    // that way means neither has to be won at the other's expense — which is what every version of
-    // this before it was doing.
-    const MIN_EDGE_PX = 12;
-    // How far above and below to look when the pointer is in the gap BETWEEN two cards. That gap is
-    // the one place someone aiming "between two tasks" actually points at — and it contains no row,
-    // so the hit test found nothing and the indicator cleared. The literal target was the only dead
-    // spot on the screen. Reported as having to be absurdly precise.
-    const GAP_PROBE_PX = 14;
+    const draggedId = activeDragTask.id;
+    const NEST_DWELL_MS = 350;
+    // The middle of a row, as a share of its height, where holding still nests.
+    const NEST_BAND = [0.3, 0.7];
 
-    const rowAt = (x: number, y: number): HTMLElement | null =>
-      document
-        .elementsFromPoint(x, y)
-        .map((n) => n.closest('[data-task-row]'))
-        .find((n): n is HTMLElement => n instanceof HTMLElement) ?? null;
+    const draggedRow = document.querySelector(`[data-task-row="${draggedId}"]`) as HTMLElement | null;
+    // The rows of the list the task is being dragged within, in the order they are on screen: the
+    // board's list or a task's subtask list (both carry data-task-list). Not the whole document — a
+    // task window sits over the board, and both contain rows.
+    const container = (draggedRow?.closest('[data-task-list]') as HTMLElement | null) ?? draggedRow?.parentElement?.parentElement ?? null;
+    if (!container) return;
 
-    // Every row in the SAME list as the given one, in document order.
-    //
-    // Not `document.querySelectorAll` across the page, which is what this used to be. A task modal is
-    // rendered on top of the board it was opened from, so the document contains both the subtask
-    // rows and the board's own rows — and "the row after this one" could be a task from an entirely
-    // different list, sitting behind the dialog. Reordering then resolved to a task with a different
-    // parent, which reorderTaskRelativeTo correctly refuses, so dropping a subtask did nothing at
-    // all. Reported as subtasks simply not being reorderable.
-    const siblingRows = (row: HTMLElement): HTMLElement[] => {
-      const container = row.parentElement?.parentElement ?? document.body;
-      return Array.from(container.querySelectorAll('[data-task-row]')) as HTMLElement[];
+    const allTasks = useTaskStore.getState().tasks;
+    const byId = new Map(allTasks.map((t) => [t.id, t]));
+    const isSibling = (id: string) => {
+      const t = byId.get(id);
+      return !!t && id !== draggedId && t.listId === activeDragTask.listId && (t.parentId ?? null) === (activeDragTask.parentId ?? null);
+    };
+    // Whether `id` sits somewhere under `ancestorId` — a task cannot be nested into its own subtree.
+    const isUnder = (id: string, ancestorId: string) => {
+      let cur = byId.get(id);
+      for (let guard = 0; cur?.parentId && guard < 30; guard++) {
+        if (cur.parentId === ancestorId) return true;
+        cur = byId.get(cur.parentId);
+      }
+      return false;
     };
 
-    // One name per gap.
-    //
-    // "Below row A" and "above row B" are two descriptions of the same place, and the code produced
-    // both: the bottom band of one row and the top band of the next are adjacent, and the gap probe
-    // could answer either way depending on which direction it looked first. Moving through that
-    // boundary flipped between two representations of one position, and since they render on
-    // different rows the line visibly jumped — reported as flicker.
-    //
-    // So every gap is canonically "above the row that follows", with the single exception of the one
-    // after the last row, which has nothing following it to be above.
-    const canonical = (targetId: string, position: 'above' | 'below') => {
-      if (position === 'above') return { targetId, position } as const;
-      const anchorRow = document.querySelector(`[data-task-row="${targetId}"]`) as HTMLElement | null;
-      if (!anchorRow) return { targetId, position } as const;
-      const rows = siblingRows(anchorRow);
-      const i = rows.findIndex((r) => r.dataset.taskRow === targetId);
-      const next = i >= 0 ? rows[i + 1] : undefined;
-      const nextId = next?.dataset.taskRow;
-      // Skipping the dragged row itself: it is still in the list while it travels, and naming the
-      // gap after it would put the line where the task already is.
-      if (nextId && nextId !== activeDragTask.id) return { targetId: nextId, position: 'above' } as const;
-      return { targetId, position: 'below' } as const;
+    let nestTimer: ReturnType<typeof setTimeout> | null = null;
+    let nestCandidate: string | null = null;
+    const stopNest = () => {
+      if (nestTimer) clearTimeout(nestTimer);
+      nestTimer = null;
+      nestCandidate = null;
+    };
+    const clearAll = () => {
+      stopNest();
+      setTaskDropIndicator(null);
+      setTaskNestTargetId(null);
+      setTaskDropLine(null);
     };
 
-    // Where the pointer was when the current gap was chosen, and how far it has to move before
-    // another one may be chosen.
-    //
-    // This is the fix for the remaining flicker, and the cause is a feedback loop rather than a
-    // threshold: showing the indicator inserts a real gap, which pushes every row below it down, and
-    // the rows moving is what the hit test reads on the very next event. Decide, move the world,
-    // re-measure the moved world, decide again. Framer's layout animations make it worse by moving
-    // the rows gradually, so several events land mid-flight.
-    //
-    // Sticking to a decision for 18px of pointer travel breaks the loop at its only weak point: the
-    // pointer is the one thing in this that does not move by itself.
-    let anchorY: number | null = null;
-    // Enough to ignore pointer jitter, not enough to ignore intent. It only needs to beat noise:
-    // the layout shift it was written for moves the ROWS, and a row moving produces no pointer
-    // movement at all, so the loop is already broken by the anchor existing. 18px was defensive and
-    // made deliberate small moves feel stuck.
-    const STICKY_PX = 8;
-
+    let lastKey = '';
     const onPointerMove = (e: PointerEvent) => {
-      if (anchorY !== null && Math.abs(e.clientY - anchorY) < STICKY_PX) return;
-      // elementsFromPoint (plural), not elementFromPoint: the drag overlay follows the cursor and is
-      // portaled to the body, so the topmost element under the pointer during a drag is always it,
-      // and `.closest` from there finds no row at all.
-      let el = rowAt(e.clientX, e.clientY);
-      // In the gap: whichever side has a row decides, and the answer is unambiguous — a pointer just
-      // below a row means "after it", just above one means "before it".
-      let forced: 'above' | 'below' | null = null;
-      if (!el) {
-        const aboveRow = rowAt(e.clientX, e.clientY - GAP_PROBE_PX);
-        if (aboveRow) {
-          el = aboveRow;
-          forced = 'below';
-        } else {
-          const belowRow = rowAt(e.clientX, e.clientY + GAP_PROBE_PX);
-          if (belowRow) {
-            el = belowRow;
-            forced = 'above';
-          }
-        }
+      const box = container.getBoundingClientRect();
+      // Off the list (towards the sidebar, say): no place here — the drop goes to whatever is there.
+      if (e.clientX < box.left - 24 || e.clientX > box.right + 24 || e.clientY < box.top - 40 || e.clientY > box.bottom + 40) {
+        if (lastKey !== 'off') clearAll();
+        lastKey = 'off';
+        return;
       }
+      const rows = Array.from(container.querySelectorAll('[data-task-row]')) as HTMLElement[];
+      const y = e.clientY;
 
-      const targetId = el?.dataset.taskRow ?? null;
-      if (!el || !targetId || targetId === activeDragTask.id) {
-        anchorY = null;
-        setTaskDropIndicator(null);
+      // Nesting: holding still over the middle of a task (not itself, nor one of its own subtasks).
+      const hovered = rows.find((r) => {
+        const b = r.getBoundingClientRect();
+        return y >= b.top && y < b.bottom;
+      });
+      const hoveredId = hovered?.dataset.taskRow ?? null;
+      let inNestBand = false;
+      if (hovered && hoveredId && hoveredId !== draggedId && !isUnder(hoveredId, draggedId)) {
+        const b = hovered.getBoundingClientRect();
+        const f = (y - b.top) / b.height;
+        inNestBand = f > NEST_BAND[0] && f < NEST_BAND[1];
+      }
+      if (inNestBand && hoveredId) {
+        if (nestCandidate !== hoveredId) {
+          stopNest();
+          nestCandidate = hoveredId;
+          nestTimer = setTimeout(() => {
+            setTaskNestTargetId(hoveredId);
+            setTaskDropIndicator(null);
+            setTaskDropLine(null);
+            lastKey = `nest:${hoveredId}`;
+          }, NEST_DWELL_MS);
+        }
+      } else if (nestCandidate) {
+        stopNest();
         setTaskNestTargetId(null);
+      }
+      // Already nesting into this row: nothing else to work out until the pointer leaves its middle.
+      if (lastKey === `nest:${hoveredId}` && inNestBand) return;
+
+      // Reordering: between siblings only, by their middles.
+      const siblings = rows.filter((r) => isSibling(r.dataset.taskRow ?? ''));
+      if (siblings.length === 0) {
+        if (lastKey !== 'none') clearAll();
+        lastKey = 'none';
         return;
       }
-      if (forced) {
-        anchorY = e.clientY;
-        setTaskDropIndicator(canonical(targetId, forced));
-        setTaskNestTargetId(null);
-        return;
-      }
-      const rect = el.getBoundingClientRect();
-      const edge = Math.max(MIN_EDGE_PX, rect.height * REORDER_EDGE_FRACTION);
-      // Never let the edges eat the row: the middle keeps at least 40% of it, so nesting stays
-      // reachable on a short row without anyone having to aim.
-      const safeEdge = Math.min(edge, rect.height * 0.35);
-      const y = e.clientY - rect.top;
-      if (y < safeEdge) {
-        anchorY = e.clientY;
-        setTaskDropIndicator(canonical(targetId, 'above'));
-        setTaskNestTargetId(null);
-      } else if (y > rect.height - safeEdge) {
-        anchorY = e.clientY;
-        setTaskDropIndicator(canonical(targetId, 'below'));
-        setTaskNestTargetId(null);
+      const next = siblings.find((r) => {
+        const b = r.getBoundingClientRect();
+        return b.top + b.height / 2 > y;
+      });
+      let indicator: { targetId: string; position: 'above' | 'below' };
+      let lineY: number;
+      let lineRow: HTMLElement;
+      if (next) {
+        indicator = { targetId: next.dataset.taskRow!, position: 'above' };
+        lineY = next.getBoundingClientRect().top;
+        lineRow = next;
       } else {
-        // Nesting is a decision too, and it also has to stick: without an anchor here the middle of
-        // a row re-decides on every event, which is where the loop started.
-        anchorY = e.clientY;
-        setTaskDropIndicator(null);
-        // Said out loud now: the row lights up blue, and the dragged card says what will happen.
-        setTaskNestTargetId(targetId);
+        const last = siblings[siblings.length - 1];
+        const lastId = last.dataset.taskRow!;
+        indicator = { targetId: lastId, position: 'below' };
+        // Under its folded-out subtasks too: the end of its whole block.
+        let end = last;
+        for (let i = rows.indexOf(last) + 1; i < rows.length; i++) {
+          const id = rows[i].dataset.taskRow ?? '';
+          if (id === draggedId || !isUnder(id, lastId)) break;
+          end = rows[i];
+        }
+        lineY = end.getBoundingClientRect().bottom;
+        lineRow = last;
       }
+      // Where it already is: dropping there changes nothing, so no line — the empty slot it left
+      // is the answer.
+      const ownIndex = rows.indexOf(draggedRow!);
+      const siblingBefore = [...siblings].reverse().find((r) => rows.indexOf(r) < ownIndex);
+      const siblingAfter = siblings.find((r) => rows.indexOf(r) > ownIndex);
+      const noop =
+        (indicator.position === 'above' && siblingAfter?.dataset.taskRow === indicator.targetId) ||
+        (indicator.position === 'below' && !siblingAfter && siblingBefore?.dataset.taskRow === indicator.targetId);
+      const key = noop ? 'noop' : `${indicator.position}:${indicator.targetId}`;
+      if (key === lastKey) return;
+      lastKey = key;
+      setTaskNestTargetId(null);
+      if (noop) {
+        setTaskDropIndicator(null);
+        setTaskDropLine(null);
+        return;
+      }
+      setTaskDropIndicator(indicator);
+      const rb = lineRow.getBoundingClientRect();
+      setTaskDropLine({ top: lineY, left: rb.left + 8, width: Math.max(80, box.right - rb.left - 16) });
     };
 
     window.addEventListener('pointermove', onPointerMove);
-    return () => window.removeEventListener('pointermove', onPointerMove);
+    return () => {
+      window.removeEventListener('pointermove', onPointerMove);
+      stopNest();
+    };
   }, [activeDragTask]);
 
   const [toast, setToast] = useState<{ message: string; undoable?: boolean } | null>(null);
@@ -4908,9 +4931,11 @@ function PageContent() {
     const droppedDocIndicator = docDropIndicator;
     const droppedListIndicator = listDropIndicator;
     const droppedTaskIndicator = taskDropIndicator;
+    const droppedNestTarget = taskNestTargetId;
     const releasedAt = dragCardRef.current?.getBoundingClientRect();
     setActiveDragTask(null);
     setTaskNestTargetId(null);
+    setTaskDropLine(null);
     setActiveDragEntity(null);
     setSpaceDropIndicator(null);
     spaceOverRef.current = null;
@@ -5155,7 +5180,9 @@ function PageContent() {
       // middle of the row: nest, exactly as before.
       // No indicator by this point means the pointer was in the middle band of a row, which is
       // nesting's territory — see the drop-indicator effect for the split.
-      if (targetId !== draggedId) {
+      // Only when holding still over its middle chose it (the drop-target effect): a drop over a
+      // row with no line and no highlight is a drop where it already was.
+      if (targetId !== draggedId && droppedNestTarget === targetId) {
         const target = tasks.find((t) => t.id === targetId);
         const nestDone = Promise.resolve(optimisticSetParent(draggedId, targetId));
         // Named, not a generic "Moved": dropping a task onto another one turns it into a subtask,
@@ -7834,7 +7861,8 @@ function PageContent() {
                 <div className="text-right">Action</div>
               </div>
 
-              <div className={isMobile ? 'flex flex-col gap-2' : 'divide-y divide-neutral-800/50'}>
+              {/* data-task-list: the rows a task dragged here is placed among (the drop-target effect). */}
+              <div data-task-list className={isMobile ? 'flex flex-col gap-2' : 'divide-y divide-neutral-800/50'}>
                 {/* The check sits OUTSIDE AnimatePresence, not inside it. Inside, flipping to
                     null asked AnimatePresence to play an exit animation for every row at once —
                     each TaskRow exits with opacity, scale, a y-offset and a blur filter, and with
@@ -9599,7 +9627,7 @@ function PageContent() {
                         <div></div>
                       </div>
                     )}
-                    <div className={isMobile ? 'flex flex-col gap-2' : ''}>
+                    <div data-task-list className={isMobile ? 'flex flex-col gap-2' : ''}>
                       <AnimatePresence mode="popLayout" initial={false}>
                         {currentSubtasks.map((sub) => (
                           <TaskRow
@@ -9983,7 +10011,26 @@ function PageContent() {
         }}
       />
 
-      <DragOverlay dropAnimation={null}>
+      {/* The insertion line for a dragged task: it glides from seam to seam; nothing in the list moves
+          to show it (see the drop-target effect). */}
+      <AnimatePresence>
+        {activeDragTask && taskDropLine && (
+          <motion.div
+            key="task-drop-line"
+            className="fixed z-[60] pointer-events-none"
+            initial={{ opacity: 0, top: taskDropLine.top - 1.5, left: taskDropLine.left, width: taskDropLine.width }}
+            animate={{ opacity: 1, top: taskDropLine.top - 1.5, left: taskDropLine.left, width: taskDropLine.width }}
+            exit={{ opacity: 0, transition: { duration: 0.08 } }}
+            transition={{ type: 'spring', stiffness: 700, damping: 46, opacity: { duration: 0.1 } }}
+          >
+            <div className="relative h-[3px] rounded-full bg-blue-500 shadow-[0_0_0_3px_rgba(59,130,246,0.18)]">
+              <span className="absolute -left-1.5 -top-[3px] w-[9px] h-[9px] rounded-full border-2 border-blue-500 bg-neutral-900" />
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      <DragOverlay dropAnimation={null} modifiers={[centerOverlayOnPointer]}>
         {activeDragTask && <DraggedTaskCard task={activeDragTask} width={dragCardWidth} cardRef={dragCardRef} nestUnder={tasks.find((t) => t.id === taskNestTargetId)?.title ?? null} />}
         {activeDragEntity && (
           <div
