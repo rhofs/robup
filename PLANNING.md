@@ -12680,3 +12680,5 @@ calendar to start once the keyboard is fully down, "bittelitt tregere".
 - Not seen in a browser.
   - The line is positioned from rects measured at the last pointer move, so scrolling the list with
     the wheel without moving the pointer leaves it stale until the next move.
+
+**Deployed 2026-10-15 as `377dd88`** (tag `deploy/2026-10-15_1021`).
