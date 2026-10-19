@@ -12742,3 +12742,5 @@ calendar to start once the keyboard is fully down, "bittelitt tregere".
   - The 120ms at the tap (the commit itself); it delays the start rather than stuttering it.
   - The real Home mounting at the end of a back push.
   - Awaiting a new set of traces from the user's phone.
+
+**Deployed 2026-10-19 as `e4fe1a1`** (tag `deploy/2026-10-19_1124`).
