@@ -12710,3 +12710,5 @@ calendar to start once the keyboard is fully down, "bittelitt tregere".
   - Opening a conversation still mounts ChatPanel (messages) as it slides in. If the traces show the
     opening stutters, defer the message list to the end of the slide.
   - Not seen on a device yet.
+
+**Deployed 2026-10-19 as `b6c5e21`** (tag `deploy/2026-10-19_1036`).
