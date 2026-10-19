@@ -1257,12 +1257,27 @@ function PageContent() {
   const [returningToContext, setReturningToContext] = useState(false);
 
   const [chatClosing, setChatClosing] = useState(false);
-  const activeChatEntityRaw = useChatStore((s) => {
+  // The open conversation. Selected as a KEY (what the page shows of it: id, kind, name, members), not
+  // as the object: fetchDMs/fetchChannels replace every object with an equal new one, and selecting
+  // the object made each of those refreshes re-render this whole page — several times while the DM
+  // list slides back in, since the list fetches as it appears. "fra en samtale tilbake til oversikten
+  // i DMs så hakker den bak" (2026-10-19). The object itself is read once per key.
+  const activeChatKey = useChatStore((s) => {
     const id = s.activeChannelId;
     if (!id) return null;
-    const channel = activeWorkspaceId ? (s.channelsByWorkspace[activeWorkspaceId] || []).find((c) => c.id === id) : null;
-    return channel ?? s.dms.find((d) => d.id === id) ?? null;
+    const channel =
+      (activeWorkspaceId ? (s.channelsByWorkspace[activeWorkspaceId] || []).find((c) => c.id === id) : null) ?? s.dms.find((d) => d.id === id);
+    if (!channel) return null;
+    return [channel.id, channel.type, channel.name ?? '', ...(channel.members ?? []).map((m) => `${m.user.id}:${m.user.name}`)].join('|');
   });
+  const activeChatEntityRaw = useMemo(() => {
+    if (!activeChatKey) return null;
+    const s = useChatStore.getState();
+    const id = s.activeChannelId;
+    if (!id) return null;
+    return (activeWorkspaceId ? (s.channelsByWorkspace[activeWorkspaceId] || []).find((c) => c.id === id) : null) ?? s.dms.find((d) => d.id === id) ?? null;
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- read once per key, see above
+  }, [activeChatKey]);
   // Null the instant Back is pressed, even though the store still holds the channel for another
   // ~460ms so the conversation can finish sliding out with its content intact.
   const activeChatEntity = chatClosing ? null : activeChatEntityRaw;
@@ -1285,6 +1300,18 @@ function PageContent() {
   // classic path holds it through `chatClosing`. So the row keeps its height for the whole
   // movement and changes only once there is no longer a conversation to shift.
   const chatRowCollapsed = activeView === 'chat' && isMobile && !!activeChatEntityRaw;
+
+  // TEMPORARY (2026-10-19): frame timing on the phone for opening and closing a conversation from the
+  // Chat list — "hakker den bak" — to confirm the fix rather than guess (lib/perfTrace.ts; read the
+  // traces back from the server). Remove with perfTrace.
+  const chatOpenForTrace = activeView === 'chat' && isMobile && !!activeChatEntity && !chatFromContext;
+  const chatOpenSeenRef = useRef<boolean | null>(null);
+  useEffect(() => {
+    if (chatOpenSeenRef.current !== null && chatOpenSeenRef.current !== chatOpenForTrace) {
+      traceMoment(chatOpenForTrace ? 'dm-open' : 'dm-close', { panel: '[data-trace="chat-panel"]', list: '[data-trace="chat-list"]' }, 900);
+    }
+    chatOpenSeenRef.current = chatOpenForTrace;
+  }, [chatOpenForTrace]);
 
   // "Something deeper than a context is filling the screen." The bottom nav hides behind this, on
   // the same reasoning ClickUp uses and the user's own: at that point the thing on screen is what
@@ -7612,29 +7639,29 @@ function PageContent() {
                     // widening the page. No `position: fixed` lives inside either pane — checked,
                     // because a transform on an ancestor would relocate it.
                     <div className="relative h-full overflow-hidden">
-                      <AnimatePresence initial={false}>
-                        {!activeChatEntity ? (
-                          <motion.div
-                            key="chat-list"
-                            // willChange: the browser promotes this to its own compositing layer
-                            // up front instead of discovering mid-animation that it needs one —
-                            // the first frames of a transform on a tall, scrollable subtree are
-                            // where dropped frames show up, which is what "færre frames i vår"
-                            // was describing.
-                            style={{ willChange: 'transform' }}
-                            // z-0 against the conversation's z-10. The incoming list starts at
-                            // x:-33%, i.e. already covering the left two thirds of the screen — so
-                            // if it paints above the outgoing conversation, the conversation is
-                            // hidden from the first frame and appears to begin the animation
-                            // already mostly gone. Reported exactly: "starter 2/3 ferdig lukka."
-                            // The conversation is the card being slid off, so it belongs on top for
-                            // the whole journey.
-                            className="absolute inset-0 z-0 overflow-y-auto px-3 py-3 pb-28 bg-neutral-900 rounded-t-2xl"
-                            initial={{ x: '-33%' }}
-                            animate={{ x: 0 }}
-                            exit={{ x: '-33%' }}
-                            transition={CHAT_PUSH_TRANSITION}
-                          >
+                      {/* The list stays mounted under an open conversation and only moves aside (the
+                          parallax third), so going back is a slide and nothing else. It used to be
+                          unmounted while a conversation was open and built again as it slid back in —
+                          the whole list rendering, plus its fetches (channels, DMs, connections, and
+                          messages for five DMs) landing mid-slide: "fra en samtale tilbake til
+                          oversikten i DMs så hakker den bak". Kept, it also keeps its scroll position.
+                          Not for a conversation opened from Home/Office: that one closes back there,
+                          not to this list, so the list would only be extra work behind it. */}
+                      {!chatFromContext && (
+                        <motion.div
+                          key="chat-list"
+                          data-trace="chat-list"
+                          // willChange: its own compositing layer up front, rather than discovered
+                          // mid-animation.
+                          style={{ willChange: 'transform', pointerEvents: activeChatEntity ? 'none' : undefined }}
+                          aria-hidden={!!activeChatEntity}
+                          // z-0 against the conversation's z-10: the conversation is the card sliding
+                          // over it, on top for the whole journey ("starter 2/3 ferdig lukka").
+                          className="absolute inset-0 z-0 overflow-y-auto px-3 py-3 pb-28 bg-neutral-900 rounded-t-2xl"
+                          initial={false}
+                          animate={{ x: activeChatEntity ? '-33%' : 0 }}
+                          transition={CHAT_PUSH_TRANSITION}
+                        >
                             <ChatSidebar
                 workspaceId={activeWorkspaceId}
                 closing={chatClosing}
@@ -7650,10 +7677,13 @@ function PageContent() {
                       }
                 }
               />
-                          </motion.div>
-                        ) : (
+                        </motion.div>
+                      )}
+                      <AnimatePresence initial={false}>
+                        {activeChatEntity && (
                           <motion.div
                             key="chat-panel"
+                            data-trace="chat-panel"
                             // p-2 lives here, not on the shared wrapper — see that wrapper's own
                             // comment. Inside the animated pane it simply travels along.
                             style={{ willChange: 'transform' }}

@@ -12682,3 +12682,31 @@ calendar to start once the keyboard is fully down, "bittelitt tregere".
     the wheel without moving the pointer leaves it stale until the next move.
 
 **Deployed 2026-10-15 as `377dd88`** (tag `deploy/2026-10-15_1021`).
+
+### 2026-10-19 — DM: going back from a conversation to the list stuttered
+
+- **Report:** "Når jeg åpner/lukker DM, altså fra en samtale tilbake til oversikten i DMs så hakker den
+  bak, tror jeg."
+- **Causes found (code reading; not yet measured on a device):**
+  1. On mobile the Chat list (`ChatSidebar`) was **unmounted while a conversation was open** and
+     built again as it slid back in (AnimatePresence list ↔ panel).
+     - So every Back rendered the whole list mid-slide.
+     - Its mount effects also fired `fetchChannels`, `fetchDMs`, `fetchConnections` and a
+       5-conversation message prefetch, all landing during the 520ms slide.
+  2. page.tsx selected the open conversation **as an object** from the chat store. `fetchDMs` and
+     `fetchChannels` replace every object, so each of those responses re-rendered the entire page,
+     several times during the slide.
+- **Built:**
+  - The list is now **always mounted** in the mobile Chat view (not when the chat was opened from
+    Home/Office, which closes back there). It only animates `x: 0 ↔ -33%` (the same parallax) under
+    the conversation, with `pointer-events: none` and `aria-hidden` while covered. Going back is a
+    pure slide, and the list keeps its scroll position.
+  - `activeChatKey`: the page selects a string key (id, type, name, member ids and names) and reads
+    the object once per key. Data refreshes no longer re-render the page.
+  - **TEMPORARY trace:** `traceMoment('dm-open' | 'dm-close', …)` on mobile (max 3 each per launch),
+    with `data-trace="chat-list"` and `"chat-panel"`. Read from the server's
+    `/logs/client-traces.jsonl` after the user tries it; remove with perfTrace.
+- **Open:**
+  - Opening a conversation still mounts ChatPanel (messages) as it slides in. If the traces show the
+    opening stutters, defer the message list to the end of the slide.
+  - Not seen on a device yet.
