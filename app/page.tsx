@@ -97,7 +97,7 @@ import { MATERIALIZE_MS } from '../components/TaskMaterialize';
 // litt lenger i bakgrunnen". Before this the boot screen vanished the instant data arrived — often
 // before its animation had begun — so the logo barely showed at all.
 const INTRO_MIN_MS = 2800;
-import { setNativeBackHandler, runNativeBackHandler, consumeIgnoredPopState } from '../lib/nativeBack';
+import { setNativeBackHandler, runNativeBackHandler, consumeIgnoredPopState, leaveApp } from '../lib/nativeBack';
 import { Capacitor } from '@capacitor/core';
 import { setMentionJumpHandler } from '../lib/mentionJump';
 import { readStartPage } from '../lib/startPage';
@@ -1515,6 +1515,32 @@ function PageContent() {
       ) {
         backToContext();
         return true;
+      }
+      // Home and Office are the top of the contexts layout. Back steps back a tab (Messages → My
+      // Spaces, the one you start on), and from the first tab the app goes to the background. Home is a
+      // board on "everything" underneath, so without this it fell through to the old-layout rule below
+      // and opened the old Personal Spaces sheet with All Tasks behind it — "det kommer en task list som
+      // spawner inn. Og så havner jeg i en gammel look av spaces".
+      if (useContexts) {
+        const onHome = activeView === 'board' && !!currentWorkspace?.isPersonal && activeSpaceId === 'everything' && !mobilePersonalSpacesOpen;
+        const onOffice = activeView === 'office' && !activeOfficeUserId && !activeOfficeRoomId;
+        if (onHome && homeTab !== 'spaces') {
+          setHomeTab('spaces');
+          return true;
+        }
+        if (onOffice && officeTab !== 'spaces') {
+          setOfficeTab('spaces');
+          return true;
+        }
+        if (onHome || onOffice) {
+          leaveApp();
+          return true;
+        }
+        // All of a real workspace's tasks belong to Office, not to the old Spaces sheet.
+        if (activeView === 'board' && activeSpaceId === 'everything' && !mobileSpacesOpen && !mobilePersonalSpacesOpen) {
+          backToContext();
+          return true;
+        }
       }
       if ((activeView === 'board' || activeView === 'docs') && !mobileSpacesOpen && !mobilePersonalSpacesOpen) {
         pushBackToSpaces(
@@ -3297,6 +3323,25 @@ function PageContent() {
     !!currentWorkspace?.isPersonal &&
     activeSpaceId === 'everything' &&
     !mobilePersonalSpacesOpen;
+
+  // The conversations on Home's Messages tab get their messages fetched while the tab is open (a peek:
+  // unread counts are left alone), so the first one opened slides in with its messages already there.
+  // Measured on the phone, the first open was the one that stuttered: its messages arrived in the
+  // middle of the slide — the one fetch the slide cannot wait for, since they are what it brings in —
+  // and the whole history was laid out for the first time as it moved (2026-10-19).
+  const prefetchedDmIdsRef = useRef<Set<string>>(new Set());
+  useEffect(() => {
+    if (!showingHomeContext || homeTab !== 'messages') return;
+    const timer = window.setTimeout(() => {
+      const { fetchMessages, loadedChannelIds, dms } = useChatStore.getState();
+      for (const d of dms.slice(0, 8)) {
+        if (prefetchedDmIdsRef.current.has(d.id) || loadedChannelIds.includes(d.id)) continue;
+        prefetchedDmIdsRef.current.add(d.id);
+        void fetchMessages(d.id, { peek: true });
+      }
+    }, 350);
+    return () => window.clearTimeout(timer);
+  }, [showingHomeContext, homeTab]);
 
   // The open List's own statuses when exactly one List is open and it has its own, else the Space's.
   const openListOwnStatuses =

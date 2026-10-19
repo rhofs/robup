@@ -71,6 +71,7 @@ export default function PersonAvatar({
         <img
           src={user.avatarUrl}
           alt={user.name}
+          decoding="async"
           className={`${SIZE_CLASSES[size]} rounded-full object-cover transition ${user.isDnd ? 'ring-2 ring-red-500' : ''}`}
         />
       ) : (

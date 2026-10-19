@@ -47,6 +47,19 @@ export function consumeIgnoredPopState(): boolean {
   return true;
 }
 
+// Back on the app's top screen: to the background, the way Android apps leave their first screen.
+// Not history.back() — history behind Home is old screens (a List, the old Spaces sheet), and replaying
+// them is what "det kommer en task list som spawner inn … en gammel look av spaces" was (2026-10-19).
+// In a browser there is no app to leave, so nothing happens.
+export function leaveApp(): void {
+  void import('@capacitor/core')
+    .then(({ Capacitor }) => {
+      if (!Capacitor.isNativePlatform()) return;
+      return import('@capacitor/app').then(({ App }) => App.minimizeApp().catch(() => App.exitApp()));
+    })
+    .catch(() => {});
+}
+
 export function runNativeBackHandler(): boolean {
   const top = layers.pop();
   if (top) {

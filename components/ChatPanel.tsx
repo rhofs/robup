@@ -646,7 +646,17 @@ export default function ChatPanel() {
           </p>
         )}
         {days.map((day, dayIdx) => (
-          <div key={dayIdx} className="space-y-3">
+          <div
+            key={dayIdx}
+            className="space-y-3"
+            // Days above the last two are laid out and painted only when scrolled to. Opening a
+            // conversation for the first time on a phone measured at frames of 90–100ms with no script
+            // in them (2026-10-19) — the browser laying out and painting the whole history while the
+            // conversation slid in — when what you see is its last few messages. `auto` in the
+            // intrinsic size keeps each day's real height once it has been shown, so scrolling back up
+            // does not jump.
+            style={dayIdx < days.length - 2 ? { contentVisibility: 'auto', containIntrinsicSize: 'auto 480px' } : undefined}
+          >
             {/* A left-aligned label over a full-width hairline, matching the reference the user
                 pointed at. The previous centred pill floated in the middle of the column and read
                 as a chip rather than as a break in the conversation — a rule that spans the whole
@@ -933,7 +943,8 @@ export function AttachmentGrid({ attachments }: { attachments: ChatAttachment[] 
           </a>
         ) : (
           <a key={a.id} href={a.url} target="_blank" rel="noopener noreferrer" title={a.fileName ?? undefined}>
-            <img src={a.url} alt={a.fileName ?? ''} className="max-w-[240px] max-h-[240px] rounded-lg border border-neutral-800 object-cover" />
+            {/* Decoded off the main thread, and only fetched near the screen. */}
+            <img src={a.url} alt={a.fileName ?? ''} loading="lazy" decoding="async" className="max-w-[240px] max-h-[240px] rounded-lg border border-neutral-800 object-cover" />
           </a>
         )
       )}

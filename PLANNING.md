@@ -12744,3 +12744,41 @@ calendar to start once the keyboard is fully down, "bittelitt tregere".
   - Awaiting a new set of traces from the user's phone.
 
 **Deployed 2026-10-19 as `e4fe1a1`** (tag `deploy/2026-10-19_1124`).
+
+### 2026-10-19 (continued) — Back from Home's Messages; the first conversation opened
+
+- **Feedback (two phone screenshots):**
+  - "Når jeg swipet tilbake fra DM delen, så kommer det en task list som spawner inn. Og så havner
+    jeg i en gammel look av spaces … At jeg heller går et steg tilbake til 'My spaces' fanen".
+  - "Nå er slide animasjonen fra en samtale og tilbake relativt smooth, men første gang jeg går inn
+    i en samtale hakker det."
+- **Traces after `e4fe1a1`:**
+  - The way back (`push-back`) is now smooth, apart from ~30ms at the end hand-off.
+  - The **first** open from Home still has 90–100ms frames with no script attribution (layout and
+    paint of the whole history) plus a 54ms `Response.json.then` (the conversation's first
+    messages, which are deliberately not held).
+  - Later opens only have the ~100–120ms tap commit, and a ~100ms burst of the held updates right
+    after the slide.
+- **Back cause:** Home is a board on "everything" in the personal workspace. The native Back handler
+  had no branch for it in the contexts layout, so it fell through to the old-layout rule
+  (`pushBackToSpaces`), which opened the old Personal Spaces sheet with All Tasks behind it.
+- **Built:**
+  - **Back on Home/Office (contexts layout):**
+    - On Home's Messages tab it goes to My Spaces; on Office's second tab, to the first.
+    - From the first tab, `leaveApp()` (lib/nativeBack) calls `App.minimizeApp()`, falling back to
+      exitApp, on native only. Never history.back(), whose entries behind Home are old screens.
+    - A real workspace's "everything" board goes back to its context instead of the old Spaces
+      sheet.
+  - **First open:**
+    - Home's Messages tab prefetches (peek, unread untouched) messages for up to 8 DMs, 350ms after
+      the tab shows, once per DM per session. The first open then has its messages and its own
+      fetch is held.
+    - ChatPanel day groups above the last two get `content-visibility: auto` with
+      `contain-intrinsic-size: auto 480px`, so off-screen history is not laid out or painted on
+      open.
+    - Chat attachment images get `loading="lazy" decoding="async"`, and PersonAvatar images
+      `decoding="async"`.
+- **Not done:**
+  - The ~110ms tap commit.
+  - The held-update burst after the slide (could be spread with requestIdleCallback).
+  - Not yet measured after this change.
