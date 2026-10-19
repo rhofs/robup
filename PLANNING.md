@@ -12782,3 +12782,5 @@ calendar to start once the keyboard is fully down, "bittelitt tregere".
   - The ~110ms tap commit.
   - The held-update burst after the slide (could be spread with requestIdleCallback).
   - Not yet measured after this change.
+
+**Deployed 2026-10-19 as `b977eca`** (tag `deploy/2026-10-19_1215`).
