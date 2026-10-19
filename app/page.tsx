@@ -106,7 +106,7 @@ import HomeContext from '../components/mobile/HomeContext';
 import { CHAT_PUSH_MS, CHAT_PUSH_EASE } from '../lib/chatTransition';
 import TaskListSentinel from '../components/TaskListSentinel';
 import { useSessionStore } from '../store/useSessionStore';
-import { useChatStore } from '../store/useChatStore';
+import { useChatStore, holdChatUpdates } from '../store/useChatStore';
 import { usePresenceConnection } from '../lib/collab/usePresenceConnection';
 import { SessionSync } from '../components/SessionSync';
 import { signOut } from 'next-auth/react';
@@ -1005,6 +1005,11 @@ function PageContent() {
   // trap). The app shell is `overflow-hidden`, so starting off-screen right cannot leave a stray
   // horizontal scroll behind either.
   const boardPushControls = useAnimationControls();
+  // The Home/Office layer a context push slides away from (or back to). Driven from the same moment
+  // as the board, two frames after the push begins: animating from its own mount meant its first
+  // frames were spent building it — the layer is a full HomeContext — so the screen behind visibly
+  // stuttered while it moved ("det bak hakker", 2026-10-19).
+  const contextLayerControls = useAnimationControls();
   const [boardPushSeq, setBoardPushSeq] = useState(0);
   // True for the length of the push. Two things depend on it, and both are why the sheet cannot
   // simply close the moment a List is tapped:
@@ -1094,6 +1099,11 @@ function PageContent() {
   const startBoardPush = (dir: 'forward' | 'back', sheet: 'spaces' | 'personal' | 'context' = 'spaces') => {
     // Temporary: measure the first few List openings on a phone (lib/perfTrace.ts).
     if (dir === 'forward') traceMoment('list-open', { main: '[data-trace="board-main"]' });
+    // TEMPORARY (2026-10-19): the way back too, for the DM → Home stutter.
+    else traceMoment('push-back', { main: '[data-trace="board-main"]', layer: '[data-trace="context-layer"]' }, 1000);
+    // Fetched chat data waits for the slide to finish (useChatStore's holdChatUpdates): the two frames
+    // before it starts, the slide, and a little to spare.
+    holdChatUpdates(CHAT_PUSH_MS + 120);
     boardPushDirRef.current = dir;
     boardPushSheetRef.current = sheet;
     setBoardPushing(true);
@@ -1125,6 +1135,18 @@ function PageContent() {
     let inner = 0;
     const frame = requestAnimationFrame(() => {
       inner = requestAnimationFrame(() => {
+      // The context layer moves on the same frame as the board (see contextLayerControls).
+      if (boardPushSheetRef.current === 'context') {
+        void contextLayerControls.start(
+          back
+            ? { x: 0, opacity: 1, transition: { x: CHAT_PUSH_TRANSITION, opacity: { duration: (CHAT_PUSH_MS * 0.35) / 1000, ease: 'easeOut' } } }
+            : {
+                x: '-33%',
+                opacity: [1, 1, 0],
+                transition: { x: CHAT_PUSH_TRANSITION, opacity: { duration: CHAT_PUSH_MS / 1000, times: [0, 0.78, 1], ease: 'linear' } },
+              }
+        );
+      }
       void boardPushControls
         .start({ x: back ? '100%' : 0, transition: CHAT_PUSH_TRANSITION })
         // Ended by the animation's own completion, NOT by a timer running alongside it. A parallel
@@ -1152,7 +1174,7 @@ function PageContent() {
       if (inner) cancelAnimationFrame(inner);
       window.clearTimeout(safety);
     };
-  }, [boardPushSeq, boardPushControls]);
+  }, [boardPushSeq, boardPushControls, contextLayerControls]);
 
   // THE BOARD MUST NEVER BE LEFT OFF-SCREEN, and this is the guarantee of it.
   //
@@ -1307,6 +1329,9 @@ function PageContent() {
   const chatOpenForTrace = activeView === 'chat' && isMobile && !!activeChatEntity && !chatFromContext;
   const chatOpenSeenRef = useRef<boolean | null>(null);
   useEffect(() => {
+    // The conversation sliding in or out of the Chat list: fetched chat data waits for it (see
+    // holdChatUpdates) — the opening conversation's own first messages excepted.
+    if (chatOpenSeenRef.current !== null && chatOpenSeenRef.current !== chatOpenForTrace) holdChatUpdates(CHAT_PUSH_MS + 80);
     if (chatOpenSeenRef.current !== null && chatOpenSeenRef.current !== chatOpenForTrace) {
       traceMoment(chatOpenForTrace ? 'dm-open' : 'dm-close', { panel: '[data-trace="chat-panel"]', list: '[data-trace="chat-list"]' }, 900);
     }
@@ -10170,22 +10195,10 @@ function PageContent() {
             initial={
               boardPushDirRef.current === 'back' ? { x: '-33%', opacity: 0 } : { x: 0, opacity: 1 }
             }
-            animate={
-              boardPushDirRef.current === 'forward'
-                ? { x: '-33%', opacity: [1, 1, 0] }
-                : { x: 0, opacity: 1 }
-            }
-            transition={
-              boardPushDirRef.current === 'forward'
-                ? {
-                    x: CHAT_PUSH_TRANSITION,
-                    opacity: { duration: CHAT_PUSH_MS / 1000, times: [0, 0.78, 1], ease: 'linear' },
-                  }
-                : {
-                    x: CHAT_PUSH_TRANSITION,
-                    opacity: { duration: (CHAT_PUSH_MS * 0.35) / 1000, ease: 'easeOut' },
-                  }
-            }
+            // Started by the push effect, on the same frame as the board — not on mount, when this
+            // layer's first frames go to building it (see contextLayerControls).
+            animate={contextLayerControls}
+            data-trace="context-layer"
             style={{ willChange: 'transform' }}
             // top-0, covering the global title bar, and NOT starting below it.
             //

@@ -206,6 +206,21 @@ function zeroUnread(channels: ChatChannel[], channelId: string): ChatChannel[] {
   return channels.map((c) => (c.id === channelId ? { ...c, unreadCount: 0 } : c));
 }
 
+// While a screen is sliding (opening or closing a conversation, a push to or from Home/Office), fetched
+// chat data waits to be applied until the slide has finished. Each of those updates re-renders the
+// page around the chat — the DM list, unread counts, Home's Messages — and three of them landing in the
+// middle of a 520ms slide were measured on the phone as the stutter behind it ("det bak hakker",
+// 2026-10-19: frames of 50–60ms made of `Response.json.then` handlers, ~200ms into the slide). The data
+// is no less fresh for arriving a quarter of a second later; the motion just gets the frames.
+let holdUntil = 0;
+export function holdChatUpdates(ms: number) {
+  holdUntil = Math.max(holdUntil, performance.now() + ms);
+}
+const afterHold = () => {
+  const wait = holdUntil - performance.now();
+  return wait > 0 ? new Promise<void>((r) => setTimeout(r, wait)) : Promise.resolve();
+};
+
 export const useChatStore = create<ChatStore>((set, get) => ({
   channelsByWorkspace: {},
   dms: [],
@@ -228,6 +243,7 @@ export const useChatStore = create<ChatStore>((set, get) => ({
     const res = await fetch(`/api/workspaces/${workspaceId}/channels`);
     if (!res.ok) return;
     const channels = await res.json();
+    await afterHold();
     set((state) => ({ channelsByWorkspace: { ...state.channelsByWorkspace, [workspaceId]: channels } }));
   },
 
@@ -285,6 +301,7 @@ export const useChatStore = create<ChatStore>((set, get) => ({
     const res = await fetch('/api/dms');
     if (!res.ok) return;
     const dms = await res.json();
+    await afterHold();
     set({ dms });
   },
 
@@ -313,7 +330,9 @@ export const useChatStore = create<ChatStore>((set, get) => ({
   fetchConnections: async () => {
     const res = await fetch('/api/connections');
     if (!res.ok) return;
-    set({ connections: await res.json() });
+    const connections = await res.json();
+    await afterHold();
+    set({ connections });
   },
 
   fetchConnectionInvite: async () => {
@@ -383,6 +402,9 @@ export const useChatStore = create<ChatStore>((set, get) => ({
     const res = await fetch(`/api/channels/${channelId}/messages${peek ? '?peek=1' : ''}`);
     if (!res.ok) return;
     const messages = await res.json();
+    // Not held when this conversation has nothing on screen yet: its first messages are what the
+    // slide is bringing in, and an empty pane is worse than one frame of work.
+    if (get().loadedChannelIds.includes(channelId)) await afterHold();
     set((state) => ({
       messagesByChannel: { ...state.messagesByChannel, [channelId]: messages },
       loadedChannelIds: state.loadedChannelIds.includes(channelId)

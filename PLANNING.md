@@ -12712,3 +12712,33 @@ calendar to start once the keyboard is fully down, "bittelitt tregere".
   - Not seen on a device yet.
 
 **Deployed 2026-10-19 as `b6c5e21`** (tag `deploy/2026-10-19_1036`).
+
+### 2026-10-19 (continued) — DM stutter, round 2: measured, and it is the Home path
+
+- **User:** "Ser fortsatt ut som det bak hakker?"
+- **The round-1 fix missed the path in use.** No `dm-open`/`dm-close` traces arrived: the user opens
+  DMs from **Home → Messages**, which is `openConversationFromContext` (a context push). The round-1
+  fix and its trace covered only the Chat list path.
+  - That push's forward direction *is* traced (`list-open` fires on every forward board push).
+  - The three 11:19 traces were DM opens from Home.
+- **What the traces showed (Android WebView):**
+  - A ~120ms task at the tap: the click handler commits the conversation (ChatPanel mount and a
+    page render) before anything moves.
+  - Around 200–260ms into the slide, a 50–60ms frame made of three `Response.json.then` handlers of
+    16–24ms each: chat fetch responses (messages, DMs and so on).
+    - Each store update re-renders the page around the chat: Home's Messages list reads `chatDms`,
+      and unread counts are zeroed by `fetchMessages`.
+- **Built:**
+  - **`holdChatUpdates(ms)` in useChatStore:** while a slide is in flight, fetched channels, DMs,
+    connections and messages are applied after it finishes instead of mid-motion.
+    - A conversation's *first* messages are not held, since that is what the slide brings in.
+    - The hold is called from `startBoardPush` (all pushes, CHAT_PUSH_MS+120) and from the Chat-list
+      open/close effect (+80).
+  - **The context layer (Home/Office copy behind a push) is now driven by `contextLayerControls`,
+    started in the same rAF as the board,** two frames after the push begins. It used to animate
+    from its own mount, while building a full HomeContext.
+  - **TEMPORARY trace `push-back`** on every back push (board-main and context-layer positions).
+- **Not yet addressed:**
+  - The 120ms at the tap (the commit itself); it delays the start rather than stuttering it.
+  - The real Home mounting at the end of a back push.
+  - Awaiting a new set of traces from the user's phone.
