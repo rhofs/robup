@@ -12784,3 +12784,23 @@ calendar to start once the keyboard is fully down, "bittelitt tregere".
   - Not yet measured after this change.
 
 **Deployed 2026-10-19 as `b977eca`** (tag `deploy/2026-10-19_1215`).
+
+### 2026-10-20 — idea: dates for repeating episode tasks (nothing built yet)
+
+- **Asked:** for new episode tasks with several date columns, Siqt should set the dates automatically
+  from the tasks already there, "litt som i excel", e.g. 7 days between episodes. Today every date on
+  the main task and ~20 subtasks is changed by hand.
+- **Fact:** no schema change is needed. Start/due dates are columns, and date custom fields
+  (Påsyn 01, Levering, Sendedato …) are values in `customFieldValues`. All can be shifted.
+- **Proposed:**
+  1. **"Create next episode"** (recommended first). Duplicates with every date shifted by an interval
+     detected from the last two episodes in the List (editable), and increments the numbers in the
+     title. Optionally creates N at once (+7, +14, …).
+  2. **"Shift dates"** in the bulk bar for selected tasks, with or without subtasks.
+  3. "Fill dates" across a selection, Excel-style: the interval from the first two, subtasks matched
+     by name.
+  4. Relative dates in task templates (subtask = anchor ± days), ClickUp's "relative due dates". The
+     most robust, and the biggest change.
+- **Recommendation given:** build 1 and 2 first.
+- **Questions put to the user:** go ahead with 1+2? Increment both numbers in titles (Ep14 → Ep15 and
+  G044662 → G044663) or only the episode number?
