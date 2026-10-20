@@ -12837,3 +12837,5 @@ calendar to start once the keyboard is fully down, "bittelitt tregere".
 - **Not built:** options 2–4 from the proposal (bulk "Shift dates", Excel-style "Fill dates",
   relative template dates). Names in titles (Rob/Victor/Chris) are not rotated; edit them after.
 - Not seen in a browser. The route itself was not exercised against a database.
+
+**Deployed 2026-10-20 as `130eabc`** (tag `deploy/2026-10-20_1011`).
