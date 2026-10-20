@@ -12948,3 +12948,5 @@ calendar to start once the keyboard is fully down, "bittelitt tregere".
 - **Not tested on a device.** iOS should be unaffected: there the list does not shrink, the overlap
   path still applies, and the new observer sees no change.
 
+
+**Deployed 2026-10-20 as `4693f5a`** (tag `deploy/2026-10-20_1238`). Web-only, no schema change, so no backup was taken.
