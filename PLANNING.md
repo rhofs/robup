@@ -12996,3 +12996,5 @@ calendar to start once the keyboard is fully down, "bittelitt tregere".
     `CookieManager.getCookie` includes HttpOnly cookies.
   - Still unhandled: PDFs shown inline in AttachmentPreview inside the app.
 
+
+**Deployed 2026-10-20 as `65fe7a5`** (tag `deploy/2026-10-20_1654`), with APK 2.1 at siqt.no/siqt.apk. No schema change, so no backup was taken.
