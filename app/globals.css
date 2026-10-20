@@ -301,6 +301,15 @@ body {
   margin: 0.4em 0;
 }
 
+/* A list written "1)" keeps counting "2)", "3)" (lib/collab/orderedListExtension.ts). */
+@counter-style siqt-paren {
+  system: extends decimal;
+  suffix: ') ';
+}
+.collab-doc-editor .ProseMirror ol[data-delimiter=')'] {
+  list-style-type: siqt-paren;
+}
+
 .collab-doc-editor .ProseMirror li {
   margin: 0.15em 0;
 }

@@ -19,11 +19,17 @@ export const MentionNode = Node.create({
   atom: true,
   selectable: true,
 
+  // Read from the data-mention-* attributes first. Without that, a mention written as HTML by
+  // anything but this node's own renderHTML (which also happens to emit bare kind/id/label) came
+  // back with every attribute null — lib/richText.ts's plainToHtml, which turns an old plain-text
+  // description into HTML, writes only the data-* ones.
   addAttributes() {
+    const fromHtml = (name: 'kind' | 'id' | 'label') => (element: HTMLElement) =>
+      element.getAttribute(`data-mention-${name}`) ?? element.getAttribute(name);
     return {
-      kind: { default: null },
-      id: { default: null },
-      label: { default: null },
+      kind: { default: null, parseHTML: fromHtml('kind') },
+      id: { default: null, parseHTML: fromHtml('id') },
+      label: { default: null, parseHTML: fromHtml('label') },
     };
   },
 

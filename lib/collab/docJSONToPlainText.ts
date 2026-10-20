@@ -1,4 +1,5 @@
 import { buildMentionToken, type MentionKind } from '../mentions';
+import { orderedListMarker } from './orderedListExtension';
 
 type ProseMirrorJSONNode = {
   type: string;
@@ -67,7 +68,7 @@ function blockToLines(node: ProseMirrorJSONNode): string[] {
     const items = node.content ?? [];
     return items.flatMap((item, index) => {
       const lines = (item.content ?? []).flatMap(blockToLines);
-      const marker = node.type === 'orderedList' ? `${index + 1}. ` : '- ';
+      const marker = node.type === 'orderedList' ? orderedListMarker(node.attrs, index) : '- ';
       return lines.length ? lines.map((line, i) => (i === 0 ? `${marker}${line}` : line)) : [marker.trimEnd()];
     });
   }

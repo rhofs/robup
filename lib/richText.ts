@@ -6,8 +6,9 @@ import { MENTION_RE, mentionsToPlainText } from './mentions';
 // `@[Label](kind:id)` mention tokens. Both kinds live in the same column; these tell them apart and
 // convert. No DOM here: the server uses it too (Google Calendar, the .ics feed).
 
-// What the rich editor writes always starts with a block element.
-export const isRichHtml = (s: string) => /^\s*<(p|h[1-6]|ul|ol|blockquote|pre|hr|div)[\s>/]/i.test(s);
+// What the rich editor writes always starts with a block element — an image too, now that a
+// description is a Doc (components/TaskDescriptionDoc.tsx) and can begin with one.
+export const isRichHtml = (s: string) => /^\s*<(p|h[1-6]|ul|ol|blockquote|pre|hr|div|img)[\s>/]/i.test(s);
 
 const escapeHtml = (s: string) =>
   s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');

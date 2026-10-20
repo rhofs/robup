@@ -8,7 +8,7 @@ import Text from '@tiptap/extension-text';
 import Bold from '@tiptap/extension-bold';
 import Italic from '@tiptap/extension-italic';
 import BulletList from '@tiptap/extension-bullet-list';
-import OrderedList from '@tiptap/extension-ordered-list';
+import { SiqtOrderedList } from '../lib/collab/orderedListExtension';
 import ListItem from '@tiptap/extension-list-item';
 import HardBreak from '@tiptap/extension-hard-break';
 import Underline from '@tiptap/extension-underline';
@@ -35,11 +35,12 @@ import type { MentionKind } from '../lib/mentions';
 // people, tasks and docs. "Mangler masse formatering for beskrivelsen … Kan du fikse så vi har det
 // samme som i docs?" (2026-10-14). It used to be a plain textarea.
 //
-// Not a live collaborative document like a Doc (no Hocuspocus room): a description is one field on the
-// task, saved as HTML when the editor loses focus, like the textarea it replaces. Older descriptions —
-// plain text with mention tokens — are turned into the same shape when they are opened
-// (lib/richText.ts), and become HTML the first time they are saved. Left out from Docs: comments,
-// subpages, the live task-list block and images/files.
+// Since 2026-10-20 a task's own description is a real Doc instead (components/TaskDescriptionDoc.tsx);
+// this lighter editor is left for a template's description (TaskTemplateEditor) and for the moment a
+// task's description doc cannot be reached. Not a live collaborative document (no Hocuspocus room):
+// one field, saved as HTML when the editor loses focus. Older descriptions — plain text with mention
+// tokens — are turned into the same shape when they are opened (lib/richText.ts). Left out from
+// Docs: comments, subpages, the live task-list block and images/files.
 export default function RichDescriptionEditor({
   value,
   onCommit,
@@ -68,7 +69,7 @@ export default function RichDescriptionEditor({
       Italic,
       ClientHeading.configure({ levels: [1, 2, 3] }),
       BulletList,
-      OrderedList,
+      SiqtOrderedList,
       ListItem,
       HardBreak,
       Underline,

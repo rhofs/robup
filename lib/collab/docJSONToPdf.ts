@@ -1,3 +1,4 @@
+import { orderedListMarker } from './orderedListExtension';
 type Mark = { type: string; attrs?: Record<string, any> };
 type PMNode = {
   type: string;
@@ -261,7 +262,7 @@ function renderBlock(doc: PDFKit.PDFDocument, node: PMNode, depth: number, image
   }
   if (node.type === 'bulletList' || node.type === 'orderedList') {
     (node.content ?? []).forEach((item, index) => {
-      const marker = node.type === 'orderedList' ? `${index + 1}. ` : '• ';
+      const marker = node.type === 'orderedList' ? orderedListMarker(node.attrs, index) : '• ';
       const blocks = item.content ?? [];
       blocks.forEach((block, i) => {
         if (i === 0 && (block.type === 'paragraph' || block.type === 'heading')) {

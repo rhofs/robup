@@ -3,7 +3,7 @@ type PMNode = {
   type: string;
   text?: string;
   marks?: Mark[];
-  attrs?: { level?: number; kind?: string; id?: string; label?: string; name?: string; textAlign?: string; src?: string; alt?: string; checked?: boolean };
+  attrs?: { level?: number; kind?: string; id?: string; label?: string; name?: string; textAlign?: string; src?: string; alt?: string; checked?: boolean; delimiter?: string };
   content?: PMNode[];
 };
 
@@ -19,7 +19,7 @@ type Run = {
   fontFamily?: string;
   link?: string;
 };
-type Line = { runs: Run[]; headingLevel?: number; listType?: 'bullet' | 'ordered'; textAlign?: string; imageUrl?: string };
+type Line = { runs: Run[]; headingLevel?: number; listType?: 'bullet' | 'ordered' | 'orderedParen'; textAlign?: string; imageUrl?: string };
 
 // Unlike PDF export (pdfkit only ships 3 built-in families, so it has to round down to the
 // closest), Google Docs' weightedFontFamily field accepts any real font name and renders it
@@ -137,7 +137,7 @@ function flattenLines(node: PMNode, out: Line[]) {
     return;
   }
   if (node.type === 'bulletList' || node.type === 'orderedList') {
-    const listType = node.type === 'orderedList' ? 'ordered' : 'bullet';
+    const listType = node.type === 'orderedList' ? (node.attrs?.delimiter === ')' ? 'orderedParen' : 'ordered') : 'bullet';
     (node.content ?? []).forEach((item) => {
       (item.content ?? []).forEach((block, i) => {
         if (i === 0 && (block.type === 'paragraph' || block.type === 'heading')) {
@@ -233,7 +233,12 @@ export function docJSONToGoogleRequests(json: { content?: PMNode[] }) {
       bulletRequests.push({
         createParagraphBullets: {
           range: { startIndex: lineStart, endIndex: lineEnd },
-          bulletPreset: line.listType === 'ordered' ? 'NUMBERED_DECIMAL_ALPHA_ROMAN' : 'BULLET_DISC_CIRCLE_SQUARE',
+          bulletPreset:
+            line.listType === 'ordered'
+              ? 'NUMBERED_DECIMAL_ALPHA_ROMAN'
+              : line.listType === 'orderedParen'
+                ? 'NUMBERED_DECIMAL_ALPHA_ROMAN_PARENS'
+                : 'BULLET_DISC_CIRCLE_SQUARE',
         },
       });
     }

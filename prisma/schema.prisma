@@ -753,7 +753,10 @@ model Task {
 
   assignees User[]    @relation("TaskAssignees")
   comments  Comment[]
-  docs      Doc[]
+  docs      Doc[]     @relation("TaskDocs")
+  // The task's description as a live Doc (Doc.descriptionTaskId) — made the first time the task is
+  // opened, never listed among its Documents.
+  descriptionDoc Doc? @relation("TaskDescription")
   attachments TaskAttachment[]
   chatChannels ChatChannel[]
 
@@ -919,7 +922,17 @@ model Doc {
   showLastModified Boolean  @default(true) @map("show_last_modified")
 
   taskId String? @map("task_id")
-  task   Task?   @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  task   Task?   @relation("TaskDocs", fields: [taskId], references: [id], onDelete: Cascade)
+
+  // Set only on the Doc that IS a task's description ("Få komplett Docs funksjon inne i beskrivelsen
+  // i tasks", 2026-10-20): comments, images, files, task lists and live editing, the same editor as
+  // every other Doc. Deliberately a field of its own rather than taskId: everything that lists a
+  // task's Documents, or every task-scoped Doc (GET /api/task-docs, the command palette, @-mentions,
+  // Trash), goes by taskId and so never sees it. Access goes through the task (ensureDocAccess, the
+  // collab server's resolveWorkspaceId). Task.description keeps a copy of its HTML for everything
+  // that reads the field (Google Calendar, the .ics feed, templates, duplicates).
+  descriptionTaskId String? @unique @map("description_task_id")
+  descriptionTask   Task?   @relation("TaskDescription", fields: [descriptionTaskId], references: [id], onDelete: Cascade)
 
   spaceId String? @map("space_id")
   space   Space?  @relation(fields: [spaceId], references: [id], onDelete: Cascade)

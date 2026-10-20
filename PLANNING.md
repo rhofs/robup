@@ -2483,6 +2483,17 @@ Picked up right after the office's "merged single island" popup-menu work (previ
 
 ## Known bugs / things to remember
 
+- **A mention in HTML is read from its `data-mention-*` attributes — before 2026-10-20 it was not**
+  (`lib/collab/mentionNode.ts`). The node's attributes had no `parseHTML`, so Tiptap read bare
+  `kind`/`id`/`label` attributes. Those exist only because the node's own `renderHTML` happens to emit
+  them next to the data-* ones, so editor → HTML → editor round-tripped and nothing looked wrong.
+  Anything else that writes mention HTML (`plainToHtml` in `lib/richText.ts`, used for every old
+  plain-text description) got mentions with every attribute null. Found by a jsdom test of the
+  description-doc seed, not by a report.
+- **A comment's `<mark data-comment-id>` parses as a highlight** when HTML goes back into the Docs
+  schema: Highlight's `mark` rule comes first and an element yields one mark. Unwrap the comment marks
+  before parsing (`lib/collab/descriptionDoc.ts` does) if the highlight is not wanted.
+
 - **Never open a gap in a list to show where a dragged item will land** (2026-10-15). A gap pushes
   the rows under the pointer, so the very next measurement reads a list that has just moved. Every
   earlier task-drag version fought this feedback loop (sticky anchors, gap probes, canonical gaps),
@@ -12839,3 +12850,74 @@ calendar to start once the keyboard is fully down, "bittelitt tregere".
 - Not seen in a browser. The route itself was not exercised against a database.
 
 **Deployed 2026-10-20 as `130eabc`** (tag `deploy/2026-10-20_1011`).
+
+
+### 2026-10-20 (continued) — "1)" lists, and a task's description is now a real Doc
+
+- **User:** "[Bug] Docs inne i tasks 1) list går ikke til 2) når jeg trykker enter. Få komplett Docs
+  funksjon inne i beskrivelsen i tasks, og Docs under tasks."
+- **"1)" lists** (`lib/collab/orderedListExtension.ts`, `SiqtOrderedList`):
+  - Cause: Tiptap's ordered list only has an input rule for "1. ". "1) " stayed a paragraph that
+    starts with a number, so Enter gave a plain line.
+  - Both now start a list, and the list stores how it was written: `orderedList.delimiter`
+    ('.' | ')'), rendered as `data-delimiter=")"` and drawn by `@counter-style siqt-paren` in
+    globals.css. Enter continues "2)".
+  - A "1)" item typed under a "1." list does not join it (and the other way round).
+  - Pasted plain text "1) …\n2) …" keeps the ")".
+  - Used by the Docs editor, the old description editor (templates) and the server schema.
+    **DOC_SCHEMA_VERSION 3 → 4**: tabs on older code are asked to reload before they can edit a doc
+    (an old editor would strip the new attribute).
+  - Text, PDF and Google Docs exports now print "1)" (Google preset
+    `NUMBERED_DECIMAL_ALPHA_ROMAN_PARENS`) and respect `start`, which they used to ignore.
+- **The description is a Doc** (`components/TaskDescriptionDoc.tsx`):
+  - It is edited with `CollabDocEditor`, the same as every Doc. That gives it comments, images and
+    files (drop, paste, "/"), live task lists, the block gutter, presence and live co-editing.
+  - **Schema:** `Doc.descriptionTaskId` (unique, cascade with the task); migration
+    `20261020120000_doc_description_task`, a hand-written ADD COLUMN verified with `migrate diff`.
+    The existing Task↔Doc relation had to be named (`"TaskDocs"`) because there are now two; that is
+    Prisma-only, and the DB and client field names are unchanged.
+  - **Kept out of the Documents list on purpose:** `taskId` stays null, a field of its own. Every
+    listing (the task's Documents, `/api/task-docs`, command palette, @-mentions, Trash) goes by
+    `taskId` and never sees it.
+  - **Access goes through the task:** `ensureDocAccess` and the collab server's `resolveWorkspaceId`
+    now follow `descriptionTask`.
+  - **Created the first time anyone opens the task:** `POST /api/tasks/[id]/description-doc`.
+    - It returns the existing doc, or creates one; two people at once → P2002 → the first one's doc.
+    - It starts from the existing description. The browser turns the HTML into ProseMirror JSON
+      against the Docs schema (`lib/collab/descriptionDoc.ts`; the server has no DOM) and sends it
+      as `seed`.
+    - The server checks the seed with `collabSchema.nodeFromJSON().check()` and falls back to the
+      plain text if it does not fit. Comment highlights are dropped from the seed (see Known bugs).
+    - `contentFromJSON` moved from `lib/wiki/seed.ts` to `lib/collab/docContent.ts` to be shared.
+  - **Task.description is now a copy:** `CollabDocEditor`'s new `onCommitHtml` sends the doc's HTML
+    after *this person's* changes (y-sync's `isChangeOrigin` marks remote ones; an undo counts as
+    local). It fires on blur, when the page is hidden and when the editor closes.
+    - The store's `mirrorDescription` writes it without an undo entry (the doc has its own undo) and
+      with `keepalive` when under 60 KB.
+    - The copy is what Google Calendar, the .ics feed, templates, duplicates and "Create next…" read.
+  - **No empty flash:** until the live doc has synced, the description is drawn from the stored HTML
+    through the Docs schema (`renderDescriptionPreview`; it renders only what the schema knows, so it
+    is safe to show).
+  - **Fallback:** if the endpoint fails, the old `RichDescriptionEditor` (saving to the field) is
+    shown instead.
+- **Docs under tasks:** a live task list created in a task's doc (or its description) now defaults
+  to the task's own Space (`embedSpaceId`). Before, it defaulted to the first Space in the
+  workspace. Subpages and page styles (cover, subtitle, width) are still Space-doc only, unchanged
+  and not offered here.
+- **Tested** (tsx + jsdom in a scratch folder, and a scratch SQLite DB):
+  - Typing "1) first", Enter, "second" gives `<ol data-delimiter=")">` with both items, and plain
+    text "1) first\n2) second".
+  - The "." list is unchanged, and the two kinds do not join.
+  - The seed keeps lists, images and mentions, drops comments, and turns `<script>` and
+    `javascript:` links into nothing.
+  - Unique index (second create → P2002); not in the `taskId` listings; workspace resolves via
+    `descriptionTask`; cascade on task delete.
+  - `next build` passes; the built CSS has the counter style.
+  - **Not tested:** in a real browser, the live editing itself, and the mirror timing.
+- **Known gaps:**
+  - A desktop tab still on the old code (it never went hidden, so UpdateReloader did not reload it)
+    still writes Task.description directly. That edit does not reach an existing description doc,
+    and the next mirror overwrites it. Small window after a deploy.
+  - Nothing else writes the description of an existing task.
+  - The description now needs the collab server, like Docs. If it is down, the stored text shows
+    read-only with the "Not connected" warning.

@@ -42,10 +42,17 @@ async function resolveWorkspaceId(documentName: string): Promise<string | null> 
       wikiWorkspaceId: true,
       space: { select: { workspaceId: true } },
       task: { select: { list: { select: { space: { select: { workspaceId: true } } } } } },
+      descriptionTask: { select: { list: { select: { space: { select: { workspaceId: true } } } } } },
     },
   });
   if (!doc) return null;
-  return doc.wikiWorkspaceId ?? doc.space?.workspaceId ?? doc.task?.list.space.workspaceId ?? null;
+  return (
+    doc.wikiWorkspaceId ??
+    doc.space?.workspaceId ??
+    doc.task?.list.space.workspaceId ??
+    doc.descriptionTask?.list.space.workspaceId ??
+    null
+  );
 }
 
 const server = new Server({

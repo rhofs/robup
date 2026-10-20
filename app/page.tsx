@@ -175,8 +175,8 @@ import UpdateReloader from '../components/UpdateReloader';
 // Client-only: HocuspocusProvider needs `window.location` and a real WebSocket, neither available
 // during SSR — a live collaborative editor has no reason to render server-side anyway.
 const CollabDocEditor = dynamic(() => import('../components/collab/CollabDocEditor'), { ssr: false });
-// Client-only for the same reason: a Tiptap editor.
-const RichDescriptionEditor = dynamic(() => import('../components/RichDescriptionEditor'), { ssr: false });
+// Client-only for the same reason: a task's description is a live Doc too.
+const TaskDescriptionDoc = dynamic(() => import('../components/TaskDescriptionDoc'), { ssr: false });
 import type { MentionKind } from '../lib/mentions';
 
 function DocTab({
@@ -9526,14 +9526,14 @@ function PageContent() {
                   })()}
                 </div>
 
-                {/* Description — a plain free-text summary, distinct from Documents below (full
-                    rich-text pages). Matches where ClickUp itself puts this: directly under the
-                    Status/Dates/Assignees row, above everything else. */}
-                {/* The same editor and formatting as Docs (components/RichDescriptionEditor.tsx). */}
-                <RichDescriptionEditor
+                {/* Description — directly under the Status/Dates/Assignees row, where ClickUp puts it.
+                    A Doc of its own with everything a Doc has (components/TaskDescriptionDoc.tsx),
+                    but not one of the Documents below: it is the task's own text, always there. */}
+                <TaskDescriptionDoc
                   key={activeModalTask.id}
-                  value={activeModalTask.description}
-                  onCommit={(value) => optimisticSetDescription(activeModalTask.id, value)}
+                  taskId={activeModalTask.id}
+                  description={activeModalTask.description}
+                  spaceId={activeModalTaskSpace?.id}
                   onJump={jumpToMention}
                 />
 
@@ -9702,6 +9702,7 @@ function PageContent() {
                         <CollabDocEditor
                           key={shownDocId}
                           docId={shownDocId}
+                          embedSpaceId={activeModalTaskSpace?.id}
                           onJump={jumpToMention}
                           placeholder="Write notes, specs, anything..."
                           className="min-h-[8em] text-xs text-neutral-300"

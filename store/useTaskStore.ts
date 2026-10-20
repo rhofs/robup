@@ -431,6 +431,9 @@ interface TaskStore {
   optimisticSetParent: (taskId: string, parentId: string | null) => void;
   optimisticSetTitle: (taskId: string, title: string) => void;
   optimisticSetDescription: (taskId: string, description: string | null) => void;
+  // Task.description following the task's description doc (components/TaskDescriptionDoc.tsx). No
+  // undo entry: the doc has its own undo, and undoing the copy alone would only make the two disagree.
+  mirrorDescription: (taskId: string, description: string | null) => void;
 
   createStatus: (spaceId: string, name: string, color: string, id?: string) => Promise<void>;
   // "Apply changes" in the Edit statuses window (components/StatusEditor.tsx): the Space's whole status
@@ -1558,6 +1561,23 @@ export const useTaskStore = create<TaskStore>((set, get) => {
           redo: () => get().optimisticSetDescription(taskId, description),
         });
       }
+    },
+
+    mirrorDescription: (taskId, description) => {
+      const task = get().tasks.find((t) => t.id === taskId);
+      if (!task || (task.description ?? null) === description) return;
+      set((state) => ({
+        tasks: state.tasks.map((t) => (t.id === taskId ? { ...t, description } : t)),
+      }));
+      const body = JSON.stringify({ description, authorId: useSessionStore.getState().currentUserId });
+      // keepalive lets the write finish when it was set off by the page closing — within the
+      // browser's 64 KB allowance for that; anything bigger goes as a normal request.
+      fetch(`/api/tasks/${taskId}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body,
+        keepalive: new TextEncoder().encode(body).length < 60_000,
+      }).catch(() => {});
     },
 
     optimisticSetParent: (taskId, parentId) => {

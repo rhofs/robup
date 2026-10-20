@@ -6,7 +6,6 @@ import Bold from '@tiptap/extension-bold';
 import Italic from '@tiptap/extension-italic';
 import Heading from '@tiptap/extension-heading';
 import BulletList from '@tiptap/extension-bullet-list';
-import OrderedList from '@tiptap/extension-ordered-list';
 import ListItem from '@tiptap/extension-list-item';
 import HardBreak from '@tiptap/extension-hard-break';
 import Underline from '@tiptap/extension-underline';
@@ -25,6 +24,7 @@ import { SubpagesIndexNode } from './subpagesIndexNode';
 import { CommentMark } from './commentMark';
 import { FileAttachmentNode } from './fileAttachmentNode';
 import { TaskListEmbedNode } from './taskListEmbedNode';
+import { SiqtOrderedList } from './orderedListExtension';
 
 // Bumped whenever a node or mark is added to the schema below. An editor that does not know a node
 // does not just fail to show it: y-prosemirror DELETES any element it cannot build from the shared
@@ -36,7 +36,8 @@ import { TaskListEmbedNode } from './taskListEmbedNode';
 //   1 — implicit, everything before checklists
 //   2 — Heading 3, quote, divider, checklist (taskList/taskItem), live task list (taskListEmbed)
 //   3 — taskListEmbed.taskIds (a block of hand-picked tasks)
-export const DOC_SCHEMA_VERSION = 3;
+//   4 — orderedList.delimiter ("1)" lists, lib/collab/orderedListExtension.ts)
+export const DOC_SCHEMA_VERSION = 4;
 export const docSchemaToken = () => `doc-schema:${DOC_SCHEMA_VERSION}`;
 
 // Paragraphs + mentions + bold/italic/underline/strike/headings(1-2)/bullet+ordered lists/text
@@ -56,7 +57,7 @@ export const collabExtensions = [
   Strike,
   Heading.configure({ levels: [1, 2, 3] }),
   BulletList,
-  OrderedList,
+  SiqtOrderedList,
   ListItem,
   HardBreak,
   TextAlign.configure({ types: ['heading', 'paragraph'] }),

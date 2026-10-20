@@ -90,6 +90,11 @@ export async function ensureDocAccess(docId: string, userId: string) {
     const taskResult = await ensureTaskAccess(doc.taskId, userId);
     if (taskResult) return { doc, ctx: taskResult.ctx };
   }
+  // A task's description (Doc.descriptionTaskId) is exactly as visible as the task.
+  if (doc.descriptionTaskId) {
+    const taskResult = await ensureTaskAccess(doc.descriptionTaskId, userId);
+    if (taskResult) return { doc, ctx: taskResult.ctx };
+  }
   if (doc.boardFolderId) {
     const folderResult = await ensureFolderAccess(doc.boardFolderId, userId);
     if (folderResult) return { doc, ctx: folderResult.ctx };

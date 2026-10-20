@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { useEditor, EditorContent } from '@tiptap/react';
 import { BubbleMenu } from '@tiptap/react/menus';
 import { HocuspocusProvider } from '@hocuspocus/provider';
@@ -12,7 +12,7 @@ import Bold from '@tiptap/extension-bold';
 import Italic from '@tiptap/extension-italic';
 import { ClientHeading } from './headingExtension';
 import BulletList from '@tiptap/extension-bullet-list';
-import OrderedList from '@tiptap/extension-ordered-list';
+import { SiqtOrderedList } from '../../lib/collab/orderedListExtension';
 import ListItem from '@tiptap/extension-list-item';
 import HardBreak from '@tiptap/extension-hard-break';
 import Underline from '@tiptap/extension-underline';
@@ -27,6 +27,7 @@ import Blockquote from '@tiptap/extension-blockquote';
 import HorizontalRule from '@tiptap/extension-horizontal-rule';
 import { TaskList, TaskItem } from '@tiptap/extension-list';
 import Collaboration from '@tiptap/extension-collaboration';
+import { ySyncPluginKey } from '@tiptap/y-tiptap';
 import CollaborationCaret from '@tiptap/extension-collaboration-caret';
 import Placeholder from '@tiptap/extension-placeholder';
 import { MessageSquare, Link2, X, Upload } from 'lucide-react';
@@ -39,6 +40,7 @@ import { ClientTaskListEmbedNode } from './taskListEmbedView';
 import DocBlockGutter from './DocBlockGutter';
 import { celebrateCheck } from './celebrateCheck';
 import { docSchemaToken } from '../../lib/collab/schema';
+import { renderDescriptionPreview } from '../../lib/collab/descriptionDoc';
 import { GapCursor } from './gapCursorExtension';
 import PresenceBar from './PresenceBar';
 import DocFormatPanel from './DocFormatPanel';
@@ -70,6 +72,20 @@ type CollabDocEditorProps = {
   // book view, and every wiki page for someone who is not a wiki editor. The collab server also
   // opens such a connection read-only, so this is the look, not the lock.
   readOnly?: boolean;
+  // A task's description doc (components/TaskDescriptionDoc.tsx) keeps Task.description in step with
+  // it: called with the doc's HTML (null when empty) after this person has changed it — when the
+  // editor loses focus, when the page is hidden and when the editor closes. Never for changes that
+  // arrived from someone else; theirs is sent by their own editor.
+  onCommitHtml?: (html: string | null) => void;
+  // Shown, drawn the same way, until the live doc has arrived — so opening a task does not flash an
+  // empty description first.
+  previewHtml?: string | null;
+  // Where a new live task list (/task list) looks first, for a doc that has no Space of its own (a
+  // task's documents and description). Unlike spaceId, it does not offer subpages.
+  embedSpaceId?: string;
+  // Classes for the box around the text alone (not the side panels); a click anywhere in it puts the
+  // caret in, not only on a line of text.
+  frameClassName?: string;
 };
 
 // Rendered only client-side (see the next/dynamic({ssr:false}) wrapper at both app/page.tsx call
@@ -86,6 +102,10 @@ export default function CollabDocEditor({
   onEditorFocus,
   onEditorBlur,
   readOnly = false,
+  onCommitHtml,
+  previewHtml,
+  embedSpaceId,
+  frameClassName,
 }: CollabDocEditorProps) {
   const users = useTaskStore((s) => s.users);
   const addDocComment = useTaskStore((s) => s.addDocComment);
@@ -137,15 +157,27 @@ export default function CollabDocEditor({
   // tab could delete blocks it does not know, so it is not let in until it reloads.
   const [outdated, setOutdated] = useState(false);
   const [editorBox, setEditorBox] = useState<HTMLDivElement | null>(null);
+  // The first full copy of the doc has arrived from the server (until then the editor is empty).
+  const [synced, setSynced] = useState(false);
+  // This person has changed the doc since onCommitHtml was last called.
+  const changedHereRef = useRef(false);
+  const onCommitHtmlRef = useRef(onCommitHtml);
+  useEffect(() => {
+    onCommitHtmlRef.current = onCommitHtml;
+  });
 
   useEffect(() => {
     setWsStatus('connecting');
     setOutdated(false);
+    setSynced(false);
     const p = new HocuspocusProvider({
       url: collabWsUrl(),
       name: docId,
       token: docSchemaToken(),
       onStatus: ({ status }) => setWsStatus(status),
+      onSynced: ({ state }) => {
+        if (state) setSynced(true);
+      },
       onAuthenticationFailed: ({ reason }) => {
         if (reason === 'outdated-client') setOutdated(true);
       },
@@ -167,7 +199,7 @@ export default function CollabDocEditor({
             Italic,
             ClientHeading.configure({ levels: [1, 2, 3] }),
             BulletList,
-            OrderedList,
+            SiqtOrderedList,
             ListItem,
             HardBreak,
             Underline,
@@ -185,7 +217,7 @@ export default function CollabDocEditor({
             HorizontalRule,
             TaskList,
             TaskItem.configure({ nested: true }),
-            ClientTaskListEmbedNode.configure({ onOpenTask: (id: string) => onJump('task', id), spaceId, docId }),
+            ClientTaskListEmbedNode.configure({ onOpenTask: (id: string) => onJump('task', id), spaceId: spaceId ?? embedSpaceId, docId }),
             GapCursor,
             ClientMentionNode.configure({ onJump }),
             ClientFileAttachmentNode,
@@ -215,7 +247,16 @@ export default function CollabDocEditor({
         : [Document, Paragraph, Text],
       editable: !!provider && !readOnly,
       onFocus: () => onEditorFocus?.(),
-      onBlur: ({ editor: e }) => onEditorBlur?.(e.getText()),
+      onBlur: ({ editor: e }) => {
+        onEditorBlur?.(e.getText());
+        commitHtmlFrom(e);
+      },
+      // Changes that came in from the server carry the sync plugin's isChangeOrigin; an undo is
+      // replayed through Yjs the same way but is this person's own.
+      onUpdate: ({ transaction }) => {
+        const sync = transaction.getMeta(ySyncPluginKey) as { isChangeOrigin?: boolean; isUndoRedoOperation?: boolean } | undefined;
+        if (!sync?.isChangeOrigin || sync.isUndoRedoOperation) changedHereRef.current = true;
+      },
       immediatelyRender: false,
       editorProps: {
         // Files dropped or pasted into the doc are uploaded and placed where they landed: images as
@@ -238,8 +279,46 @@ export default function CollabDocEditor({
         },
       },
     },
-    [docId, provider, spaceId]
+    [docId, provider, spaceId, embedSpaceId]
   );
+
+  // Hands this person's changes to onCommitHtml (see the prop). Also when the page is hidden — a tab
+  // closed or an app sent to the background without the editor ever losing focus — and when the
+  // editor closes.
+  function commitHtmlFrom(e: { isEmpty: boolean; getHTML: () => string } | null) {
+    if (!changedHereRef.current || !onCommitHtmlRef.current || !e) return;
+    changedHereRef.current = false;
+    try {
+      onCommitHtmlRef.current(e.isEmpty ? null : e.getHTML());
+    } catch {
+      // The editor was already taken apart; nothing left to read.
+    }
+  }
+  const editorRef = useRef(editor);
+  useEffect(() => {
+    editorRef.current = editor;
+  });
+  const commitsHtml = !!onCommitHtml;
+  useEffect(() => {
+    if (!commitsHtml) return;
+    const onHidden = () => {
+      if (document.visibilityState === 'hidden') commitHtmlFrom(editorRef.current);
+    };
+    document.addEventListener('visibilitychange', onHidden);
+    return () => {
+      document.removeEventListener('visibilitychange', onHidden);
+      commitHtmlFrom(editorRef.current);
+    };
+    // Once per doc: the cleanup is the editor closing (or this doc being swapped for another). The
+    // editor itself is read through editorRef, so a new instance does not count as closing.
+  }, [docId, commitsHtml]);
+
+  // previewHtml, drawn through the Docs schema (lib/collab/descriptionDoc.ts), until the doc is here.
+  const showPreview = !!previewHtml && !synced && !outdated;
+  const previewRef = useRef<HTMLDivElement>(null);
+  useLayoutEffect(() => {
+    if (showPreview && previewRef.current) renderDescriptionPreview(previewRef.current, previewHtml ?? null);
+  }, [showPreview, previewHtml]);
 
   // Links open in a new tab: always while reading (the Wiki, or a page you cannot edit), and with
   // Ctrl/⌘ held while editing — a plain click there has to stay free for putting the caret inside the
@@ -539,8 +618,24 @@ export default function CollabDocEditor({
             )}
           </BubbleMenu>
         )}
-        <div ref={setEditorBox} className="collab-doc-editor mt-1.5" onClick={openLinkOnClick}>
-          <EditorContent editor={editor} />
+        <div
+          className={frameClassName}
+          onClick={
+            frameClassName
+              ? (e) => {
+                  if (editor && !editor.isFocused && editor.isEditable && (e.target as HTMLElement).closest('.ProseMirror') === null) editor.commands.focus('end');
+                }
+              : undefined
+          }
+        >
+          {showPreview && (
+            <div className="collab-doc-editor mt-1.5 pointer-events-none" aria-hidden>
+              <div ref={previewRef} className="ProseMirror" />
+            </div>
+          )}
+          <div ref={setEditorBox} className={`collab-doc-editor mt-1.5 ${showPreview ? 'hidden' : ''}`} onClick={openLinkOnClick}>
+            <EditorContent editor={editor} />
+          </div>
         </div>
         {editor && !readOnly && <DocBlockGutter editor={editor} container={editorBox} />}
       </div>
