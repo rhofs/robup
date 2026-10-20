@@ -12921,3 +12921,5 @@ calendar to start once the keyboard is fully down, "bittelitt tregere".
   - Nothing else writes the description of an existing task.
   - The description now needs the collab server, like Docs. If it is down, the stored text shows
     read-only with the "Not connected" warning.
+
+**Deployed 2026-10-20 as `b5bfe46`** (tag `deploy/2026-10-20_1108`). Pterodactyl backup `before-2026-10-20-description-docs` (89e455da, 742 MB) taken first; the migration ran as part of the start (`migrate deploy`), and the new route answers 401 without a session.
