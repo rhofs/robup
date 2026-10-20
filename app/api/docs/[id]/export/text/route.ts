@@ -3,6 +3,7 @@ import { loadDocJSONForExport } from '@/lib/collab/loadDocForExport';
 import { docJSONToPlainText } from '@/lib/collab/docJSONToPlainText';
 import { getCurrentUserId } from '@/lib/auth/session';
 import { ensureDocAccess } from '@/lib/auth/resourceAccess';
+import { attachmentDisposition } from '@/lib/contentDisposition';
 
 export async function GET(_req: Request, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
@@ -17,11 +18,10 @@ export async function GET(_req: Request, { params }: { params: Promise<{ id: str
   const title = doc.title || 'Untitled';
   const body = `${title}\n\n${docJSONToPlainText(json)}`;
 
-  const safeTitle = title.replace(/[\\/:*?"<>|]/g, '_');
   return new Response(body, {
     headers: {
       'Content-Type': 'text/plain; charset=utf-8',
-      'Content-Disposition': `attachment; filename="${safeTitle}.txt"`,
+      'Content-Disposition': attachmentDisposition(title, 'txt'),
       'Cache-Control': 'no-store',
     },
   });

@@ -25,6 +25,7 @@ public class MainActivity extends BridgeActivity {
         // error anywhere — the call simply rejects at runtime as "not implemented".
         registerPlugin(SiqtHapticsPlugin.class);
         registerPlugin(SiqtKeyboardPlugin.class);
+        registerPlugin(SiqtDownloadsPlugin.class);
         super.onCreate(savedInstanceState);
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.VANILLA_ICE_CREAM) fitWebViewAboveKeyboard();
     }

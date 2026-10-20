@@ -7367,7 +7367,7 @@ function PageContent() {
                     })}
                   </div>
                   <div className="flex items-center gap-2">
-                    <DocExportMenu docId={activeStandaloneDoc.id} onToast={showToast} />
+                    <DocExportMenu docId={activeStandaloneDoc.id} title={activeStandaloneDoc.title} onToast={showToast} />
                     {activeStandaloneDoc.taskId ? (
                       (() => {
                         const linkedTask = tasks.find((t) => t.id === activeStandaloneDoc.taskId);
@@ -9690,7 +9690,7 @@ function PageContent() {
                             className="flex-1 min-w-0 bg-transparent text-sm font-semibold text-app-strong focus:outline-none"
                             placeholder="Document title"
                           />
-                          <DocExportMenu docId={shownDocId} onToast={showToast} />
+                          <DocExportMenu docId={shownDocId} title={activeTaskDocs.find((d) => d.id === shownDocId)?.title} onToast={showToast} />
                           <button
                             onClick={() => activeModalTaskId && setTaskDocClosed(activeModalTaskId, true)}
                             title="Close document"

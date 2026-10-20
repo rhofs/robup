@@ -2483,6 +2483,16 @@ Picked up right after the office's "merged single island" popup-menu work (previ
 
 ## Known bugs / things to remember
 
+- **The Android app drops every download unless the app itself handles it** (found 2026-10-20). A
+  WebView gives downloads to its DownloadListener, and Capacitor sets none. So `<a download>`, an
+  `attachment` response, or a PDF the WebView cannot show did nothing, with no error, from the first
+  APK up to 2.0. `SiqtDownloadsPlugin` (APK 2.1) sets the listener and sends downloads through
+  DownloadManager with the WebView's cookies. Apps older than 2.1 still cannot download.
+- **A `Content-Disposition` filename must be Latin-1, or `new Response` throws** (2026-10-20). A doc
+  title with "–", a phone keyboard's curly ’, or an emoji made its PDF and text export a 500 on every
+  platform. Use `attachmentDisposition` (`lib/contentDisposition.ts`): an ASCII `filename` plus a
+  UTF-8 `filename*`.
+
 - **In the Android app the keyboard never "covers" the page — it makes it smaller** (2026-10-20).
   Since `MainActivity.fitWebViewAboveKeyboard` (Android 15+) the WebView itself is resized, frame by
   frame, and the keyboard is removed from its insets. So `visualViewport` overlap stays 0, and code
@@ -12950,3 +12960,39 @@ calendar to start once the keyboard is fully down, "bittelitt tregere".
 
 
 **Deployed 2026-10-20 as `4693f5a`** (tag `deploy/2026-10-20_1238`). Web-only, no schema change, so no backup was taken.
+
+### 2026-10-20 (continued) — doc PDF downloads on a phone; APK 2.1
+
+- **User:** "[Bug] Kan ikke laste ned pdf via mobil fra docs under tasks. Sjekk doca andre steder og"
+  (the message ends there).
+- **Two causes:**
+  1. **The Android app could not download anything** (see Known bugs). The new
+     `android/.../SiqtDownloadsPlugin.java`, registered in MainActivity:
+     - It sets the WebView's DownloadListener for every download in the app (doc exports, chat and
+       task attachments).
+     - It exposes `download({url, filename, mimeType})` for the page.
+     - Both use DownloadManager with the WebView's cookies and user agent. The file goes to the
+       shared Downloads folder (Android 10+; older phones get the app's own Downloads folder, no
+       permission needed). The system notification opens it.
+     - The filename is read from the UTF-8 `filename*` first.
+     - On the web side, `lib/nativeDownload.ts` `downloadSupport()` returns 'browser', 'app' or
+       'outdated-app', by plugin header. `DocExportMenu` (now given the doc's `title`) calls the
+       plugin in the app. In an app from before 2.1 it shows a toast saying to install the new APK
+       from siqt.no/siqt.apk (Settings hides the APK row inside the app).
+  2. **Export failed with a 500 for titles with characters outside Latin-1** ("–", ’, emoji) on
+     every platform. Fixed with `lib/contentDisposition.ts`, used by the PDF and text export routes;
+     tested with tricky titles.
+- **"Docs elsewhere":**
+  - The Docs tab uses the same `DocExportMenu`, so it is fixed by the same change.
+  - The Wiki has no export at all; not added, and the user was asked.
+  - The new description doc has no export either.
+- **APK 2.1 (versionCode 12)**, clean build, 5.0 MB, same signing certificate as the previous APK
+  (SHA-256 6660…9e27, so it installs as an update). Copied to `public/siqt.apk`. It **must be
+  installed** for downloads to work in the app.
+- **Not tested on a device.**
+  - Unconfirmed: that `isPluginAvailable` sees the plugin in remote-URL mode. It reads the native
+    plugin headers, as SiqtKeyboard's calls rely on.
+  - Unconfirmed: that DownloadManager's request carries the HttpOnly session cookie.
+    `CookieManager.getCookie` includes HttpOnly cookies.
+  - Still unhandled: PDFs shown inline in AttachmentPreview inside the app.
+

@@ -5,6 +5,7 @@ import { writeDocToPdf } from '@/lib/collab/docJSONToPdf';
 import { resolveDocImages } from '@/lib/collab/resolveDocImages';
 import { getCurrentUserId } from '@/lib/auth/session';
 import { ensureDocAccess } from '@/lib/auth/resourceAccess';
+import { attachmentDisposition } from '@/lib/contentDisposition';
 
 function renderPdfBuffer(build: (doc: PDFKit.PDFDocument) => void): Promise<Buffer> {
   return new Promise((resolve, reject) => {
@@ -39,11 +40,10 @@ export async function GET(_req: Request, { params }: { params: Promise<{ id: str
     writeDocToPdf(pdf, json, images);
   });
 
-  const safeTitle = title.replace(/[\\/:*?"<>|]/g, '_');
   return new Response(new Uint8Array(buffer), {
     headers: {
       'Content-Type': 'application/pdf',
-      'Content-Disposition': `attachment; filename="${safeTitle}.pdf"`,
+      'Content-Disposition': attachmentDisposition(title, 'pdf'),
       'Cache-Control': 'no-store',
     },
   });

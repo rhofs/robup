@@ -5,18 +5,23 @@ import { Download, FileText, Share2 } from 'lucide-react';
 import FloatingPopover from '../FloatingPopover';
 import { useTaskStore } from '../../store/useTaskStore';
 import { useSessionStore } from '../../store/useSessionStore';
+import { downloadInApp, downloadSupport, OUTDATED_APP_MESSAGE } from '../../lib/nativeDownload';
 
 type DocExportMenuProps = {
   docId: string;
+  // Names the downloaded file in the Android app, which hands the download to the phone before
+  // the server's own name for it is known.
+  title?: string;
   onToast?: (message: string) => void;
 };
 
 // Small "Link existing"/"Link to task" style popover (same FloatingPopover already used right
 // next to where this sits at both call sites) with two export paths: a plain download link for
-// PDF (the server sets Content-Disposition: attachment, no client JS needed), and an action
+// PDF (the server sets Content-Disposition: attachment; in the Android app it goes through the app's
+// downloader instead, see `download` below), and an action
 // button for Google Docs, which needs the current signed-in identity to know which Google
 // account to use/connect.
-export default function DocExportMenu({ docId, onToast }: DocExportMenuProps) {
+export default function DocExportMenu({ docId, title, onToast }: DocExportMenuProps) {
   const [open, setOpen] = useState(false);
   const [exporting, setExporting] = useState(false);
   const users = useTaskStore((s) => s.users);
@@ -54,6 +59,23 @@ export default function DocExportMenu({ docId, onToast }: DocExportMenuProps) {
     }
   };
 
+  // In a browser the links below are the whole story. In the Android app a link to a download does
+  // nothing by itself (lib/nativeDownload.ts), so the app is asked to fetch it; an app from before it
+  // could says it needs updating rather than silently not downloading.
+  const download = (e: React.MouseEvent, path: string, ext: 'pdf' | 'txt', mimeType: string) => {
+    setOpen(false);
+    const support = downloadSupport();
+    if (support === 'browser') return;
+    e.preventDefault();
+    if (support === 'outdated-app') {
+      onToast?.(OUTDATED_APP_MESSAGE);
+      return;
+    }
+    void downloadInApp(path, `${(title || 'Untitled').trim() || 'Untitled'}.${ext}`, mimeType).then((ok) => {
+      if (!ok) onToast?.('Could not start the download.');
+    });
+  };
+
   return (
     <FloatingPopover
       open={open}
@@ -73,7 +95,7 @@ export default function DocExportMenu({ docId, onToast }: DocExportMenuProps) {
       <a
         href={`/api/docs/${docId}/export/pdf`}
         download
-        onClick={() => setOpen(false)}
+        onClick={(e) => download(e, `/api/docs/${docId}/export/pdf`, 'pdf', 'application/pdf')}
         className="w-full text-left px-3 py-1.5 text-xs text-neutral-300 hover:bg-neutral-800/60 cursor-pointer flex items-center gap-2"
       >
         <FileText className="w-3.5 h-3.5 shrink-0" /> Download PDF
@@ -81,7 +103,7 @@ export default function DocExportMenu({ docId, onToast }: DocExportMenuProps) {
       <a
         href={`/api/docs/${docId}/export/text`}
         download
-        onClick={() => setOpen(false)}
+        onClick={(e) => download(e, `/api/docs/${docId}/export/text`, 'txt', 'text/plain')}
         className="w-full text-left px-3 py-1.5 text-xs text-neutral-300 hover:bg-neutral-800/60 cursor-pointer flex items-center gap-2"
       >
         <FileText className="w-3.5 h-3.5 shrink-0" /> Download plain text
