@@ -12804,3 +12804,36 @@ calendar to start once the keyboard is fully down, "bittelitt tregere".
 - **Recommendation given:** build 1 and 2 first.
 - **Questions put to the user:** go ahead with 1+2? Increment both numbers in titles (Ep14 → Ep15 and
   G044662 → G044663) or only the episode number?
+
+### 2026-10-20 (continued) — "Create next…": a series of copies with shifted dates (option 1, built)
+
+- **User:** "Jeg liker 1. Men, kan vi få med at vi kan f.eks velge 'Lag de 13 neste tasksa'. Så det
+  fungerer som en duplicate, men med da forskøvet datoer, med det mønsteret?" The title-numbering
+  question was not answered, so the dialog lets each number be toggled.
+- **Built:**
+  - **Task menu → "Create next…"** (desktop right-click and phone long-press) opens
+    `components/TaskSeriesDialog.tsx`:
+    - **How many:** 1–60, with 1/4/13 quick picks.
+    - **Every N days:** detected from the task before it among its siblings (same List and parent,
+      in List order). It takes the most common positive day difference over all dates both have
+      (start, due, date custom fields) and names the field it came from. Defaults to 7 when there is
+      nothing to read; always editable.
+    - **Count up in the title:** each number in the title is a toggle, on by default. Zero padding
+      is kept (G044662 → G044663).
+    - **Preview:** the first three and the last title, each with its first three shifted dates.
+  - **`POST /api/tasks/[id]/series`** `{count, shiftDays, titles, timeZone}`, in one transaction
+    (timeout 60s):
+    - Copy n is the task and its whole subtree (in order, with status, assignees, field values and
+      privacy) with every start/due and every **date-type custom field** moved n × shiftDays.
+    - Copies go after the source (same `order`, later createdAt).
+    - Google sync runs per copy.
+  - **`lib/taskSeries.ts`:** days are **calendar days in the person's time zone** (sent from the
+    client). This keeps local midnight on midnight across DST; adding n×24h would land on 23:00 the
+    day before.
+    - `YYYY-MM-DD` custom values shift as calendar dates.
+    - Tested with tsx under TZ=UTC: Oslo +7 days across both the October and the March DST changes,
+      ±7, and a year rollover.
+  - Store `createTaskSeries` refetches the tasks and pushes one undo (copies to Trash) with a redo.
+- **Not built:** options 2–4 from the proposal (bulk "Shift dates", Excel-style "Fill dates",
+  relative template dates). Names in titles (Rob/Victor/Chris) are not rotated; edit them after.
+- Not seen in a browser. The route itself was not exercised against a database.

@@ -498,6 +498,9 @@ interface TaskStore {
   // rather than splice: a duplicate can bring a whole subtask or subpage tree with it, and
   // reconstructing that shape locally is exactly the kind of hand-maintained mirror that drifts.
   duplicateTask: (taskId: string, targetListId?: string) => Promise<void>;
+  // "Create next tasks" (components/TaskSeriesDialog.tsx): `count` copies, the n-th with every date
+  // moved n × `shiftDays` days. Returns an error message, or null.
+  createTaskSeries: (taskId: string, opts: { count: number; shiftDays: number; titles: string[] }) => Promise<string | null>;
   duplicateList: (listId: string, targetSpaceId?: string) => Promise<void>;
   duplicateSpaceDoc: (docId: string, targetSpaceId?: string) => Promise<void>;
   deleteUser: (userId: string) => Promise<void>;
@@ -1868,6 +1871,32 @@ export const useTaskStore = create<TaskStore>((set, get) => {
       });
       if (!res.ok) return;
       await get().refetchTasks();
+    },
+
+    createTaskSeries: async (taskId, { count, shiftDays, titles }) => {
+      const res = await fetch(`/api/tasks/${taskId}/series`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        // Days are calendar days in this person's time zone (lib/taskSeries.ts).
+        body: JSON.stringify({ count, shiftDays, titles, timeZone: Intl.DateTimeFormat().resolvedOptions().timeZone }),
+      }).catch(() => null);
+      if (!res || !res.ok) {
+        const err = res ? await res.json().catch(() => null) : null;
+        return err?.error ?? 'Could not create the tasks — try again.';
+      }
+      const { ids } = (await res.json()) as { ids: string[] };
+      await get().refetchTasks();
+      // One undo for the whole series: the copies go to Trash, subtasks with them.
+      useHistoryStore.getState().push({
+        label: `Create ${ids.length} tasks`,
+        undo: async () => {
+          for (const id of ids) await get().optimisticDeleteTask(id);
+        },
+        redo: async () => {
+          await get().createTaskSeries(taskId, { count, shiftDays, titles });
+        },
+      });
+      return null;
     },
 
     duplicateList: async (listId, targetSpaceId) => {

@@ -1,5 +1,6 @@
 'use client';
 
+import TaskSeriesDialog from '../components/TaskSeriesDialog';
 import TaskTemplateEditor from '../components/TaskTemplateEditor';
 import { sortedStatusesOfList, statusesOfList } from '../lib/listStatuses';
 import { offerCompleteSubtasks } from '../lib/completeSubtasks';
@@ -40,6 +41,7 @@ import {
   Settings2,
   CircleDot,
   Minus,
+  Repeat,
   House as HouseIcon,
   UserCircle,
   LogOut,
@@ -1896,6 +1898,8 @@ function PageContent() {
   const [templateApplyMode, setTemplateApplyMode] = useState<'add' | 'replace'>('add');
   // The task template open in TaskTemplateEditor (the pencil in the template picker).
   const [editingTaskTemplate, setEditingTaskTemplate] = useState<AppTemplate | null>(null);
+  // The task "Create next…" was chosen on (TaskSeriesDialog).
+  const [seriesTask, setSeriesTask] = useState<Task | null>(null);
   const [templatePicker, setTemplatePicker] = useState<
     { mode: 'create' } | { mode: 'apply'; taskId: string } | { mode: 'update'; taskId: string } | null
   >(null);
@@ -8295,6 +8299,16 @@ function PageContent() {
             >
               <Copy className="w-3.5 h-3.5" /> Duplicate
             </button>
+            {/* A duplicate several times over, each copy's dates one step further on (TaskSeriesDialog). */}
+            <button
+              onClick={() => {
+                setSeriesTask(taskMenu.task);
+                setTaskMenu(null);
+              }}
+              className="w-full text-left px-3 py-1.5 text-xs text-neutral-300 hover:bg-neutral-800/60 cursor-pointer flex items-center gap-2"
+            >
+              <Repeat className="w-3.5 h-3.5" /> Create next…
+            </button>
             <button
               onClick={() => {
                 // Same picker the drag-and-drop "dropped on a Folder/Space with several Lists"
@@ -10745,6 +10759,8 @@ function PageContent() {
           </div>
         </div>
       )}
+
+      {seriesTask && <TaskSeriesDialog task={seriesTask} onClose={() => setSeriesTask(null)} />}
 
       {editingTaskTemplate && (
         <TaskTemplateEditor
