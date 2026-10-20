@@ -407,6 +407,41 @@ export default function ChatPanel() {
     return () => cancelAnimationFrame(raf);
   }, [keyboardOverlap]);
 
+  // The same, for a keyboard that makes the page smaller instead of covering it.
+  //
+  // The Android app resizes the WebView for the keyboard, frame by frame as it slides up
+  // (MainActivity.fitWebViewAboveKeyboard), so nothing is covered and keyboardOverlap stays 0 — the
+  // effect above never sees the keyboard open. What happens instead is that the list's own window gets
+  // shorter from the bottom while its scroll position stays put, so the composer rises and the last
+  // messages slide out of sight beneath it: "går chatten opp, og går over samtalen, så det nederste
+  // forsvinner" (2026-10-20).
+  //
+  // So the list is watched for getting shorter. On a phone with the composer focused that is the
+  // keyboard, and it goes to the newest message as above. Otherwise (the window resized, a phone
+  // rotated) whatever was at the bottom of the window stays there: at the newest message if that is
+  // where it was, or moved up by as much as it shrank. Getting taller is left alone — the keyboard
+  // closing leaves the view where it is, for the same reason as above.
+  const isMobileRef = useRef(isMobile);
+  useEffect(() => {
+    isMobileRef.current = isMobile;
+  });
+  useEffect(() => {
+    const el = scrollRef.current;
+    if (!el) return;
+    let lastHeight = el.clientHeight;
+    const observer = new ResizeObserver(() => {
+      const height = el.clientHeight;
+      const shrunk = lastHeight - height;
+      lastHeight = height;
+      if (shrunk <= 0) return;
+      const typing = isMobileRef.current && !!composerRef.current?.contains(document.activeElement);
+      if (typing || stickToBottomRef.current) el.scrollTop = el.scrollHeight;
+      else el.scrollTop += shrunk;
+    });
+    observer.observe(el);
+    return () => observer.disconnect();
+  }, []);
+
   // Has this conversation ever finished loading? Cached messages render instantly on a second
   // visit; the very first open genuinely has nothing to show yet, and the difference matters
   // because "empty" and "not loaded" look identical from `messages.length` alone.

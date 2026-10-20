@@ -2483,6 +2483,13 @@ Picked up right after the office's "merged single island" popup-menu work (previ
 
 ## Known bugs / things to remember
 
+- **In the Android app the keyboard never "covers" the page — it makes it smaller** (2026-10-20).
+  Since `MainActivity.fitWebViewAboveKeyboard` (Android 15+) the WebView itself is resized, frame by
+  frame, and the keyboard is removed from its insets. So `visualViewport` overlap stays 0, and code
+  that detects the keyboard that way (ChatPanel's `keyboardOverlap`, which iOS still needs) sees
+  nothing. Anything that must react to the keyboard there has to react to its own box getting
+  shorter: ChatPanel now watches the message list's height with a ResizeObserver.
+
 - **A mention in HTML is read from its `data-mention-*` attributes — before 2026-10-20 it was not**
   (`lib/collab/mentionNode.ts`). The node's attributes had no `parseHTML`, so Tiptap read bare
   `kind`/`id`/`label` attributes. Those exist only because the node's own `renderHTML` happens to emit
@@ -12923,3 +12930,21 @@ calendar to start once the keyboard is fully down, "bittelitt tregere".
     read-only with the "Not connected" warning.
 
 **Deployed 2026-10-20 as `b5bfe46`** (tag `deploy/2026-10-20_1108`). Pterodactyl backup `before-2026-10-20-description-docs` (89e455da, 742 MB) taken first; the migration ran as part of the start (`migrate deploy`), and the new route answers 401 without a session.
+
+### 2026-10-20 (continued) — chat: tapping the composer hid the last messages (Android app)
+
+- **User:** "Når jeg trykker på tekstfeltet i en chatsamtale, så går chatten opp, og går over
+  samtalen, så det nederste forsvinner."
+- **Cause:** the Android app resizes the WebView for the keyboard (see Known bugs). ChatPanel only
+  followed the keyboard through `visualViewport` overlap, which is 0 there, so its "keyboard opened →
+  go to the newest message" effect never ran. The list's window got shorter from the bottom with its
+  scroll position unchanged, and the composer rose over the last messages.
+- **Fix** (`components/ChatPanel.tsx`): a ResizeObserver on the message list's scroll box.
+  - When it gets shorter on a phone with the composer focused, it jumps to the newest message (the
+    keyboard opening, same rule as the iOS path).
+  - Otherwise it keeps the bottom where it was: at the newest message if it was there, or moved up
+    by the amount it shrank.
+  - Getting taller (the keyboard closing) is left alone.
+- **Not tested on a device.** iOS should be unaffected: there the list does not shrink, the overlap
+  path still applies, and the new observer sees no change.
+
