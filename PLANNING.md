@@ -13278,3 +13278,5 @@ calendar to start once the keyboard is fully down, "bittelitt tregere".
   - A drop on a Space header still moves to that Space's top level, keeping the item's order.
 - Not seen in a browser.
 
+
+**Deployed 2026-10-21 as `af5a705`** (tag `deploy/2026-10-21_1105`). Pterodactyl backup `before-2026-10-21-sidebar-shared-order` (379626ac) taken first; the data migration ran on start. The panel now holds 7 of its 10 backups — old ones will need deleting before long.
