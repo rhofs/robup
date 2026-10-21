@@ -13096,3 +13096,5 @@ calendar to start once the keyboard is fully down, "bittelitt tregere".
        episode deadlines they rely on.
   - **Waiting for:** the user's choice.
 
+
+**Deployed 2026-10-21 as `44490c6`** (tag `deploy/2026-10-21_0808`). Web-only.
