@@ -13015,3 +13015,23 @@ calendar to start once the keyboard is fully down, "bittelitt tregere".
   (Chrome/Edge on Windows/Mac, Safari dock apps on macOS).
   - Open question for the user: should the number be DMs + every workspace's channels, or only the
     active workspace's, which is what the rail counts today?
+
+### 2026-10-21 (continued) — right-click menus cut off near the bottom of the screen
+
+- **User** (screenshot, the task menu running past the bottom of a desktop window): "Høyreklikk blir
+  croppa om den er for nær bunnen på desktop".
+- **Cause:**
+  - `lib/contextMenuPosition.ts` placed every menu from an assumed max height of 240px.
+  - The task menu has grown to about 330px (Apply template, Create next…).
+  - `openTaskMenu` also pre-clamped the click with its own 230px guess.
+- **Fix:**
+  - `fitMenuElement(el, x, y)` is given to each menu as an inline ref. It runs after React writes
+    the style and before paint, so the correction is never seen, and again on every render.
+  - It places the menu from its measured size the way system menus open: below and right of the
+    pointer when it fits, otherwise upward (bottom at the pointer) or to the left. Then it is
+    clamped inside the window. A menu taller than the window is pinned to the top and scrolls.
+  - Applied to the task, Space, Folder, List, Doc and column menus (page.tsx) and the Planner's day
+    menu (CalendarView). `openTaskMenu` now stores the raw click.
+  - The "Move to…" list picker still uses `clampMenuPosition`'s estimate; not changed.
+- Placement rules tested with tsx, including the screenshot's case: a click at y=665 in a 984px
+  window opens the 330px menu upward at top 335. Not seen in a browser.

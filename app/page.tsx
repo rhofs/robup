@@ -126,7 +126,7 @@ import StatusGlyph, { statusKind } from '../components/StatusGlyph';
 import { homeLabel, homeOfTask, workspaceColor } from '../lib/whereIs';
 import { activeGlowStyle } from '../lib/activeGlowStyle';
 import { copyToClipboard } from '../lib/copyToClipboard';
-import { contextMenuPosition } from '../lib/contextMenuPosition';
+import { contextMenuPosition, fitMenuElement } from '../lib/contextMenuPosition';
 import { formatBytes } from '../lib/formatBytes';
 import AttachmentPreview, { type PreviewFile } from '../components/AttachmentPreview';
 import { parseTaskTemplate, type AppTemplate } from '../lib/templates';
@@ -3890,8 +3890,8 @@ function PageContent() {
   const openTaskMenu = (e: React.MouseEvent, task: Task) => {
     e.preventDefault();
     e.stopPropagation();
-    const { x, y } = clampMenuPosition(e.clientX, e.clientY, 192, 230);
-    setTaskMenu({ x, y, task });
+    // The click itself: the menu places itself from there once its real size is known (fitMenuElement).
+    setTaskMenu({ x: e.clientX, y: e.clientY, task });
   };
 
   const openSpaceMenu = (e: React.MouseEvent, space: HierarchySpace) => {
@@ -8252,7 +8252,7 @@ function PageContent() {
       {taskMenu && (
         <>
           <div className="fixed inset-0 z-[60]" onClick={() => setTaskMenu(null)} onContextMenu={(e) => { e.preventDefault(); setTaskMenu(null); }} />
-          <div className="fixed z-[61] w-48 bg-neutral-900 border border-neutral-800 rounded-xl shadow-2xl py-1" style={contextMenuPosition(taskMenu.x, taskMenu.y)}>
+          <div className="fixed z-[61] w-48 bg-neutral-900 border border-neutral-800 rounded-xl shadow-2xl py-1" style={contextMenuPosition(taskMenu.x, taskMenu.y)} ref={(el) => fitMenuElement(el, taskMenu.x, taskMenu.y)}>
             <button
               onClick={() => {
                 setModalTaskStack([taskMenu.task.id]);
@@ -8372,7 +8372,7 @@ function PageContent() {
       {spaceMenu && (
         <>
           <div className="fixed inset-0 z-[60]" onClick={() => setSpaceMenu(null)} onContextMenu={(e) => { e.preventDefault(); setSpaceMenu(null); }} />
-          <div className="fixed z-[61] w-48 bg-neutral-900 border border-neutral-800 rounded-xl shadow-2xl py-1" style={contextMenuPosition(spaceMenu.x, spaceMenu.y)}>
+          <div className="fixed z-[61] w-48 bg-neutral-900 border border-neutral-800 rounded-xl shadow-2xl py-1" style={contextMenuPosition(spaceMenu.x, spaceMenu.y)} ref={(el) => fitMenuElement(el, spaceMenu.x, spaceMenu.y)}>
             <button onClick={() => startEditSpace(spaceMenu.space)} className="w-full text-left px-3 py-1.5 text-xs text-neutral-300 hover:bg-neutral-800/60 cursor-pointer flex items-center gap-2">
               <Pencil className="w-3.5 h-3.5" /> Edit appearance
             </button>
@@ -8428,7 +8428,7 @@ function PageContent() {
       {folderMenu && (
         <>
           <div className="fixed inset-0 z-[60]" onClick={() => setFolderMenu(null)} onContextMenu={(e) => { e.preventDefault(); setFolderMenu(null); }} />
-          <div className="fixed z-[61] w-48 bg-neutral-900 border border-neutral-800 rounded-xl shadow-2xl py-1" style={contextMenuPosition(folderMenu.x, folderMenu.y)}>
+          <div className="fixed z-[61] w-48 bg-neutral-900 border border-neutral-800 rounded-xl shadow-2xl py-1" style={contextMenuPosition(folderMenu.x, folderMenu.y)} ref={(el) => fitMenuElement(el, folderMenu.x, folderMenu.y)}>
             <button onClick={() => startEditFolder(folderMenu.folder)} className="w-full text-left px-3 py-1.5 text-xs text-neutral-300 hover:bg-neutral-800/60 cursor-pointer flex items-center gap-2">
               <Pencil className="w-3.5 h-3.5" /> Edit appearance
             </button>
@@ -8469,7 +8469,7 @@ function PageContent() {
       {listMenu && (
         <>
           <div className="fixed inset-0 z-[60]" onClick={() => setListMenu(null)} onContextMenu={(e) => { e.preventDefault(); setListMenu(null); }} />
-          <div className="fixed z-[61] w-48 bg-neutral-900 border border-neutral-800 rounded-xl shadow-2xl py-1" style={contextMenuPosition(listMenu.x, listMenu.y)}>
+          <div className="fixed z-[61] w-48 bg-neutral-900 border border-neutral-800 rounded-xl shadow-2xl py-1" style={contextMenuPosition(listMenu.x, listMenu.y)} ref={(el) => fitMenuElement(el, listMenu.x, listMenu.y)}>
             <button
               onClick={() => startEditList(listMenu.list, listMenu.spaceId)}
               className="w-full text-left px-3 py-1.5 text-xs text-neutral-300 hover:bg-neutral-800/60 cursor-pointer flex items-center gap-2"
@@ -8539,7 +8539,7 @@ function PageContent() {
       {docMenu && (
         <>
           <div className="fixed inset-0 z-[60]" onClick={() => setDocMenu(null)} onContextMenu={(e) => { e.preventDefault(); setDocMenu(null); }} />
-          <div className="fixed z-[61] w-48 bg-neutral-900 border border-neutral-800 rounded-xl shadow-2xl py-1" style={contextMenuPosition(docMenu.x, docMenu.y)}>
+          <div className="fixed z-[61] w-48 bg-neutral-900 border border-neutral-800 rounded-xl shadow-2xl py-1" style={contextMenuPosition(docMenu.x, docMenu.y)} ref={(el) => fitMenuElement(el, docMenu.x, docMenu.y)}>
             <button
               onClick={() => startEditDoc(docMenu.doc, docMenu.spaceId)}
               className="w-full text-left px-3 py-1.5 text-xs text-neutral-300 hover:bg-neutral-800/60 cursor-pointer flex items-center gap-2"
@@ -8598,7 +8598,7 @@ function PageContent() {
       {columnMenu && (
         <>
           <div className="fixed inset-0 z-[60]" onClick={() => setColumnMenu(null)} onContextMenu={(e) => { e.preventDefault(); setColumnMenu(null); }} />
-          <div className="fixed z-[61] w-48 bg-neutral-900 border border-neutral-800 rounded-xl shadow-2xl py-1" style={contextMenuPosition(columnMenu.x, columnMenu.y)}>
+          <div className="fixed z-[61] w-48 bg-neutral-900 border border-neutral-800 rounded-xl shadow-2xl py-1" style={contextMenuPosition(columnMenu.x, columnMenu.y)} ref={(el) => fitMenuElement(el, columnMenu.x, columnMenu.y)}>
             <button
               onClick={() => {
                 toggleColumn(columnMenu.col.key);

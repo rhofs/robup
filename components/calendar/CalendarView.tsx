@@ -18,7 +18,7 @@ import { assignLanes, clipRangeToWeek, type ClippedSegment, type DragMode, type 
 import { useTaskStore, StatusDef, Task, Event, HierarchyWorkspace } from '../../store/useTaskStore';
 import { useIsMobile } from '../../hooks/useIsMobile';
 import WeekRow, { BAR_GAP, BAR_H, DAY_NUM_H, GUTTER_WIDTH } from './WeekRow';
-import { contextMenuPosition } from '../../lib/contextMenuPosition';
+import { contextMenuPosition, fitMenuElement } from '../../lib/contextMenuPosition';
 import DayTimeline from './DayTimeline';
 import TeamStrip from './TeamStrip';
 
@@ -801,6 +801,7 @@ export default function CalendarView({ tasks, events, statuses, workspaces, show
         <div
           className="fixed z-[61] w-48 bg-neutral-900 border border-neutral-800 rounded-xl shadow-2xl py-1"
           style={contextMenuPosition(dayMenu.x, dayMenu.y)}
+          ref={(el) => fitMenuElement(el, dayMenu.x, dayMenu.y)}
           onClick={(e) => e.stopPropagation()}
         >
           <div className="px-3 py-1.5 text-[10px] uppercase tracking-wide text-neutral-500">
