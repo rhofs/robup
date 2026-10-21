@@ -13156,3 +13156,5 @@ calendar to start once the keyboard is fully down, "bittelitt tregere".
   - `next build` passes.
 - **Not tested:** in a browser or on a phone, and dragging a marker.
 
+
+**Deployed 2026-10-21 as `71f1dc2`** (tag `deploy/2026-10-21_0843`). Pterodactyl backup `before-2026-10-21-planner-visibility` (622ca563, 747 MB) was taken first; the migration ran on start.
