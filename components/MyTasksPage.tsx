@@ -6,6 +6,7 @@ import { HierarchyWorkspace, AppUser, Task, StatusDef } from '../store/useTaskSt
 import { isDoneStatus } from '../lib/taskDoneDust';
 import { statusesOfList } from '../lib/listStatuses';
 import { dueDateColor } from '../lib/dateBadgeColor';
+import { dateFieldsByList, myTasksDate } from '../lib/taskDates';
 import { useIsMobile } from '../hooks/useIsMobile';
 import StatusCircle from './StatusCircle';
 
@@ -127,6 +128,10 @@ export default function MyTasksPage({ currentUser, workspaces: allWorkspaces, de
     return map;
   }, [currentWorkspace, workspaces, fallbackStatuses]);
 
+  // Date fields switched on for My Assigned Tasks ("Edit field"), per List: with "Due date" order a task
+  // goes by the next of its due date and these (lib/taskDates.ts myTasksDate), and shows which it is.
+  const myDateFields = useMemo(() => dateFieldsByList(workspaces, 'showInMyTasks'), [workspaces]);
+
   const taskById = useMemo(() => new Map(tasks.map((t) => [t.id, t])), [tasks]);
   const childrenOf = useMemo(() => {
     const m = new Map<string, Task[]>();
@@ -169,7 +174,7 @@ export default function MyTasksPage({ currentUser, workspaces: allWorkspaces, de
 
   const sortKeyOf = (t: Task) =>
     sort === 'due'
-      ? time(t.dueDate)
+      ? time(myTasksDate(t, myDateFields.get(t.listId))?.date)
       : sort === 'start'
         ? time(t.startDate)
         : sort === 'assigned'
@@ -223,10 +228,20 @@ export default function MyTasksPage({ currentUser, workspaces: allWorkspaces, de
     );
   };
   const dateOf = (t: Task) => {
-    const d = sort === 'start' ? t.startDate : t.dueDate;
-    if (!d) return null;
-    const late = sort !== 'start' && !isFinished(t) && dueDateColor(t.dueDate) === 'red';
-    return <span className={`text-[11px] shrink-0 ${late ? 'text-red-400' : 'text-neutral-500'}`}>{shortDate(d)}</span>;
+    if (sort === 'start') {
+      return t.startDate ? <span className="text-[11px] shrink-0 text-neutral-500">{shortDate(t.startDate)}</span> : null;
+    }
+    const next = myTasksDate(t, myDateFields.get(t.listId));
+    if (!next) return null;
+    // Late: a deadline (the due date, or a date field of that kind) that has passed. An event's date
+    // having passed only means it happened.
+    const late = !isFinished(t) && next.kind === 'deadline' && dueDateColor(next.date.toISOString()) === 'red';
+    return (
+      <span className={`text-[11px] shrink-0 ${late ? 'text-red-400' : 'text-neutral-500'}`}>
+        {next.label && <span className="text-neutral-600">{next.label} · </span>}
+        {shortDate(next.date)}
+      </span>
+    );
   };
   const circle = (t: Task) => (
     <StatusCircle task={t} statuses={statusesFor(t)} mode={listInfo.get(t.listId)?.circle ?? 'menu'} size={isMobile ? 'md' : 'sm'} />

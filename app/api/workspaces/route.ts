@@ -33,7 +33,7 @@ export async function GET(req: Request) {
           lists: {
             where: { deletedAt: null },
             // `statuses`: the List's own, when it has chosen custom ones (empty = the Space's).
-            select: { id: true, name: true, color: true, textColor: true, icon: true, folderId: true, docId: true, order: true, archived: true, isPrivate: true, accessJson: true, visibleColumnsJson: true, columnWidthsJson: true, sortJson: true, statuses: { orderBy: { order: 'asc' } } },
+            select: { id: true, name: true, color: true, textColor: true, icon: true, folderId: true, docId: true, order: true, archived: true, isPrivate: true, accessJson: true, visibleColumnsJson: true, columnWidthsJson: true, sortJson: true, plannerDefault: true, statuses: { orderBy: { order: 'asc' } } },
           },
           // The Space's own set only — a List's own statuses come with that List above.
           statuses: { where: { listId: null }, orderBy: { order: 'asc' } },

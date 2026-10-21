@@ -23,6 +23,9 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
     data.dateKind = body.dateKind;
   }
 
+  if (body.showInPlanner !== undefined) data.showInPlanner = body.showInPlanner === true;
+  if (body.showInMyTasks !== undefined) data.showInMyTasks = body.showInMyTasks === true;
+
   let renamedPairs: { from: string; to: string }[] = [];
   if (body.options !== undefined) {
     const oldOptions: { id?: string; label: string; color: string }[] = JSON.parse(existing.options || '[]');

@@ -76,7 +76,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
       orderBy: [{ order: 'asc' }, { createdAt: 'asc' }],
       select: {
         id: true, title: true, description: true, status: true, priority: true, startDate: true,
-        dueDate: true, calendarLane: true, customFieldValues: true, isPrivate: true,
+        dueDate: true, calendarLane: true, showInPlanner: true, customFieldValues: true, isPrivate: true,
         accessJson: true, order: true, assignees: { select: { id: true } },
       },
     });
@@ -91,6 +91,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
           startDate: node.startDate,
           dueDate: node.dueDate,
           calendarLane: node.calendarLane,
+          showInPlanner: node.showInPlanner,
           customFieldValues: node.customFieldValues,
           order: node.order,
           isPrivate: node.isPrivate,
@@ -105,7 +106,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
         orderBy: [{ order: 'asc' }, { createdAt: 'asc' }],
         select: {
           id: true, title: true, description: true, status: true, priority: true, startDate: true,
-          dueDate: true, calendarLane: true, customFieldValues: true, isPrivate: true,
+          dueDate: true, calendarLane: true, showInPlanner: true, customFieldValues: true, isPrivate: true,
           accessJson: true, order: true, assignees: { select: { id: true } },
         },
       });

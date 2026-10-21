@@ -27,6 +27,7 @@ type TaskNode = {
   startDate: Date | null;
   dueDate: Date | null;
   calendarLane: number | null;
+  showInPlanner: boolean | null;
   customFieldValues: string;
   order: number;
   isPrivate: boolean;
@@ -45,7 +46,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
     where: { id },
     select: {
       id: true, title: true, description: true, status: true, priority: true, startDate: true,
-      dueDate: true, calendarLane: true, customFieldValues: true, isPrivate: true, accessJson: true,
+      dueDate: true, calendarLane: true, showInPlanner: true, customFieldValues: true, isPrivate: true, accessJson: true,
       listId: true, parentId: true, order: true, assignees: { select: { id: true } },
     },
   });
@@ -79,6 +80,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
           startDate: node.startDate,
           dueDate: node.dueDate,
           calendarLane: node.calendarLane,
+          showInPlanner: node.showInPlanner,
           customFieldValues: node.customFieldValues,
           // Subtasks keep their place: "Det må ligge i akkurat samme rekkefølge som vi har satt opp,
           // fordi det er et system." The children were read in no particular order and created
@@ -100,7 +102,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
         orderBy: [{ order: 'asc' }, { createdAt: 'asc' }],
         select: {
           id: true, title: true, description: true, status: true, priority: true, startDate: true,
-          dueDate: true, calendarLane: true, customFieldValues: true, isPrivate: true,
+          dueDate: true, calendarLane: true, showInPlanner: true, customFieldValues: true, isPrivate: true,
           accessJson: true, order: true, assignees: { select: { id: true } },
         },
       });

@@ -37,6 +37,7 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
   // "Manage statuses" by anyone who can edit the Space, like its statuses themselves.
   if (body.checkMode === 'close' || body.checkMode === 'menu') data.checkMode = body.checkMode;
   if (body.strikeDone !== undefined) data.strikeDone = body.strikeDone === true;
+  if (body.plannerDefault !== undefined) data.plannerDefault = body.plannerDefault === true;
 
   // Marking something private, or editing who it's shared with, is a stricter, separate
   // Owner/Admin-only gate on top of the plain "can you see this" check above — every other field

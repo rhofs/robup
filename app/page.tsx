@@ -32,6 +32,7 @@ import {
   List as ListIcon,
   Folder as FolderIconLucide,
   Calendar as CalendarIcon,
+  CalendarOff,
   Bell,
   UserPlus,
   Paperclip,
@@ -150,6 +151,8 @@ import DirectMessagesPage from '../components/DirectMessagesPage';
 import ProfilePage from '../components/ProfilePage';
 import NotificationsPanel, { NotificationList, type AppNotification } from '../components/NotificationsPanel';
 import QuickAddTaskRow, { type QuickAddExtras } from '../components/QuickAddTaskRow';
+import { TaskPlannerToggle } from '../components/PlannerToggle';
+import { dateFieldsByList, isTaskInPlanner, parsePlannerMarkerId, plannerDefaults, plannerMarkers } from '../lib/taskDates';
 import CommandPalette from '../components/CommandPalette';
 import TrashPanel from '../components/TrashPanel';
 import OnboardingFlow from '../components/OnboardingFlow';
@@ -1768,6 +1771,8 @@ function PageContent() {
   const [editSpaceTextColor, setEditSpaceTextColor] = useState<string | null>(null);
   const [editSpaceIcon, setEditSpaceIcon] = useState<string | null>(null);
   const [editSpaceCoverUrl, setEditSpaceCoverUrl] = useState('');
+  // "Edit Space" → Planner: whether the Space's tasks show in the Planner by default (lib/taskDates.ts).
+  const [editSpacePlannerDefault, setEditSpacePlannerDefault] = useState(true);
   const [spaceToDelete, setSpaceToDelete] = useState<HierarchySpace | null>(null);
   const [creatingSpace, setCreatingSpace] = useState(false);
   const [trashOpen, setTrashOpen] = useState(false);
@@ -2048,6 +2053,8 @@ function PageContent() {
   const [editListColor, setEditListColor] = useState<string | null>(null);
   const [editListTextColor, setEditListTextColor] = useState<string | null>(null);
   const [editListIcon, setEditListIcon] = useState<string | null>(null);
+  // "Edit List" → Planner: the List's own default, or null for the Space's.
+  const [editListPlannerDefault, setEditListPlannerDefault] = useState<boolean | null>(null);
   const [renameListId, setRenameListId] = useState<string | null>(null);
   const [listToDelete, setListToDelete] = useState<{ list: HierarchyList; spaceId: string } | null>(null);
 
@@ -2124,11 +2131,16 @@ function PageContent() {
   const [fieldNameDraft, setFieldNameDraft] = useState('');
   const [fieldOptionsDraft, setFieldOptionsDraft] = useState<{ id: string; label: string; color: string }[]>([]);
   const [fieldDateKindDraft, setFieldDateKindDraft] = useState<'deadline' | 'event'>('deadline');
+  // Date fields: shown in the Planner / counted in My Assigned Tasks (lib/taskDates.ts).
+  const [fieldInPlannerDraft, setFieldInPlannerDraft] = useState(false);
+  const [fieldInMyTasksDraft, setFieldInMyTasksDraft] = useState(false);
 
   useEffect(() => {
     if (fieldEditTarget) {
       setFieldNameDraft(fieldEditTarget.name);
       setFieldDateKindDraft(fieldEditTarget.dateKind ?? 'deadline');
+      setFieldInPlannerDraft(!!fieldEditTarget.showInPlanner);
+      setFieldInMyTasksDraft(!!fieldEditTarget.showInMyTasks);
       setFieldOptionsDraft(
         (fieldEditTarget.options ?? []).map((o) => ({ id: o.id || crypto.randomUUID(), label: o.label, color: o.color }))
       );
@@ -2164,6 +2176,8 @@ function PageContent() {
         fieldEditTarget.type === 'date' && fieldDateKindDraft !== (fieldEditTarget.dateKind ?? 'deadline')
           ? fieldDateKindDraft
           : undefined,
+      showInPlanner: fieldEditTarget.type === 'date' && fieldInPlannerDraft !== !!fieldEditTarget.showInPlanner ? fieldInPlannerDraft : undefined,
+      showInMyTasks: fieldEditTarget.type === 'date' && fieldInMyTasksDraft !== !!fieldEditTarget.showInMyTasks ? fieldInMyTasksDraft : undefined,
     });
     setFieldEditTarget(null);
   };
@@ -3611,13 +3625,27 @@ function PageContent() {
 
   // Calendar has its own independent multi-select filter (which Spaces/Lists are visible),
   // separate from the Tasks tab's single-selection navigation.
+  // Whether each List's tasks show in the Planner when they have not said (lib/taskDates.ts).
+  const plannerDefaultByList = useMemo(() => plannerDefaults(workspaces), [workspaces]);
+  const plannerDateFieldsByList = useMemo(() => dateFieldsByList(workspaces, 'showInPlanner'), [workspaces]);
   const calendarFilteredTasks = useMemo(
     () =>
       tasks.filter(
-        (task) => task.parentId === null && isArchivedTask(task) === showArchived && calendarVisibleListIds.has(task.listId)
+        (task) =>
+          task.parentId === null &&
+          isArchivedTask(task) === showArchived &&
+          calendarVisibleListIds.has(task.listId) &&
+          // Kept out by its own Planner switch, or by its List's or Space's default.
+          isTaskInPlanner(task, plannerDefaultByList)
       ),
     // eslint-disable-next-line react-hooks/exhaustive-deps -- isArchivedTask reads archivedSpaceListIds, listed
-    [tasks, calendarVisibleListIds, showArchived, archivedSpaceListIds]
+    [tasks, calendarVisibleListIds, showArchived, archivedSpaceListIds, plannerDefaultByList]
+  );
+  // Plus a one-day item for each custom date shown in the Planner ("Edit field" → Show in Planner),
+  // named "Task · Field"; CalendarView moves the field's value when one is dragged.
+  const calendarTasksWithDates = useMemo(
+    () => [...calendarFilteredTasks, ...plannerMarkers(calendarFilteredTasks, plannerDateFieldsByList)],
+    [calendarFilteredTasks, plannerDateFieldsByList]
   );
 
   // The Planner reads across every workspace you are in (tasks and events are membership-wide), so
@@ -3802,6 +3830,7 @@ function PageContent() {
     setSortBy('none');
     void optimisticCreateTask(title, target.listId, target.spaceId, null, extras?.startDate ?? null, extras?.dueDate ?? null, id).then(() => {
       if (extras?.assigneeIds.length) optimisticSetAssignees(id, extras.assigneeIds);
+      if (extras && extras.showInPlanner !== null) useTaskStore.getState().optimisticSetShowInPlanner(id, extras.showInPlanner);
     });
     setMaterializeTaskId(id);
     // New tasks go to the end; make sure the end is on the page, or the card would arrive unseen.
@@ -3820,6 +3849,7 @@ function PageContent() {
     await optimisticCreateTask(t.title, t.listId, t.spaceId, null, t.startDate, t.dueDate, id, t.status);
     if (t.assigneeIds.length) optimisticSetAssignees(id, t.assigneeIds);
     if (t.description) optimisticSetDescription(id, t.description);
+    if (t.showInPlanner !== null) useTaskStore.getState().optimisticSetShowInPlanner(id, t.showInPlanner);
   };
 
   // Multi-select for Lists in the Tasks-tab sidebar — plain click selects just one; Ctrl/Cmd
@@ -3912,6 +3942,7 @@ function PageContent() {
     setEditSpaceTextColor(space.textColor);
     setEditSpaceIcon(space.icon);
     setEditSpaceCoverUrl(space.coverImageUrl ?? '');
+    setEditSpacePlannerDefault(space.plannerDefault ?? true);
     setSpaceMenu(null);
   };
 
@@ -3923,6 +3954,7 @@ function PageContent() {
       textColor: editSpaceTextColor,
       icon: editSpaceIcon,
       coverImageUrl: editSpaceCoverUrl.trim() || null,
+      ...(editSpacePlannerDefault !== (spaceEditTarget.plannerDefault ?? true) ? { plannerDefault: editSpacePlannerDefault } : {}),
     });
     setSpaceEditTarget(null);
   };
@@ -3968,6 +4000,7 @@ function PageContent() {
     setEditListColor(list.color);
     setEditListTextColor(list.textColor);
     setEditListIcon(list.icon);
+    setEditListPlannerDefault(list.plannerDefault ?? null);
     setListMenu(null);
   };
 
@@ -3978,6 +4011,7 @@ function PageContent() {
       color: editListColor,
       textColor: editListTextColor,
       icon: editListIcon,
+      ...(editListPlannerDefault !== (listEditTarget.list.plannerDefault ?? null) ? { plannerDefault: editListPlannerDefault } : {}),
     });
     setListEditTarget(null);
   };
@@ -7879,12 +7913,13 @@ function PageContent() {
             ) : activeView === 'calendar' ? (
               <div className="flex-1 min-h-0">
                 <CalendarView
-                  tasks={calendarFilteredTasks}
+                  tasks={calendarTasksWithDates}
                   events={calendarFilteredEvents}
                   statuses={statuses}
                   workspaces={workspaces}
                   showWeekNumbers={!hideWeekNumbers}
-                  onOpenTask={(id) => setModalTaskStack([id])}
+                  // A custom date's item opens the task it belongs to.
+                  onOpenTask={(id) => setModalTaskStack([parsePlannerMarkerId(id)?.taskId ?? id])}
                   onOpenEvent={(id) => setEventDetailId(id)}
                   onRequestCreateTask={(date, endDate) => {
                     setCreateTaskDefaultDate(date.toISOString());
@@ -8073,6 +8108,7 @@ function PageContent() {
                   // Who and when can be set before the task exists (components/QuickAddTaskRow.tsx).
                   <QuickAddTaskRow
                     listId={quickAddTarget()?.listId ?? null}
+                    gridTemplate={isMobile ? undefined : rowGridTemplate}
                     inputRef={newTaskInputRef}
                     onAdd={(title, extras) => quickAddTask(title, extras) !== null}
                     onCancel={() => setActiveAdd(false)}
@@ -8408,7 +8444,7 @@ function PageContent() {
           <div className="fixed inset-0 z-[60]" onClick={() => setSpaceMenu(null)} onContextMenu={(e) => { e.preventDefault(); setSpaceMenu(null); }} />
           <div className="fixed z-[61] w-48 bg-neutral-900 border border-neutral-800 rounded-xl shadow-2xl py-1" style={contextMenuPosition(spaceMenu.x, spaceMenu.y)} ref={(el) => fitMenuElement(el, spaceMenu.x, spaceMenu.y)}>
             <button onClick={() => startEditSpace(spaceMenu.space)} className="w-full text-left px-3 py-1.5 text-xs text-neutral-300 hover:bg-neutral-800/60 cursor-pointer flex items-center gap-2">
-              <Pencil className="w-3.5 h-3.5" /> Edit appearance
+              <Pencil className="w-3.5 h-3.5" /> Edit Space
             </button>
             {/* Also the way in on a phone, which has no column headers and no status groups. */}
             <button
@@ -8508,7 +8544,7 @@ function PageContent() {
               onClick={() => startEditList(listMenu.list, listMenu.spaceId)}
               className="w-full text-left px-3 py-1.5 text-xs text-neutral-300 hover:bg-neutral-800/60 cursor-pointer flex items-center gap-2"
             >
-              <Pencil className="w-3.5 h-3.5" /> Edit appearance
+              <Pencil className="w-3.5 h-3.5" /> Edit List
             </button>
             <button
               onClick={() => {
@@ -8793,6 +8829,31 @@ function PageContent() {
                   className="w-full bg-neutral-950 border border-neutral-700 rounded-lg px-3 py-2 text-xs text-app-strong focus:outline-none focus:border-blue-500"
                 />
               </div>
+              {/* Not only appearance: whether this Space's tasks go to the Planner unless a List or the task
+                  itself says otherwise — "om denne knappen er by default på eller av" (2026-10-21). */}
+              <div className="pt-3 border-t border-neutral-800">
+                <label className="text-[11px] text-neutral-400 mb-1 block">Planner</label>
+                <div className="flex gap-1 bg-neutral-950 border border-neutral-800 rounded-lg p-1">
+                  {([
+                    { value: true, label: 'Show tasks in the Planner' },
+                    { value: false, label: 'Keep them out' },
+                  ] as const).map((o) => (
+                    <button
+                      key={String(o.value)}
+                      type="button"
+                      onClick={() => setEditSpacePlannerDefault(o.value)}
+                      className={`flex-1 px-2 py-1.5 rounded-md text-[11px] font-medium cursor-pointer transition ${
+                        editSpacePlannerDefault === o.value ? 'bg-neutral-800 text-app-strong' : 'text-neutral-500 hover:text-neutral-300'
+                      }`}
+                    >
+                      {o.label}
+                    </button>
+                  ))}
+                </div>
+                <p className="text-[10px] text-neutral-500 mt-1.5">
+                  The default for tasks with dates here. A List can choose differently, and each task can be switched on or off in its date picker.
+                </p>
+              </div>
               <button onClick={saveSpaceEdit} className="w-full bg-blue-600 hover:bg-blue-500 text-white text-xs py-2 rounded font-medium cursor-pointer">
                 Save
               </button>
@@ -8953,6 +9014,29 @@ function PageContent() {
                 })()}
                 <span className="text-xs text-neutral-300">{editListName || 'Preview'}</span>
               </div>
+              {/* The List's own Planner default, which wins over the Space's (2026-10-21). */}
+              <div className="pt-3 border-t border-neutral-800">
+                <label className="text-[11px] text-neutral-400 mb-1 block">Planner</label>
+                <div className="flex gap-1 bg-neutral-950 border border-neutral-800 rounded-lg p-1">
+                  {([
+                    { value: null, label: `Like the Space (${(workspaces.flatMap((w) => w.spaces).find((sp) => sp.id === listEditTarget.spaceId)?.plannerDefault ?? true) ? 'shown' : 'kept out'})` },
+                    { value: true, label: 'Show' },
+                    { value: false, label: 'Keep out' },
+                  ] as const).map((o) => (
+                    <button
+                      key={String(o.value)}
+                      type="button"
+                      onClick={() => setEditListPlannerDefault(o.value)}
+                      className={`flex-1 px-2 py-1.5 rounded-md text-[11px] font-medium cursor-pointer transition ${
+                        editListPlannerDefault === o.value ? 'bg-neutral-800 text-app-strong' : 'text-neutral-500 hover:text-neutral-300'
+                      }`}
+                    >
+                      {o.label}
+                    </button>
+                  ))}
+                </div>
+                <p className="text-[10px] text-neutral-500 mt-1.5">Whether this List&apos;s tasks show in the Planner. Each task can still be switched in its date picker.</p>
+              </div>
               <button onClick={saveListEdit} className="w-full bg-blue-600 hover:bg-blue-500 text-white text-xs py-2 rounded font-medium cursor-pointer">
                 Save
               </button>
@@ -9074,6 +9158,35 @@ function PageContent() {
                   <button onClick={addFieldOption} className="mt-2 text-[11px] text-blue-400 hover:text-blue-300 cursor-pointer">
                     + New option
                   </button>
+                </div>
+              )}
+
+              {/* Where this date counts besides its column — "Velge om en custom column date skal påvirke
+                  My Assigned Task … og Planner" (2026-10-21). Both off by default. */}
+              {fieldEditTarget.type === 'date' && (
+                <div className="space-y-2">
+                  {([
+                    {
+                      on: fieldInPlannerDraft,
+                      set: setFieldInPlannerDraft,
+                      title: 'Show in the Planner',
+                      hint: 'The date appears in the Planner as its own one-day item, "Task · ' + (fieldNameDraft.trim() || fieldEditTarget.name) + '". Dragging it there moves the date.',
+                    },
+                    {
+                      on: fieldInMyTasksDraft,
+                      set: setFieldInMyTasksDraft,
+                      title: 'Count in My Assigned Tasks',
+                      hint: 'Sorted by due date, a task there goes by whichever of its due date and this date comes next, and shows which one it is.',
+                    },
+                  ] as const).map((o) => (
+                    <label key={o.title} className="flex items-start gap-2.5 cursor-pointer rounded-lg border border-neutral-800 hover:border-neutral-700 px-3 py-2">
+                      <input type="checkbox" checked={o.on} onChange={(e) => o.set(e.target.checked)} className="mt-0.5 accent-blue-500 cursor-pointer" />
+                      <span className="min-w-0">
+                        <span className="block text-xs font-medium text-app-strong">{o.title}</span>
+                        <span className="block text-[10px] text-neutral-500 mt-0.5">{o.hint}</span>
+                      </span>
+                    </label>
+                  ))}
                 </div>
               )}
 
@@ -9428,6 +9541,7 @@ function PageContent() {
                       <div className="flex items-center gap-1 text-xs font-mono min-w-0">
                         <DatePickerPopover
                           value={activeModalTask.startDate}
+                        plannerToggle={activeModalTask.parentId === null ? <TaskPlannerToggle task={activeModalTask} /> : undefined}
                           label="Start"
                           showLabel
                           placeholder="Start date"
@@ -9447,6 +9561,7 @@ function PageContent() {
                         <span className="text-neutral-600 shrink-0">–</span>
                         <DatePickerPopover
                           value={activeModalTask.dueDate}
+                        plannerToggle={activeModalTask.parentId === null ? <TaskPlannerToggle task={activeModalTask} /> : undefined}
                           label="Due"
                           showLabel
                           placeholder="Due date"
@@ -9463,6 +9578,11 @@ function PageContent() {
                           })()}
                           tooltip={dueDateTooltip(activeModalTask.dueDate)}
                         />
+                        {activeModalTask.parentId === null && !isTaskInPlanner(activeModalTask, plannerDefaultByList) && (
+                          <span title="Not shown in the Planner — change it in the date picker" className="text-neutral-500 shrink-0">
+                            <CalendarOff className="w-3.5 h-3.5" />
+                          </span>
+                        )}
                       </div>
                     </div>
                   ) : (
@@ -9470,6 +9590,7 @@ function PageContent() {
                       <CalendarIcon className="w-3.5 h-3.5 text-neutral-500 shrink-0" />
                       <DatePickerPopover
                         value={activeModalTask.startDate}
+                        plannerToggle={activeModalTask.parentId === null ? <TaskPlannerToggle task={activeModalTask} /> : undefined}
                         label="Start"
                         showLabel
                         placeholder="Start date"
@@ -9489,6 +9610,7 @@ function PageContent() {
                       <span className="text-neutral-600">–</span>
                       <DatePickerPopover
                         value={activeModalTask.dueDate}
+                        plannerToggle={activeModalTask.parentId === null ? <TaskPlannerToggle task={activeModalTask} /> : undefined}
                         label="Due"
                         showLabel
                         placeholder="Due date"
@@ -9505,6 +9627,12 @@ function PageContent() {
                         })()}
                         tooltip={dueDateTooltip(activeModalTask.dueDate)}
                       />
+                      {/* Kept out of the Planner — said here, or a dated task missing from it is a puzzle. */}
+                      {activeModalTask.parentId === null && !isTaskInPlanner(activeModalTask, plannerDefaultByList) && (
+                        <span title="Not shown in the Planner — change it in the date picker" className="text-neutral-500">
+                          <CalendarOff className="w-3.5 h-3.5" />
+                        </span>
+                      )}
                     </div>
                   )}
 

@@ -18,6 +18,8 @@ import { pickableMembers, taskAudience, workspaceIdForList } from '../../lib/wor
 import { suggestTaskAssignees } from '../../lib/assigneeSuggestions';
 import AssigneePicker, { AssigneeStack } from '../AssigneePicker';
 import DateSheet from './DateSheet';
+import PlannerToggle from '../PlannerToggle';
+import { plannerDefaults } from '../../lib/taskDates';
 import { PickSheet, Row } from './MobileQuickCreateSheet';
 import { useSheetDrag } from './sheetDrag';
 import SheetLayer from './SheetLayer';
@@ -42,6 +44,8 @@ export type NewTaskInput = {
   startDate: string | null;
   dueDate: string | null;
   assigneeIds: string[];
+  // The Planner switch in the date sheet: null = the List's default (lib/taskDates.ts).
+  showInPlanner: boolean | null;
 };
 
 const FALLBACK_STATUSES: StatusDef[] = [
@@ -97,6 +101,7 @@ export default function TaskCreateSheet({
   const [start, setStart] = useState<string | null>(null);
   const [due, setDue] = useState<string | null>(null);
   const [assigneeIds, setAssigneeIds] = useState<string[]>([]);
+  const [inPlanner, setInPlanner] = useState<boolean | null>(null);
   const [sheet, setSheet] = useState<'list' | 'people' | 'dates' | 'status' | null>(null);
   const titleRef = useRef<HTMLInputElement>(null);
 
@@ -199,6 +204,7 @@ export default function TaskCreateSheet({
       startDate: start,
       dueDate: due,
       assigneeIds,
+      showInPlanner: inPlanner,
     });
     close();
   };
@@ -321,6 +327,11 @@ export default function TaskCreateSheet({
             start={start}
             end={due}
             endName="Due"
+            plannerToggle={(() => {
+              const fallback = listId ? plannerDefaults(workspaces).get(listId) ?? true : true;
+              const on = inPlanner ?? fallback;
+              return <PlannerToggle on={on} followsDefault={inPlanner === null} onToggle={() => setInPlanner(!on === fallback ? null : !on)} />;
+            })()}
             onClose={closeSheet}
             onSave={(s, e) => {
               setStart(s);

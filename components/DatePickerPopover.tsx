@@ -27,6 +27,9 @@ type DatePickerPopoverProps = {
   // was which ("kan vi indikere at det er start date/due date? Men at det fortsatt viser at det ikke er
   // satt?"). Off by default: in a row's column the column header says it.
   showLabel?: boolean;
+  // The Planner switch (components/PlannerToggle.tsx), for a task's own start and due dates: shown
+  // under the calendar, and in the phone's date sheet. Rendered only while the picker is open.
+  plannerToggle?: React.ReactNode;
 };
 
 const WEEKDAY_LABELS = ['Mo', 'Tu', 'We', 'Th', 'Fr', 'Sa', 'Su'];
@@ -71,7 +74,7 @@ const formatShort = (d: Date) => {
 // The text input right next to it still accepts anything (e.g. 14:07), this is just a shortcut.
 const TIME_OPTIONS = Array.from({ length: 96 }, (_, i) => `${pad(Math.floor(i / 4))}:${pad((i % 4) * 15)}`);
 
-export default function DatePickerPopover({ value, onChange, placeholder = 'Not set', align = 'left', badgeColorHex, tooltip, label = 'Date', showLabel = false }: DatePickerPopoverProps) {
+export default function DatePickerPopover({ value, onChange, placeholder = 'Not set', align = 'left', badgeColorHex, tooltip, label = 'Date', showLabel = false, plannerToggle }: DatePickerPopoverProps) {
   const [open, setOpen] = useState(false);
   const isMobile = useIsMobile();
   const [showTimeInput, setShowTimeInput] = useState(false);
@@ -158,6 +161,7 @@ export default function DatePickerPopover({ value, onChange, placeholder = 'Not 
         <AnimatePresence>
           {open && (
             <DateSheet
+              plannerToggle={plannerToggle}
               single={label}
               start={selected ? selected.toISOString() : null}
               end={null}
@@ -276,6 +280,7 @@ export default function DatePickerPopover({ value, onChange, placeholder = 'Not 
           </div>
         </div>
       )}
+      {plannerToggle && <div className="px-3 py-2 border-t border-neutral-800 flex justify-end">{plannerToggle}</div>}
     </FloatingPopover>
   );
 }

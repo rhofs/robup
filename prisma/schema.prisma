@@ -339,6 +339,9 @@ model Space {
   checkMode     String        @default("archive") @map("check_mode")
   // Strike through the title of a task whose status is a done one.
   strikeDone    Boolean       @default(false) @map("strike_done")
+  // Whether this Space's tasks show in the Planner when neither the task nor its List says
+  // otherwise (Task.showInPlanner, List.plannerDefault). "Edit Space" → Planner.
+  plannerDefault Boolean      @default(true) @map("planner_default")
   workspaceId   String        @map("workspace_id")
   workspace     Workspace     @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
   folders       Folder[]
@@ -441,6 +444,9 @@ model List {
   // Stored for the same reason as the other two: a chosen sort is part of "the layout we chose", and
   // it was the one piece still living in nothing but component state, so it reset on every load.
   sortJson String? @map("sort_json")
+  // The Planner default for this List's tasks; null = the Space's (Space.plannerDefault). A List that
+  // says otherwise wins. "Edit List" → Planner.
+  plannerDefault Boolean? @map("planner_default")
   tasks        Task[]
   customFields CustomField[]
   // See Space.isPrivate/accessJson above — same shape, independent at this level.
@@ -506,6 +512,11 @@ model CustomField {
   // Date fields only: what a date that has passed means. Null / "deadline" = red once passed, like
   // Due. "event" = green once passed, like Start — the thing has happened, it is not late.
   dateKind  String?  @map("date_kind")
+  // Date fields only, both off unless switched on in "Edit field". showInPlanner: the date shows in
+  // the Planner as an item of its own, under the task's name and the field's. showInMyTasks: it counts
+  // in My Assigned Tasks, which sorts a task by the next of its dates (lib/taskDates.ts).
+  showInPlanner Boolean @default(false) @map("show_in_planner")
+  showInMyTasks Boolean @default(false) @map("show_in_my_tasks")
   createdAt DateTime @default(now()) @map("created_at")
 }
 
@@ -731,6 +742,10 @@ model Task {
   // per-week-row, so a task spanning multiple weeks renders at the same lane in every row it
   // appears in.
   calendarLane Int? @map("calendar_lane")
+  // Whether the Planner shows this task: the Planner switch in its date picker. Null = not chosen,
+  // and then its List decides (List.plannerDefault), then its Space (Space.plannerDefault). For small
+  // things given a date only so they top My Assigned Tasks, without filling the Planner (2026-10-21).
+  showInPlanner Boolean? @map("show_in_planner")
 
   archived   Boolean   @default(false)
   archivedAt DateTime? @map("archived_at")

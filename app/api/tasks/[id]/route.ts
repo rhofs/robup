@@ -33,6 +33,8 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
   if (body.startDate !== undefined) data.startDate = body.startDate ? new Date(body.startDate) : null;
   if (body.dueDate !== undefined) data.dueDate = body.dueDate ? new Date(body.dueDate) : null;
   if (body.calendarLane !== undefined) data.calendarLane = body.calendarLane;
+  // true / false = chosen for this task; null = follow its List and Space (schema: Task.showInPlanner).
+  if (body.showInPlanner !== undefined) data.showInPlanner = body.showInPlanner === null ? null : body.showInPlanner === true;
   if (body.order !== undefined) data.order = body.order;
   if (body.customFieldValues !== undefined) data.customFieldValues = body.customFieldValues;
   if (body.listId !== undefined) data.listId = body.listId;

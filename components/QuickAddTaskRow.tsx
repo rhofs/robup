@@ -9,8 +9,16 @@ import { useTaskStore } from '../store/useTaskStore';
 import { useSessionStore } from '../store/useSessionStore';
 import { pickableMembers, taskAudience, workspaceIdForList } from '../lib/workspaceMembers';
 import { suggestTaskAssignees } from '../lib/assigneeSuggestions';
+import { plannerDefaults } from '../lib/taskDates';
+import PlannerToggle from './PlannerToggle';
 
-export type QuickAddExtras = { assigneeIds: string[]; startDate: string | null; dueDate: string | null };
+export type QuickAddExtras = {
+  assigneeIds: string[];
+  startDate: string | null;
+  dueDate: string | null;
+  // The Planner switch in the date pickers: null = the List's default (lib/taskDates.ts).
+  showInPlanner: boolean | null;
+};
 
 // The list's "+ Add Task" row on desktop, with who and when settable before the task exists — "når
 // jeg legger inn ny task i ClickUp, så kan man legge til enkelt info, sånn som assign task, eller set
@@ -22,10 +30,16 @@ export type QuickAddExtras = { assigneeIds: string[]; startDate: string | null; 
 // give the next task someone else's choices.
 export default function QuickAddTaskRow({
   listId,
+  gridTemplate,
   inputRef,
   onAdd,
   onCancel,
 }: {
+  // The list's own column grid. The title takes the Name column and everything else starts where the
+  // first column does — "kan vi få så de default starter der første column starter? og at tekstboksen
+  // ikke går så langt" (2026-10-21) — instead of a title box the width of the screen with its buttons
+  // pushed to the far edge.
+  gridTemplate?: string;
   // Where the task will go; decides who can be picked. Null when there is no List to put it in.
   listId: string | null;
   inputRef: React.RefObject<HTMLInputElement | null>;
@@ -42,6 +56,16 @@ export default function QuickAddTaskRow({
   const [startDate, setStartDate] = useState<string | null>(null);
   const [dueDate, setDueDate] = useState<string | null>(null);
   const [peopleOpen, setPeopleOpen] = useState(false);
+  const [inPlanner, setInPlanner] = useState<boolean | null>(null);
+  const plannerFallback = useMemo(() => (listId ? plannerDefaults(workspaces).get(listId) ?? true : true), [workspaces, listId]);
+  const plannerOn = inPlanner ?? plannerFallback;
+  const plannerToggle = (
+    <PlannerToggle
+      on={plannerOn}
+      followsDefault={inPlanner === null}
+      onToggle={() => setInPlanner(!plannerOn === plannerFallback ? null : !plannerOn)}
+    />
+  );
 
   // The people who will be able to open a task in this List — the same rule the phone's card uses.
   const people = useMemo(() => {
@@ -55,32 +79,35 @@ export default function QuickAddTaskRow({
   const save = () => {
     const t = title.trim();
     if (!t) return;
-    if (!onAdd(t, { assigneeIds, startDate, dueDate })) return;
+    if (!onAdd(t, { assigneeIds, startDate, dueDate, showInPlanner: inPlanner })) return;
     setTitle('');
     setAssigneeIds([]);
     setStartDate(null);
     setDueDate(null);
+    setInPlanner(null);
     inputRef.current?.focus();
   };
 
-  return (
-    <div className="p-2.5 bg-neutral-950/40 flex gap-2 items-center">
-      <input
-        type="text"
-        ref={inputRef}
-        placeholder="Type a title and press Enter..."
-        value={title}
-        onChange={(e) => setTitle(e.target.value)}
-        onKeyDown={(e) => {
-          if (e.key === 'Enter') save();
-          if (e.key === 'Escape') onCancel();
-        }}
-        className="flex-1 min-w-0 bg-neutral-900 border border-blue-500/80 rounded px-3 py-1 text-xs text-app-strong focus:outline-none"
-      />
+  const input = (
+    <input
+      type="text"
+      ref={inputRef}
+      placeholder="Type a title and press Enter..."
+      value={title}
+      onChange={(e) => setTitle(e.target.value)}
+      onKeyDown={(e) => {
+        if (e.key === 'Enter') save();
+        if (e.key === 'Escape') onCancel();
+      }}
+      className="w-full min-w-0 bg-neutral-900 border border-blue-500/80 rounded px-3 py-1 text-xs text-app-strong focus:outline-none"
+    />
+  );
+  const controls = (
+    <>
       <FloatingPopover
         open={peopleOpen}
         onClose={() => setPeopleOpen(false)}
-        align="right"
+        align="left"
         panelClassName="w-64 bg-neutral-900 border border-neutral-800 rounded-xl shadow-2xl overflow-hidden"
         anchor={
           <button
@@ -104,8 +131,8 @@ export default function QuickAddTaskRow({
           currentUserId={currentUserId}
         />
       </FloatingPopover>
-      <DatePickerPopover value={startDate} onChange={setStartDate} placeholder="Start" label="Start" showLabel align="right" />
-      <DatePickerPopover value={dueDate} onChange={setDueDate} placeholder="Due" label="Due" showLabel align="right" />
+      <DatePickerPopover value={startDate} onChange={setStartDate} placeholder="Start" label="Start" showLabel plannerToggle={plannerToggle} />
+      <DatePickerPopover value={dueDate} onChange={setDueDate} placeholder="Due" label="Due" showLabel plannerToggle={plannerToggle} />
       <button onClick={onCancel} className="text-neutral-400 hover:text-neutral-200 text-xs px-2 cursor-pointer">
         Cancel
       </button>
@@ -116,6 +143,24 @@ export default function QuickAddTaskRow({
       >
         Save <CornerDownLeft className="w-3 h-3" />
       </button>
+    </>
+  );
+
+  if (gridTemplate) {
+    return (
+      <div className="grid items-center px-4 py-2 bg-neutral-950/40" style={{ gridTemplateColumns: gridTemplate }}>
+        <div />
+        <div className="min-w-0 pr-3">{input}</div>
+        <div className="flex items-center gap-2 min-w-max" style={{ gridColumn: '3 / -1' }}>
+          {controls}
+        </div>
+      </div>
+    );
+  }
+  return (
+    <div className="p-2.5 bg-neutral-950/40 flex gap-2 items-center">
+      <div className="flex-1 min-w-0">{input}</div>
+      {controls}
     </div>
   );
 }

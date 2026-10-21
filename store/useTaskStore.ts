@@ -34,6 +34,10 @@ export type CustomFieldDef = {
   listId: string | null;
   // Date fields only — see customDateColor in lib/dateBadgeColor.ts. Null reads as 'deadline'.
   dateKind?: 'deadline' | 'event' | null;
+  // Date fields only: shown in the Planner / counted in My Assigned Tasks (lib/taskDates.ts).
+  // Optional for older payloads; missing reads as off.
+  showInPlanner?: boolean;
+  showInMyTasks?: boolean;
 };
 
 export type AppUser = {
@@ -202,6 +206,9 @@ export type HierarchyList = {
   // The List's own statuses ("Use custom statuses"); empty or absent = it uses its Space's. Read
   // through lib/listStatuses.ts, not directly, so every place agrees which set a task is in.
   statuses?: StatusDef[];
+  // Whether this List's tasks show in the Planner by default; null/absent = the Space's
+  // (lib/taskDates.ts).
+  plannerDefault?: boolean | null;
 };
 
 export type HierarchySpace = {
@@ -222,6 +229,8 @@ export type HierarchySpace = {
   // strikeDone: whether done tasks are struck through. Optional for older payloads.
   checkMode?: 'close' | 'menu' | string;
   strikeDone?: boolean;
+  // Whether this Space's tasks show in the Planner by default (lib/taskDates.ts). Absent reads as on.
+  plannerDefault?: boolean;
   customFields: CustomFieldDef[];
   folders: HierarchyFolder[];
   lists: HierarchyList[];
@@ -423,6 +432,8 @@ interface TaskStore {
   optimisticDeleteTask: (taskId: string) => Promise<void>;
   optimisticArchiveTask: (taskId: string, archived: boolean) => void;
   optimisticSetAssignees: (taskId: string, userIds: string[]) => void;
+  // The Planner switch: true/false for this task, null to follow its List and Space (lib/taskDates.ts).
+  optimisticSetShowInPlanner: (taskId: string, value: boolean | null) => void;
   optimisticSetCustomFieldValue: (taskId: string, fieldId: string, value: string) => void;
   optimisticSetDates: (taskId: string, startDate: string | null, dueDate: string | null) => void;
   optimisticSetCalendarLane: (taskId: string, lane: number | null) => void;
@@ -464,7 +475,7 @@ interface TaskStore {
   updateCustomField: (
     spaceId: string,
     fieldId: string,
-    patch: { name?: string; options?: { id?: string; label: string; color: string }[]; dateKind?: 'deadline' | 'event' }
+    patch: { name?: string; options?: { id?: string; label: string; color: string }[]; dateKind?: 'deadline' | 'event'; showInPlanner?: boolean; showInMyTasks?: boolean }
   ) => Promise<void>;
   deleteCustomField: (spaceId: string, fieldId: string) => Promise<void>;
 
@@ -584,6 +595,7 @@ interface TaskStore {
       accessJson?: string;
       checkMode?: 'close' | 'menu';
       strikeDone?: boolean;
+      plannerDefault?: boolean;
     }
   ) => Promise<void>;
   reorderSpace: (spaceId: string, order: number) => Promise<void>;
@@ -595,7 +607,7 @@ interface TaskStore {
   updateList: (
     spaceId: string,
     listId: string,
-    patch: { name?: string; color?: string | null; textColor?: string | null; icon?: string | null; isPrivate?: boolean; accessJson?: string }
+    patch: { name?: string; color?: string | null; textColor?: string | null; icon?: string | null; isPrivate?: boolean; accessJson?: string; plannerDefault?: boolean | null }
   ) => Promise<void>;
   // Which columns a List's board shows. Its own action rather than a field on updateList, because
   // it must NOT go on the undo stack: every other list edit is a change to the thing itself, and
@@ -1563,6 +1575,22 @@ export const useTaskStore = create<TaskStore>((set, get) => {
       }
     },
 
+    optimisticSetShowInPlanner: (taskId, value) => {
+      const old = get().tasks.find((t) => t.id === taskId)?.showInPlanner ?? null;
+      if (old === value) return;
+      set((state) => ({ tasks: state.tasks.map((t) => (t.id === taskId ? { ...t, showInPlanner: value } : t)) }));
+      fetch(`/api/tasks/${taskId}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ showInPlanner: value }),
+      }).catch(() => {});
+      useHistoryStore.getState().push({
+        label: value === false ? 'Hide from Planner' : 'Show in Planner',
+        undo: () => get().optimisticSetShowInPlanner(taskId, old),
+        redo: () => get().optimisticSetShowInPlanner(taskId, value),
+      });
+    },
+
     mirrorDescription: (taskId, description) => {
       const task = get().tasks.find((t) => t.id === taskId);
       if (!task || (task.description ?? null) === description) return;
@@ -1807,6 +1835,8 @@ export const useTaskStore = create<TaskStore>((set, get) => {
         if (patch.name !== undefined) oldPatch.name = oldField.name;
         if (patch.options !== undefined) oldPatch.options = oldField.options;
         if (patch.dateKind !== undefined) oldPatch.dateKind = oldField.dateKind ?? 'deadline';
+        if (patch.showInPlanner !== undefined) oldPatch.showInPlanner = !!oldField.showInPlanner;
+        if (patch.showInMyTasks !== undefined) oldPatch.showInMyTasks = !!oldField.showInMyTasks;
         useHistoryStore.getState().push({
           label: 'Update field',
           undo: () => get().updateCustomField(spaceId, fieldId, oldPatch),
@@ -2363,6 +2393,7 @@ export const useTaskStore = create<TaskStore>((set, get) => {
         if (patch.accessJson !== undefined) oldPatch.accessJson = oldSpace.accessJson;
         if (patch.checkMode !== undefined) oldPatch.checkMode = oldSpace.checkMode === 'close' ? 'close' : 'menu';
         if (patch.strikeDone !== undefined) oldPatch.strikeDone = !!oldSpace.strikeDone;
+        if (patch.plannerDefault !== undefined) oldPatch.plannerDefault = oldSpace.plannerDefault ?? true;
         useHistoryStore.getState().push({
           label: 'Update space',
           undo: () => get().updateSpace(spaceId, oldPatch),
@@ -2509,6 +2540,7 @@ export const useTaskStore = create<TaskStore>((set, get) => {
         if (patch.icon !== undefined) oldPatch.icon = oldList.icon;
         if (patch.isPrivate !== undefined) oldPatch.isPrivate = oldList.isPrivate;
         if (patch.accessJson !== undefined) oldPatch.accessJson = oldList.accessJson;
+        if (patch.plannerDefault !== undefined) oldPatch.plannerDefault = oldList.plannerDefault ?? null;
         useHistoryStore.getState().push({
           label: 'Update list',
           undo: () => get().updateList(spaceId, listId, oldPatch),

@@ -14,6 +14,8 @@ import {
   startOfWeek,
   WEEKDAY_LABELS_SHORT,
 } from '../../lib/calendarDates';
+import { customDateValue, parsePlannerMarkerId } from '../../lib/taskDates';
+import { shiftDateText } from '../../lib/taskSeries';
 import { assignLanes, clipRangeToWeek, type ClippedSegment, type DragMode, type DragState, type TaskRange } from '../../lib/ganttLayout';
 import { useTaskStore, StatusDef, Task, Event, HierarchyWorkspace } from '../../store/useTaskStore';
 import { useIsMobile } from '../../hooks/useIsMobile';
@@ -74,6 +76,7 @@ export default function CalendarView({ tasks, events, statuses, workspaces, show
   const {
     optimisticSetDates,
     optimisticSetCalendarLane,
+    optimisticSetCustomFieldValue,
     updateEvent,
     refetchEvents,
     calendarGranularity: granularity,
@@ -446,7 +449,30 @@ export default function CalendarView({ tasks, events, statuses, workspaces, show
     });
   };
 
+  const fieldValuesOf = (task: Task | undefined): Record<string, unknown> => {
+    try {
+      return JSON.parse(task?.customFieldValues || '{}');
+    } catch {
+      return {};
+    }
+  };
+  // Moves a task's custom date by whole days, in the stored form it already has (a plain date stays a
+  // plain date) and in calendar days in this person's time zone (lib/taskSeries.ts).
+  const moveCustomDate = (taskId: string, fieldId: string, days: number) => {
+    const old = fieldValuesOf(tasksById.get(taskId))[fieldId];
+    if (typeof old !== 'string' || !old) return;
+    optimisticSetCustomFieldValue(taskId, fieldId, shiftDateText(old, days, Intl.DateTimeFormat().resolvedOptions().timeZone));
+  };
+
   const handleDragEnd = (id: string, mode: DragMode) => {
+    // A custom date's own item (lib/taskDates.ts plannerMarkers): moving it moves that one date. It is
+    // a single day, so only a move means anything, and it has no lane of its own to pin.
+    const marker = parsePlannerMarkerId(id);
+    if (marker) {
+      if (weekDrag && mode === 'move' && weekDrag.deltaDays !== 0) moveCustomDate(marker.taskId, marker.fieldId, weekDrag.deltaDays);
+      setWeekDrag(null);
+      return;
+    }
     const task = tasksById.get(id);
     if (!task) {
       handleEventDragEnd(id, mode);
@@ -717,7 +743,20 @@ export default function CalendarView({ tasks, events, statuses, workspaces, show
             tasks={dayTasks}
             taskColorOf={taskColorOf}
             onOpenTask={onOpenTask}
-            onCommitTaskDates={(taskId, startISO, dueISO) => optimisticSetDates(taskId, startISO, dueISO)}
+            onCommitTaskDates={(taskId, startISO, dueISO) => {
+              const marker = parsePlannerMarkerId(taskId);
+              if (!marker) {
+                optimisticSetDates(taskId, startISO, dueISO);
+                return;
+              }
+              // A custom date dragged in the day view: the day it now starts on.
+              const owner = tasksById.get(marker.taskId);
+              const old = customDateValue(fieldValuesOf(owner)[marker.fieldId]);
+              const next = startISO ? new Date(startISO) : null;
+              if (!old || !next) return;
+              const days = Math.round((startOfDay(next).getTime() - startOfDay(old).getTime()) / 86_400_000);
+              if (days !== 0) moveCustomDate(marker.taskId, marker.fieldId, days);
+            }}
             events={dayEvents}
             eventColorOf={eventColorOf}
             onOpenEvent={onOpenEvent}

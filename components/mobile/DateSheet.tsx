@@ -66,6 +66,7 @@ export default function DateSheet({
   keepKeyboard = false,
   dialog = false,
   initialTimeFor,
+  plannerToggle,
 }: {
   // Opened over a field that keeps its keyboard (the new-task card): the sheet sits on the visible
   // area above the keyboard, like the Assignees picker, and nothing in it takes the focus away — so the
@@ -85,6 +86,8 @@ export default function DateSheet({
   dialog?: boolean;
   // Open straight on a field's clock face (desktop's "Add time" under the dates).
   initialTimeFor?: 'start' | 'end';
+  // The Planner switch (components/PlannerToggle.tsx), for a task's dates — top left of the sheet.
+  plannerToggle?: React.ReactNode;
 }) {
   const drag = useSheetDrag(onClose);
   const visible = useVisibleViewport();
@@ -188,6 +191,7 @@ export default function DateSheet({
     <>
         <div {...(dialog ? {} : drag.handleProps)} className="relative flex items-center justify-center px-5 pt-5 pb-3 shrink-0">
           {!dialog && <span className="absolute top-2 left-1/2 -translate-x-1/2 w-10 h-1 rounded-full bg-neutral-700" />}
+          {plannerToggle && <div className="absolute left-4">{plannerToggle}</div>}
           <h3 className="text-[17px] font-semibold text-app-strong">{single ? 'Choose date' : 'Choose dates'}</h3>
           <button onClick={onClose} className="absolute right-4 w-9 h-9 rounded-full bg-neutral-800 flex items-center justify-center text-neutral-400 cursor-pointer">
             <X className="w-4 h-4" />

@@ -22,6 +22,7 @@ type Node = {
   startDate: Date | null;
   dueDate: Date | null;
   calendarLane: number | null;
+  showInPlanner: boolean | null;
   customFieldValues: string;
   order: number;
   isPrivate: boolean;
@@ -31,7 +32,7 @@ type Node = {
 
 const NODE_SELECT = {
   id: true, title: true, description: true, status: true, priority: true, startDate: true, dueDate: true,
-  calendarLane: true, customFieldValues: true, order: true, isPrivate: true, accessJson: true,
+  calendarLane: true, showInPlanner: true, customFieldValues: true, order: true, isPrivate: true, accessJson: true,
   assignees: { select: { id: true } },
 } as const;
 
@@ -73,6 +74,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
           startDate: node.startDate ? shiftInstant(node.startDate, days, timeZone) : null,
           dueDate: node.dueDate ? shiftInstant(node.dueDate, days, timeZone) : null,
           calendarLane: node.calendarLane,
+          showInPlanner: node.showInPlanner,
           customFieldValues: shiftCustomDates(node.customFieldValues, dateFieldIds, days, timeZone),
           order: node.order,
           isPrivate: node.isPrivate,

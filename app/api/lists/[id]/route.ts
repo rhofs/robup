@@ -53,6 +53,8 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
   if (body.visibleColumnsJson !== undefined) data.visibleColumnsJson = body.visibleColumnsJson;
   if (body.columnWidthsJson !== undefined) data.columnWidthsJson = body.columnWidthsJson;
   if (body.sortJson !== undefined) data.sortJson = body.sortJson;
+  // null = the Space's default (schema: List.plannerDefault).
+  if (body.plannerDefault !== undefined) data.plannerDefault = body.plannerDefault === null ? null : body.plannerDefault === true;
   if (body.spaceId !== undefined) data.spaceId = body.spaceId;
   // A List that moves Space takes its own statuses along (Status.spaceId follows); without this they
   // would still hang off the old Space and go when it is deleted.

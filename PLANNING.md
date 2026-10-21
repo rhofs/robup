@@ -13098,3 +13098,61 @@ calendar to start once the keyboard is fully down, "bittelitt tregere".
 
 
 **Deployed 2026-10-21 as `44490c6`** (tag `deploy/2026-10-21_0808`). Web-only.
+
+### 2026-10-21 (continued) — the add row aligned to the columns; Planner visibility per task/List/Space; date fields in the Planner and My Assigned
+
+- **User:**
+  1. The add row's buttons sat at the far right of a wide screen; start them where the first
+     column starts, and don't stretch the text box.
+  2. **[Feature]** in Edit Field, choose whether a custom date column affects My Assigned Task
+     ("om den kommer opp der") and the Planner.
+  3. A toggle (Planner icon) in the date picker when setting start/due, for whether the task shows
+     in the Planner.
+  4. In Edit Space and Edit List (not only appearance), whether that toggle is on or off by
+     default; the List's choice wins over the Space's.
+- **Schema** (migration `20261021090000_planner_visibility`, hand-written ADD COLUMNs, verified with
+  `migrate diff`; Prisma wanted to rebuild Space and CustomField):
+  - `Task.showInPlanner Boolean?` (null = follow the defaults);
+  - `List.plannerDefault Boolean?` (null = the Space's);
+  - `Space.plannerDefault Boolean @default(true)`;
+  - `CustomField.showInPlanner` / `showInMyTasks Boolean @default(false)`.
+  - Nothing changes until someone switches something.
+- **`lib/taskDates.ts`** holds the rules:
+  - `plannerDefaults` (listId → List ?? Space ?? true) and `isTaskInPlanner`.
+  - `dateFieldsByList(flag)`: the Space's fields plus that List's own.
+  - `plannerMarkers`: one synthetic one-day task per custom date with `showInPlanner`, id
+    `taskId::fieldId`, title "Task · Field", calendarLane null.
+  - `myTasksDate`: the next upcoming date among the due date and fields with `showInMyTasks`. If
+    all have passed, the latest. Due-only tasks are unchanged.
+- **Planner:**
+  - `page.tsx` filters `calendarFilteredTasks` with `isTaskInPlanner` and passes
+    `calendarTasksWithDates` (tasks + markers). `onOpenTask` maps a marker to its task.
+  - In `CalendarView`, dragging a marker (move only, week view or day view) moves that field's
+    value by whole calendar days (`shiftDateText`, the stored form is kept) and never pins a lane.
+- **The switch:**
+  - `components/PlannerToggle.tsx`: "In Planner" / "Not in Planner". `TaskPlannerToggle` writes
+    null when the choice equals the default, so the task keeps following its List and Space.
+  - It is shown in `DatePickerPopover` (new `plannerToggle` slot, under the calendar) and in the
+    phone's `DateSheet` (top left of the header).
+  - Wired into: the task window's start/due (desktop and phone), list rows' start/due, the
+    desktop add row, and the phone's new-task card (`NewTaskInput.showInPlanner`).
+  - Only for top-level tasks: subtasks never appear in the Planner.
+  - The task window shows a CalendarOff icon next to the dates when the task is kept out.
+  - Store: `optimisticSetShowInPlanner` (with undo).
+- **Edit Space / Edit List:**
+  - Each has a "Planner" section. Space: Show / Keep out. List: "Like the Space (shown/kept out)",
+    Show, or Keep out.
+  - The context menu items are renamed "Edit Space" / "Edit List" (they were "Edit appearance").
+- **Edit field (date fields):** checkboxes "Show in the Planner" and "Count in My Assigned Tasks".
+- **Add row:** `QuickAddTaskRow` takes the list's `rowGridTemplate`. The title sits in the Name
+  column, and the people/Start/Due/Cancel/Save start at the first column.
+- **Duplicate, list duplicate and "Create next…"** copy `showInPlanner`.
+- **Tested** (tsx, TZ=Europe/Oslo):
+  - defaults (List over Space);
+  - the field lists;
+  - markers at local midnight;
+  - next date: an upcoming field date before the due date, after it has passed, all passed, due
+    only, none.
+  - `next build` passes.
+- **Not tested:** in a browser or on a phone, and dragging a marker.
+
