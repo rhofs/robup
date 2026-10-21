@@ -9176,7 +9176,7 @@ function PageContent() {
                       on: fieldInMyTasksDraft,
                       set: setFieldInMyTasksDraft,
                       title: 'Count in My Assigned Tasks',
-                      hint: 'Sorted by due date, a task there goes by whichever of its due date and this date comes next, and shows which one it is.',
+                      hint: 'In the "All dates" order, a task there goes by whichever of its start date, due date and this date comes next, and shows which one it is.',
                     },
                   ] as const).map((o) => (
                     <label key={o.title} className="flex items-start gap-2.5 cursor-pointer rounded-lg border border-neutral-800 hover:border-neutral-700 px-3 py-2">

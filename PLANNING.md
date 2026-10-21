@@ -13158,3 +13158,26 @@ calendar to start once the keyboard is fully down, "bittelitt tregere".
 
 
 **Deployed 2026-10-21 as `71f1dc2`** (tag `deploy/2026-10-21_0843`). Pterodactyl backup `before-2026-10-21-planner-visibility` (622ca563, 747 MB) was taken first; the migration ran on start.
+
+### 2026-10-21 (continued) — My Assigned Tasks: an "All dates" order, the default
+
+- **User:** "et valg (som er default) - som sorterer ALLE date columns (som er huket av for det i
+  Field settingen), inkludert start og due date, så viser den den tidligere øverst".
+- **Built:**
+  - My Assigned Tasks has a new order, **All dates**, which is the default.
+  - A task goes by `myTasksDate` (lib/taskDates.ts): the next date coming among its **start**, due
+    and the date fields with "Count in My Assigned Tasks". If all of them have passed, it takes
+    the latest, so late tasks sort above everything still to come. The row shows which date it is
+    ("Start · 22. okt", "Due · …", "Klipp · …").
+  - Start counts as an event kind (never red), and the due date as a deadline.
+- **Decided:** the *next* date rather than simply the earliest. A task that started last month and
+  is due next week would otherwise sit at the top for good. Explained to the user; easy to change
+  if they meant the earliest.
+- **Changes to the existing orders:**
+  - "Due date" and "Start date" are those dates alone again. Since the previous entry (earlier the
+    same day), Due had included the checked fields.
+  - The sort is now stored under `siqt.myTasksSort.v2`, so everyone starts once on the new
+    default. An earlier choice of another order is forgotten.
+- Edit field's hint was updated. Tested with tsx (start tomorrow, started earlier, a field before
+  the due date, all passed, start only). Not seen in a browser.
+

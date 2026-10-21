@@ -37,14 +37,17 @@ type MyTasksPageProps = {
   onOpenTask: (taskId: string) => void;
 };
 
-type SortKey = 'due' | 'start' | 'assigned' | 'created';
+type SortKey = 'all' | 'due' | 'start' | 'assigned' | 'created';
 const SORTS: { key: SortKey; label: string }[] = [
+  { key: 'all', label: 'All dates' },
   { key: 'due', label: 'Due date' },
   { key: 'start', label: 'Start date' },
   { key: 'assigned', label: 'Recently assigned' },
   { key: 'created', label: 'Newest' },
 ];
-const SORT_KEY = 'siqt.myTasksSort';
+// A new key with "All dates" (2026-10-21): it is meant to be where everyone starts, and the old key
+// held "Due date" for anyone who had ever picked an order.
+const SORT_KEY = 'siqt.myTasksSort.v2';
 const SHOW_DONE_KEY = 'siqt.myTasksShowDone';
 
 const readLocal = (key: string) => {
@@ -83,7 +86,10 @@ export default function MyTasksPage({ currentUser, workspaces: allWorkspaces, de
   const [pickedWorkspaceId, setPickedWorkspaceId] = useState<string | null>(null);
   const currentWorkspace =
     allWorkspaces.find((w) => w.id === (pickedWorkspaceId ?? defaultWorkspaceId)) ?? allWorkspaces.find((w) => !w.isPersonal) ?? allWorkspaces[0];
-  const [sort, setSort] = useState<SortKey>(() => (readLocal(SORT_KEY) as SortKey) || 'due');
+  const [sort, setSort] = useState<SortKey>(() => {
+    const stored = readLocal(SORT_KEY) as SortKey | null;
+    return stored && SORTS.some((s) => s.key === stored) ? stored : 'all';
+  });
   const [showDone, setShowDone] = useState(() => readLocal(SHOW_DONE_KEY) === '1');
   const [assignedAt, setAssignedAt] = useState<Record<string, string>>({});
   // Cards whose other subtasks are folded out.
@@ -128,8 +134,9 @@ export default function MyTasksPage({ currentUser, workspaces: allWorkspaces, de
     return map;
   }, [currentWorkspace, workspaces, fallbackStatuses]);
 
-  // Date fields switched on for My Assigned Tasks ("Edit field"), per List: with "Due date" order a task
-  // goes by the next of its due date and these (lib/taskDates.ts myTasksDate), and shows which it is.
+  // Date fields switched on for My Assigned Tasks ("Edit field"), per List: with the "All dates" order a
+  // task goes by the next of its start, due and these dates (lib/taskDates.ts myTasksDate), and shows
+  // which it is. "Due date" and "Start date" are those dates alone.
   const myDateFields = useMemo(() => dateFieldsByList(workspaces, 'showInMyTasks'), [workspaces]);
 
   const taskById = useMemo(() => new Map(tasks.map((t) => [t.id, t])), [tasks]);
@@ -173,8 +180,10 @@ export default function MyTasksPage({ currentUser, workspaces: allWorkspaces, de
   };
 
   const sortKeyOf = (t: Task) =>
-    sort === 'due'
+    sort === 'all'
       ? time(myTasksDate(t, myDateFields.get(t.listId))?.date)
+      : sort === 'due'
+      ? time(t.dueDate)
       : sort === 'start'
         ? time(t.startDate)
         : sort === 'assigned'
@@ -230,6 +239,11 @@ export default function MyTasksPage({ currentUser, workspaces: allWorkspaces, de
   const dateOf = (t: Task) => {
     if (sort === 'start') {
       return t.startDate ? <span className="text-[11px] shrink-0 text-neutral-500">{shortDate(t.startDate)}</span> : null;
+    }
+    if (sort !== 'all') {
+      if (!t.dueDate) return null;
+      const late = !isFinished(t) && dueDateColor(t.dueDate) === 'red';
+      return <span className={`text-[11px] shrink-0 ${late ? 'text-red-400' : 'text-neutral-500'}`}>{shortDate(t.dueDate)}</span>;
     }
     const next = myTasksDate(t, myDateFields.get(t.listId));
     if (!next) return null;

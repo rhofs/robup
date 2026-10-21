@@ -80,16 +80,30 @@ export function plannerMarkers(tasks: Task[], fieldsByList: Map<string, CustomFi
   return out;
 }
 
-// The date My Assigned Tasks sorts a task by and shows: the next one coming among its due date and the
-// date fields counted there — or, when all of them have passed, the latest. A task with only a due
-// date gets exactly that, as before.
-export type MyTasksDate = { date: Date; label: string | null; kind: 'deadline' | 'event' };
-export function myTasksDate(task: Pick<Task, 'dueDate' | 'customFieldValues'>, fields: CustomFieldDef[] | undefined, now = new Date()): MyTasksDate | null {
+// The date My Assigned Tasks' "All dates" order sorts a task by and shows — "sorterer ALLE date
+// columns (som er huket av for det i Field settingen), inkludert start og due date, så viser den den
+// tidligere øverst" (2026-10-21): the next one coming among its start date, due date and the date
+// fields counted there ("Edit field" → Count in My Assigned Tasks); or, when all of them have passed,
+// the latest — so a task that is late sorts above everything still to come. Labelled with which date
+// it is.
+//
+// The next one, not simply the earliest: a task that started last month and is due next week would
+// otherwise sit at the top for good, on a date nothing happens on any more.
+export type MyTasksDate = { date: Date; label: string; kind: 'deadline' | 'event' };
+export function myTasksDate(
+  task: Pick<Task, 'startDate' | 'dueDate' | 'customFieldValues'>,
+  fields: CustomFieldDef[] | undefined,
+  now = new Date()
+): MyTasksDate | null {
   const candidates: MyTasksDate[] = [];
-  if (task.dueDate) {
-    const d = new Date(task.dueDate as unknown as string);
-    if (!isNaN(d.getTime())) candidates.push({ date: d, label: null, kind: 'deadline' });
-  }
+  const add = (value: unknown, label: string, kind: MyTasksDate['kind']) => {
+    if (!value) return;
+    const d = new Date(value as string);
+    if (!isNaN(d.getTime())) candidates.push({ date: d, label, kind });
+  };
+  // A start date that has passed means the work has begun, not that it is late.
+  add(task.startDate, 'Start', 'event');
+  add(task.dueDate, 'Due', 'deadline');
   if (fields?.length) {
     const values = fieldValues(task);
     for (const f of fields) {
