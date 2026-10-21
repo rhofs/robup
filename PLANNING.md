@@ -12998,3 +12998,20 @@ calendar to start once the keyboard is fully down, "bittelitt tregere".
 
 
 **Deployed 2026-10-20 as `65fe7a5`** (tag `deploy/2026-10-20_1654`), with APK 2.1 at siqt.no/siqt.apk. No schema change, so no backup was taken.
+
+### 2026-10-21 — question: a notification badge on desktop like on the phone? (answered, nothing built)
+
+- **Answer given:**
+  - **Inside the app, yes.** The desktop icon rail shows the same red counts:
+    - Chat = unread DMs + the active workspace's channels;
+    - pending connection requests;
+    - pending workspace invites on the switcher.
+  - **Outside the app, no.** On the phone, the badge on the app icon comes from Android itself (the
+    push notifications in the tray). On desktop nothing shows once Siqt is in a background tab or
+    minimised: no count in the tab title, no dot on the favicon, and no badge on the icon of an
+    installed desktop app (`navigator.setAppBadge` is not used anywhere).
+- **Offered, not built:** "(3) Siqt" in the tab title plus a red dot on the favicon (works in every
+  browser), and `navigator.setAppBadge(n)` / `clearAppBadge()` for Siqt installed as an app
+  (Chrome/Edge on Windows/Mac, Safari dock apps on macOS).
+  - Open question for the user: should the number be DMs + every workspace's channels, or only the
+    active workspace's, which is what the rail counts today?
