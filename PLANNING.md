@@ -13061,3 +13061,5 @@ calendar to start once the keyboard is fully down, "bittelitt tregere".
   - Clicking a chat mention only marks it read; it has no taskId to open.
 - Not seen in a browser.
 
+
+**Deployed 2026-10-21 as `d264dbf`** (tag `deploy/2026-10-21_0801`). Web-only.
