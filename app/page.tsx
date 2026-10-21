@@ -148,7 +148,7 @@ import ChatSidebar from '../components/ChatSidebar';
 import MyTasksPage from '../components/MyTasksPage';
 import DirectMessagesPage from '../components/DirectMessagesPage';
 import ProfilePage from '../components/ProfilePage';
-import NotificationsPanel, { type AppNotification } from '../components/NotificationsPanel';
+import NotificationsPanel, { NotificationList, type AppNotification } from '../components/NotificationsPanel';
 import CommandPalette from '../components/CommandPalette';
 import TrashPanel from '../components/TrashPanel';
 import OnboardingFlow from '../components/OnboardingFlow';
@@ -6121,7 +6121,49 @@ function PageContent() {
             </button>
           </div>
         )}
-        <div className="hidden md:block w-64 shrink-0" aria-hidden />
+        {/* The bell on desktop — "jeg snakker om den Notifications knappen, så man kan se hva som har
+            skjedd/tildelt etc. Som mobil har" (2026-10-21). Only the phone's header had one, so on a
+            computer the notifications were fetched and counted but could not be seen. Here it opens
+            as a dropdown under the bell rather than the phone's sheet. The box keeps the width of the
+            spacer it replaces, which balances the workspace switcher and keeps the search centred. */}
+        <div className="hidden md:flex w-64 shrink-0 items-center justify-end">
+          {!isMobile && (
+            <FloatingPopover
+              open={notificationsOpen}
+              onClose={() => setNotificationsOpen(false)}
+              align="right"
+              panelClassName="w-[380px] bg-neutral-900 border border-neutral-800 rounded-2xl shadow-2xl overflow-hidden flex flex-col"
+              anchor={
+                <button
+                  onClick={() => {
+                    if (!notificationsOpen) void fetchNotifications();
+                    setNotificationsOpen((o) => !o);
+                  }}
+                  title="Notifications"
+                  className={`relative w-8 h-8 rounded-full flex items-center justify-center cursor-pointer transition ${
+                    notificationsOpen ? 'bg-neutral-800 text-app-strong' : 'text-neutral-400 hover:text-app-strong hover:bg-neutral-800/60'
+                  }`}
+                >
+                  <Bell className="w-4 h-4" />
+                  {notificationUnread > 0 && (
+                    <span className="absolute -top-0.5 -right-0.5 min-w-[15px] h-[15px] px-1 rounded-full bg-red-500 text-white text-[8px] font-bold flex items-center justify-center leading-none">
+                      {notificationUnread > 99 ? '99+' : notificationUnread}
+                    </span>
+                  )}
+                </button>
+              }
+            >
+              <NotificationList
+                notifications={notifications}
+                onOpenTask={(taskId) => setModalTaskStack([taskId])}
+                onMarkAllRead={() => void markNotificationsRead()}
+                onMarkRead={(id) => void markNotificationsRead(id)}
+                onClose={() => setNotificationsOpen(false)}
+                listClassName="max-h-[min(28rem,70vh)]"
+              />
+            </FloatingPopover>
+          )}
+        </div>
       </motion.header>
 
       <div className="flex flex-1 overflow-hidden">
@@ -10776,7 +10818,7 @@ function PageContent() {
       )}
 
       {previewFile && <AttachmentPreview file={previewFile} onClose={() => setPreviewFile(null)} />}
-      {notificationsOpen && (
+      {notificationsOpen && isMobile && (
         <NotificationsPanel
           notifications={notifications}
           onOpenTask={(taskId) => setModalTaskStack([taskId])}

@@ -13037,3 +13037,27 @@ calendar to start once the keyboard is fully down, "bittelitt tregere".
   window opens the 330px menu upward at top 335. Not seen in a browser.
 
 **Deployed 2026-10-21 as `5be3527`** (tag `deploy/2026-10-21_0756`). Web-only.
+
+### 2026-10-21 (continued) — the notifications bell on desktop
+
+- **User** (clarifying the badge question above): "jeg snakker om den Notifications knappen, så man
+  kan se hva som har skjedd/tildelt etc. Som mobil har". They meant the bell (the in-app
+  notifications list), not an icon badge. The tab-title and app-icon badge ideas above stay unbuilt.
+- **Finding:** the bell existed only in the phone's contexts header (`useContexts && isMobile`). On
+  desktop the notifications were fetched (30 s poll) and counted, but there was no way to see them.
+- **Built:**
+  - A bell in the desktop top bar, in the `w-64` spacer on the right, so the search pill stays
+    centred. It shows the red unread count.
+  - It opens a `FloatingPopover` dropdown (380px wide, list up to `min(28rem, 70vh)`) and refetches
+    when opened.
+  - `components/NotificationsPanel.tsx` is split: `NotificationList` (heading, list, mark-all-read
+    on open) is shared by the phone's sheet (unchanged, now only `isMobile`) and the desktop
+    dropdown.
+  - The empty text now mentions mentions too.
+- **What creates notifications today** (`lib/notifications.ts` `notify`):
+  - `task_assigned` (tasks PATCH);
+  - `comment_mention` and `chat_mention` (`lib/mentionRecipients.ts`).
+  - Nothing else: no comments on your tasks, no status changes, no due dates.
+  - Clicking a chat mention only marks it read; it has no taskId to open.
+- Not seen in a browser.
+
