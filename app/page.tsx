@@ -149,6 +149,7 @@ import MyTasksPage from '../components/MyTasksPage';
 import DirectMessagesPage from '../components/DirectMessagesPage';
 import ProfilePage from '../components/ProfilePage';
 import NotificationsPanel, { NotificationList, type AppNotification } from '../components/NotificationsPanel';
+import QuickAddTaskRow, { type QuickAddExtras } from '../components/QuickAddTaskRow';
 import CommandPalette from '../components/CommandPalette';
 import TrashPanel from '../components/TrashPanel';
 import OnboardingFlow from '../components/OnboardingFlow';
@@ -1618,7 +1619,6 @@ function PageContent() {
   useEffect(() => {
     if (activeAdd) newTaskInputRef.current?.focus();
   }, [activeAdd]);
-  const [newTaskTitle, setNewTaskTitle] = useState('');
 
   const [modalTaskStack, setModalTaskStack] = useState<string[]>([]);
   // Where you were in the list when a task opened, put back when it closes: "når jeg trykker meg inn
@@ -3775,9 +3775,9 @@ function PageContent() {
     setFieldToDelete({ id: fieldId, name: fieldName });
   };
 
-  // Creates a task in the List on screen (or the first one there is) and returns its id — chosen here,
-  // so the new card can be found and given its entrance the moment it renders.
-  const quickAddTask = (title: string): string | null => {
+  // The List a task added from the list's own "+ Add Task" row goes into: the List on screen, or the
+  // first one there is.
+  const quickAddTarget = (): { listId: string; spaceId: string } | null => {
     let targetListId: string | null = [...activeListIds][0] ?? null;
     let targetSpaceId = activeSpaceId === 'everything' ? '' : activeSpaceId;
     if (!targetListId && currentSpace && currentSpace.lists.length > 0) {
@@ -3786,13 +3786,23 @@ function PageContent() {
       targetListId = currentWorkspace.spaces[0].lists[0].id;
       targetSpaceId = currentWorkspace.spaces[0].id;
     }
-    if (!targetListId) {
+    return targetListId ? { listId: targetListId, spaceId: targetSpaceId } : null;
+  };
+
+  // Creates a task in that List and returns its id — chosen here, so the new card can be found and
+  // given its entrance the moment it renders. Dates go with the create; assignees follow once the
+  // server has the task, as on the phone (createTaskFromSheet below).
+  const quickAddTask = (title: string, extras?: QuickAddExtras): string | null => {
+    const target = quickAddTarget();
+    if (!target) {
       alert('Select a list in the sidebar first.');
       return null;
     }
     const id = crypto.randomUUID();
     setSortBy('none');
-    void optimisticCreateTask(title, targetListId, targetSpaceId, null, null, null, id);
+    void optimisticCreateTask(title, target.listId, target.spaceId, null, extras?.startDate ?? null, extras?.dueDate ?? null, id).then(() => {
+      if (extras?.assigneeIds.length) optimisticSetAssignees(id, extras.assigneeIds);
+    });
     setMaterializeTaskId(id);
     // New tasks go to the end; make sure the end is on the page, or the card would arrive unseen.
     setVisibleTaskCount((n) => Math.max(n, filteredTasks.length + 1));
@@ -3810,11 +3820,6 @@ function PageContent() {
     await optimisticCreateTask(t.title, t.listId, t.spaceId, null, t.startDate, t.dueDate, id, t.status);
     if (t.assigneeIds.length) optimisticSetAssignees(id, t.assigneeIds);
     if (t.description) optimisticSetDescription(id, t.description);
-  };
-
-  const handleQuickAdd = () => {
-    if (!newTaskTitle.trim()) return;
-    if (quickAddTask(newTaskTitle.trim())) setNewTaskTitle('');
   };
 
   // Multi-select for Lists in the Tasks-tab sidebar — plain click selects just one; Ctrl/Cmd
@@ -8065,26 +8070,13 @@ function PageContent() {
                   )}
 
                 {activeAdd ? (
-                  <div className="p-2.5 bg-neutral-950/40 flex gap-2 items-center">
-                    <input
-                      type="text"
-                      ref={newTaskInputRef}
-                      placeholder="Type a title and press Enter..."
-                      value={newTaskTitle}
-                      onChange={(e) => setNewTaskTitle(e.target.value)}
-                      onKeyDown={(e) => {
-                        if (e.key === 'Enter') handleQuickAdd();
-                        if (e.key === 'Escape') setActiveAdd(false);
-                      }}
-                      className="flex-1 bg-neutral-900 border border-blue-500/80 rounded px-3 py-1 text-xs text-app-strong focus:outline-none"
-                    />
-                    <button onClick={handleQuickAdd} className="bg-blue-600 text-white text-xs px-3 py-1 rounded font-medium cursor-pointer">
-                      Add
-                    </button>
-                    <button onClick={() => setActiveAdd(false)} className="text-neutral-400 text-xs px-2 cursor-pointer">
-                      Cancel
-                    </button>
-                  </div>
+                  // Who and when can be set before the task exists (components/QuickAddTaskRow.tsx).
+                  <QuickAddTaskRow
+                    listId={quickAddTarget()?.listId ?? null}
+                    inputRef={newTaskInputRef}
+                    onAdd={(title, extras) => quickAddTask(title, extras) !== null}
+                    onCancel={() => setActiveAdd(false)}
+                  />
                 ) : (
                   !showArchived && (
                     <button

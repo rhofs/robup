@@ -13063,3 +13063,36 @@ calendar to start once the keyboard is fully down, "bittelitt tregere".
 
 
 **Deployed 2026-10-21 as `d264dbf`** (tag `deploy/2026-10-21_0801`). Web-only.
+
+### 2026-10-21 (continued) — assignee and dates in the list's "+ Add Task" row; keeping small tasks out of the Planner (discussed)
+
+- **User** (ClickUp screenshot of its inline add row): set assignee, due date and so on while
+  creating the task, instead of creating it and clicking in. "Mulig å fikse."
+- **Built** (`components/QuickAddTaskRow.tsx`, desktop list view; the phone already had this in
+  TaskCreateSheet):
+  - Title, an assignee button (AssigneePicker in a popover; the people rule and suggestions are the
+    same as the phone card's), Start and Due (DatePickerPopover), then Cancel and Save ↵.
+  - Enter saves and keeps the row open and empty. People and dates are cleared with the title, not
+    carried over to the next task.
+  - `page.tsx`: `quickAddTarget()` (the List choice, split out of `quickAddTask`).
+    `quickAddTask(title, extras)` creates with the dates and sets assignees once the server has the
+    task, as `createTaskFromSheet` does. The old `newTaskTitle` state and `handleQuickAdd` are gone.
+  - Not done: the subtask add row in the task window still takes only a title.
+  - Not seen in a browser.
+- **Asked, not built — the Planner:**
+  - **Their use case:** they set a due date of today so a task tops everyone's My Assigned Tasks.
+    For small tasks that clutters the Planner. A "keep out of the Planner" button? Other ideas?
+  - **Current behaviour:** the Planner shows every task with any date (CalendarView `ranges`),
+    filtered only by the per-person List filter (localStorage).
+  - **Options put to the user:**
+    1. **"Show in Planner" off, per task** (a `Task` boolean). The task keeps its date: it still
+       sorts to the top and goes red if overdue, but the Planner skips it. Also offered as a toggle
+       in the add row and the phone card. **Recommended.**
+    2. **A "Today" pin with no date:** it tops My Assigned until done and never touches the
+       Planner. A new concept, and it loses the overdue signal.
+    3. **Possible today:** a List for small tasks, hidden in the Planner filter. But the filter is
+       per person and per device, so everyone must hide it themselves.
+    4. **Advised against:** a rule that due-only tasks leave the Planner. It would also remove the
+       episode deadlines they rely on.
+  - **Waiting for:** the user's choice.
+
