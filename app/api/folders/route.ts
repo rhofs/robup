@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { getCurrentUserId } from '@/lib/auth/session';
 import { ensureSpaceAccess, ensureFolderAccess } from '@/lib/auth/resourceAccess';
+import { nextSidebarOrder } from '@/lib/sidebarOrder';
 
 export async function POST(req: Request) {
   const body = await req.json();
@@ -18,6 +19,8 @@ export async function POST(req: Request) {
       spaceId: body.spaceId,
       name: body.name,
       parentId: body.parentId ?? null,
+      // Last in its place in the sidebar, after the Lists and Docs there too (they share one order).
+      order: await nextSidebarOrder(body.spaceId, body.parentId ?? null),
     },
     select: { id: true, name: true, color: true, icon: true, spaceId: true, parentId: true, order: true, isPrivate: true, accessJson: true },
   });

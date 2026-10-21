@@ -586,10 +586,36 @@ function SpaceContents({
       order: d.order,
     })),
   ].sort((a, b) => a.order - b.order);
+  const renderLeaf = (leaf: (typeof leaves)[number]) => {
+    const CustomIcon = leaf.icon ? FOLDER_ICON_MAP[leaf.icon] : null;
+    const LIcon = CustomIcon || (leaf.kind === 'doc' ? FileText : ListIconLucide);
+    return (
+      <SpaceRowButton
+        key={leaf.id}
+        onOpenMenu={onListMenu && leaf.kind === 'list' ? (x, y) => onListMenu(leaf.id, x, y) : undefined}
+        onClick={() => (leaf.kind === 'list' ? onSelectList(leaf.id) : onSelectDoc(leaf.id))}
+        className="w-full flex items-center gap-2 py-2 rounded-lg text-left transition cursor-pointer hover:bg-neutral-800/60"
+        style={{ paddingLeft: 8 + depth * 20, paddingRight: 8 }}
+      >
+        <LIcon className="w-3.5 h-3.5 shrink-0" style={{ color: leaf.color || undefined }} />
+        <span className="min-w-0 flex-1 text-[13px] text-neutral-400 truncate">{leaf.name}</span>
+      </SpaceRowButton>
+    );
+  };
+
+  // Folders, Lists and Docs in their one shared order, as the desktop sidebar draws them
+  // (lib/folderTree.ts sidebarSiblings) — a List can sit above or between Folders. Folders first in
+  // the array, so a tie keeps them in front, as before.
+  const items = [
+    ...childFolders.map((folder) => ({ order: folder.order, folder, leaf: null })),
+    ...leaves.map((leaf) => ({ order: leaf.order, folder: null, leaf })),
+  ].sort((a, b) => a.order - b.order);
 
   return (
     <>
-      {childFolders.map((folder) => {
+      {items.map(({ folder, leaf }) => {
+        if (leaf) return renderLeaf(leaf);
+        if (!folder) return null;
         const CustomIcon = folder.icon ? FOLDER_ICON_MAP[folder.icon] : null;
         const FIcon = CustomIcon || FolderIconLucide;
         const isExpanded = expandedFolderIds.has(folder.id);
@@ -626,22 +652,6 @@ function SpaceContents({
               />
             )}
           </div>
-        );
-      })}
-      {leaves.map((leaf) => {
-        const CustomIcon = leaf.icon ? FOLDER_ICON_MAP[leaf.icon] : null;
-        const LIcon = CustomIcon || (leaf.kind === 'doc' ? FileText : ListIconLucide);
-        return (
-          <SpaceRowButton
-            key={leaf.id}
-            onOpenMenu={onListMenu && leaf.kind === 'list' ? (x, y) => onListMenu(leaf.id, x, y) : undefined}
-            onClick={() => (leaf.kind === 'list' ? onSelectList(leaf.id) : onSelectDoc(leaf.id))}
-            className="w-full flex items-center gap-2 py-2 rounded-lg text-left transition cursor-pointer hover:bg-neutral-800/60"
-            style={{ paddingLeft: 8 + depth * 20, paddingRight: 8 }}
-          >
-            <LIcon className="w-3.5 h-3.5 shrink-0" style={{ color: leaf.color || undefined }} />
-            <span className="min-w-0 flex-1 text-[13px] text-neutral-400 truncate">{leaf.name}</span>
-          </SpaceRowButton>
         );
       })}
       <NewFolderOrListRow

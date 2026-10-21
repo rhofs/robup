@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { getCurrentUserId } from '@/lib/auth/session';
 import { ensureSpaceAccess, ensureFolderAccess } from '@/lib/auth/resourceAccess';
+import { nextSidebarOrder } from '@/lib/sidebarOrder';
 
 export async function POST(req: Request) {
   const body = await req.json();
@@ -20,6 +21,8 @@ export async function POST(req: Request) {
       folderId: body.folderId ?? null,
       // Made from a Doc's task-list block: the List belongs to that Doc only (see schema).
       docId: typeof body.docId === 'string' ? body.docId : null,
+      // Last in its place in the sidebar (a Doc's own List is not in the sidebar at all).
+      ...(typeof body.docId === 'string' ? {} : { order: await nextSidebarOrder(body.spaceId, body.folderId ?? null) }),
     },
     // Must match GET /api/workspaces's own List select shape field-for-field — the sidebar tree's
     // getListsIn() filters on `list.archived === false`, so a response missing `archived` (as this

@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { getCurrentUserId } from '@/lib/auth/session';
 import { ensureSpaceAccess, ensureDocAccess } from '@/lib/auth/resourceAccess';
+import { nextSidebarOrder } from '@/lib/sidebarOrder';
 
 export async function POST(req: Request, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
@@ -40,11 +41,11 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
   let order = body.order;
   if (order === undefined) {
     if (body.boardFolderId !== undefined) {
-      const [listCount, docCount] = await Promise.all([
-        prisma.list.count({ where: { spaceId, folderId: boardFolderId } }),
-        prisma.doc.count({ where: { spaceId, boardFolderId, parentId: body.parentId ?? null } }),
-      ]);
-      order = listCount + docCount;
+      // Last at that level, which Folders share too (lib/sidebarOrder.ts). A subpage is not in the
+      // sidebar's levels; it counts among its own siblings.
+      order = body.parentId
+        ? await prisma.doc.count({ where: { spaceId, boardFolderId, parentId: body.parentId } })
+        : await nextSidebarOrder(spaceId, boardFolderId ?? null);
     } else {
       order = await prisma.doc.count({ where: { spaceId, folderId, parentId: body.parentId ?? null } });
     }

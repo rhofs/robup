@@ -194,7 +194,7 @@ const COLLAPSED_FOLDERS_STORAGE_KEY = 'siqt.collapsedFolders';
 // Folders default to expanded, so we only need to persist the collapsed ones (usually the
 // minority). Read/write the whole set on each toggle — toggles are one-at-a-time user clicks,
 // never concurrent, so a read-modify-write round trip per click is safe.
-function readCollapsedFolders(): Set<string> {
+export function readCollapsedFolders(): Set<string> {
   if (typeof window === 'undefined') return new Set();
   try {
     const raw = localStorage.getItem(COLLAPSED_FOLDERS_STORAGE_KEY);
@@ -440,7 +440,7 @@ type FolderTreeProps = {
   onDocContextMenu: (e: React.MouseEvent, doc: TaskDoc) => void;
   renameDocId: string | null;
   onRenameDocHandled: () => void;
-  listDropIndicator: { targetId: string; position: 'above' | 'below' } | null;
+  listDropIndicator: { targetId: string; position: 'above' | 'below' | 'inside' } | null;
   // The existing per-Space "Archive"/"Viewing archive" toggle (previously task-table-only) now
   // also drives which Lists/Docs this tree shows — false (normal) hides archived ones, true shows
   // only the archived ones, mirroring how the task table already flips between the two sets.
@@ -498,10 +498,6 @@ function FolderLevel(props: FolderTreeProps & { parentId: string | null; depth: 
     // Space header itself, which made it hard to tell where one Space's own content ended and
     // the next Space's began when scanning down a list of several Spaces in a row.
     <div className={depth === 0 ? 'ml-3 pl-2 border-l border-neutral-800/50 space-y-0.5' : 'ml-6 pl-3 border-l border-neutral-800 space-y-0.5'}>
-      {folders.map((folder) => (
-        <FolderRow key={folder.id} {...props} folder={folder} />
-      ))}
-
       {/* Lists and top-level Docs (parentId/folderId both null) render as one combined,
           order-sorted sequence rather than two separate blocks — otherwise a Doc could never
           land anywhere but after every List, no matter what order.field it actually had.
@@ -510,6 +506,13 @@ function FolderLevel(props: FolderTreeProps & { parentId: string | null; depth: 
           merge entirely in that mode, same as before. */}
       {(() => {
         type SidebarItem = { key: string; order: number; render: () => React.ReactNode };
+        // Folders join the same sequence (lib/folderTree.ts sidebarSiblings): a List or Doc can sit
+        // above or between them. Listed first, so a tie keeps a Folder in front, as it always was.
+        const folderItems: SidebarItem[] = folders.map((folder) => ({
+          key: folder.id,
+          order: folder.order,
+          render: () => <FolderRow key={folder.id} {...props} folder={folder} />,
+        }));
         const listItems: SidebarItem[] = lists.map((list) => {
           const isActive = activeView === 'board' && activeListIds.has(list.id);
           const count = topLevelCountByList.get(list.id) ?? 0;
@@ -556,7 +559,7 @@ function FolderLevel(props: FolderTreeProps & { parentId: string | null; depth: 
                   />
                 ),
               }));
-        return [...listItems, ...docItems]
+        return [...folderItems, ...listItems, ...docItems]
           .sort((a, b) => a.order - b.order)
           .map((item) => item.render());
       })()}
@@ -654,7 +657,7 @@ function DocRow({
   onContextMenu: (e: React.MouseEvent) => void;
   renameDocId: string | null;
   onRenameDocHandled: () => void;
-  listDropIndicator: { targetId: string; position: 'above' | 'below' } | null;
+  listDropIndicator: { targetId: string; position: 'above' | 'below' | 'inside' } | null;
 }) {
   const { updateSpaceDoc } = useTaskStore();
   const [editing, setEditing] = useState(false);
@@ -851,8 +854,12 @@ function FolderRow(props: FolderTreeProps & { folder: HierarchyFolder; parentId:
     );
   }
 
+  // While a List, Folder or Doc is dragged over this Folder: a line above or below means "next to it",
+  // the ring means "into it" (page.tsx works out which from where the pointer is on the row).
+  const dropHere = props.listDropIndicator?.targetId === folder.id ? props.listDropIndicator.position : null;
   return (
     <div className="space-y-0.5">
+      {dropHere === 'above' && <div className="h-0.5 bg-blue-500 rounded-full mx-2" />}
       <div
         ref={setNodeRef}
         {...attributes}
@@ -864,7 +871,7 @@ function FolderRow(props: FolderTreeProps & { folder: HierarchyFolder; parentId:
           onFolderContextMenu(e, folder);
         }}
         className={`group w-full text-left px-2 py-1 rounded text-[11px] transition flex items-center justify-between cursor-pointer text-neutral-300 hover:text-neutral-200 hover:bg-neutral-800/30 ${
-          isOver ? 'ring-1 ring-inset ring-neutral-500 bg-neutral-700/40' : ''
+          (isOver && dropHere !== 'above' && dropHere !== 'below') || dropHere === 'inside' ? 'ring-1 ring-inset ring-blue-500/70 bg-blue-500/10' : ''
         } ${isDragging ? 'opacity-40' : ''}`}
       >
         <span className="truncate flex items-center gap-1.5 min-w-0">
@@ -998,6 +1005,8 @@ function FolderRow(props: FolderTreeProps & { folder: HierarchyFolder; parentId:
           </button>
         </span>
       </div>
+      {/* Only for a closed Folder: below an open one is its first child, which reads as "into it". */}
+      {dropHere === 'below' && <div className="h-0.5 bg-blue-500 rounded-full mx-2" />}
       {childAddMode && (
         <input
           autoFocus
@@ -1048,7 +1057,7 @@ function ListRow({
   onDeleteRequest: () => void;
   renameListId: string | null;
   onRenameListHandled: () => void;
-  listDropIndicator: { targetId: string; position: 'above' | 'below' } | null;
+  listDropIndicator: { targetId: string; position: 'above' | 'below' | 'inside' } | null;
 }) {
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState(list.name);

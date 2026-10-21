@@ -2483,6 +2483,13 @@ Picked up right after the office's "merged single island" popup-menu work (previ
 
 ## Known bugs / things to remember
 
+- **Folders have negative `order` values on purpose** (since 2026-10-21). Folders, Lists and Docs at
+  one sidebar level share one order (`lib/folderTree.ts` `sidebarSiblings`). The data migration
+  `20261021120000_folders_share_sidebar_order` gave every Folder -n..-1 among its siblings, so the
+  joined sort still drew Folders first, as before. Do not "fix" them to 0..n: Lists were never
+  renumbered (many still sit at 0), and Folders would suddenly interleave with them. A level is
+  renumbered 0..n only when someone drags something within it (`placeSidebarItem`).
+
 - **Everything in a List's "Edit statuses" window must save to that List** (2026-10-21). The status
   set was already List-scoped (2026-10-13), but "Task circle" and "Strike through done tasks" sat in
   the same window and always wrote to the Space. So "changing Edit statuses on one list changed every
@@ -13236,3 +13243,38 @@ calendar to start once the keyboard is fully down, "bittelitt tregere".
 - Not seen in a browser.
 
 **Deployed 2026-10-21 as `756108f`** (tag `deploy/2026-10-21_1054`). Web-only.
+
+### 2026-10-21 (continued) — the sidebar: Lists, Folders and Docs can go anywhere at a level
+
+- **User:** "Kan vi flytte elementer rundt i spaces? Akkurat nå, kan vi flytte lists, f.eks. men det
+  går ikke an å legge de mellom 2 folders, eller over folders osv."
+- **Cause:** each kind had its own order, and FolderTree drew Folders first, then Lists and Docs
+  merged by order. There was no place between or above Folders. A Folder dropped on a List did
+  nothing, and on a sibling Folder it could only swap.
+- **Built:**
+  - **One shared order per level.** `sidebarSiblings(space, parentId)` returns Folders, Lists and
+    Docs sorted together; on ties the order is Folders, Lists, Docs. FolderTree, the phone's
+    `MobileSpacesSheet` and `getOrderedListIds` (Shift-click ranges) all use it.
+  - **Data migration** `20261021120000_folders_share_sidebar_order`: Folder orders become -n..-1
+    per (space, parent), keeping today's order (`order`, then rowid, which is what the API
+    returned). Nothing moves on screen until someone drags. Tested on sample data, including ties
+    and nesting.
+  - **Dropping:**
+    - On a List or Doc row: above or below it, by row half.
+    - On a Folder row: the top 28% goes above, the bottom 28% below, the middle inside. Below an
+      open Folder counts as inside (it would read as its first child).
+    - FolderRow draws a blue line above/below, or a blue ring for inside.
+    - Works for Lists, Folders and Docs, in any Space and at any depth.
+    - Dropping a Folder into itself or under itself is refused.
+  - **`placeSidebarItem`** (page.tsx), with the plan computed by `planSidebarPlacement`
+    (lib/folderTree.ts, unit-tested with tsx): it moves the item if the parent or Space changes,
+    then renumbers that level 0..n and writes only changed rows, as one undo step. It replaces
+    `moveSidebarItemRelativeTo`, `combinedSidebarSiblings` and `reorderFolderSiblings`.
+  - **New items go last at their level:** `lib/sidebarOrder.ts` `nextSidebarOrder` gives max+1
+    across all three kinds, used by `POST /api/lists`, `POST /api/folders` and board-doc creation.
+    So a new Folder now lands after the Lists, not at the top; drag it where it should be.
+- **Not changed:**
+  - SpaceHome (the Space overview grid) still shows Folders and Lists as separate sections.
+  - A drop on a Space header still moves to that Space's top level, keeping the item's order.
+- Not seen in a browser.
+

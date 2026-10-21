@@ -113,7 +113,7 @@ import { useChatStore, holdChatUpdates } from '../store/useChatStore';
 import { usePresenceConnection } from '../lib/collab/usePresenceConnection';
 import { SessionSync } from '../components/SessionSync';
 import { signOut } from 'next-auth/react';
-import { collectListIdsUnder, isDescendantOf, getOrderedListIds } from '../lib/folderTree';
+import { collectListIdsUnder, isDescendantOf, getOrderedListIds, planSidebarPlacement, type SidebarItemType } from '../lib/folderTree';
 import { isDescendantOfDocFolder } from '../lib/docFolderTree';
 import { buildNavQueryString, dateKey, parseNavUrl } from '../lib/navUrl';
 import DatePickerPopover from '../components/DatePickerPopover';
@@ -133,7 +133,7 @@ import AttachmentPreview, { type PreviewFile } from '../components/AttachmentPre
 import { parseTaskTemplate, type AppTemplate } from '../lib/templates';
 import DocExportMenu from '../components/collab/DocExportMenu';
 import TaskRow, { ColumnDef } from '../components/TaskRow';
-import FolderTree, { FOLDER_ICON_CHOICES, FOLDER_ICON_MAP } from '../components/FolderTree';
+import FolderTree, { FOLDER_ICON_CHOICES, FOLDER_ICON_MAP, readCollapsedFolders } from '../components/FolderTree';
 import CalendarView from '../components/calendar/CalendarView';
 import QuickCreatePopover from '../components/calendar/QuickCreatePopover';
 import EventDetailModal from '../components/calendar/EventDetailModal';
@@ -4180,7 +4180,8 @@ function PageContent() {
   // is dual-purpose (also a task-drop target), so this only engages while the *dragged* item is
   // itself a List, never for a plain task drag over the same target. Lets a List be dropped at an
   // exact position among a *different* Space's Lists, not just appended via that Space's header.
-  const [listDropIndicator, setListDropIndicator] = useState<{ targetId: string; position: 'above' | 'below' } | null>(null);
+  // 'inside' only for a Folder target: the middle of its row drops into it, its edges next to it.
+  const [listDropIndicator, setListDropIndicator] = useState<{ targetId: string; position: 'above' | 'below' | 'inside' } | null>(null);
   // Dragging one task over another now means two different things depending on WHERE in the row
   // the finger is: near an edge it reorders, in the middle it still nests as a subtask. Before
   // this, a task drag could only ever nest — there was no manual order to move into, which is a
@@ -4188,7 +4189,7 @@ function PageContent() {
   // Null while hovering the middle, which is what makes "no line showing" mean "this will nest."
   const [taskDropIndicator, setTaskDropIndicator] = useState<{ targetId: string; position: 'above' | 'below' } | null>(null);
   const taskOverRef = useRef<{ targetId: string; top: number; height: number } | null>(null);
-  const listOverRef = useRef<{ targetId: string; top: number; height: number } | null>(null);
+  const listOverRef = useRef<{ targetId: string; top: number; height: number; folder?: boolean } | null>(null);
 
   // dnd-kit ships a built-in autoScroll, but it never actually kicks in for this sidebar (verified
   // directly — holding the pointer at the scrollable container's own edge for several seconds
@@ -4526,110 +4527,45 @@ function PageContent() {
   // Re-numbers one sibling group's `order` field after a drag-to-reorder, same pattern as
   // `handleStatusDragEnd` below: move the dragged item to the target's index via `arrayMove`,
   // then persist any index that actually changed.
-  const reorderFolderSiblings = (space: HierarchySpace, draggedId: string, targetId: string) => {
-    const dragged = space.folders.find((f) => f.id === draggedId);
-    if (!dragged) return;
-    const siblings = space.folders.filter((f) => f.parentId === dragged.parentId).sort((a, b) => a.order - b.order);
-    const oldIndex = siblings.findIndex((f) => f.id === draggedId);
-    const newIndex = siblings.findIndex((f) => f.id === targetId);
-    if (oldIndex === -1 || newIndex === -1) return;
-    // transaction()'s group only closes once its callback's returned Promise resolves — an async
-    // callback awaiting every update (Promise.all, same shape as bulkDelete below) is required for
-    // that, not a sync forEach firing fetches it doesn't wait for. A sync forEach here would close
-    // (and push) an EMPTY group immediately, since none of the individual updateFolder calls'
-    // own history pushes (which happen after their own await fetch) have landed yet — so each
-    // change would end up as its own separate top-level undo entry instead of one combined step,
-    // and Ctrl+Z would only revert the last of them, leaving the rest applied. Only visible when a
-    // reorder actually changes 2+ siblings at once (a 2-item swap where one side's old order
-    // already happens to equal its new index dodges it by luck) — found via the Office Rooms
-    // reorder fix, where a 3-way tie made a simultaneous 2-item change unavoidable.
-    useHistoryStore.getState().transaction('Reorder folders', async () => {
-      await Promise.all(
-        arrayMove(siblings, oldIndex, newIndex).map((f, index) => (f.order !== index ? updateFolder(space.id, f.id, { order: index }) : null))
-      );
-    });
-  };
 
 
-  // Lets a List and a Doc be dragged into position relative to *each other* in the Tasks-tab
-  // sidebar (FolderTree.tsx renders them as sibling-native rows there, but this repo's schema
-  // keeps List.folderId and Doc.folderId as two genuinely different foreign keys — List.folderId
-  // -> Folder, Doc.folderId -> DocFolder, a completely separate model/table, see prisma/schema.prisma
-  // — so a Doc can never actually nest inside a real Folder the way a List can; every sidebar-
-  // native Doc is structurally top-level (folderId: null) no matter how it's dragged). Rather than
-  // trying to reconcile two incompatible foreign-key spaces, this only ever combines them at the
-  // top level (folderId === null): a List target keeps its own real folderId for other List
-  // siblings; a Doc target (or a dragged Doc) is always treated as folderId: null, which is the
-  // only value it can ever structurally have. One combined, order-sorted sibling array either way,
-  // covering both the top-level "Lists + Docs interleaved" case and the plain "Lists nested in a
-  // Folder" case (where the Doc side is simply always empty).
-  type SidebarSibling = { type: 'list' | 'doc'; id: string; order: number };
-  // Docs use boardFolderId here (the Tasks-tab sidebar's own folder axis — see
-  // lib/folderTree.ts's getBoardDocsIn), not folderId (the separate Docs-tab/DocFolder axis) —
-  // works at every Folder depth now, not just the Space root.
-  const combinedSidebarSiblings = (space: HierarchySpace, folderId: string | null): SidebarSibling[] => [
-    ...space.lists.filter((l) => l.folderId === folderId && !l.docId).map((l) => ({ type: 'list' as const, id: l.id, order: l.order })),
-    ...space.spaceDocs.filter((d) => d.boardFolderId === folderId && d.parentId === null).map((d) => ({ type: 'doc' as const, id: d.id, order: d.order })),
-  ];
-
-  const moveSidebarItemRelativeTo = (
+  // Puts a List, Folder or Doc of the sidebar next to another item (above/below), or at the end of a
+  // Folder (inside) — in any Space, at any depth. Folders, Lists and Docs at one level share one order
+  // (lib/folderTree.ts sidebarSiblings), so a List can go between two Folders and a Folder between two
+  // Lists: "det går ikke an å legge de mellom 2 folders, eller over folders" (2026-10-21). The whole
+  // level is renumbered 0..n in its new order, writing only what changed, as one undo step.
+  const placeSidebarItem = (
     sourceSpace: HierarchySpace,
-    dragged: { type: 'list' | 'doc'; id: string },
+    dragged: { type: SidebarItemType; id: string },
     targetSpace: HierarchySpace,
-    target: { type: 'list' | 'doc'; id: string },
-    position: 'above' | 'below'
+    target: { type: SidebarItemType; id: string },
+    position: 'above' | 'below' | 'inside'
   ) => {
-    // Both branches now look up the right axis per type — Lists via folderId, Docs via
-    // boardFolderId — rather than hardcoding null for Docs (which used to mean "a Doc dropped near
-    // another Doc/List *inside* a Folder never actually adopted that Folder," only a drop directly
-    // on the Folder's own header row did).
-    const targetFolderId =
-      target.type === 'list'
-        ? targetSpace.lists.find((l) => l.id === target.id)?.folderId ?? null
-        : targetSpace.spaceDocs.find((d) => d.id === target.id)?.boardFolderId ?? null;
-    const draggedFolderId =
-      dragged.type === 'list'
-        ? sourceSpace.lists.find((l) => l.id === dragged.id)?.folderId ?? null
-        : sourceSpace.spaceDocs.find((d) => d.id === dragged.id)?.boardFolderId ?? null;
-    const sameContext = sourceSpace.id === targetSpace.id && draggedFolderId === targetFolderId;
-
-    const writeOrder = (space: HierarchySpace, items: SidebarSibling[]) =>
-      Promise.all(
-        items.map((item, index) =>
-          item.type === 'list' ? reorderList(space.id, item.id, index) : reorderSpaceDoc(space.id, item.id, index)
+    const plan = planSidebarPlacement(sourceSpace, dragged, targetSpace, target, position);
+    if (!plan) return;
+    const { newParent, moving, next } = plan;
+    const noun = dragged.type === 'folder' ? 'folder' : dragged.type === 'list' ? 'list' : 'document';
+    useHistoryStore.getState().transaction(`${moving ? 'Move' : 'Reorder'} ${noun}`, async () => {
+      if (moving) {
+        if (dragged.type === 'list') await moveList(sourceSpace.id, dragged.id, newParent, targetSpace.id);
+        else if (dragged.type === 'doc') await moveDocToBoardFolder(sourceSpace.id, dragged.id, newParent, targetSpace.id);
+        else await moveFolder(sourceSpace.id, dragged.id, newParent, targetSpace.id);
+      }
+      await Promise.all(
+        next.map((item, index) =>
+          item.order === index
+            ? null
+            : item.type === 'list'
+              ? reorderList(targetSpace.id, item.id, index)
+              : item.type === 'doc'
+                ? reorderSpaceDoc(targetSpace.id, item.id, index)
+                : updateFolder(targetSpace.id, item.id, { order: index })
         )
       );
-
-    if (sameContext) {
-      const siblings = combinedSidebarSiblings(sourceSpace, targetFolderId).sort((a, b) => a.order - b.order);
-      const withoutDragged = siblings.filter((s) => !(s.type === dragged.type && s.id === dragged.id));
-      const targetIndex = withoutDragged.findIndex((s) => s.type === target.type && s.id === target.id);
-      if (targetIndex === -1) return false;
-      const insertAt = position === 'below' ? targetIndex + 1 : targetIndex;
-      const draggedEntry = siblings.find((s) => s.type === dragged.type && s.id === dragged.id);
-      if (!draggedEntry) return;
-      const next = [...withoutDragged.slice(0, insertAt), draggedEntry, ...withoutDragged.slice(insertAt)];
-      useHistoryStore.getState().transaction(dragged.type === 'list' ? 'Reorder lists' : 'Reorder documents', async () => {
-        await writeOrder(sourceSpace, next);
-      });
-      return;
-    }
-
-    useHistoryStore.getState().transaction(dragged.type === 'list' ? 'Move list' : 'Move document', async () => {
-      if (dragged.type === 'list') await moveList(sourceSpace.id, dragged.id, targetFolderId, targetSpace.id);
-      else await moveDocToBoardFolder(sourceSpace.id, dragged.id, targetFolderId, targetSpace.id);
-      const siblings = combinedSidebarSiblings(targetSpace, targetFolderId)
-        .filter((s) => !(s.type === dragged.type && s.id === dragged.id))
-        .sort((a, b) => a.order - b.order);
-      const targetIndex = siblings.findIndex((s) => s.type === target.type && s.id === target.id);
-      if (targetIndex === -1) return;
-      const insertAt = position === 'below' ? targetIndex + 1 : targetIndex;
-      const next = [...siblings.slice(0, insertAt), { ...dragged, order: 0 }, ...siblings.slice(insertAt)];
-      await writeOrder(targetSpace, next);
     });
   };
 
-  // Same shape as reorderFolderSiblings/reorderListSiblings, for the Docs tab's DocFolder/Doc tree.
+  // Sibling reorder for the Docs tab's DocFolder/Doc tree.
   const reorderDocFolderSiblings = (space: HierarchySpace, draggedId: string, targetId: string) => {
     const dragged = space.docFolders.find((f) => f.id === draggedId);
     if (!dragged) return;
@@ -4909,19 +4845,21 @@ function PageContent() {
     }
     taskOverRef.current = null;
 
-    if (draggedId.startsWith('list-drag:')) {
+    if (draggedId.startsWith('list-drag:') || draggedId.startsWith('folder-drag:')) {
       spaceOverRef.current = null;
       setSpaceDropIndicator(null);
       docOverRef.current = null;
       setDocDropIndicator(null);
-      const draggedListId = draggedId.slice('list-drag:'.length);
+      const draggedTreeId = draggedId.slice(draggedId.indexOf(':') + 1);
       // `list:${id}` is dual-purpose (also a task-drop target) — only meaningful as a reorder
-      // target here since the dragged item is itself a List. Also tracks hovering a `spacedoc:`
-      // target (a Doc row) — Lists and top-level Docs render interleaved in this sidebar
-      // (FolderTree.tsx), so dropping a List next to a Doc needs the same live indicator.
-      if ((overId.startsWith('list:') || overId.startsWith('spacedoc:')) && over.rect) {
-        const targetId = overId.startsWith('spacedoc:') ? overId.slice('spacedoc:'.length) : overId.slice('list:'.length);
-        listOverRef.current = targetId === draggedListId ? null : { targetId, top: over.rect.top, height: over.rect.height };
+      // target here since the dragged item is itself a List or Folder. Lists, Folders and top-level
+      // Docs share one order in this sidebar (FolderTree.tsx), so any of their rows is a place to
+      // drop next to; a Folder's row is also a place to drop into (the pointer loop below decides).
+      const isFolderTarget = overId.startsWith('folder-drop:');
+      if ((overId.startsWith('list:') || overId.startsWith('spacedoc:') || isFolderTarget) && over.rect) {
+        const targetId = overId.slice(overId.indexOf(':') + 1);
+        listOverRef.current =
+          targetId === draggedTreeId ? null : { targetId, top: over.rect.top, height: over.rect.height, folder: isFolderTarget };
       } else {
         listOverRef.current = null;
       }
@@ -4958,6 +4896,10 @@ function PageContent() {
         const next = targetId === draggedDocId ? null : { targetId, top: over.rect.top, height: over.rect.height };
         docOverRef.current = next;
         listOverRef.current = next;
+      } else if (overId.startsWith('folder-drop:') && over.rect) {
+        // A Folder in the Tasks-tab sidebar: next to it or into it, as for a List.
+        docOverRef.current = null;
+        listOverRef.current = { targetId: overId.slice('folder-drop:'.length), top: over.rect.top, height: over.rect.height, folder: true };
       } else {
         docOverRef.current = null;
         listOverRef.current = null;
@@ -5051,11 +4993,20 @@ function PageContent() {
   // drag needs this same indicator when hovering a List row (handleTaskDragOver feeds
   // listOverRef for both cases — see its spacedoc-drag branch).
   useEffect(() => {
-    if (activeDragEntity?.kind !== 'list' && activeDragEntity?.kind !== 'spacedoc') return;
+    if (activeDragEntity?.kind !== 'list' && activeDragEntity?.kind !== 'spacedoc' && activeDragEntity?.kind !== 'folder') return;
     const onPointerMove = (e: PointerEvent) => {
       const over = listOverRef.current;
       if (!over) {
         setListDropIndicator(null);
+        return;
+      }
+      if (over.folder) {
+        // A Folder's row in three: the top and bottom edges put the item next to the Folder, the
+        // middle into it. Below an open Folder is its first child, so there the bottom means into.
+        const rel = (e.clientY - over.top) / over.height;
+        let position: 'above' | 'below' | 'inside' = rel < 0.28 ? 'above' : rel > 0.72 ? 'below' : 'inside';
+        if (position === 'below' && !readCollapsedFolders().has(over.targetId)) position = 'inside';
+        setListDropIndicator({ targetId: over.targetId, position });
         return;
       }
       const overCenterY = over.top + over.height / 2;
@@ -5173,6 +5124,7 @@ function PageContent() {
       const space = allSpaces.find((s) => (isFolder ? s.folders.some((f) => f.id === treeId) : s.lists.some((l) => l.id === treeId)));
       if (!space) return;
 
+      const dragged = { type: isFolder ? ('folder' as const) : ('list' as const), id: treeId };
       if (overId.startsWith('folder-drop:')) {
         const targetFolderId = overId.slice('folder-drop:'.length);
         // The target folder can live in a *different* Space than the one being dragged from —
@@ -5180,36 +5132,19 @@ function PageContent() {
         // nothing (this used to only ever look inside `space`, the source).
         const targetSpace = allSpaces.find((s) => s.folders.some((f) => f.id === targetFolderId));
         if (!targetSpace) return;
-        if (isFolder) {
-          if (targetSpace.id === space.id && (targetFolderId === treeId || isDescendantOf(space, targetFolderId, treeId))) return;
-          const dragged = space.folders.find((f) => f.id === treeId);
-          const target = targetSpace.folders.find((f) => f.id === targetFolderId);
-          // Dropping a folder onto one that's ALREADY its sibling (same Space, same parent)
-          // reorders it to that position instead of nesting it — nesting only kicks in when
-          // dropped onto a folder somewhere else in the tree, which is the far more common
-          // gesture there. A different Space can never be "already a sibling".
-          if (dragged && target && targetSpace.id === space.id && dragged.parentId === target.parentId) {
-            reorderFolderSiblings(space, treeId, targetFolderId);
-          } else {
-            moveFolder(space.id, treeId, targetFolderId, targetSpace.id);
-          }
-        } else {
-          moveList(space.id, treeId, targetFolderId, targetSpace.id);
-        }
-      } else if ((overId.startsWith('list:') || overId.startsWith('spacedoc:')) && !isFolder) {
-        // Lists can't "contain" anything, so a List dragged onto another List's `list:` target
-        // (already registered for task-drops) has no competing meaning the way folder-onto-
-        // folder does — for a list-drag specifically, it always means reorder/move. Also accepts
-        // a `spacedoc:` target (a Doc row) — Lists and top-level Docs render interleaved in this
-        // sidebar, so a List needs to be droppable relative to a Doc too, not just other Lists.
-        // Works across Spaces too, landing exactly where listDropIndicator last showed — search
-        // all Spaces for the target (same reasoning as the folder-drop branch above).
+        // Next to the Folder from its row's edges, into it from the middle — where the indicator last
+        // showed. Into it goes to the end of what is already there.
+        const position = droppedListIndicator?.targetId === targetFolderId ? droppedListIndicator.position : 'inside';
+        placeSidebarItem(space, dragged, targetSpace, { type: 'folder', id: targetFolderId }, position);
+      } else if (overId.startsWith('list:') || overId.startsWith('spacedoc:')) {
+        // Next to a List or Doc row, in any Space. A List row has no inside, so this is always a
+        // place in the order (`list:` is also a task-drop target, which means nothing for a tree drag).
         const isDocTarget = overId.startsWith('spacedoc:');
-        const targetId = isDocTarget ? overId.slice('spacedoc:'.length) : overId.slice('list:'.length);
+        const targetId = overId.slice(overId.indexOf(':') + 1);
         const targetSpace = allSpaces.find((s) => (isDocTarget ? s.spaceDocs.some((d) => d.id === targetId) : s.lists.some((l) => l.id === targetId)));
-        if (targetId !== treeId && targetSpace) {
-          const position = droppedListIndicator?.targetId === targetId ? droppedListIndicator.position : 'below';
-          moveSidebarItemRelativeTo(space, { type: 'list', id: treeId }, targetSpace, { type: isDocTarget ? 'doc' : 'list', id: targetId }, position);
+        if (targetSpace) {
+          const indicated = droppedListIndicator?.targetId === targetId ? droppedListIndicator.position : 'below';
+          placeSidebarItem(space, dragged, targetSpace, { type: isDocTarget ? 'doc' : 'list', id: targetId }, indicated === 'above' ? 'above' : 'below');
         }
       } else if (overId.startsWith('space:')) {
         const targetSpaceId = overId.slice('space:'.length);
@@ -5270,7 +5205,8 @@ function PageContent() {
         // works too.
         const targetFolderId = overId.slice('folder-drop:'.length);
         const targetSpace = allSpaces.find((s) => s.folders.some((f) => f.id === targetFolderId));
-        if (targetSpace) moveDocToBoardFolder(space.id, treeId, targetFolderId, targetSpace.id);
+        const position = droppedListIndicator?.targetId === targetFolderId ? droppedListIndicator.position : 'inside';
+        if (targetSpace) placeSidebarItem(space, { type: 'doc', id: treeId }, targetSpace, { type: 'folder', id: targetFolderId }, position);
       } else if (overId.startsWith('list:') && !isDocFolder) {
         // A Doc dropped onto a List (`list:` target) — only possible in the Tasks-tab sidebar,
         // where Lists and top-level Docs render interleaved. Goes through the same combined
@@ -5280,8 +5216,8 @@ function PageContent() {
         const targetListId = overId.slice('list:'.length);
         const targetSpace = allSpaces.find((s) => s.lists.some((l) => l.id === targetListId));
         if (targetSpace) {
-          const position = droppedListIndicator?.targetId === targetListId ? droppedListIndicator.position : 'below';
-          moveSidebarItemRelativeTo(space, { type: 'doc', id: treeId }, targetSpace, { type: 'list', id: targetListId }, position);
+          const position = droppedListIndicator?.targetId === targetListId && droppedListIndicator.position === 'above' ? 'above' : 'below';
+          placeSidebarItem(space, { type: 'doc', id: treeId }, targetSpace, { type: 'list', id: targetListId }, position);
         }
       } else if (overId.startsWith('spacedoc:') && !isDocFolder) {
         const targetDocId = overId.slice('spacedoc:'.length);
@@ -5296,12 +5232,12 @@ function PageContent() {
           // The `spacedoc:` id is shared by both DocFolderTree.tsx (Docs tab — folderId/DocFolder
           // is the right axis) and FolderTree.tsx (Tasks tab — boardFolderId is) — `activeView`
           // picks the one actually relevant here, since only one of those trees is ever mounted at
-          // once. Tasks-tab reuses moveSidebarItemRelativeTo (already boardFolderId-aware, same
+          // once. Tasks-tab reuses placeSidebarItem (already boardFolderId-aware, same
           // function the list: branch above already uses) rather than a parallel duplicate.
           if (activeView === 'docs') {
             reorderSpaceDocRelativeTo(space, treeId, targetDocId, position, targetSpace);
           } else {
-            moveSidebarItemRelativeTo(space, { type: 'doc', id: treeId }, targetSpace, { type: 'doc', id: targetDocId }, position);
+            placeSidebarItem(space, { type: 'doc', id: treeId }, targetSpace, { type: 'doc', id: targetDocId }, position);
           }
         }
       } else if (overId.startsWith('space:')) {
