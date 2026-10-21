@@ -13181,3 +13181,5 @@ calendar to start once the keyboard is fully down, "bittelitt tregere".
 - Edit field's hint was updated. Tested with tsx (start tomorrow, started earlier, a field before
   the due date, all passed, start only). Not seen in a browser.
 
+
+**Deployed 2026-10-21 as `4831ad7`** (tag `deploy/2026-10-21_0854`). Web-only.
