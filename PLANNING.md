@@ -13234,3 +13234,5 @@ calendar to start once the keyboard is fully down, "bittelitt tregere".
   - The Save button's click calls `save()` explicitly: passing the handler directly would have
     handed it the click event as "keep open".
 - Not seen in a browser.
+
+**Deployed 2026-10-21 as `756108f`** (tag `deploy/2026-10-21_1054`). Web-only.
