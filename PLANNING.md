@@ -13219,3 +13219,18 @@ calendar to start once the keyboard is fully down, "bittelitt tregere".
 
 
 **Deployed 2026-10-21 as `a471fde`** (tag `deploy/2026-10-21_1046`). Pterodactyl backup `before-2026-10-21-list-circle-settings` (a14349db) taken first; the migration ran on start.
+
+### 2026-10-21 (continued) — [Bug] the add row stayed open after the task was created
+
+- **User:** "Når man adder ny task i en liste, så er tekstvinduet (create new task) fortsatt oppe,
+  selv om tasken lages. (På desktop)"
+- **Cause:** not a malfunction. `QuickAddTaskRow` (built earlier today) kept the row open after
+  Enter, by design, for adding several in a row; the old plain input had done the same. The user
+  reads it as a bug.
+- **Change:**
+  - Enter and Save create the task and close the row.
+  - Shift+Enter creates it and keeps the row open and empty for the next one. This is said in the
+    input's and Save's hover text; the placeholder is "Task name — Enter to save".
+  - The Save button's click calls `save()` explicitly: passing the handler directly would have
+    handed it the click event as "keep open".
+- Not seen in a browser.

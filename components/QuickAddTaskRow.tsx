@@ -25,9 +25,11 @@ export type QuickAddExtras = {
 // due date … allerede når man lager tasken, i stedet for at man må lage tasken og trykke seg inn"
 // (2026-10-21). The phone has had this all along in its own card (components/mobile/TaskCreateSheet).
 //
-// Enter saves and leaves the row open, empty, for the next task: adding several in a row is the
-// usual case. The people and dates are cleared with the title — carrying them over would quietly
-// give the next task someone else's choices.
+// Enter (or Save) creates the task and closes the row — the row staying open after the task had
+// appeared read as the task not having been made: "tekstvinduet (create new task) [er] fortsatt oppe,
+// selv om tasken lages" (2026-10-21). Shift+Enter creates it and keeps the row open, empty, for the
+// next one. The people and dates are cleared with the title either way — carrying them over would
+// quietly give the next task someone else's choices.
 export default function QuickAddTaskRow({
   listId,
   gridTemplate,
@@ -76,10 +78,14 @@ export default function QuickAddTaskRow({
   }, [workspaces, users, listId]);
   const chosen = users.filter((u) => assigneeIds.includes(u.id));
 
-  const save = () => {
+  const save = (keepOpen = false) => {
     const t = title.trim();
     if (!t) return;
     if (!onAdd(t, { assigneeIds, startDate, dueDate, showInPlanner: inPlanner })) return;
+    if (!keepOpen) {
+      onCancel();
+      return;
+    }
     setTitle('');
     setAssigneeIds([]);
     setStartDate(null);
@@ -92,11 +98,15 @@ export default function QuickAddTaskRow({
     <input
       type="text"
       ref={inputRef}
-      placeholder="Type a title and press Enter..."
+      placeholder="Task name — Enter to save"
+      title="Enter saves and closes · Shift+Enter saves and starts the next one"
       value={title}
       onChange={(e) => setTitle(e.target.value)}
       onKeyDown={(e) => {
-        if (e.key === 'Enter') save();
+        if (e.key === 'Enter') {
+          e.preventDefault();
+          save(e.shiftKey);
+        }
         if (e.key === 'Escape') onCancel();
       }}
       className="w-full min-w-0 bg-neutral-900 border border-blue-500/80 rounded px-3 py-1 text-xs text-app-strong focus:outline-none"
@@ -137,7 +147,8 @@ export default function QuickAddTaskRow({
         Cancel
       </button>
       <button
-        onClick={save}
+        onClick={() => save()}
+        title="Save (Enter) · Shift+Enter saves and starts the next one"
         disabled={!title.trim()}
         className="bg-blue-600 hover:bg-blue-500 disabled:opacity-40 disabled:cursor-default text-white text-xs pl-3 pr-2 py-1 rounded font-medium cursor-pointer flex items-center gap-1"
       >
