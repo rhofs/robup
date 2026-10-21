@@ -13217,3 +13217,5 @@ calendar to start once the keyboard is fully down, "bittelitt tregere".
   - The List's context menu has a new "Edit statuses" item for that List.
 - Helper tested with tsx; `next build` passes. Not seen in a browser.
 
+
+**Deployed 2026-10-21 as `a471fde`** (tag above). Pterodactyl backup `before-2026-10-21-list-circle-settings` (a14349db) taken first; the migration ran on start.
