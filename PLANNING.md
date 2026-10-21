@@ -13218,4 +13218,4 @@ calendar to start once the keyboard is fully down, "bittelitt tregere".
 - Helper tested with tsx; `next build` passes. Not seen in a browser.
 
 
-**Deployed 2026-10-21 as `a471fde`** (tag above). Pterodactyl backup `before-2026-10-21-list-circle-settings` (a14349db) taken first; the migration ran on start.
+**Deployed 2026-10-21 as `a471fde`** (tag `deploy/2026-10-21_1046`). Pterodactyl backup `before-2026-10-21-list-circle-settings` (a14349db) taken first; the migration ran on start.
