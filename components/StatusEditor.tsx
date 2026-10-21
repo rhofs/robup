@@ -99,6 +99,7 @@ export default function StatusEditor({
 }) {
   const applySpaceStatuses = useTaskStore((s) => s.applySpaceStatuses);
   const updateSpace = useTaskStore((s) => s.updateSpace);
+  const updateList = useTaskStore((s) => s.updateList);
   const allTasks = useTaskStore((s) => s.tasks);
 
   // What "Apply" saves: the Space's statuses, or the List's. A List that has its own starts on them;
@@ -121,8 +122,18 @@ export default function StatusEditor({
   const [initial, setInitial] = useState<Draft[]>(boot.init);
   const [draft, setDraft] = useState<Draft[]>(() => (boot.extra ? [...boot.init, boot.extra] : boot.init));
   const [focusKey, setFocusKey] = useState<string | null>(boot.extra?.key ?? null);
-  const [checkMode, setCheckMode] = useState<'menu' | 'close'>(space.checkMode === 'close' ? 'close' : 'menu');
-  const [strikeDone, setStrikeDone] = useState(!!space.strikeDone);
+  // The task circle and strike-through belong to what the window edits: opened from a List, that List —
+  // its own choice, else its Space's. They used to be the Space's whichever way the window was opened,
+  // so changing them in one List changed every List in the Space ("Når jeg endrer på 'Edit statuses' på
+  // en list endres det på alle lists i samme space", 2026-10-21).
+  const spaceCircle: 'menu' | 'close' = space.checkMode === 'close' ? 'close' : 'menu';
+  const spaceStrike = !!space.strikeDone;
+  const savedSettings = (t: 'space' | 'list') =>
+    t === 'list' && list
+      ? { circle: (list.checkMode ?? spaceCircle) === 'close' ? ('close' as const) : ('menu' as const), strike: list.strikeDone ?? spaceStrike }
+      : { circle: spaceCircle, strike: spaceStrike };
+  const [checkMode, setCheckMode] = useState<'menu' | 'close'>(() => savedSettings(list ? 'list' : 'space').circle);
+  const [strikeDone, setStrikeDone] = useState(() => savedSettings(list ? 'list' : 'space').strike);
   const [step, setStep] = useState<'edit' | 'migrate'>('edit');
   const [targets, setTargets] = useState<Record<string, string>>({});
   const [error, setError] = useState<string | null>(null);
@@ -156,7 +167,7 @@ export default function StatusEditor({
   const shownRows = editing ? draft : spaceRows();
   const current = asTemplate(shownRows);
   const matching = allTemplates.find((t) => same(t.statuses, current));
-  const settingsDirty = checkMode !== (space.checkMode === 'close' ? 'close' : 'menu') || strikeDone !== !!space.strikeDone;
+  const settingsDirty = checkMode !== savedSettings(target).circle || strikeDone !== savedSettings(target).strike;
   // Content, or which saved status sits where (a removed status re-added under the same name is a new
   // status, not the old one).
   const initialKeys = ordered(initial).map((d) => d.key);
@@ -181,9 +192,13 @@ export default function StatusEditor({
     setTarget('space');
     setInitial(rows);
     setDraft(rows);
+    setCheckMode(savedSettings('space').circle);
+    setStrikeDone(savedSettings('space').strike);
   };
   const backToList = () => {
     setTarget('list');
+    setCheckMode(savedSettings('list').circle);
+    setStrikeDone(savedSettings('list').strike);
     const rows = listHadOwn ? draftFrom(list!.statuses, fallback, true) : draftFrom(space.statuses, fallback, false);
     setInitial(rows);
     setDraft(rows);
@@ -256,7 +271,16 @@ export default function StatusEditor({
         return setError(err);
       }
     }
-    if (settingsDirty) void updateSpace(space.id, { checkMode, strikeDone });
+    if (settingsDirty) {
+      // A List stores its own choice only where it differs from its Space, so it goes on following the
+      // Space in everything it has not chosen.
+      if (target === 'list' && list) {
+        void updateList(space.id, list.id, {
+          checkMode: checkMode === spaceCircle ? null : checkMode,
+          strikeDone: strikeDone === spaceStrike ? null : strikeDone,
+        });
+      } else void updateSpace(space.id, { checkMode, strikeDone });
+    }
     onClose();
   };
 
@@ -519,7 +543,7 @@ export default function StatusEditor({
               {/* What tapping a task's circle does in this Space — the status menu, or closing at once
                   ("at man kan toggle om man vil ha den 'gamle' stilen"). See Space.checkMode. */}
               <div>
-                <p className="text-[12px] text-neutral-400 mb-2">Task circle</p>
+                <p className="text-[12px] text-neutral-400 mb-2">Task circle{target === 'list' && list ? ` in ${list.name}` : ''}</p>
                 <div className="flex rounded-lg bg-neutral-800/70 p-0.5 w-[210px] max-w-full">
                   {(['menu', 'close'] as const).map((m) => (
                     <button
@@ -535,6 +559,7 @@ export default function StatusEditor({
                 </div>
                 <p className="text-[10.5px] text-neutral-500 mt-1.5 leading-relaxed">
                   {checkMode === 'close' ? 'A tap closes the task at once (archived).' : 'A tap opens these statuses to pick from.'}
+                  {target === 'list' && list && ` Only this List; the rest of ${space.name} keep their own.`}
                 </p>
               </div>
 

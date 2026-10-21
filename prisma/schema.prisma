@@ -447,6 +447,12 @@ model List {
   // The Planner default for this List's tasks; null = the Space's (Space.plannerDefault). A List that
   // says otherwise wins. "Edit List" → Planner.
   plannerDefault Boolean? @map("planner_default")
+  // The task circle and strike-through for this List's tasks, when its own "Edit statuses" window chose
+  // differently from its Space (Space.checkMode / Space.strikeDone); null = the Space's. These used to
+  // be the Space's only, so changing them in a List's window changed every List in the Space: "Når jeg
+  // endrer på 'Edit statuses' på en list endres det på alle lists i samme space" (2026-10-21).
+  checkMode  String?  @map("check_mode")
+  strikeDone Boolean? @map("strike_done")
   tasks        Task[]
   customFields CustomField[]
   // See Space.isPrivate/accessJson above — same shape, independent at this level.

@@ -8546,6 +8546,17 @@ function PageContent() {
             >
               <Pencil className="w-3.5 h-3.5" /> Edit List
             </button>
+            {/* This List's statuses — the Space's menu edits the Space's. On a phone, with no column
+                headers, this is the way to one List's own. */}
+            <button
+              onClick={() => {
+                openStatusEditor(listMenu.spaceId, false, listMenu.list.id);
+                setListMenu(null);
+              }}
+              className="w-full text-left px-3 py-1.5 text-xs text-neutral-300 hover:bg-neutral-800/60 cursor-pointer flex items-center gap-2"
+            >
+              <Palette className="w-3.5 h-3.5" /> Edit statuses
+            </button>
             <button
               onClick={() => {
                 setRenameListId(listMenu.list.id);

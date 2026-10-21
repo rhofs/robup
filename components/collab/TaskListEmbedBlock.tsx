@@ -610,6 +610,13 @@ export default function TaskListEmbedBlock({ node, updateAttributes, deleteNode,
                           <GroupMenuItem
                             icon={<Pencil className="w-3.5 h-3.5" />}
                             onClick={() => {
+                              // A List that uses its Space's statuses would rename the Space's, in
+                              // every List of it — so it goes to the Edit statuses window, which asks
+                              // whether to give this List its own or change the Space's.
+                              if (!ownListStatuses?.length) {
+                                editStatuses(listSpace.id, false);
+                                return;
+                              }
                               setGroupMenu(null);
                               setRenameDraft(g.name);
                               setRenamingGroup(g.name);

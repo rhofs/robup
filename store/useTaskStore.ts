@@ -209,6 +209,10 @@ export type HierarchyList = {
   // Whether this List's tasks show in the Planner by default; null/absent = the Space's
   // (lib/taskDates.ts).
   plannerDefault?: boolean | null;
+  // Its own task circle and strike-through, when its "Edit statuses" window chose differently from the
+  // Space; null/absent = the Space's (lib/listStatuses.ts circleSettingsOfList).
+  checkMode?: 'close' | 'menu' | null;
+  strikeDone?: boolean | null;
 };
 
 export type HierarchySpace = {
@@ -607,7 +611,7 @@ interface TaskStore {
   updateList: (
     spaceId: string,
     listId: string,
-    patch: { name?: string; color?: string | null; textColor?: string | null; icon?: string | null; isPrivate?: boolean; accessJson?: string; plannerDefault?: boolean | null }
+    patch: { name?: string; color?: string | null; textColor?: string | null; icon?: string | null; isPrivate?: boolean; accessJson?: string; plannerDefault?: boolean | null; checkMode?: 'close' | 'menu' | null; strikeDone?: boolean | null }
   ) => Promise<void>;
   // Which columns a List's board shows. Its own action rather than a field on updateList, because
   // it must NOT go on the undo stack: every other list edit is a change to the thing itself, and
@@ -2541,6 +2545,8 @@ export const useTaskStore = create<TaskStore>((set, get) => {
         if (patch.isPrivate !== undefined) oldPatch.isPrivate = oldList.isPrivate;
         if (patch.accessJson !== undefined) oldPatch.accessJson = oldList.accessJson;
         if (patch.plannerDefault !== undefined) oldPatch.plannerDefault = oldList.plannerDefault ?? null;
+        if (patch.checkMode !== undefined) oldPatch.checkMode = oldList.checkMode ?? null;
+        if (patch.strikeDone !== undefined) oldPatch.strikeDone = oldList.strikeDone ?? null;
         useHistoryStore.getState().push({
           label: 'Update list',
           undo: () => get().updateList(spaceId, listId, oldPatch),

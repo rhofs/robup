@@ -2483,6 +2483,13 @@ Picked up right after the office's "merged single island" popup-menu work (previ
 
 ## Known bugs / things to remember
 
+- **Everything in a List's "Edit statuses" window must save to that List** (2026-10-21). The status
+  set was already List-scoped (2026-10-13), but "Task circle" and "Strike through done tasks" sat in
+  the same window and always wrote to the Space. So "changing Edit statuses on one list changed every
+  list" came back as a second report. A doc List block's inline status "Rename" did the same for a
+  List that inherits. Any new setting added to that window needs a List-level home, or it repeats
+  this.
+
 - **The Android app drops every download unless the app itself handles it** (found 2026-10-20). A
   WebView gives downloads to its DownloadListener, and Capacitor sets none. So `<a download>`, an
   `attachment` response, or a PDF the WebView cannot show did nothing, with no error, from the first
@@ -13183,3 +13190,30 @@ calendar to start once the keyboard is fully down, "bittelitt tregere".
 
 
 **Deployed 2026-10-21 as `4831ad7`** (tag `deploy/2026-10-21_0854`). Web-only.
+
+### 2026-10-21 (continued) — [Bug] Edit statuses on one List changed every List in the Space
+
+- **User:** "Når jeg endrer på 'Edit statues' på en list endres det på alle lists i samme space".
+- **Checked first:** the status set itself is saved per List correctly. Client `applySpaceStatuses`
+  and server `applyStatusSet` were read: a List set is scoped by `listId` and only renames that
+  List's tasks. A List that inherits shows the Space's statuses read-only; changing them for the
+  whole Space takes the explicit "Edit <Space>'s statuses instead" link.
+- **Causes found:**
+  1. **"Task circle" and "Strike through done tasks"** in the same window were always saved with
+     `updateSpace`, even when the window was opened from a List. Most likely what was reported.
+  2. **A doc List block's group "Rename"** called `updateStatus` on the status shown. For a List
+     that inherits, that is the Space's status, so every List was renamed.
+  3. **No way to reach one List's statuses on a phone:** only the Space menu had "Edit statuses",
+     so every edit there was Space-wide.
+- **Fix:**
+  - `List.checkMode String?` / `List.strikeDone Boolean?` (null = the Space's); migration
+    `20261021110000_list_circle_settings`, plain ADD COLUMNs, verified with `migrate diff`.
+  - `lib/listStatuses.ts` `circleSettingsOfList` is used by TaskRow (circle and strike) and
+    MyTasksPage.
+  - StatusEditor saves these settings to the List when it edits a List, storing null where they
+    equal the Space's. The labels say "Task circle in <List>" and "Only this List".
+    "Edit <Space>'s statuses instead" switches them to the Space's.
+  - The doc block's Rename opens the Edit statuses window when the List inherits.
+  - The List's context menu has a new "Edit statuses" item for that List.
+- Helper tested with tsx; `next build` passes. Not seen in a browser.
+

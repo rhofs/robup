@@ -4,7 +4,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { ArrowDownUp, Check } from 'lucide-react';
 import { HierarchyWorkspace, AppUser, Task, StatusDef } from '../store/useTaskStore';
 import { isDoneStatus } from '../lib/taskDoneDust';
-import { statusesOfList } from '../lib/listStatuses';
+import { circleSettingsOfList, statusesOfList } from '../lib/listStatuses';
 import { dueDateColor } from '../lib/dateBadgeColor';
 import { dateFieldsByList, myTasksDate } from '../lib/taskDates';
 import { useIsMobile } from '../hooks/useIsMobile';
@@ -127,7 +127,7 @@ export default function MyTasksPage({ currentUser, workspaces: allWorkspaces, de
         map.set(list.id, {
           path: [space.name, ...folders, list.name],
           statuses: statusesOfList(workspaces, list.id) ?? fallbackStatuses,
-          circle: space.checkMode === 'close' ? 'close' : 'menu',
+          circle: circleSettingsOfList(workspaces, list.id).circle,
         });
       }
     }

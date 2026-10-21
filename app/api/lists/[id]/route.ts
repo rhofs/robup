@@ -55,6 +55,9 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
   if (body.sortJson !== undefined) data.sortJson = body.sortJson;
   // null = the Space's default (schema: List.plannerDefault).
   if (body.plannerDefault !== undefined) data.plannerDefault = body.plannerDefault === null ? null : body.plannerDefault === true;
+  // The List's own task circle / strike-through; null = the Space's (schema: List.checkMode).
+  if (body.checkMode === null || body.checkMode === 'close' || body.checkMode === 'menu') data.checkMode = body.checkMode;
+  if (body.strikeDone !== undefined) data.strikeDone = body.strikeDone === null ? null : body.strikeDone === true;
   if (body.spaceId !== undefined) data.spaceId = body.spaceId;
   // A List that moves Space takes its own statuses along (Status.spaceId follows); without this they
   // would still hang off the old Space and go when it is deleted.

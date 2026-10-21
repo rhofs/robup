@@ -1,6 +1,6 @@
 'use client';
 
-import { statusesOfList } from '../lib/listStatuses';
+import { circleSettingsOfList, statusesOfList } from '../lib/listStatuses';
 import { offerCompleteSubtasks } from '../lib/completeSubtasks';
 import { memo, useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { motion } from 'framer-motion';
@@ -188,8 +188,9 @@ function TaskRowImpl({
   // Store references, so a row only re-renders when its Space's statuses change.
   const spaceStatuses = useTaskStore((st) => statusesOfList(st.workspaces, task.listId));
   const ownStatuses = spaceStatuses && spaceStatuses.length > 0 ? spaceStatuses : DEFAULT_ROW_STATUSES;
-  const strikeDone = useTaskStore((st) => !!spaceOfList(st.workspaces, task.listId)?.strikeDone);
-  const circleMode = useTaskStore((st) => (spaceOfList(st.workspaces, task.listId)?.checkMode === 'close' ? 'close' : 'menu'));
+  // The List's own choice, else its Space's (lib/listStatuses.ts). Primitives, so the selectors stay stable.
+  const strikeDone = useTaskStore((st) => circleSettingsOfList(st.workspaces, task.listId).strikeDone);
+  const circleMode = useTaskStore((st) => circleSettingsOfList(st.workspaces, task.listId).circle);
   // Done = archived (closed), or in a done status. "Strike through gjennom hele oppgaven når den er
   // Complete eller Done" — a Space setting.
   const struck = strikeDone && (task.archived || isDoneStatus(task.status, ownStatuses));
@@ -805,12 +806,6 @@ const DEFAULT_ROW_STATUSES: StatusDef[] = [
   { id: 'default-review', name: 'Review', color: '#9a61d1', order: 2 },
   { id: 'default-done', name: 'Done', color: '#349f7c', order: 3, isDone: true },
 ];
-
-// The Space a List belongs to, for the row's statuses and done rules.
-function spaceOfList(workspaces: ReturnType<typeof useTaskStore.getState>['workspaces'], listId: string) {
-  for (const ws of workspaces) for (const sp of ws.spaces) if (sp.lists.some((l) => l.id === listId)) return sp;
-  return undefined;
-}
 
 const TaskRow = memo(TaskRowImpl);
 export default TaskRow;
