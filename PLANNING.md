@@ -13035,3 +13035,5 @@ calendar to start once the keyboard is fully down, "bittelitt tregere".
   - The "Move to…" list picker still uses `clampMenuPosition`'s estimate; not changed.
 - Placement rules tested with tsx, including the screenshot's case: a click at y=665 in a 984px
   window opens the 330px menu upward at top 335. Not seen in a browser.
+
+**Deployed 2026-10-21 as `5be3527`** (tag `deploy/2026-10-21_0756`). Web-only.
