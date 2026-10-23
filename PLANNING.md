@@ -13414,3 +13414,5 @@ calendar to start once the keyboard is fully down, "bittelitt tregere".
   weekday picks for weekly ("Mon and Thu").
 - `next build` passes. Not seen in a browser.
 
+
+**Deployed 2026-10-23 as `d88b7f4`** (tag `deploy/2026-10-23_1320`). Pterodactyl backup `before-2026-10-23-event-recurrence` (bba78366) taken first — the panel now holds 9 of its 10 backups, so the next one needs an old one deleted (ask Robin which). The migration ran on start.
