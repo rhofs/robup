@@ -15,6 +15,14 @@ import EventActivityPanel from './EventActivityPanel';
 import GoogleIcon from '../icons/GoogleIcon';
 import { googleMapsSearchUrl } from '../../lib/googleMapsUrl';
 import LocationAutocompleteInput from '../LocationAutocompleteInput';
+import RepeatPicker from './RepeatPicker';
+import { parseRecurrence } from '../../lib/recurrence';
+
+// "5 Nov" for an occurrence's YYYY-MM-DD.
+const occurrenceLabel = (key: string) => {
+  const [y, m, d] = key.split('-').map(Number);
+  return new Date(y, m - 1, d).toLocaleDateString(undefined, { day: 'numeric', month: 'short' });
+};
 
 // Exported so QuickCreatePopover offers the exact same palette when creating an event as this
 // modal does when editing one — they were previously separate concerns only because the create
@@ -37,21 +45,26 @@ type EventDetailModalProps = {
     color?: string | null;
     spaceId?: string | null;
     workspaceId?: string;
+    recurrence?: string | null;
   }) => void;
   onSetAssignees: (assigneeIds: string[]) => void;
   onDelete: () => void;
+  // Opened from one occurrence of a repeating event: that day (YYYY-MM-DD), and how to leave just it out.
+  occurrenceKey?: string | null;
+  onDeleteOccurrence?: () => void;
 };
 
 // Opens on clicking an Event bar in the Planner. Deliberately much smaller than the Task modal —
 // no subtasks/docs/status/custom-fields, none of that concept applies to an Event. Does now have
 // Activity & Comments (backlog #12 — see EventActivityPanel), the one thing from the Task modal
 // that genuinely does apply here (a date-range edit needs somewhere to log to).
-export default function EventDetailModal({ event, workspaces, users, currentUserId, onClose, onUpdate, onSetAssignees, onDelete }: EventDetailModalProps) {
+export default function EventDetailModal({ event, workspaces, users, currentUserId, onClose, onUpdate, onSetAssignees, onDelete, occurrenceKey, onDeleteOccurrence }: EventDetailModalProps) {
   const [titleDraft, setTitleDraft] = useState(event?.title ?? '');
   const [editingTitle, setEditingTitle] = useState(false);
   const [assigneePickerOpen, setAssigneePickerOpen] = useState(false);
 
   if (!event) return null;
+  const repeats = !!parseRecurrence(event.recurrence);
 
   // Per-assignee sync now (see EventGoogleSync in schema.prisma) — the badge only speaks for the
   // person actually looking at it: is *this* viewer's own Google Calendar one of the ones this
@@ -181,6 +194,18 @@ export default function EventDetailModal({ event, workspaces, users, currentUser
             All day
           </button>
 
+          {/* Repeating — "Kunne sette events som recurring" (2026-10-23). The dates above are the
+              first occurrence's; changing them moves the whole series. */}
+          <div className="space-y-1.5">
+            <label className="text-[10px] uppercase tracking-wide text-neutral-500 font-semibold">Repeat</label>
+            <RepeatPicker value={event.recurrence} startDate={event.startDate} onChange={(recurrence) => onUpdate({ recurrence })} />
+            {repeats && (
+              <p className="text-[10.5px] text-neutral-500">
+                Start and End are the first time it happens — changing them moves every occurrence. Drag one in the Planner to move only that one.
+              </p>
+            )}
+          </div>
+
           {!event.spaceId && (
             <div className="space-y-1.5">
               <label className="text-[10px] uppercase tracking-wide text-neutral-500 font-semibold flex items-center gap-2">
@@ -275,6 +300,17 @@ export default function EventDetailModal({ event, workspaces, users, currentUser
 
           <EventActivityPanel eventId={event.id} />
 
+          {repeats && occurrenceKey && onDeleteOccurrence && (
+            <button
+              onClick={() => {
+                onDeleteOccurrence();
+                onClose();
+              }}
+              className="w-full flex items-center justify-center gap-1.5 text-xs text-red-400 hover:text-red-300 hover:bg-red-500/10 py-2 rounded cursor-pointer transition"
+            >
+              <Trash2 className="w-3.5 h-3.5" /> Delete only this one ({occurrenceLabel(occurrenceKey)})
+            </button>
+          )}
           <button
             onClick={() => {
               onDelete();
@@ -282,7 +318,7 @@ export default function EventDetailModal({ event, workspaces, users, currentUser
             }}
             className="w-full flex items-center justify-center gap-1.5 text-xs text-red-400 hover:text-red-300 hover:bg-red-500/10 py-2 rounded cursor-pointer transition"
           >
-            <Trash2 className="w-3.5 h-3.5" /> Delete event
+            <Trash2 className="w-3.5 h-3.5" /> {repeats ? 'Delete every occurrence' : 'Delete event'}
           </button>
         </div>
       </div>

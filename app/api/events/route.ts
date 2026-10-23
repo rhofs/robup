@@ -1,4 +1,5 @@
 import { NextResponse } from 'next/server';
+import { normalizeRecurrence } from '@/lib/recurrence';
 import { includeArchivedSpaces } from '@/lib/archivedSpaces';
 import { prisma, publicUserSelect } from '@/lib/prisma';
 import { getCurrentUserId } from '@/lib/auth/session';
@@ -60,6 +61,7 @@ export async function POST(req: Request) {
       color: body.color ?? null,
       spaceId: body.spaceId ?? null,
       workspaceId: body.workspaceId,
+      recurrence: normalizeRecurrence(body.recurrence),
       ...(assigneeIds.length ? { assignees: { connect: assigneeIds.map((id) => ({ id })) } } : {}),
     },
     include: { assignees: { select: publicUserSelect } },

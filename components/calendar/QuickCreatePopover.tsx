@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import { AnimatePresence } from 'framer-motion';
-import { X, MapPin, CalendarDays, Clock, Plus } from 'lucide-react';
+import { X, MapPin, CalendarDays, Clock, Plus, Repeat } from 'lucide-react';
 import { HierarchyWorkspace, AppUser, useTaskStore } from '../../store/useTaskStore';
 import { suggestEventAttendees } from '../../lib/assigneeSuggestions';
 import DateSheet from '../mobile/DateSheet';
@@ -16,6 +16,7 @@ import ColorSwatchPicker from '../ColorSwatchPicker';
 import { EVENT_COLOR_CHOICES } from './EventDetailModal';
 import { googleMapsSearchUrl } from '../../lib/googleMapsUrl';
 import LocationAutocompleteInput from '../LocationAutocompleteInput';
+import RepeatPicker from './RepeatPicker';
 import MobileQuickCreateSheet from '../mobile/MobileQuickCreateSheet';
 import { useIsMobile } from '../../hooks/useIsMobile';
 
@@ -42,6 +43,9 @@ type QuickCreatePopoverProps = {
     location: string | null;
     description: string | null;
     color: string | null;
+    // How it repeats (lib/recurrence.ts), or null. The phone's sheet does not ask; it is set in the
+    // event window afterwards.
+    recurrence?: string | null;
   }) => void;
 };
 
@@ -87,6 +91,7 @@ export default function QuickCreatePopover({
   // opened straight on a field's clock when "Add time" under the dates was pressed.
   const [dateDialog, setDateDialog] = useState<{ for: 'event' | 'task'; time?: 'start' | 'end' } | null>(null);
   const [eventLocation, setEventLocation] = useState('');
+  const [eventRecurrence, setEventRecurrence] = useState<string | null>(null);
   const [assigneeIds, setAssigneeIds] = useState<string[]>([]);
   const [assigneePickerOpen, setAssigneePickerOpen] = useState(false);
   // Description and color were the two fields EventDetailModal offered but this popover didn't,
@@ -109,6 +114,7 @@ export default function QuickCreatePopover({
       setEventEnd(defaultEndDate ?? defaultStartDate);
       setDateDialog(null);
       setEventLocation('');
+      setEventRecurrence(null);
       setAssigneeIds([]);
       setEventDescription('');
       setEventColor(null);
@@ -166,6 +172,7 @@ export default function QuickCreatePopover({
         location: eventLocation.trim() || null,
         description: eventDescription.trim() || null,
         color: eventColor,
+        recurrence: eventRecurrence,
       });
     }
     onClose();
@@ -337,6 +344,10 @@ export default function QuickCreatePopover({
                     />
                   </FloatingPopover>
                 </div>
+              </Field>
+
+              <Field label="Repeat" icon={<Repeat className="w-3 h-3" />}>
+                <RepeatPicker value={eventRecurrence} startDate={eventStart} onChange={setEventRecurrence} />
               </Field>
 
               <Field label="Location" icon={<MapPin className="w-3 h-3" />}>

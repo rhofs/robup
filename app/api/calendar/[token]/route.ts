@@ -1,5 +1,6 @@
 import { richToPlainText } from '@/lib/richText';
 import { prisma } from '@/lib/prisma';
+import { parseExceptions, parseRecurrence, toRRule } from '@/lib/recurrence';
 
 // RFC 5545 §3.3.11 — escape backslash, semicolon, comma, and newline in TEXT values.
 const icsEscape = (s: string) => s.replace(/\\/g, '\\\\').replace(/;/g, '\\;').replace(/,/g, '\\,').replace(/\n/g, '\\n');
@@ -78,6 +79,12 @@ export async function GET(_req: Request, { params }: { params: Promise<{ token: 
       // is very hard to notice and worse than not supporting times at all.
       lines.push(`DTSTART:${icsStamp(e.startDate)}`, `DTEND:${icsStamp(e.endDate)}`);
     }
+
+    // A repeating event as one VEVENT with its rule (lib/recurrence.ts). A timed one repeats in UTC
+    // here, like its DTSTART, so across a change of clocks a subscribing calendar may show it an hour
+    // off — the price of the no-VTIMEZONE rule above.
+    const rule = parseRecurrence(e.recurrence);
+    if (rule) lines.push(...toRRule(rule, e.startDate, e.allDay, parseExceptions(e.recurrenceExceptions)));
 
     lines.push(`SUMMARY:${icsEscape(e.title)}`);
     if (e.location) lines.push(`LOCATION:${icsEscape(e.location)}`);

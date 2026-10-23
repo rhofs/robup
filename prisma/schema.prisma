@@ -847,6 +847,13 @@ model Event {
   // EventGoogleSync row too. Drives the small Google-icon badge in the UI, same "mark where this
   // came from" treatment the ClickUp reference screenshot showed.
   importedFromGoogle Boolean @default(false) @map("imported_from_google")
+  // Repeating ("Kunne sette events som recurring", 2026-10-23): the rule as JSON
+  // {freq: daily|weekly|monthly|yearly, interval, until?: YYYY-MM-DD, count?} — null for a one-off —
+  // and the days left out of it (JSON array of YYYY-MM-DD). Occurrences are worked out when shown
+  // (lib/recurrence.ts), never stored; this row is the first one. One moved on its own becomes an
+  // event of its own, its day added here.
+  recurrence           String? @map("recurrence")
+  recurrenceExceptions String  @default("[]") @map("recurrence_exceptions")
   deletedAt   DateTime? @map("deleted_at")
   createdAt   DateTime  @default(now()) @map("created_at")
   updatedAt   DateTime  @updatedAt @map("updated_at")

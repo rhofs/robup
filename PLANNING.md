@@ -13372,3 +13372,45 @@ calendar to start once the keyboard is fully down, "bittelitt tregere".
 
 
 **Deployed 2026-10-23 as `7872aac`** (tag `deploy/2026-10-23_1311`). Pterodactyl backup `before-2026-10-23-task-statuses` (2f3cfe8e) taken first, the panel's 8th of 10; the migration ran on start.
+
+### 2026-10-23 (continued) — [Feature] repeating events in the Planner
+
+- **User:** "Planner - Kunne sette evnts som recurring."
+- **Model** (migration `20261023150000_event_recurrence`, hand-written ADD COLUMNs, verified):
+  - `Event.recurrence` holds the rule as JSON: `{freq: daily|weekly|monthly|yearly, interval 1–99,
+    until?: YYYY-MM-DD | count?}`; null for a one-off.
+  - `Event.recurrenceExceptions` is a JSON array of the YYYY-MM-DD days left out.
+  - The row is the first occurrence. Occurrences are computed when shown, never stored.
+- **`lib/recurrence.ts`** (tested with tsx, TZ=Europe/Oslo):
+  - `parseRecurrence`/`normalizeRecurrence`, `occurrenceStarts` (local calendar arithmetic, so
+    09:00 stays 09:00 across DST; daily/weekly jump straight to the window), `expandOccurrences`
+    (each occurrence keeps the series' span in calendar days), `recurrenceLabel`, `toRRule`, and
+    the occurrence id `<eventId>@@YYYY-MM-DD`.
+  - Monthly on the 31st and yearly on 29 Feb skip the months/years without that day (RFC 5545
+    behaviour, so Google agrees).
+  - `count` counts excepted days too, as in RRULE.
+- **Planner:**
+  - `page.tsx` passes `calendarEventsWithRepeats`: occurrences in a window from 50 days before to
+    80 days after the Planner's focus date.
+  - Opening an occurrence opens its series and remembers the day (`eventOccurrenceKey`).
+  - Dragging an occurrence (week grid or day view) moves only that one: `detachOccurrence` adds
+    its day to the exceptions and creates a standalone copy (title, description, location, colour,
+    Space, workspace, attendees) on the new dates, in one undo step. Comments stay on the series.
+- **Event window:** a Repeat section (`components/calendar/RepeatPicker.tsx`): Does not repeat /
+  Repeats; every N days/weeks/months/years; ends Never, On a date, or After N times.
+  - A note says Start/End are the first occurrence: editing them moves the whole series.
+  - "Delete only this one (5 Nov)" adds an exception; the other button reads "Delete every
+    occurrence".
+- **Desktop create popover:** has Repeat. The phone's create sheet does not; repeat is set in the
+  event window afterwards.
+- **Google Calendar:** `syncEventForUser` sends `recurrence: toRRule(...)` (an empty list when not
+  repeating, which clears it). Excepted days go as EXDATE (all-day → `VALUE=DATE`; timed → UTC
+  instant of its start time that day).
+  - The pull does not import rule changes made in Google.
+  - A Google-native repeating event is still imported as a single event, as before.
+- **.ics feed:** RRULE/EXDATE lines. Timed repeats are in UTC there, so they may show an hour off
+  across DST in subscribing calendars (the feed's no-VTIMEZONE choice).
+- **Not done:** "this and following" edits, editing one occurrence's details without moving it,
+  weekday picks for weekly ("Mon and Thu").
+- `next build` passes. Not seen in a browser.
+

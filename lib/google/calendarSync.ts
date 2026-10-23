@@ -1,4 +1,5 @@
 import { calendar_v3, google } from 'googleapis';
+import { parseExceptions, parseRecurrence, toRRule } from '../recurrence';
 import { richToPlainText } from '../richText';
 import { prisma } from '@/lib/prisma';
 import { createGoogleOAuthClient } from './oauthClient';
@@ -350,12 +351,16 @@ export async function syncEventForUser(eventId: string, userId: string): Promise
     .filter((email): email is string => !!email)
     .map((email) => ({ email }));
 
+  // A repeating event goes as one Google event with its rule (lib/recurrence.ts toRRule). An update
+  // with no rule sends an empty list, which is how Google is told an event stopped repeating.
+  const rule = parseRecurrence(event.recurrence);
   const requestBody: calendar_v3.Schema$Event = {
     summary: ev.title,
     description: ev.description ?? undefined,
     location: ev.location ?? undefined,
     attendees,
     ...toGoogleDateFields(ev),
+    recurrence: rule ? toRRule(rule, ev.startDate, ev.allDay, parseExceptions(event.recurrenceExceptions)) : [],
   };
 
   try {

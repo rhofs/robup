@@ -1,4 +1,5 @@
 import { NextResponse } from 'next/server';
+import { normalizeRecurrence } from '@/lib/recurrence';
 import { prisma, publicUserSelect } from '@/lib/prisma';
 import { getCurrentUserId } from '@/lib/auth/session';
 import { ensureEventAccess } from '@/lib/auth/resourceAccess';
@@ -65,6 +66,13 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
   if (body.allDay !== undefined) data.allDay = body.allDay;
   if (body.color !== undefined) data.color = body.color;
   if (body.spaceId !== undefined) data.spaceId = body.spaceId;
+  // Repeating (lib/recurrence.ts): a rule, or null to stop; and the days left out of it.
+  if (body.recurrence !== undefined) data.recurrence = normalizeRecurrence(body.recurrence);
+  if (Array.isArray(body.recurrenceExceptions)) {
+    data.recurrenceExceptions = JSON.stringify(
+      [...new Set(body.recurrenceExceptions.filter((k: unknown) => typeof k === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(k as string)))].sort()
+    );
+  }
   if (moving) {
     data.workspaceId = targetWorkspaceId;
     // Attendees come from the event's workspace; whoever is not in the new one comes off (the window

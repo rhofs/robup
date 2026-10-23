@@ -9,6 +9,7 @@ import { parseTaskTemplate, type AppTemplate, type TemplateKind } from '../lib/t
 import { useSessionStore } from './useSessionStore';
 import { celebrateTaskDone, isClosedStatus } from '../lib/taskDoneDust';
 import { statusOwnerOf, statusesOfList, statusesOfTask } from '../lib/listStatuses';
+import { parseExceptions } from '../lib/recurrence';
 
 export type StatusDef = {
   id: string;
@@ -404,8 +405,13 @@ interface TaskStore {
     // POST /api/events already persisted this; it just had no way in from the create popover
     // until that gained a Description field.
     description?: string | null;
+    // A repeating event's rule as JSON (lib/recurrence.ts), or null.
+    recurrence?: string | null;
     id?: string;
   }) => Promise<Event | null>;
+  // One occurrence of a repeating event moved on its own: its day is left out of the series and it
+  // becomes an event of its own on its new dates — one undo step.
+  detachOccurrence: (eventId: string, key: string, startDate: string, endDate: string) => Promise<void>;
   updateEvent: (
     eventId: string,
     patch: {
@@ -420,6 +426,9 @@ interface TaskStore {
       // Moving it to another workspace (the event window's "Belongs to"). With a Space, the Space's
       // workspace wins — here and on the server.
       workspaceId?: string;
+      // Repeating (lib/recurrence.ts): the rule as JSON (null stops it), and the days left out.
+      recurrence?: string | null;
+      recurrenceExceptions?: string[];
     }
   ) => Promise<void>;
   optimisticSetEventAssignees: (eventId: string, assigneeIds: string[]) => Promise<void>;
@@ -1129,6 +1138,26 @@ export const useTaskStore = create<TaskStore>((set, get) => {
       }
     },
 
+    detachOccurrence: async (eventId, key, startDate, endDate) => {
+      const series = get().events.find((e) => e.id === eventId);
+      if (!series) return;
+      await useHistoryStore.getState().transaction('Move one occurrence', async () => {
+        await get().updateEvent(eventId, { recurrenceExceptions: [...parseExceptions(series.recurrenceExceptions), key] });
+        await get().optimisticCreateEvent({
+          title: series.title,
+          description: series.description,
+          location: series.location,
+          startDate,
+          endDate,
+          allDay: series.allDay,
+          color: series.color,
+          spaceId: series.spaceId,
+          workspaceId: series.workspaceId,
+          assigneeIds: series.assignees.map((a) => a.id),
+        });
+      });
+    },
+
     optimisticCreateEvent: async (params) => {
       const res = await fetch('/api/events', {
         method: 'POST',
@@ -1165,6 +1194,7 @@ export const useTaskStore = create<TaskStore>((set, get) => {
                 ...patch,
                 startDate: patch.startDate ? new Date(patch.startDate) : e.startDate,
                 endDate: patch.endDate ? new Date(patch.endDate) : e.endDate,
+                recurrenceExceptions: patch.recurrenceExceptions ? JSON.stringify(patch.recurrenceExceptions) : e.recurrenceExceptions,
               }
             : e
         ),
@@ -1194,6 +1224,8 @@ export const useTaskStore = create<TaskStore>((set, get) => {
         if (patch.color !== undefined) oldPatch.color = oldEvent.color;
         if (patch.spaceId !== undefined) oldPatch.spaceId = oldEvent.spaceId;
         if (patch.workspaceId !== undefined) oldPatch.workspaceId = oldEvent.workspaceId;
+        if (patch.recurrence !== undefined) oldPatch.recurrence = oldEvent.recurrence ?? null;
+        if (patch.recurrenceExceptions !== undefined) oldPatch.recurrenceExceptions = [...parseExceptions(oldEvent.recurrenceExceptions)];
         useHistoryStore.getState().pushCoalesced(`event-${eventId}`, {
           label: 'Edit event',
           undo: () => get().updateEvent(eventId, oldPatch),

@@ -15,6 +15,7 @@ import {
   WEEKDAY_LABELS_SHORT,
 } from '../../lib/calendarDates';
 import { customDateValue, parsePlannerMarkerId } from '../../lib/taskDates';
+import { parseOccurrenceId } from '../../lib/recurrence';
 import { shiftDateText } from '../../lib/taskSeries';
 import { assignLanes, clipRangeToWeek, type ClippedSegment, type DragMode, type DragState, type TaskRange } from '../../lib/ganttLayout';
 import { useTaskStore, StatusDef, Task, Event, HierarchyWorkspace } from '../../store/useTaskStore';
@@ -78,6 +79,7 @@ export default function CalendarView({ tasks, events, statuses, workspaces, show
     optimisticSetCalendarLane,
     optimisticSetCustomFieldValue,
     updateEvent,
+    detachOccurrence,
     refetchEvents,
     calendarGranularity: granularity,
     calendarFocusDate: focusDate,
@@ -556,6 +558,14 @@ export default function CalendarView({ tasks, events, statuses, workspaces, show
   // startDate-falls-back-to-dueDate juggling Task needs (an Event always has both). No lane-pin
   // handling — Event has no calendarLane field, so a vertical drag only ever affects the live
   // ghost preview, never anything persisted.
+  // One occurrence of a repeating event (lib/recurrence.ts) moves on its own: it leaves the series and
+  // becomes an event of its own. Anything else is the event's own dates.
+  const commitEventDates = (eventId: string, startISO: string, endISO: string) => {
+    const occ = parseOccurrenceId(eventId);
+    if (occ) void detachOccurrence(occ.eventId, occ.key, startISO, endISO);
+    else updateEvent(eventId, { startDate: startISO, endDate: endISO });
+  };
+
   const handleEventDragEnd = (eventId: string, mode: DragMode) => {
     const event = eventsById.get(eventId);
     const d = weekDrag;
@@ -572,7 +582,7 @@ export default function CalendarView({ tasks, events, statuses, workspaces, show
         newEnd = addDays(newEnd, d.deltaDays);
         if (newEnd < newStart) newEnd = new Date(newStart);
       }
-      updateEvent(eventId, { startDate: newStart.toISOString(), endDate: newEnd.toISOString() });
+      commitEventDates(eventId, newStart.toISOString(), newEnd.toISOString());
     }
     setWeekDrag(null);
   };
@@ -760,7 +770,7 @@ export default function CalendarView({ tasks, events, statuses, workspaces, show
             events={dayEvents}
             eventColorOf={eventColorOf}
             onOpenEvent={onOpenEvent}
-            onCommitEventDates={(eventId, startISO, endISO) => updateEvent(eventId, { startDate: startISO, endDate: endISO })}
+            onCommitEventDates={(eventId, startISO, endISO) => commitEventDates(eventId, startISO, endISO)}
             isMobile={isMobile}
           />
         ) : (

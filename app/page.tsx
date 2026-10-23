@@ -153,6 +153,7 @@ import NotificationsPanel, { NotificationList, type AppNotification } from '../c
 import QuickAddTaskRow, { type QuickAddExtras } from '../components/QuickAddTaskRow';
 import { TaskPlannerToggle } from '../components/PlannerToggle';
 import { dateFieldsByList, isTaskInPlanner, parsePlannerMarkerId, plannerDefaults, plannerMarkers } from '../lib/taskDates';
+import { expandOccurrences, parseExceptions, parseOccurrenceId } from '../lib/recurrence';
 import CommandPalette from '../components/CommandPalette';
 import TrashPanel from '../components/TrashPanel';
 import OnboardingFlow from '../components/OnboardingFlow';
@@ -1709,6 +1710,8 @@ function PageContent() {
   // other entry point, where a single day means a single-day event.
   const [createTaskDefaultEndDate, setCreateTaskDefaultEndDate] = useState<string | null>(null);
   const [eventDetailId, setEventDetailId] = useState<string | null>(null);
+  // The day of the occurrence it was opened from, when the event repeats.
+  const [eventOccurrenceKey, setEventOccurrenceKey] = useState<string | null>(null);
 
   const [calendarVisibleListIds, setCalendarVisibleListIds] = useState<Set<string>>(new Set());
   const calendarFilterInitRef = useRef(false);
@@ -3688,6 +3691,19 @@ function PageContent() {
     if (!space || space.lists.length === 0) return true;
     return space.lists.some((l) => calendarVisibleListIds.has(l.id));
   });
+
+  // Repeating events laid out as their occurrences (lib/recurrence.ts) for a window around the day the
+  // Planner is on — wide enough for a month grid either side of it, so moving a little does not
+  // leave occurrences missing until the next render.
+  const plannerFocus = useTaskStore((s) => s.calendarFocusDate);
+  const calendarEventsWithRepeats = (() => {
+    const focus = new Date(plannerFocus);
+    return expandOccurrences(
+      calendarFilteredEvents,
+      new Date(focus.getFullYear(), focus.getMonth(), focus.getDate() - 50),
+      new Date(focus.getFullYear(), focus.getMonth(), focus.getDate() + 80)
+    );
+  })();
 
   const toggleCalendarList = (listId: string) => {
     setCalendarVisibleListIds((prev) => {
@@ -7866,13 +7882,18 @@ function PageContent() {
               <div className="flex-1 min-h-0">
                 <CalendarView
                   tasks={calendarTasksWithDates}
-                  events={calendarFilteredEvents}
+                  events={calendarEventsWithRepeats}
                   statuses={statuses}
                   workspaces={workspaces}
                   showWeekNumbers={!hideWeekNumbers}
                   // A custom date's item opens the task it belongs to.
                   onOpenTask={(id) => setModalTaskStack([parsePlannerMarkerId(id)?.taskId ?? id])}
-                  onOpenEvent={(id) => setEventDetailId(id)}
+                  // An occurrence opens its series, remembering which day was clicked (for "delete only this one").
+                  onOpenEvent={(id) => {
+                    const occ = parseOccurrenceId(id);
+                    setEventOccurrenceKey(occ?.key ?? null);
+                    setEventDetailId(occ?.eventId ?? id);
+                  }}
                   onRequestCreateTask={(date, endDate) => {
                     setCreateTaskDefaultDate(date.toISOString());
                     setCreateTaskDefaultEndDate(endDate ? endDate.toISOString() : null);
@@ -10084,8 +10105,8 @@ function PageContent() {
         onCreateTask={({ title, spaceId, listId, startDate, dueDate }) => {
           optimisticCreateTask(title, listId, spaceId, null, startDate, dueDate);
         }}
-        onCreateEvent={({ title, startDate, endDate, allDay, spaceId, workspaceId, assigneeIds, location, description, color }) => {
-          optimisticCreateEvent({ title, startDate, endDate, allDay, spaceId, workspaceId, assigneeIds, location, description, color });
+        onCreateEvent={({ title, startDate, endDate, allDay, spaceId, workspaceId, assigneeIds, location, description, color, recurrence }) => {
+          optimisticCreateEvent({ title, startDate, endDate, allDay, spaceId, workspaceId, assigneeIds, location, description, color, recurrence });
         }}
       />
 
@@ -10098,6 +10119,12 @@ function PageContent() {
         onUpdate={(patch) => eventDetailId && updateEvent(eventDetailId, patch)}
         onSetAssignees={(assigneeIds) => eventDetailId && optimisticSetEventAssignees(eventDetailId, assigneeIds)}
         onDelete={() => eventDetailId && deleteEvent(eventDetailId)}
+        occurrenceKey={eventOccurrenceKey}
+        onDeleteOccurrence={() => {
+          const ev = events.find((e) => e.id === eventDetailId);
+          if (!ev || !eventOccurrenceKey) return;
+          updateEvent(ev.id, { recurrenceExceptions: [...parseExceptions(ev.recurrenceExceptions), eventOccurrenceKey] });
+        }}
       />
 
       {/* Team membership management (promote/demote, Roles, remove) moved into Office's
