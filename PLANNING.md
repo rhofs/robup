@@ -13370,3 +13370,5 @@ calendar to start once the keyboard is fully down, "bittelitt tregere".
     B and C but not D. Fallback names are right. Going back to inheriting works. Copying works.
   - Client nearest-owner lookup tested with tsx. `next build` passes. Not seen in a browser.
 
+
+**Deployed 2026-10-23 as `7872aac`** (tag `deploy/2026-10-23_1311`). Pterodactyl backup `before-2026-10-23-task-statuses` (2f3cfe8e) taken first, the panel's 8th of 10; the migration ran on start.
