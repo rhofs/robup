@@ -8,7 +8,7 @@ import { uploadChatFile } from '../lib/uploadChatFile';
 import { parseTaskTemplate, type AppTemplate, type TemplateKind } from '../lib/templates';
 import { useSessionStore } from './useSessionStore';
 import { celebrateTaskDone, isClosedStatus } from '../lib/taskDoneDust';
-import { statusesOfList } from '../lib/listStatuses';
+import { statusOwnerOf, statusesOfList, statusesOfTask } from '../lib/listStatuses';
 
 export type StatusDef = {
   id: string;
@@ -78,6 +78,9 @@ export type TaskAttachment = {
 
 export type Task = PrismaTask & {
   assignees: AppUser[];
+  // The statuses its subtasks use when it has chosen its own (lib/listStatuses.ts statusesOfTask).
+  // Absent on tasks made in this tab until the next load, and on most tasks: they have none.
+  subtaskStatuses?: StatusDef[];
   // Optional because older cached payloads and the optimistic rows created before a POST returns do
   // not carry it — every reader treats a missing list as an empty one rather than a failure.
   attachments?: TaskAttachment[];
@@ -460,8 +463,9 @@ interface TaskStore {
     spaceId: string,
     statuses: { id?: string; name: string; color: string; kind: 'open' | 'done' | 'closed'; icon: string | null }[],
     rename: Record<string, string>,
-    // A List's own set instead of the Space's; `inherit` gives it up and goes back to the Space's.
-    target?: { listId: string; inherit?: boolean }
+    // A List's own set instead of the Space's, or a task's own set for its subtasks (taskId); `inherit`
+    // gives it up and goes back to what it would use without.
+    target?: { listId?: string; taskId?: string; inherit?: boolean }
   ) => Promise<string | null>;
   updateStatus: (
     spaceId: string,
@@ -1243,7 +1247,7 @@ export const useTaskStore = create<TaskStore>((set, get) => {
       // closed status, not into a done one: "Når jeg trykker 'Done' status, så kommer det partikkel
       // effekt som kun 'Close' skal ha".
       if (task && oldStatus !== newStatus) {
-        const statuses = statusesOfList(get().workspaces, task.listId) ?? [];
+        const statuses = statusesOfTask(get().workspaces, get().tasks, task) ?? [];
         if (isClosedStatus(newStatus, statuses) && !(oldStatus && isClosedStatus(oldStatus, statuses))) celebrateTaskDone(taskId);
       }
       set((state) => ({
@@ -1270,8 +1274,9 @@ export const useTaskStore = create<TaskStore>((set, get) => {
       const space = get()
         .workspaces.flatMap((w) => w.spaces)
         .find((s) => s.id === spaceId);
-      // The List's own first status when it has its own, else the Space's.
-      const listStatuses = statusesOfList(get().workspaces, listId) ?? space?.statuses ?? [];
+      // The first status of the set this task will use: its parent's (or a task above that) when one
+      // has its own for its subtasks, else the List's own, else the Space's.
+      const listStatuses = statusesOfTask(get().workspaces, get().tasks, { listId, parentId: parentId ?? null }) ?? space?.statuses ?? [];
       const defaultStatus = explicitStatus ?? [...listStatuses].sort((a, b) => a.order - b.order)[0]?.name ?? 'To Do';
 
       // `order` matters here, and its absence was a real bug rather than an omission.
@@ -1648,7 +1653,7 @@ export const useTaskStore = create<TaskStore>((set, get) => {
       const res = await fetch(`/api/spaces/${spaceId}/statuses`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ statuses, rename, listId: target?.listId, inherit: target?.inherit === true }),
+        body: JSON.stringify({ statuses, rename, listId: target?.listId, taskId: target?.taskId, inherit: target?.inherit === true }),
       }).catch(() => null);
       if (!res || !res.ok) {
         const err = res ? await res.json().catch(() => null) : null;
@@ -1657,26 +1662,46 @@ export const useTaskStore = create<TaskStore>((set, get) => {
       const { statuses: saved } = (await res.json()) as { statuses: StatusDef[] };
       set((state) => {
         const space = state.workspaces.flatMap((w) => w.spaces).find((sp) => sp.id === spaceId);
-        // The tasks the change reached, as on the server (lib/statusSets.ts): the one List's, or those
-        // of the Space's Lists without their own statuses.
+        // The tasks the change reached, as on the server (lib/statusSets.ts): a task's set — the
+        // subtasks that use it; else the one List's, or those of the Space's Lists without their own
+        // statuses — less any task under a task with a set of its own.
+        const taskId = target?.taskId;
         const listIds = new Set(
-          target ? [target.listId] : (space?.lists.filter((l) => !l.statuses?.length).map((l) => l.id) ?? [])
+          target?.listId ? [target.listId] : (space?.lists.filter((l) => !l.statuses?.length).map((l) => l.id) ?? [])
+        );
+        // Under the task, with no task of its own set in between — whether or not the task had a set
+        // before this (going custom is exactly when it did not).
+        const byId = new Map(state.tasks.map((t) => [t.id, t]));
+        const usesTaskSet = (t: Task) => {
+          let parentId = t.parentId;
+          for (let guard = 0; parentId && guard < 30; guard++) {
+            if (parentId === taskId) return true;
+            const parent = byId.get(parentId);
+            if (!parent || parent.subtaskStatuses?.length) return false;
+            parentId = parent.parentId;
+          }
+          return false;
+        };
+        const reached = (t: Task) => (taskId ? usesTaskSet(t) : listIds.has(t.listId) && !statusOwnerOf(state.tasks, t));
+        const moved = state.tasks.map((t) =>
+          reached(t) && Object.prototype.hasOwnProperty.call(rename, t.status) ? { ...t, status: rename[t.status] } : t
         );
         return {
-          workspaces: state.workspaces.map((ws) => ({
-            ...ws,
-            spaces: ws.spaces.map((sp) =>
-              sp.id !== spaceId
-                ? sp
-                : target
-                  ? { ...sp, lists: sp.lists.map((l) => (l.id === target.listId ? { ...l, statuses: target.inherit ? [] : saved } : l)) }
-                  : { ...sp, statuses: saved }
-            ),
-          })),
-          // The same moves the server made, once per task (a swap must not apply twice).
-          tasks: state.tasks.map((t) =>
-            listIds.has(t.listId) && Object.prototype.hasOwnProperty.call(rename, t.status) ? { ...t, status: rename[t.status] } : t
-          ),
+          workspaces: taskId
+            ? state.workspaces
+            : state.workspaces.map((ws) => ({
+                ...ws,
+                spaces: ws.spaces.map((sp) =>
+                  sp.id !== spaceId
+                    ? sp
+                    : target?.listId
+                      ? { ...sp, lists: sp.lists.map((l) => (l.id === target.listId ? { ...l, statuses: target.inherit ? [] : saved } : l)) }
+                      : { ...sp, statuses: saved }
+                ),
+              })),
+          // The same moves the server made, once per task (a swap must not apply twice); and the
+          // task's own set on the task itself.
+          tasks: taskId ? moved.map((t) => (t.id === taskId ? { ...t, subtaskStatuses: target?.inherit ? [] : saved } : t)) : moved,
         };
       });
       return null;

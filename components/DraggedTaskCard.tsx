@@ -3,7 +3,7 @@
 import { motion } from 'framer-motion';
 import { CornerDownRight, ListTree } from 'lucide-react';
 import { useTaskStore, type Task } from '../store/useTaskStore';
-import { statusesOfList } from '../lib/listStatuses';
+import { statusesOfTask } from '../lib/listStatuses';
 import StatusGlyph, { statusKind } from './StatusGlyph';
 
 // The task in your hand while dragging it (app/page.tsx's DragOverlay): the row itself, lifted — as
@@ -24,7 +24,8 @@ export default function DraggedTaskCard({
 }) {
   const workspaces = useTaskStore((s) => s.workspaces);
   const subtaskCount = useTaskStore((s) => s.tasks.filter((t) => t.parentId === task.id && !t.deletedAt && !t.archived).length);
-  const def = (statusesOfList(workspaces, task.listId) ?? []).find((s) => s.name === task.status);
+  const allTasks = useTaskStore((s) => s.tasks);
+  const def = (statusesOfTask(workspaces, allTasks, task) ?? []).find((s) => s.name === task.status);
   const due = task.dueDate ? new Date(task.dueDate) : null;
   return (
     <div style={{ width: width ?? 360 }} className="cursor-grabbing">

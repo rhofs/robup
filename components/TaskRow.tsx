@@ -1,6 +1,6 @@
 'use client';
 
-import { circleSettingsOfList, statusesOfList } from '../lib/listStatuses';
+import { circleSettingsOfList, statusesOfTask } from '../lib/listStatuses';
 import { offerCompleteSubtasks } from '../lib/completeSubtasks';
 import { memo, useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { motion } from 'framer-motion';
@@ -186,7 +186,8 @@ function TaskRowImpl({
   // This task's own Space's statuses (the row may be showing in My Tasks or Everything, among others'),
   // for the circle's menu and for what counts as done. The defaults where a Space has none of its own.
   // Store references, so a row only re-renders when its Space's statuses change.
-  const spaceStatuses = useTaskStore((st) => statusesOfList(st.workspaces, task.listId));
+  // A subtask goes by the statuses of the nearest task above it that has its own (statusesOfTask).
+  const spaceStatuses = useTaskStore((st) => statusesOfTask(st.workspaces, st.tasks, task));
   const ownStatuses = spaceStatuses && spaceStatuses.length > 0 ? spaceStatuses : DEFAULT_ROW_STATUSES;
   // The List's own choice, else its Space's (lib/listStatuses.ts). Primitives, so the selectors stay stable.
   const strikeDone = useTaskStore((st) => circleSettingsOfList(st.workspaces, task.listId).strikeDone);

@@ -497,9 +497,16 @@ model Status {
   // every List without its own inherits. A List has its own set exactly when rows point at it.
   listId    String?  @map("list_id")
   list      List?    @relation(fields: [listId], references: [id], onDelete: Cascade)
+  // Set on a task's own statuses for its subtasks ("Ha forskjellige status fra liste og inne i
+  // subtasks", 2026-10-23): every subtask under that task — down to one that has a set of its own —
+  // uses these instead of its List's (lib/listStatuses.ts statusesOfTask). listId stays null on them,
+  // so every query for a Space's own set must also say taskId: null, or these would join it.
+  taskId    String?  @map("task_id")
+  task      Task?    @relation("TaskSubtaskStatuses", fields: [taskId], references: [id], onDelete: Cascade)
   createdAt DateTime @default(now()) @map("created_at")
 
   @@index([listId])
+  @@index([taskId])
 }
 
 // 6. Egendefinerte felt/kolonner per Space
@@ -778,6 +785,8 @@ model Task {
   // The task's description as a live Doc (Doc.descriptionTaskId) — made the first time the task is
   // opened, never listed among its Documents.
   descriptionDoc Doc? @relation("TaskDescription")
+  // The statuses this task's subtasks use, when it has chosen its own (Status.taskId).
+  subtaskStatuses Status[] @relation("TaskSubtaskStatuses")
   attachments TaskAttachment[]
   chatChannels ChatChannel[]
 

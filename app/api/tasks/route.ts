@@ -40,6 +40,8 @@ export async function GET(req: Request) {
     include: {
       assignees: { select: publicUserSelect },
       attachments: { orderBy: { createdAt: 'asc' }, include: { uploadedBy: { select: publicUserSelect } } },
+      // The statuses its subtasks use, when it has its own set (Status.taskId).
+      subtaskStatuses: { orderBy: { order: 'asc' } },
       list: { select: { isPrivate: true, accessJson: true, folderId: true, space: { select: { isPrivate: true, accessJson: true, workspaceId: true } } } },
     },
     orderBy: { createdAt: 'desc' },

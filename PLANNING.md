@@ -2483,6 +2483,13 @@ Picked up right after the office's "merged single island" popup-menu work (previ
 
 ## Known bugs / things to remember
 
+- **A task's own statuses (Status.taskId) have `listId` null, like a Space's** (2026-10-23). Every
+  query for "the Space's own set" must therefore also say `taskId: null`. Without it, the Space's set
+  picks up task sets, and applying the Space's set deletes them (`applyStatusSet`'s deleteMany). The
+  queries fixed at the time were the workspaces payload, the statuses POST count, the spaces
+  statuses PUT, the wiki feedback route and the ClickUp import. Renames from a Space or List set
+  skip tasks under any task set (`idsUnderTaskSets`).
+
 - **A Capacitor plugin method runs on a background thread ("CapacitorPlugins"), not the main
   thread** (2026-10-23). Anything that touches the WebView there throws and closes the app, with no
   catch possible in JS. `SiqtDownloadsPlugin.download` read the WebView's user agent and crashed the
@@ -13324,3 +13331,42 @@ calendar to start once the keyboard is fully down, "bittelitt tregere".
 
 
 **Deployed 2026-10-23 as `89ea459`** (tag `deploy/2026-10-23_1300`), with APK 2.2. No schema change, so no backup was taken.
+
+### 2026-10-23 (continued) — [Feature] a task's own statuses for its subtasks
+
+- **User:** "Ha forskjellige status fra liste og inne i subtasks. Egen knapp inne i task som kan
+  endre statuser inne i den tasken".
+- **Model:**
+  - `Status.taskId` (FK, cascade; migration `20261023140000_task_subtask_statuses`, hand-written
+    ADD COLUMN, verified).
+  - A task's set is for its subtasks only; the task itself keeps its List's statuses.
+  - A subtask goes by the nearest task above it with a set, else its List's, else its Space's
+    (`lib/listStatuses.ts` `statusOwnerOf` / `statusesOfTask` / `sortedStatusesOfTask`, with a
+    WeakMap task index per tasks array so row selectors stay cheap and return store arrays).
+- **Data:** `GET /api/tasks` includes `subtaskStatuses`. `Task.subtaskStatuses?` is in the store.
+- **Readers switched to task-aware lookup:**
+  - TaskRow (circle, pill, done rule), DraggedTaskCard, the task window's status picker, bulk
+    status choices, MyTasksPage, the doc List block (subtask rows), `optimisticMoveTask` (closed
+    dust), and the default status of a new subtask (`optimisticCreateTask`: first of the parent's
+    set).
+  - The "complete subtasks too?" offer checks each subtask against its own set. It sets the status
+    of the same name, or else its set's first of the same kind (done/closed).
+- **Saving** (`PUT /api/spaces/[id]/statuses` with `taskId` [+ `inherit`]): `applyStatusSet` with
+  taskId scope.
+  - Renames reach the subtasks using that set (`idsUsingTaskSet`, stopping below a deeper owner).
+  - Going back to inheriting moves names onto `fallbackNamesForTask` (nearest owner above, else
+    List, else Space).
+  - The store's `applySpaceStatuses(..., {taskId, inherit})` mirrors this.
+- **UI:**
+  - A "Statuses" button by the task window's "Subtasks (n)" heading reads "Own statuses" (blue)
+    when set.
+  - It opens StatusEditor in a task mode. The task is treated like a List whose "Space" is what
+    its subtasks would otherwise use (`inheritedForTask`). The options are "Same as its List" /
+    "Use custom statuses"; templates work. The Space-wide settings (circle, strike, new-Space
+    default) are hidden.
+- **Copies keep the set:** `copyTaskStatuses` in task duplicate, List duplicate and "Create next…".
+- **Tested:**
+  - Scratch DB: B's set renames only D. A Space rename leaves D and B's set alone. A's set reaches
+    B and C but not D. Fallback names are right. Going back to inheriting works. Copying works.
+  - Client nearest-owner lookup tested with tsx. `next build` passes. Not seen in a browser.
+

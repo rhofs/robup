@@ -4,7 +4,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { ArrowDownUp, Check } from 'lucide-react';
 import { HierarchyWorkspace, AppUser, Task, StatusDef } from '../store/useTaskStore';
 import { isDoneStatus } from '../lib/taskDoneDust';
-import { circleSettingsOfList, statusesOfList } from '../lib/listStatuses';
+import { circleSettingsOfList, statusesOfList, statusesOfTask } from '../lib/listStatuses';
 import { dueDateColor } from '../lib/dateBadgeColor';
 import { dateFieldsByList, myTasksDate } from '../lib/taskDates';
 import { useIsMobile } from '../hooks/useIsMobile';
@@ -160,7 +160,8 @@ export default function MyTasksPage({ currentUser, workspaces: allWorkspaces, de
     );
   }
 
-  const statusesFor = (t: Task) => listInfo.get(t.listId)?.statuses ?? fallbackStatuses;
+  // Its own List's, or — for a subtask — those of a task above it that has its own (statusesOfTask).
+  const statusesFor = (t: Task) => (t.parentId ? statusesOfTask(workspaces, tasks, t) : undefined) ?? listInfo.get(t.listId)?.statuses ?? fallbackStatuses;
   const isFinished = (t: Task) => t.archived || isDoneStatus(t.status, statusesFor(t));
   const assignedToMe = (t: Task) => t.assignees.some((a) => a.id === currentUser.id);
   const mineAll = tasks.filter((t) => !t.deletedAt && assignedToMe(t) && listInfo.has(t.listId));

@@ -82,7 +82,9 @@ type TemplatesState = { loaded: boolean; templates: StatusTemplateDef[]; default
 
 export default function StatusEditor({
   space,
-  list,
+  list: listProp,
+  task,
+  inheritedForTask,
   workspaceId,
   fallback,
   focusNew = false,
@@ -91,6 +93,12 @@ export default function StatusEditor({
   space: HierarchySpace;
   // The List it was opened from, if any — then it edits that List (see the note at the top).
   list?: HierarchyList;
+  // A task, instead: its own statuses for its subtasks (Status.taskId) — "Egen knapp inne i task som
+  // kan endre statuser inne i den tasken" (2026-10-23). It works the way a List does against its
+  // Space, with `inheritedForTask` (what its subtasks use without a set of its own: a task above's,
+  // its List's, its Space's) in the Space's place. The Space-wide settings are not shown.
+  task?: { id: string; title: string; subtaskStatuses?: StatusDef[] };
+  inheritedForTask?: StatusDef[];
   workspaceId: string | null;
   // The built-in statuses a Space without its own shows (page.tsx's DEFAULT_STATUSES).
   fallback: StatusDef[];
@@ -104,19 +112,26 @@ export default function StatusEditor({
 
   // What "Apply" saves: the Space's statuses, or the List's. A List that has its own starts on them;
   // one that inherits starts on "Inherit", showing its Space's.
+  // A task is edited as if it were a List whose "Space" is what its subtasks would otherwise use.
+  const forTask = !!task;
+  const list: HierarchyList | undefined = task
+    ? ({ id: task.id, name: `subtasks of “${task.title}”`, statuses: task.subtaskStatuses ?? [] } as unknown as HierarchyList)
+    : listProp;
+  const baseStatuses = forTask ? inheritedForTask ?? [] : space.statuses;
+  const baseName = forTask ? 'its List' : space.name;
   const listHadOwn = !!list?.statuses?.length;
   const [target, setTarget] = useState<'space' | 'list'>(list ? 'list' : 'space');
   // "New status" from a List that inherits starts its own set — there is nowhere else to add one.
   const [listCustom, setListCustom] = useState(listHadOwn || (!!list && focusNew));
   const editing = target === 'space' || listCustom;
   // The Space's statuses as rows (read-only while a List inherits, and the base when it goes custom).
-  const spaceRows = () => draftFrom(space.statuses, fallback, true);
+  const spaceRows = () => draftFrom(baseStatuses, fallback, true);
 
   // Built once, together: opened from "New status", the window starts with an empty Active row to type
   // in — which, in a List that inherits, means starting its own set.
   const [boot] = useState(() => {
     const extra: Draft | null = focusNew ? { key: newKey(), name: '', color: COLORS[1], kind: 'open', icon: null } : null;
-    const init = list ? (listHadOwn ? draftFrom(list.statuses, fallback, true) : draftFrom(space.statuses, fallback, false)) : spaceRows();
+    const init = list ? (listHadOwn ? draftFrom(list.statuses, fallback, true) : draftFrom(baseStatuses, fallback, false)) : spaceRows();
     return { init, extra };
   });
   const [initial, setInitial] = useState<Draft[]>(boot.init);
@@ -182,8 +197,8 @@ export default function StatusEditor({
     if (listCustom) return;
     setListCustom(true);
     // Its own saved set if it had one; else a copy of the Space's to start from.
-    const rows = listHadOwn ? draftFrom(list!.statuses, fallback, true) : draftFrom(space.statuses, fallback, false);
-    setInitial(listHadOwn ? rows : draftFrom(space.statuses, fallback, false).map((r, i) => ({ ...r, key: rows[i].key })));
+    const rows = listHadOwn ? draftFrom(list!.statuses, fallback, true) : draftFrom(baseStatuses, fallback, false);
+    setInitial(listHadOwn ? rows : draftFrom(baseStatuses, fallback, false).map((r, i) => ({ ...r, key: rows[i].key })));
     setDraft(rows);
   };
   const useInherit = () => setListCustom(false);
@@ -199,7 +214,7 @@ export default function StatusEditor({
     setTarget('list');
     setCheckMode(savedSettings('list').circle);
     setStrikeDone(savedSettings('list').strike);
-    const rows = listHadOwn ? draftFrom(list!.statuses, fallback, true) : draftFrom(space.statuses, fallback, false);
+    const rows = listHadOwn ? draftFrom(list!.statuses, fallback, true) : draftFrom(baseStatuses, fallback, false);
     setInitial(rows);
     setDraft(rows);
     setListCustom(listHadOwn);
@@ -210,7 +225,7 @@ export default function StatusEditor({
     // A template in a List that inherits gives it its own set.
     let base = initial;
     if (target === 'list' && !listCustom) {
-      base = listHadOwn ? draftFrom(list!.statuses, fallback, true) : draftFrom(space.statuses, fallback, false);
+      base = listHadOwn ? draftFrom(list!.statuses, fallback, true) : draftFrom(baseStatuses, fallback, false);
       setInitial(base);
       setListCustom(true);
     }
@@ -227,6 +242,19 @@ export default function StatusEditor({
 
   // The tasks a change here reaches: this List's, or those of the Space's Lists without their own.
   const listIds = new Set(target === 'list' ? [list!.id] : space.lists.filter((l) => !l.statuses?.length).map((l) => l.id));
+  // For a task: its subtasks that use its set (under it, with no task of its own set between).
+  const taskById = new Map(allTasks.map((t) => [t.id, t]));
+  const usesTaskSet = (t: { parentId: string | null }) => {
+    let parentId = t.parentId;
+    for (let guard = 0; parentId && guard < 30; guard++) {
+      if (parentId === task?.id) return true;
+      const parent = taskById.get(parentId);
+      if (!parent || parent.subtaskStatuses?.length) return false;
+      parentId = parent.parentId;
+    }
+    return false;
+  };
+  const inScope = (t: { listId: string; parentId: string | null }) => (forTask ? usesTaskSet(t) : listIds.has(t.listId));
   // A List going back to inheriting: its own statuses whose names its Space does not have.
   const goingBack = target === 'list' && listHadOwn && !listCustom;
   const goneByInherit = goingBack
@@ -235,7 +263,7 @@ export default function StatusEditor({
   // Removed statuses, by the name their tasks are filed under — and how many tasks that is, here.
   const removed = (goingBack ? goneByInherit : editing ? initial.filter((i) => i.origName && !draft.some((d) => d.key === i.key)) : []).map((i) => ({
     ...i,
-    count: allTasks.filter((t) => listIds.has(t.listId) && t.status === i.origName).length,
+    count: allTasks.filter((t) => inScope(t) && t.status === i.origName).length,
   }));
   // The statuses tasks can be moved to.
   const destinations = goingBack ? ordered(shownRows) : ordered(draft);
@@ -263,7 +291,7 @@ export default function StatusEditor({
         space.id,
         editing ? rows.map((d) => ({ id: d.id, name: d.name.trim(), color: d.color, kind: d.kind, icon: d.icon })) : [],
         rename,
-        target === 'list' ? { listId: list!.id, inherit: !listCustom } : undefined
+        target === 'list' ? (forTask ? { taskId: task!.id, inherit: !listCustom } : { listId: list!.id, inherit: !listCustom }) : undefined
       );
       if (err) {
         setSaving(false);
@@ -271,7 +299,7 @@ export default function StatusEditor({
         return setError(err);
       }
     }
-    if (settingsDirty) {
+    if (settingsDirty && !forTask) {
       // A List stores its own choice only where it differs from its Space, so it goes on following the
       // Space in everything it has not chosen.
       if (target === 'list' && list) {
@@ -370,7 +398,15 @@ export default function StatusEditor({
               'Edit status template'
             ) : (
               <>
-                Edit <span className="underline decoration-dashed decoration-neutral-600 underline-offset-4">{target === 'list' ? list!.name : space.name}</span> statuses
+                {forTask ? (
+                  <>
+                    Statuses for <span className="underline decoration-dashed decoration-neutral-600 underline-offset-4">{list!.name}</span>
+                  </>
+                ) : (
+                  <>
+                    Edit <span className="underline decoration-dashed decoration-neutral-600 underline-offset-4">{target === 'list' ? list!.name : space.name}</span> statuses
+                  </>
+                )}
               </>
             )}
           </h3>
@@ -438,7 +474,7 @@ export default function StatusEditor({
                   </p>
                   {(
                     [
-                      [false, `Inherit from Space`],
+                      [false, forTask ? 'Same as its List' : `Inherit from Space`],
                       [true, 'Use custom statuses'],
                     ] as const
                   ).map(([custom, label]) => (
@@ -496,6 +532,9 @@ export default function StatusEditor({
                 </FloatingPopover>
               </div>
 
+              {/* The Space-wide settings — not a task's to choose: its subtasks keep its List's. */}
+              {!forTask && (
+                <>
               <div>
                 <p className="text-[12px] text-neutral-400 mb-2">New Spaces start with</p>
                 {tpl.canSetDefault ? (
@@ -571,6 +610,8 @@ export default function StatusEditor({
                   Strike through done tasks <span className="line-through text-neutral-500">like this</span>
                 </span>
               </button>
+                </>
+              )}
             </div>
 
             {/* ---- Right: the statuses ---- */}
@@ -580,14 +621,24 @@ export default function StatusEditor({
                 // explicit step, and says what it reaches.
                 <>
                   <div className="rounded-xl border border-neutral-800 bg-neutral-950/40 p-3.5 space-y-2.5">
-                    <p className="text-[12.5px] text-neutral-300 leading-relaxed">
-                      <span className="font-semibold text-app-strong">{list!.name}</span> uses the statuses of the Space{' '}
-                      <span className="font-semibold text-app-strong">{space.name}</span>. To change them for this List only, choose{' '}
-                      <span className="text-app-strong">Use custom statuses</span>.
-                    </p>
-                    <button onClick={editSpaceInstead} className="text-[12px] text-blue-400 hover:text-blue-300 cursor-pointer">
-                      Edit {space.name}&apos;s statuses instead — every List in it that uses them
-                    </button>
+                    {forTask ? (
+                      <p className="text-[12.5px] text-neutral-300 leading-relaxed">
+                        The <span className="font-semibold text-app-strong">{list!.name}</span> use the same statuses as its List. To
+                        give them their own — only these subtasks, nothing else in the List — choose{' '}
+                        <span className="text-app-strong">Use custom statuses</span>.
+                      </p>
+                    ) : (
+                      <>
+                        <p className="text-[12.5px] text-neutral-300 leading-relaxed">
+                          <span className="font-semibold text-app-strong">{list!.name}</span> uses the statuses of the Space{' '}
+                          <span className="font-semibold text-app-strong">{space.name}</span>. To change them for this List only, choose{' '}
+                          <span className="text-app-strong">Use custom statuses</span>.
+                        </p>
+                        <button onClick={editSpaceInstead} className="text-[12px] text-blue-400 hover:text-blue-300 cursor-pointer">
+                          Edit {space.name}&apos;s statuses instead — every List in it that uses them
+                        </button>
+                      </>
+                    )}
                   </div>
                   {KINDS.map(({ kind, label }) => {
                     const rows = shownRows.filter((d) => d.kind === kind);
@@ -637,8 +688,10 @@ export default function StatusEditor({
                 : target === 'space'
                   ? `Applies to every List in ${space.name} that does not use its own statuses.`
                   : listCustom
-                    ? `Only ${list!.name} uses these.`
-                    : `${list!.name} follows ${space.name}.`)}
+                    ? forTask
+                      ? `Only the ${list!.name} use these.`
+                      : `Only ${list!.name} uses these.`
+                    : `${forTask ? `The ${list!.name}` : list!.name} follow${forTask ? '' : 's'} ${baseName}.`)}
           </p>
           {step === 'migrate' ? (
             <>

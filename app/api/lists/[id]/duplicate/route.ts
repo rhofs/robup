@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
+import { copyTaskStatuses } from '@/lib/statusSets';
 import { getCurrentUserId } from '@/lib/auth/session';
 import { ensureListAccess, ensureSpaceAccess } from '@/lib/auth/resourceAccess';
 
@@ -101,6 +102,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
           assignees: { connect: node.assignees.map((a) => ({ id: a.id })) },
         },
       });
+      await copyTaskStatuses(tx, node.id, copy.id);
       const children = await tx.task.findMany({
         where: { parentId: node.id, deletedAt: null, archived: false },
         orderBy: [{ order: 'asc' }, { createdAt: 'asc' }],

@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
+import { copyTaskStatuses } from '@/lib/statusSets';
 import { getCurrentUserId } from '@/lib/auth/session';
 import { ensureTaskAccess } from '@/lib/auth/resourceAccess';
 import { syncTaskForAllRelevantUsers } from '@/lib/google/calendarSync';
@@ -85,6 +86,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
         },
         select: { id: true },
       });
+      await copyTaskStatuses(tx, node.id, copy.id);
       const children = await tx.task.findMany({
         where: { parentId: node.id, deletedAt: null },
         orderBy: [{ order: 'asc' }, { createdAt: 'asc' }],

@@ -29,7 +29,7 @@ import { useTaskStore, type Task, type StatusDef, type CustomFieldDef, type Hier
 import TaskRow, { type ColumnDef } from '../TaskRow';
 import FloatingPopover from '../FloatingPopover';
 import Caret from '../Caret';
-import { statusesOfList } from '../../lib/listStatuses';
+import { statusesOfList, statusesOfTask } from '../../lib/listStatuses';
 import StatusGlyph, { statusKind } from '../StatusGlyph';
 import type { TaskListEmbedExtensionOptions } from './taskListEmbedView';
 
@@ -284,7 +284,12 @@ export default function TaskListEmbedBlock({ node, updateAttributes, deleteNode,
   };
 
   const renderRow = ({ task, depth, subtaskCount }: { task: Task; depth: number; subtaskCount: number }) => {
-    const rowStatuses = mode === 'list' ? statuses : statusesOfList(workspaces, task.listId) ?? FALLBACK_STATUSES;
+    // A subtask may go by a set of its parent's (statusesOfTask); a top-level row by the List's.
+    const rowStatuses = task.parentId
+      ? statusesOfTask(workspaces, allTasks, task) ?? FALLBACK_STATUSES
+      : mode === 'list'
+        ? statuses
+        : statusesOfList(workspaces, task.listId) ?? FALLBACK_STATUSES;
     return (
       <TaskRow
         key={task._localId || task.id}

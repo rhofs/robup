@@ -32,7 +32,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
     // The List's own statuses when it has them, else the Space's.
     prisma.status
       .findFirst({ where: { listId }, orderBy: { order: 'asc' }, select: { name: true } })
-      .then((own) => own ?? prisma.status.findFirst({ where: { spaceId: list.spaceId, listId: null }, orderBy: { order: 'asc' }, select: { name: true } })),
+      .then((own) => own ?? prisma.status.findFirst({ where: { spaceId: list.spaceId, listId: null, taskId: null }, orderBy: { order: 'asc' }, select: { name: true } })),
     prisma.task.findFirst({ where: { listId, parentId: null, deletedAt: null }, orderBy: { order: 'desc' }, select: { order: true } }),
     prisma.user.findUnique({ where: { id: userId }, select: { name: true } }),
   ]);

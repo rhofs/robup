@@ -2,7 +2,7 @@
 
 import TaskSeriesDialog from '../components/TaskSeriesDialog';
 import TaskTemplateEditor from '../components/TaskTemplateEditor';
-import { sortedStatusesOfList, statusesOfList } from '../lib/listStatuses';
+import { sortedStatusesOfTask, statusesOfTask } from '../lib/listStatuses';
 import { offerCompleteSubtasks } from '../lib/completeSubtasks';
 import { isDoneStatus } from '../lib/taskDoneDust';
 import { closeOnBackdrop } from '../lib/backdrop';
@@ -1735,10 +1735,14 @@ function PageContent() {
   // The List it edits, when opened from one (then the window edits that List — its own statuses, or
   // whether it inherits its Space's). Null: the Space's.
   const [statusMenuListId, setStatusMenuListId] = useState<string | null>(null);
-  const openStatusEditor = (spaceId: string | null, focusNew = false, listId: string | null = null) => {
+  // Set when the window edits one task's own statuses for its subtasks (the "Statuses" button by a
+  // task's Subtasks heading).
+  const [statusMenuTaskId, setStatusMenuTaskId] = useState<string | null>(null);
+  const openStatusEditor = (spaceId: string | null, focusNew = false, listId: string | null = null, taskId: string | null = null) => {
     setStatusMenuSpaceId(spaceId);
     setStatusMenuFocusNew(focusNew);
     setStatusMenuListId(listId);
+    setStatusMenuTaskId(taskId);
     setStatusMenuOpen(true);
   };
 
@@ -2190,13 +2194,14 @@ function PageContent() {
       const { tasks: all, workspaces: wss } = useTaskStore.getState();
       const parent = all.find((t) => t.id === d.taskId);
       if (!parent) return;
-      const own = statusesOfList(wss, parent.listId) ?? DEFAULT_STATUSES;
+      // Each subtask's own set: a task above it may have given its subtasks their own statuses.
+      const ownOf = (t: Task) => statusesOfTask(wss, all, t) ?? DEFAULT_STATUSES;
       const ids: string[] = [];
       const walk = (parentId: string, depth: number) => {
         if (depth > 12) return;
         for (const t of all) {
           if (t.parentId !== parentId || t.deletedAt) continue;
-          if (!t.archived && !isDoneStatus(t.status, own)) ids.push(t.id);
+          if (!t.archived && !isDoneStatus(t.status, ownOf(t))) ids.push(t.id);
           walk(t.id, depth + 1);
         }
       };
@@ -2216,6 +2221,7 @@ function PageContent() {
       setStatusMenuSpaceId(d?.spaceId ?? null);
       setStatusMenuFocusNew(!!d?.focusNew);
       setStatusMenuListId(d?.listId ?? null);
+      setStatusMenuTaskId(null);
       setStatusMenuOpen(true);
     };
     window.addEventListener('siqt-edit-statuses', onEdit);
@@ -4097,7 +4103,7 @@ function PageContent() {
     const sets = new Map<StatusDef[], StatusDef[]>();
     for (const id of selectedIds) {
       const t = tasks.find((x) => x.id === id);
-      const own = t ? statusesOfList(workspaces, t.listId) : undefined;
+      const own = t ? statusesOfTask(workspaces, tasks, t) : undefined;
       sets.set(own ?? DEFAULT_STATUSES, own ? [...own].sort((a, b) => a.order - b.order) : DEFAULT_STATUSES);
     }
     const [first, ...rest] = [...sets.values()];
@@ -9160,15 +9166,25 @@ function PageContent() {
           (the siqt-edit-statuses event, for that List's Space) ================= */}
       {statusMenuOpen && statusSpace && (
         <StatusEditor
-          key={`${statusSpace.id}:${statusMenuListId ?? ''}`}
+          key={`${statusSpace.id}:${statusMenuListId ?? ''}:${statusMenuTaskId ?? ''}`}
           space={statusSpace}
-          list={statusMenuListId ? statusSpace.lists.find((l) => l.id === statusMenuListId) : undefined}
+          list={!statusMenuTaskId && statusMenuListId ? statusSpace.lists.find((l) => l.id === statusMenuListId) : undefined}
+          task={(() => {
+            const t = statusMenuTaskId ? tasks.find((x) => x.id === statusMenuTaskId) : undefined;
+            return t ? { id: t.id, title: t.title, subtaskStatuses: t.subtaskStatuses } : undefined;
+          })()}
+          // What the task's subtasks use without a set of its own: the task's own statuses.
+          inheritedForTask={(() => {
+            const t = statusMenuTaskId ? tasks.find((x) => x.id === statusMenuTaskId) : undefined;
+            return t ? statusesOfTask(workspaces, tasks, t) ?? DEFAULT_STATUSES : undefined;
+          })()}
           workspaceId={workspaces.find((w) => w.spaces.some((sp) => sp.id === statusSpace.id))?.id ?? null}
           fallback={DEFAULT_STATUSES}
           focusNew={statusMenuFocusNew}
           onClose={() => {
             setStatusMenuOpen(false);
             setStatusMenuSpaceId(null);
+            setStatusMenuTaskId(null);
           }}
         />
       )}
@@ -9472,7 +9488,7 @@ function PageContent() {
                     >
                       {/* The task's own Space's statuses, not the open Space's — from the Planner or My Tasks
                           those were another Space's (or the defaults). */}
-                      {sortedStatusesOfList(workspaces, activeModalTask.listId, DEFAULT_STATUSES).map((s) => (
+                      {sortedStatusesOfTask(workspaces, tasks, activeModalTask, DEFAULT_STATUSES).map((s) => (
                         <button
                           key={s.id}
                           onClick={() => {
@@ -9836,9 +9852,28 @@ function PageContent() {
                 </div>
 
                 <div className="space-y-2 pt-4 border-t border-neutral-800">
-                  <h3 className="text-xs font-medium text-neutral-500">
-                    Subtasks ({currentSubtasks.length})
-                  </h3>
+                  <div className="flex items-center gap-2">
+                    <h3 className="text-xs font-medium text-neutral-500">
+                      Subtasks ({currentSubtasks.length})
+                    </h3>
+                    {/* This task's own statuses for its subtasks — "Ha forskjellige status fra liste og
+                        inne i subtasks. Egen knapp inne i task som kan endre statuser inne i den
+                        tasken" (2026-10-23). Says so when it has them. */}
+                    {(() => {
+                      const ownSet = !!activeModalTask.subtaskStatuses?.length;
+                      return (
+                        <button
+                          onClick={() => openStatusEditor(activeModalTaskSpace?.id ?? null, false, activeModalTask.listId, activeModalTask.id)}
+                          title={ownSet ? 'These subtasks have their own statuses — edit them' : 'Give these subtasks their own statuses'}
+                          className={`ml-auto h-6 px-2 rounded-md flex items-center gap-1 text-[11px] cursor-pointer transition ${
+                            ownSet ? 'text-blue-400 bg-blue-500/10 hover:bg-blue-500/20' : 'text-neutral-500 hover:text-neutral-200 hover:bg-neutral-800'
+                          }`}
+                        >
+                          <Palette className="w-3.5 h-3.5" /> {ownSet ? 'Own statuses' : 'Statuses'}
+                        </button>
+                      );
+                    })()}
+                  </div>
 
                   <div className={isMobile ? '' : 'overflow-x-auto'}>
                     <div style={{ minWidth: isMobile || currentSubtasks.length === 0 ? undefined : tableMinWidth }}>
@@ -10112,9 +10147,24 @@ function PageContent() {
         onConfirm={() => {
           if (subtaskOffer) {
             const { ids, statusName, close } = subtaskOffer;
+            const { tasks: all, workspaces: wss } = useTaskStore.getState();
+            const parentTask = all.find((t) => t.id === subtaskOffer.taskId);
+            const parentSet = parentTask ? statusesOfTask(wss, all, parentTask) ?? DEFAULT_STATUSES : DEFAULT_STATUSES;
+            const chosen = parentSet.find((st) => st.name === statusName);
+            // A subtask may use other statuses than its parent (a set of the parent's own): it gets the
+            // status of the same name where its set has one, else its set's first of the same kind.
+            const statusFor = (id: string) => {
+              if (!statusName) return null;
+              const sub = all.find((t) => t.id === id);
+              const set = sub ? [...(statusesOfTask(wss, all, sub) ?? DEFAULT_STATUSES)].sort((a, b) => a.order - b.order) : [];
+              if (set.some((st) => st.name === statusName)) return statusName;
+              const sameKind = set.find((st) => (chosen?.isClosed ? st.isClosed : st.isDone && !st.isClosed));
+              return sameKind?.name ?? statusName;
+            };
             useHistoryStore.getState().transaction('Complete subtasks', () => {
               for (const id of ids) {
-                if (statusName) optimisticMoveTask(id, statusName);
+                const target = statusFor(id);
+                if (target) optimisticMoveTask(id, target);
                 if (close) optimisticArchiveTask(id, true);
               }
             });

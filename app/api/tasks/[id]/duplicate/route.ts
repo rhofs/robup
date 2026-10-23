@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import { prisma, publicUserSelect } from '@/lib/prisma';
+import { copyTaskStatuses } from '@/lib/statusSets';
 import { getCurrentUserId } from '@/lib/auth/session';
 import { ensureTaskAccess, ensureListAccess } from '@/lib/auth/resourceAccess';
 import { syncTaskForAllRelevantUsers } from '@/lib/google/calendarSync';
@@ -93,6 +94,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
           assignees: { connect: node.assignees.map((a) => ({ id: a.id })) },
         },
       });
+      await copyTaskStatuses(tx, node.id, copy.id);
 
       // Depth-first, one level at a time — the tree is shallow in practice (this app only ever
       // shows one level of subtasks in the UI) and this keeps parent ids resolved before children
