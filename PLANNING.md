@@ -13322,3 +13322,5 @@ calendar to start once the keyboard is fully down, "bittelitt tregere".
   matched desktop; the 2026-10-21 change had covered `MobileSpacesSheet` only. It now walks
   `sidebarSiblings` like the desktop sidebar (still only one Folder level, as before).
 
+
+**Deployed 2026-10-23 as `89ea459`** (tag `deploy/2026-10-23_1300`), with APK 2.2. No schema change, so no backup was taken.
