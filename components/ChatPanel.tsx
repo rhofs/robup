@@ -291,34 +291,52 @@ export default function ChatPanel() {
   // Reset per conversation: the first render with messages in a newly-opened channel jumps instantly
   // (no smooth scroll — an animated scroll through a long history on open looks like a glitch).
   const initialJumpDoneRef = useRef(false);
-  const lastCountRef = useRef(0);
+  // The newest message's id, not the count: a refetch that arrives with the new message can replace
+  // the list with one of the same length (the sent message and the refetch racing), and a count would
+  // then not see that anything was added.
+  const lastMessageIdRef = useRef<string | null>(null);
 
   useEffect(() => {
     initialJumpDoneRef.current = false;
     stickToBottomRef.current = true;
-    lastCountRef.current = 0;
+    lastMessageIdRef.current = null;
   }, [activeChannelId]);
+
+  // To the newest message, instantly and again on the next two frames — the list is still settling
+  // (the composer shrinking back, a picture or a quote taking its height) when this runs.
+  const jumpToBottom = () => {
+    const el = scrollRef.current;
+    if (!el) return;
+    stickToBottomRef.current = true;
+    el.scrollTop = el.scrollHeight;
+    requestAnimationFrame(() => {
+      el.scrollTop = el.scrollHeight;
+      requestAnimationFrame(() => {
+        el.scrollTop = el.scrollHeight;
+      });
+    });
+  };
 
   useEffect(() => {
     const el = scrollRef.current;
     if (!el || messages.length === 0) return;
 
+    const last = messages[messages.length - 1];
     if (!initialJumpDoneRef.current) {
       el.scrollTop = el.scrollHeight;
       initialJumpDoneRef.current = true;
-      lastCountRef.current = messages.length;
+      lastMessageIdRef.current = last?.id ?? null;
       return;
     }
 
-    if (messages.length > lastCountRef.current) {
+    if (last && last.id !== lastMessageIdRef.current) {
       // Your own message always scrolls, whatever you were reading: you just pressed send, so the
-      // result belongs on screen. Someone else's only scrolls if you were already at the bottom.
-      const last = messages[messages.length - 1];
-      if (last?.authorId === currentUserId || stickToBottomRef.current) {
-        el.scrollTo({ top: el.scrollHeight, behavior: 'smooth' });
-      }
+      // result belongs on screen — and it stays pinned while the list settles. Someone else's only
+      // scrolls if you were already at the bottom.
+      if (last.authorId === currentUserId) jumpToBottom();
+      else if (stickToBottomRef.current) el.scrollTo({ top: el.scrollHeight, behavior: 'smooth' });
     }
-    lastCountRef.current = messages.length;
+    lastMessageIdRef.current = last?.id ?? null;
   }, [messages, currentUserId]);
 
   // 120px of slack rather than an exact match: a list is "at the bottom" for this purpose well
@@ -552,6 +570,9 @@ export default function ChatPanel() {
       }
       const sent = await postMessage(activeChannelId, { body: trimmed, quotedMessageId: replyTarget?.id, attachment });
       if (sent) {
+        // "Chat scroller ikke automatisk ned når jeg sender ny meld i DMs" (desktop, 2026-10-23): the
+        // message effect above does this too, but sending is the one moment it must not be missed.
+        jumpToBottom();
         setDraft('');
         if (activeChannelId) delete chatDrafts[activeChannelId];
         setReplyTarget(null);

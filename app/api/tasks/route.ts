@@ -83,10 +83,10 @@ export async function POST(req: Request) {
     include: { assignees: { select: publicUserSelect } },
   });
 
-  // Only a genuinely fresh interactive create logs activity — an id-based create is always
-  // either a snapshot restore (which replays the original activity comments verbatim) or a
-  // redo-of-create, neither of which should generate a second, synthetic one.
-  if (!body.id) {
+  // Only a genuinely fresh interactive create logs activity — not a snapshot restore (which replays
+  // the original activity comments verbatim) or a redo-of-create. Those send an id; so do most fresh
+  // creates now (the client picks the id to animate the new row in), which say so with `fresh`.
+  if (!body.id || body.fresh === true) {
     await prisma.comment.create({
       data: {
         taskId: task.id,

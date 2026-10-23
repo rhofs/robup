@@ -15,7 +15,7 @@ import {
   type HierarchyFolder,
   type HierarchyList,
 } from "../../store/useTaskStore";
-import { getBoardDocsIn, getListsIn } from "../../lib/folderTree";
+import { getBoardDocsIn, getListsIn, sidebarSiblings } from "../../lib/folderTree";
 import { archivedLast } from "../../lib/archivedLast";
 import { FOLDER_ICON_MAP } from "../FolderTree";
 import { hapticTap } from "../../lib/haptics";
@@ -276,6 +276,25 @@ export default function ContextSpaceList({
     },
   });
 
+  // A List's row: tap opens it, a long press its menu.
+  const listRow = (spaceId: string, list: HierarchyList) => (
+    <button
+      key={list.id}
+      onClick={() => {
+        if (firedRef.current) {
+          firedRef.current = false;
+          return;
+        }
+        onSelectList(spaceId, list.id);
+      }}
+      {...holdHandlers((x, y) => onListMenu(x, y, list, spaceId))}
+      className="w-full flex items-center gap-2 px-2 py-2 rounded-lg text-left cursor-pointer hover:bg-neutral-800/60"
+    >
+      <ListIcon className="w-3.5 h-3.5 shrink-0 text-neutral-500" />
+      <span className="min-w-0 flex-1 text-[13px] text-neutral-300 truncate">{list.name}</span>
+    </button>
+  );
+
   return (
     <>
       {spaces.length === 0 && (
@@ -357,117 +376,83 @@ export default function ContextSpaceList({
                     carry parentId, so the real structure nests arbitrarily deep — but this is a
                     way to reach a List, not a replacement for the tree, and a phone-width list that
                     indents four times over stops being one. Anything deeper is still reachable by
-                    opening the Space itself. */}
-                {space.folders
-                  .filter((f) => f.parentId === null)
-                  .map((folder) => {
-                    const folderOpen = openFolderIds.has(folder.id);
-                    return (
-                      <div key={folder.id}>
-                        <div className="flex items-center">
-                          <button
-                            onClick={() => {
-                              if (firedRef.current) {
-                                firedRef.current = false;
-                                return;
-                              }
-                              hapticTap();
-                              onToggleFolder(folder.id);
-                            }}
-                            {...holdHandlers((x, y) =>
-                              onFolderMenu(x, y, folder)
-                            )}
-                            className="min-w-0 flex-1 flex items-center gap-2 px-2 py-2 rounded-lg text-left cursor-pointer hover:bg-neutral-800/60"
-                          >
-                            {folderOpen ? (
-                              <ChevronDown className="w-3.5 h-3.5 shrink-0 text-neutral-600" />
-                            ) : (
-                              <ChevronRight className="w-3.5 h-3.5 shrink-0 text-neutral-600" />
-                            )}
-                            <FolderIcon className="w-3.5 h-3.5 shrink-0 text-neutral-500" />
-                            <span className="min-w-0 flex-1 text-[13px] text-neutral-300 truncate">
-                              {folder.name}
-                            </span>
-                          </button>
-                          {!space.archived &&
-                            plusButton(space.id, folder.id, folderOpen, () =>
-                              onToggleFolder(folder.id)
-                            )}
-                        </div>
-                        {folderOpen && (
-                          <div className="ml-4 pl-3 border-l border-neutral-800 space-y-0.5">
-                            {createRow(space.id, folder.id)}
-                            {space.lists.filter(
-                              (l) =>
-                                l.folderId === folder.id &&
-                                !l.archived &&
-                                !l.docId
-                            ).length === 0 &&
-                              getBoardDocsIn(space, folder.id).length === 0 && (
-                                <p className="px-2 py-1.5 text-[11px] text-neutral-600">
-                                  Empty folder.
-                                </p>
-                              )}
-                            {space.lists
-                              .filter(
-                                (l) =>
-                                  l.folderId === folder.id &&
-                                  !l.archived &&
-                                  !l.docId
-                              )
-                              .map((list) => (
-                                <button
-                                  key={list.id}
-                                  onClick={() => {
-                                    if (firedRef.current) {
-                                      firedRef.current = false;
-                                      return;
-                                    }
-                                    onSelectList(space.id, list.id);
-                                  }}
-                                  {...holdHandlers((x, y) =>
-                                    onListMenu(x, y, list, space.id)
-                                  )}
-                                  className="w-full flex items-center gap-2 px-2 py-2 rounded-lg text-left cursor-pointer hover:bg-neutral-800/60"
-                                >
-                                  <ListIcon className="w-3.5 h-3.5 shrink-0 text-neutral-500" />
-                                  <span className="min-w-0 flex-1 text-[13px] text-neutral-300 truncate">
-                                    {list.name}
-                                  </span>
-                                </button>
-                              ))}
-                            {getBoardDocsIn(space, folder.id).map((d) =>
-                              docRow(space.id, d)
-                            )}
-                          </div>
-                        )}
+                    opening the Space itself.
+
+                    In the desktop sidebar's order (lib/folderTree.ts sidebarSiblings) — Folders,
+                    Lists and Docs in one shared order per level. This list was drawn in whatever
+                    order the server happened to return, so it never matched the sidebar: "Mobil
+                    deler ikke rekkefølgen i spaces med desktop" (2026-10-23). */}
+                {sidebarSiblings(space, null).map((item) => {
+                  if (item.type === 'list') {
+                    const list = space.lists.find((l) => l.id === item.id);
+                    return list && !list.archived && !list.docId ? listRow(space.id, list) : null;
+                  }
+                  if (item.type === 'doc') {
+                    const d = getBoardDocsIn(space, null).find((x) => x.id === item.id);
+                    return d ? docRow(space.id, d) : null;
+                  }
+                  const folder = space.folders.find((f) => f.id === item.id);
+                  if (!folder) return null;
+                  const folderOpen = openFolderIds.has(folder.id);
+                  const folderDocs = getBoardDocsIn(space, folder.id);
+                  const inFolder = sidebarSiblings(space, folder.id).filter(
+                    (x) =>
+                      (x.type === 'list' && space.lists.some((l) => l.id === x.id && !l.archived && !l.docId)) ||
+                      (x.type === 'doc' && folderDocs.some((d) => d.id === x.id))
+                  );
+                  return (
+                    <div key={folder.id}>
+                      <div className="flex items-center">
+                        <button
+                          onClick={() => {
+                            if (firedRef.current) {
+                              firedRef.current = false;
+                              return;
+                            }
+                            hapticTap();
+                            onToggleFolder(folder.id);
+                          }}
+                          {...holdHandlers((x, y) =>
+                            onFolderMenu(x, y, folder)
+                          )}
+                          className="min-w-0 flex-1 flex items-center gap-2 px-2 py-2 rounded-lg text-left cursor-pointer hover:bg-neutral-800/60"
+                        >
+                          {folderOpen ? (
+                            <ChevronDown className="w-3.5 h-3.5 shrink-0 text-neutral-600" />
+                          ) : (
+                            <ChevronRight className="w-3.5 h-3.5 shrink-0 text-neutral-600" />
+                          )}
+                          <FolderIcon className="w-3.5 h-3.5 shrink-0 text-neutral-500" />
+                          <span className="min-w-0 flex-1 text-[13px] text-neutral-300 truncate">
+                            {folder.name}
+                          </span>
+                        </button>
+                        {!space.archived &&
+                          plusButton(space.id, folder.id, folderOpen, () =>
+                            onToggleFolder(folder.id)
+                          )}
                       </div>
-                    );
-                  })}
-                {space.lists
-                  .filter((l) => l.folderId === null && !l.archived && !l.docId)
-                  .map((list) => (
-                    <button
-                      key={list.id}
-                      onClick={() => {
-                        if (firedRef.current) {
-                          firedRef.current = false;
-                          return;
-                        }
-                        onSelectList(space.id, list.id);
-                      }}
-                      {...holdHandlers((x, y) =>
-                        onListMenu(x, y, list, space.id)
+                      {folderOpen && (
+                        <div className="ml-4 pl-3 border-l border-neutral-800 space-y-0.5">
+                          {createRow(space.id, folder.id)}
+                          {inFolder.length === 0 && (
+                            <p className="px-2 py-1.5 text-[11px] text-neutral-600">
+                              Empty folder.
+                            </p>
+                          )}
+                          {inFolder.map((x) => {
+                            if (x.type === 'doc') {
+                              const d = folderDocs.find((doc) => doc.id === x.id);
+                              return d ? docRow(space.id, d) : null;
+                            }
+                            const list = space.lists.find((l) => l.id === x.id);
+                            return list ? listRow(space.id, list) : null;
+                          })}
+                        </div>
                       )}
-                      className="w-full flex items-center gap-2 px-2 py-2 rounded-lg text-left cursor-pointer hover:bg-neutral-800/60"
-                    >
-                      <ListIcon className="w-3.5 h-3.5 shrink-0 text-neutral-500" />
-                      <span className="min-w-0 flex-1 text-[13px] text-neutral-300 truncate">
-                        {list.name}
-                      </span>
-                    </button>
-                  ))}
-                {getBoardDocsIn(space, null).map((d) => docRow(space.id, d))}
+                    </div>
+                  );
+                })}
               </div>
             )}
           </div>

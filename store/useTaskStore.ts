@@ -431,7 +431,9 @@ interface TaskStore {
     startDate?: string | null,
     dueDate?: string | null,
     id?: string,
-    status?: string
+    status?: string,
+    // A redo of a create: the same task coming back, so the server logs no second "created".
+    isRedo?: boolean
   ) => Promise<void>;
   optimisticDeleteTask: (taskId: string) => Promise<void>;
   optimisticArchiveTask: (taskId: string, archived: boolean) => void;
@@ -1263,7 +1265,7 @@ export const useTaskStore = create<TaskStore>((set, get) => {
       }
     },
 
-    optimisticCreateTask: async (title, listId, spaceId, parentId = null, startDate = null, dueDate = null, explicitId, explicitStatus) => {
+    optimisticCreateTask: async (title, listId, spaceId, parentId = null, startDate = null, dueDate = null, explicitId, explicitStatus, isRedo = false) => {
       const tempId = explicitId ?? `temp-${Date.now()}`;
       const space = get()
         .workspaces.flatMap((w) => w.spaces)
@@ -1314,6 +1316,11 @@ export const useTaskStore = create<TaskStore>((set, get) => {
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
             ...(explicitId ? { id: explicitId } : {}),
+            // A new task, whoever chose its id — only a redo is the same task coming back. The server
+            // used to read any given id as "a restore" and so logged no "created" for the tasks most
+            // screens now make, which choose their id up front ("Står ikke i activity hvem som
+            // opprettet tasken", 2026-10-23).
+            ...(isRedo ? {} : { fresh: true }),
             title,
             listId,
             parentId,
@@ -1333,12 +1340,12 @@ export const useTaskStore = create<TaskStore>((set, get) => {
 
         // A fresh subtask create also logs on its immediate parent server-side — refresh the
         // parent's comments if they're already loaded (its modal open) so that shows up live.
-        if (!explicitId && parentId && get().comments[parentId]) get().fetchComments(parentId);
+        if (!isRedo && parentId && get().comments[parentId]) get().fetchComments(parentId);
 
         useHistoryStore.getState().push({
           label: `Create task "${title}"`,
           undo: () => get().optimisticDeleteTask(savedTask.id),
-          redo: () => get().optimisticCreateTask(title, listId, spaceId, parentId, startDate, dueDate, savedTask.id, defaultStatus),
+          redo: () => get().optimisticCreateTask(title, listId, spaceId, parentId, startDate, dueDate, savedTask.id, defaultStatus, true),
         });
       } catch (error) {
         console.error('Failed to save task:', error);

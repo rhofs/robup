@@ -2483,6 +2483,16 @@ Picked up right after the office's "merged single island" popup-menu work (previ
 
 ## Known bugs / things to remember
 
+- **A Capacitor plugin method runs on a background thread ("CapacitorPlugins"), not the main
+  thread** (2026-10-23). Anything that touches the WebView there throws and closes the app, with no
+  catch possible in JS. `SiqtDownloadsPlugin.download` read the WebView's user agent and crashed the
+  app on "Download PDF" (APK 2.1). Wrap such work in `getBridge().executeOnMainThread(...)`.
+  WebView callbacks (DownloadListener) already arrive on the main thread.
+- **"An id was sent" no longer means "a restore"** (2026-10-23). `POST /api/tasks` skipped the
+  "created" activity for any create that carried an id, but most screens now pick the id themselves
+  (to animate the new row), so new tasks showed no creator. Fresh creates now send `fresh: true`;
+  only a redo (`optimisticCreateTask(..., isRedo)`) and snapshot restores omit it.
+
 - **Folders have negative `order` values on purpose** (since 2026-10-21). Folders, Lists and Docs at
   one sidebar level share one order (`lib/folderTree.ts` `sidebarSiblings`). The data migration
   `20261021120000_folders_share_sidebar_order` gave every Folder -n..-1 among its siblings, so the
@@ -13280,3 +13290,35 @@ calendar to start once the keyboard is fully down, "bittelitt tregere".
 
 
 **Deployed 2026-10-21 as `af5a705`** (tag `deploy/2026-10-21_1105`). Pterodactyl backup `before-2026-10-21-sidebar-shared-order` (379626ac) taken first; the data migration ran on start. The panel now holds 7 of its 10 backups — old ones will need deleting before long.
+
+### 2026-10-23 — a batch of seven: five fixes deployed first, two features after
+
+- **User's list:** workspace shown in the notifications window; [Bug] Activity doesn't show who
+  created a task; [Bug] chat doesn't scroll down after sending in DMs (desktop), nor the subtask
+  list after adding at its end; [Feature] statuses for subtasks separate from the List's, with a
+  button inside the task; [Bug] PDF from a task's Docs: "Appen bare lukka seg"; [Bug] the phone
+  doesn't share the Spaces order with desktop; [Feature] recurring events in the Planner.
+- **Notifications:** `GET /api/notifications` adds `workspace {id, name, isPersonal}` through each
+  notification's task. Rows show "2d ago · CRRM Media" ("Private" for the personal workspace).
+  Chat mentions have no task and show none; their title already names the channel. No schema
+  change.
+- **Creator in Activity:** see Known bugs. Fixed with `fresh: true` from `optimisticCreateTask`.
+  Tasks made before the fix have no "created" entry and cannot get one: the creator was never
+  stored anywhere else.
+- **Chat scroll (desktop DMs):**
+  - The cause was not found by reading. The effect looked right: own message → smooth scroll.
+  - Made robust instead. A new message is detected by the last message's id rather than the count:
+    a refetch racing the POST can replace the list without changing its length.
+  - Your own message calls `jumpToBottom()`. It sets stick-to-bottom and jumps on this frame and
+    the next two, so the composer shrinking or a picture loading cannot leave it short.
+  - `handleSend` also calls it.
+  - Not verified in a browser.
+- **Subtasks:** adding one scrolls the "+ Add subtask" row back into view (`subtaskAddRowRef`, on
+  the next frame and after 320 ms, when the new row has opened).
+- **PDF in the app:** see Known bugs. `download()` now runs on the main thread. **APK 2.2
+  (versionCode 13)**, clean build, same certificate, in `public/siqt.apk`; it must be installed.
+- **Phone order:** the cause was `components/mobile/ContextSpaceList.tsx` ("My Spaces" in the
+  contexts layout). It drew Folders and Lists in raw server order with no sort at all, so it never
+  matched desktop; the 2026-10-21 change had covered `MobileSpacesSheet` only. It now walks
+  `sidebarSiblings` like the desktop sidebar (still only one Folder level, as before).
+

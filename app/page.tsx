@@ -113,7 +113,7 @@ import { useChatStore, holdChatUpdates } from '../store/useChatStore';
 import { usePresenceConnection } from '../lib/collab/usePresenceConnection';
 import { SessionSync } from '../components/SessionSync';
 import { signOut } from 'next-auth/react';
-import { collectListIdsUnder, isDescendantOf, getOrderedListIds, planSidebarPlacement, type SidebarItemType } from '../lib/folderTree';
+import { collectListIdsUnder, getOrderedListIds, planSidebarPlacement, type SidebarItemType } from '../lib/folderTree';
 import { isDescendantOfDocFolder } from '../lib/docFolderTree';
 import { buildNavQueryString, dateKey, parseNavUrl } from '../lib/navUrl';
 import DatePickerPopover from '../components/DatePickerPopover';
@@ -3883,8 +3883,18 @@ function PageContent() {
     multiSelectAnchorRef.current = { spaceId: space.id, listId };
   };
 
+  // The "+ Add subtask" row, kept in view as new subtasks push it down: "når vi når enden med subtasks
+  // og lager ny … Må scrolle ned manuelt" (desktop, 2026-10-23). Once on the next frame, and again
+  // once the new row has finished opening.
+  const subtaskAddRowRef = useRef<HTMLDivElement | null>(null);
+  const keepSubtaskAddInView = () => {
+    const reveal = () => subtaskAddRowRef.current?.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+    requestAnimationFrame(reveal);
+    window.setTimeout(reveal, 320);
+  };
   const handleAddSubtask = (parent: any) => {
     if (!newSubtaskTitle.trim()) return;
+    keepSubtaskAddInView();
     optimisticCreateTask(newSubtaskTitle, parent.listId, activeSpaceId, parent.id);
     setNewSubtaskTitle('');
   };
@@ -9887,7 +9897,7 @@ function PageContent() {
                         {isMobile ? '+ Legg til underoppgave' : '+ Add subtask'}
                       </button>
                     ) : (
-                      <div className="flex gap-2 items-center pt-1">
+                      <div ref={subtaskAddRowRef} className="flex gap-2 items-center pt-1 scroll-mb-4">
                         <input
                           type="text"
                           autoFocus

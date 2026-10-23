@@ -17,5 +17,17 @@ export async function GET() {
     include: { actor: { select: publicUserSelect } },
   });
 
-  return NextResponse.json(notifications);
+  // Which workspace each one is from — "at man ser hvilken workspace den tilhører også" (2026-10-23).
+  // Read through the task it is about; a chat mention has none and shows none (its title already says
+  // which channel).
+  const taskIds = [...new Set(notifications.map((n) => n.taskId).filter((id): id is string => !!id))];
+  const tasks = taskIds.length
+    ? await prisma.task.findMany({
+        where: { id: { in: taskIds } },
+        select: { id: true, list: { select: { space: { select: { workspace: { select: { id: true, name: true, isPersonal: true } } } } } } },
+      })
+    : [];
+  const workspaceOf = new Map(tasks.map((t) => [t.id, t.list.space.workspace]));
+
+  return NextResponse.json(notifications.map((n) => ({ ...n, workspace: (n.taskId && workspaceOf.get(n.taskId)) || null })));
 }

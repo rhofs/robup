@@ -44,6 +44,11 @@ public class SiqtDownloadsPlugin extends Plugin {
         );
     }
 
+    // Plugin calls arrive on Capacitor's own background thread ("CapacitorPlugins"), and a WebView may
+    // only be touched from the main thread — reading its user agent there threw and closed the app:
+    // "Kunne ikke laste ned PDF fra Docs inne i task … Appen bare lukka seg" (APK 2.1, 2026-10-23). So
+    // the whole download is started on the main thread, which is also where the DownloadListener's
+    // calls already come in.
     @PluginMethod
     public void download(PluginCall call) {
         String url = call.getString("url");
@@ -53,10 +58,16 @@ public class SiqtDownloadsPlugin extends Plugin {
         }
         String name = call.getString("filename");
         String mimeType = call.getString("mimeType");
-        String userAgent = getBridge().getWebView().getSettings().getUserAgentString();
-        boolean ok = enqueue(url, userAgent, name != null && !name.isEmpty() ? clean(name) : fileName(url, null, mimeType), mimeType);
-        if (ok) call.resolve();
-        else call.reject("Could not start the download");
+        getBridge().executeOnMainThread(() -> {
+            try {
+                String userAgent = getBridge().getWebView().getSettings().getUserAgentString();
+                boolean ok = enqueue(url, userAgent, name != null && !name.isEmpty() ? clean(name) : fileName(url, null, mimeType), mimeType);
+                if (ok) call.resolve();
+                else call.reject("Could not start the download");
+            } catch (Exception e) {
+                call.reject("Could not start the download");
+            }
+        });
     }
 
     private boolean enqueue(String url, String userAgent, String name, String mimeType) {

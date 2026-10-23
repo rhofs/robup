@@ -15,6 +15,8 @@ export type AppNotification = {
   readAt: string | null;
   createdAt: string;
   actor: AppUser | null;
+  // The workspace the task it is about is in (app/api/notifications); null for a chat mention.
+  workspace?: { id: string; name: string; isPersonal: boolean } | null;
 };
 
 function timeAgo(iso: string): string {
@@ -131,7 +133,15 @@ export function NotificationList({
             <span className="min-w-0 flex-1">
               <span className="block text-xs text-neutral-200">{n.title}</span>
               {n.body && <span className="block text-[11px] text-neutral-400 truncate">{n.body}</span>}
-              <span className="block text-[10px] text-neutral-600 mt-0.5">{timeAgo(n.createdAt)}</span>
+              <span className="block text-[10px] text-neutral-600 mt-0.5 truncate">
+                {timeAgo(n.createdAt)}
+                {n.workspace && (
+                  <>
+                    {' · '}
+                    <span className="text-neutral-500">{n.workspace.isPersonal ? 'Private' : n.workspace.name}</span>
+                  </>
+                )}
+              </span>
             </span>
             {!n.readAt && <span className="mt-1.5 w-2 h-2 rounded-full bg-blue-500 shrink-0" />}
           </button>
