@@ -18,7 +18,7 @@ import { suggestTaskAssignees } from '../lib/assigneeSuggestions';
 import { useSessionStore } from '../store/useSessionStore';
 import { useLongPress } from '../hooks/useLongPress';
 import DatePickerPopover from './DatePickerPopover';
-import { SubtaskPlannerNote, TaskPlannerToggle } from './PlannerToggle';
+import { TaskPlannerToggle } from './PlannerToggle';
 import FloatingPopover from './FloatingPopover';
 import { startDateColor, dueDateColor, DATE_BADGE_COLOR_HEX, startDateTooltip, dueDateTooltip, customDateColor, customDateTooltip } from '../lib/dateBadgeColor';
 
@@ -358,7 +358,7 @@ function TaskRowImpl({
         <DatePickerPopover
           value={task.startDate}
           label="Start"
-          plannerToggle={task.parentId === null ? <TaskPlannerToggle task={task} /> : <SubtaskPlannerNote />}
+          plannerToggle={<TaskPlannerToggle task={task} />}
           placeholder="---"
           onChange={(iso) => optimisticSetDates(task.id, iso, task.dueDate ? new Date(task.dueDate).toISOString() : null)}
           badgeColorHex={(() => {
@@ -375,7 +375,7 @@ function TaskRowImpl({
         <DatePickerPopover
           value={task.dueDate}
           label="Due"
-          plannerToggle={task.parentId === null ? <TaskPlannerToggle task={task} /> : <SubtaskPlannerNote />}
+          plannerToggle={<TaskPlannerToggle task={task} />}
           placeholder="---"
           onChange={(iso) => optimisticSetDates(task.id, task.startDate ? new Date(task.startDate).toISOString() : null, iso)}
           badgeColorHex={(() => {

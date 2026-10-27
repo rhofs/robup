@@ -28,11 +28,13 @@ export default function PlannerToggle({ on, onToggle, followsDefault }: { on: bo
 
 // The switch for a task that exists. Choosing the same as the default stores nothing (null), so the
 // task keeps following its List and Space if those change later.
-export function TaskPlannerToggle({ task }: { task: Pick<Task, 'id' | 'listId' | 'showInPlanner'> }) {
+// A subtask's default is off (lib/taskDates.ts isTaskInPlanner), whatever its List says.
+export function TaskPlannerToggle({ task }: { task: Pick<Task, 'id' | 'listId' | 'showInPlanner' | 'parentId'> }) {
   const workspaces = useTaskStore((s) => s.workspaces);
   const setShowInPlanner = useTaskStore((s) => s.optimisticSetShowInPlanner);
-  const fallback = useMemo(() => plannerDefaults(workspaces).get(task.listId) ?? true, [workspaces, task.listId]);
-  const on = isTaskInPlanner(task, new Map([[task.listId, fallback]]));
+  const listDefault = useMemo(() => plannerDefaults(workspaces).get(task.listId) ?? true, [workspaces, task.listId]);
+  const fallback = task.parentId ? false : listDefault;
+  const on = isTaskInPlanner(task, new Map([[task.listId, listDefault]]));
   return (
     <PlannerToggle
       on={on}
@@ -43,11 +45,4 @@ export function TaskPlannerToggle({ task }: { task: Pick<Task, 'id' | 'listId' |
       }}
     />
   );
-}
-
-// In a subtask's date picker, where the switch would be: subtasks are never drawn in the Planner, so
-// there is nothing to switch — said, rather than leaving the switch missing without a word ("nå ser
-// jeg ikke den planner greia", on a subtask, 2026-10-27).
-export function SubtaskPlannerNote() {
-  return <span className="text-[10.5px] text-neutral-500">Subtasks are not shown in the Planner</span>;
 }

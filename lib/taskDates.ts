@@ -17,7 +17,11 @@ export function plannerDefaults(workspaces: HierarchyWorkspace[]): Map<string, b
   return out;
 }
 
-export function isTaskInPlanner(task: Pick<Task, 'listId' | 'showInPlanner'>, defaults: Map<string, boolean>): boolean {
+// A subtask only when switched on for itself — "vi skal jo kunne velge at en subtask skal vises i
+// planner og" (2026-10-27). Off by default, not by its List's or Space's default: every dated step of
+// every episode would otherwise fill the Planner.
+export function isTaskInPlanner(task: Pick<Task, 'listId' | 'showInPlanner' | 'parentId'>, defaults: Map<string, boolean>): boolean {
+  if (task.parentId) return task.showInPlanner === true;
   return task.showInPlanner ?? defaults.get(task.listId) ?? true;
 }
 

@@ -13464,3 +13464,23 @@ calendar to start once the keyboard is fully down, "bittelitt tregere".
 
 
 **Deployed 2026-10-27 as `fae394e`** (tag `deploy/2026-10-27_2347`). Web-only, no schema change, so no backup was taken.
+
+### 2026-10-27 (continued) — subtasks can be switched into the Planner
+
+- **User:** "Men vi skal jo kunne velge at en subtask skal vises i planner og? Hvor kunne jeg velge
+  default valget btw?"
+- **Answered:** the defaults are under right-click Space → Edit Space → Planner, and right-click
+  List → Edit List → Planner (the List's choice wins).
+- **Built:**
+  - Subtasks get the same "In Planner / Not in Planner" switch in their date picker. This replaces
+    the "Subtasks are not shown in the Planner" note deployed an hour earlier (`SubtaskPlannerNote`,
+    now removed).
+  - **Off by default:** `isTaskInPlanner` shows a subtask only when `showInPlanner === true`,
+    whatever its List or Space default says. Otherwise every dated step of every episode would fill
+    the Planner.
+  - The Planner list no longer filters out `parentId`. A subtask's bar is titled "Subtask · Parent"
+    (a display copy; the id is unchanged, so opening and dragging act on the real task).
+  - The Edit Space/List hints now say "subtasks stay out unless switched on one by one".
+  - The task window's crossed-calendar icon is still shown for top-level tasks only.
+- Rule tested with tsx; `next build` passes. Not seen in a browser.
+

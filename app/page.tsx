@@ -151,7 +151,7 @@ import DirectMessagesPage from '../components/DirectMessagesPage';
 import ProfilePage from '../components/ProfilePage';
 import NotificationsPanel, { NotificationList, type AppNotification } from '../components/NotificationsPanel';
 import QuickAddTaskRow, { type QuickAddExtras } from '../components/QuickAddTaskRow';
-import { SubtaskPlannerNote, TaskPlannerToggle } from '../components/PlannerToggle';
+import { TaskPlannerToggle } from '../components/PlannerToggle';
 import { dateFieldsByList, isTaskInPlanner, parsePlannerMarkerId, plannerDefaults, plannerMarkers } from '../lib/taskDates';
 import { expandOccurrences, parseExceptions, parseOccurrenceId } from '../lib/recurrence';
 import CommandPalette from '../components/CommandPalette';
@@ -3639,14 +3639,21 @@ function PageContent() {
   const plannerDateFieldsByList = useMemo(() => dateFieldsByList(workspaces, 'showInPlanner'), [workspaces]);
   const calendarFilteredTasks = useMemo(
     () =>
-      tasks.filter(
-        (task) =>
-          task.parentId === null &&
-          isArchivedTask(task) === showArchived &&
-          calendarVisibleListIds.has(task.listId) &&
-          // Kept out by its own Planner switch, or by its List's or Space's default.
-          isTaskInPlanner(task, plannerDefaultByList)
-      ),
+      tasks
+        .filter(
+          (task) =>
+            isArchivedTask(task) === showArchived &&
+            calendarVisibleListIds.has(task.listId) &&
+            // Kept out by its own Planner switch, or by its List's or Space's default. A subtask
+            // only when switched on for itself (isTaskInPlanner).
+            isTaskInPlanner(task, plannerDefaultByList)
+        )
+        // A subtask's bar says what it belongs to — "Innspilling" alone says nothing in a month view.
+        .map((task) => {
+          if (!task.parentId) return task;
+          const parent = tasks.find((t) => t.id === task.parentId);
+          return parent ? { ...task, title: `${task.title} · ${parent.title}` } : task;
+        }),
     // eslint-disable-next-line react-hooks/exhaustive-deps -- isArchivedTask reads archivedSpaceListIds, listed
     [tasks, calendarVisibleListIds, showArchived, archivedSpaceListIds, plannerDefaultByList]
   );
@@ -8835,7 +8842,7 @@ function PageContent() {
                   ))}
                 </div>
                 <p className="text-[10px] text-neutral-500 mt-1.5">
-                  The default for tasks with dates here. A List can choose differently, and each task can be switched on or off in its date picker.
+                  The default for tasks with dates here. A List can choose differently, and each task can be switched on or off in its date picker. Subtasks stay out unless switched on one by one.
                 </p>
               </div>
               <button onClick={saveSpaceEdit} className="w-full bg-blue-600 hover:bg-blue-500 text-white text-xs py-2 rounded font-medium cursor-pointer">
@@ -9019,7 +9026,7 @@ function PageContent() {
                     </button>
                   ))}
                 </div>
-                <p className="text-[10px] text-neutral-500 mt-1.5">Whether this List&apos;s tasks show in the Planner. Each task can still be switched in its date picker.</p>
+                <p className="text-[10px] text-neutral-500 mt-1.5">Whether this List&apos;s tasks show in the Planner. Each task can still be switched in its date picker; subtasks stay out unless switched on one by one.</p>
               </div>
               <button onClick={saveListEdit} className="w-full bg-blue-600 hover:bg-blue-500 text-white text-xs py-2 rounded font-medium cursor-pointer">
                 Save
@@ -9535,7 +9542,7 @@ function PageContent() {
                       <div className="flex items-center gap-1 text-xs font-mono min-w-0">
                         <DatePickerPopover
                           value={activeModalTask.startDate}
-                        plannerToggle={activeModalTask.parentId === null ? <TaskPlannerToggle task={activeModalTask} /> : <SubtaskPlannerNote />}
+                        plannerToggle={<TaskPlannerToggle task={activeModalTask} />}
                           label="Start"
                           showLabel
                           placeholder="Start date"
@@ -9555,7 +9562,7 @@ function PageContent() {
                         <span className="text-neutral-600 shrink-0">–</span>
                         <DatePickerPopover
                           value={activeModalTask.dueDate}
-                        plannerToggle={activeModalTask.parentId === null ? <TaskPlannerToggle task={activeModalTask} /> : <SubtaskPlannerNote />}
+                        plannerToggle={<TaskPlannerToggle task={activeModalTask} />}
                           label="Due"
                           showLabel
                           placeholder="Due date"
@@ -9584,7 +9591,7 @@ function PageContent() {
                       <CalendarIcon className="w-3.5 h-3.5 text-neutral-500 shrink-0" />
                       <DatePickerPopover
                         value={activeModalTask.startDate}
-                        plannerToggle={activeModalTask.parentId === null ? <TaskPlannerToggle task={activeModalTask} /> : <SubtaskPlannerNote />}
+                        plannerToggle={<TaskPlannerToggle task={activeModalTask} />}
                         label="Start"
                         showLabel
                         placeholder="Start date"
@@ -9604,7 +9611,7 @@ function PageContent() {
                       <span className="text-neutral-600">–</span>
                       <DatePickerPopover
                         value={activeModalTask.dueDate}
-                        plannerToggle={activeModalTask.parentId === null ? <TaskPlannerToggle task={activeModalTask} /> : <SubtaskPlannerNote />}
+                        plannerToggle={<TaskPlannerToggle task={activeModalTask} />}
                         label="Due"
                         showLabel
                         placeholder="Due date"
