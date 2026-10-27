@@ -13484,3 +13484,5 @@ calendar to start once the keyboard is fully down, "bittelitt tregere".
   - The task window's crossed-calendar icon is still shown for top-level tasks only.
 - Rule tested with tsx; `next build` passes. Not seen in a browser.
 
+
+**Deployed 2026-10-28 as `d67af36`** (tag `deploy/2026-10-27_2350`). Web-only.
