@@ -151,7 +151,7 @@ import DirectMessagesPage from '../components/DirectMessagesPage';
 import ProfilePage from '../components/ProfilePage';
 import NotificationsPanel, { NotificationList, type AppNotification } from '../components/NotificationsPanel';
 import QuickAddTaskRow, { type QuickAddExtras } from '../components/QuickAddTaskRow';
-import { TaskPlannerToggle } from '../components/PlannerToggle';
+import { SubtaskPlannerNote, TaskPlannerToggle } from '../components/PlannerToggle';
 import { dateFieldsByList, isTaskInPlanner, parsePlannerMarkerId, plannerDefaults, plannerMarkers } from '../lib/taskDates';
 import { expandOccurrences, parseExceptions, parseOccurrenceId } from '../lib/recurrence';
 import CommandPalette from '../components/CommandPalette';
@@ -9535,7 +9535,7 @@ function PageContent() {
                       <div className="flex items-center gap-1 text-xs font-mono min-w-0">
                         <DatePickerPopover
                           value={activeModalTask.startDate}
-                        plannerToggle={activeModalTask.parentId === null ? <TaskPlannerToggle task={activeModalTask} /> : undefined}
+                        plannerToggle={activeModalTask.parentId === null ? <TaskPlannerToggle task={activeModalTask} /> : <SubtaskPlannerNote />}
                           label="Start"
                           showLabel
                           placeholder="Start date"
@@ -9555,7 +9555,7 @@ function PageContent() {
                         <span className="text-neutral-600 shrink-0">–</span>
                         <DatePickerPopover
                           value={activeModalTask.dueDate}
-                        plannerToggle={activeModalTask.parentId === null ? <TaskPlannerToggle task={activeModalTask} /> : undefined}
+                        plannerToggle={activeModalTask.parentId === null ? <TaskPlannerToggle task={activeModalTask} /> : <SubtaskPlannerNote />}
                           label="Due"
                           showLabel
                           placeholder="Due date"
@@ -9584,7 +9584,7 @@ function PageContent() {
                       <CalendarIcon className="w-3.5 h-3.5 text-neutral-500 shrink-0" />
                       <DatePickerPopover
                         value={activeModalTask.startDate}
-                        plannerToggle={activeModalTask.parentId === null ? <TaskPlannerToggle task={activeModalTask} /> : undefined}
+                        plannerToggle={activeModalTask.parentId === null ? <TaskPlannerToggle task={activeModalTask} /> : <SubtaskPlannerNote />}
                         label="Start"
                         showLabel
                         placeholder="Start date"
@@ -9604,7 +9604,7 @@ function PageContent() {
                       <span className="text-neutral-600">–</span>
                       <DatePickerPopover
                         value={activeModalTask.dueDate}
-                        plannerToggle={activeModalTask.parentId === null ? <TaskPlannerToggle task={activeModalTask} /> : undefined}
+                        plannerToggle={activeModalTask.parentId === null ? <TaskPlannerToggle task={activeModalTask} /> : <SubtaskPlannerNote />}
                         label="Due"
                         showLabel
                         placeholder="Due date"

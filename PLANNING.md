@@ -2483,6 +2483,15 @@ Picked up right after the office's "merged single island" popup-menu work (previ
 
 ## Known bugs / things to remember
 
+- **A background refetch must not land on top of this tab's own writes** (2026-10-27).
+  `refetchTasks`/`refetchEvents` replace the whole list with the server's reply. A reply read while
+  a create or edit from this tab was in flight is older than the screen: new rows vanished and edits
+  flipped back until the next 30-second poll. The fix is `lib/pendingWrites.ts`, which wraps
+  `window.fetch` once and counts non-GET requests to /api/tasks… and /api/events… in flight. A
+  refetch is applied only if none were in flight when it started or ended, none settled while it
+  was being read, and the list on screen did not change meanwhile. Otherwise it is retried every
+  1.2 s, up to 8 times. Any new background refresh of a list should go through the same check.
+
 - **A task's own statuses (Status.taskId) have `listId` null, like a Space's** (2026-10-23). Every
   query for "the Space's own set" must therefore also say `taskId: null`. Without it, the Space's set
   picks up task sets, and applying the Space's set deletes them (`applyStatusSet`'s deleteMany). The
@@ -13433,3 +13442,23 @@ calendar to start once the keyboard is fully down, "bittelitt tregere".
 - **Offered, not built:**
   - "Hide from Planner / Show in Planner" in the task's right-click/"···" menu.
   - "Hide from Planner" on a Planner bar's right-click.
+
+### 2026-10-27 (continued) — [Bug] applying a template: subtasks appear, vanish, come back
+
+- **User:** "Når jeg applier template … jeg ser at den fyller opp, men så forsvinner den, og jeg må
+  refreshe? Nei, nå ser jeg de kom etter 5-10 sek".
+- **Cause:**
+  - `applyTemplateToTask` creates subtasks one after another, each waiting for its POST.
+  - page.tsx's 30-second poll (`refetchTasks`) replaced `tasks` wholesale with a reply read before
+    those creates were committed, so they vanished.
+  - The POST handler then replaced the optimistic row only if it was still there, so a wiped one
+    stayed gone until the next poll.
+- **Fix:**
+  - `lib/pendingWrites.ts`, as described under Known bugs.
+  - `optimisticCreateTask` puts its saved task back if the optimistic row has gone missing.
+  - It covers every write, not just templates: edits made just before a poll no longer flip back.
+- **Also: a subtask's date picker now says "Subtasks are not shown in the Planner"** where the
+  switch would be. The user had opened a subtask's picker, found no switch and thought it was gone.
+  The switch is on top-level tasks only, by design.
+- Tracker tested with a fake fetch under tsx; `next build` passes. Not seen in a browser.
+

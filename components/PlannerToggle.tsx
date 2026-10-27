@@ -44,3 +44,10 @@ export function TaskPlannerToggle({ task }: { task: Pick<Task, 'id' | 'listId' |
     />
   );
 }
+
+// In a subtask's date picker, where the switch would be: subtasks are never drawn in the Planner, so
+// there is nothing to switch — said, rather than leaving the switch missing without a word ("nå ser
+// jeg ikke den planner greia", on a subtask, 2026-10-27).
+export function SubtaskPlannerNote() {
+  return <span className="text-[10.5px] text-neutral-500">Subtasks are not shown in the Planner</span>;
+}

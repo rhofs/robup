@@ -8,8 +8,9 @@ import { uploadChatFile } from '../lib/uploadChatFile';
 import { parseTaskTemplate, type AppTemplate, type TemplateKind } from '../lib/templates';
 import { useSessionStore } from './useSessionStore';
 import { celebrateTaskDone, isClosedStatus } from '../lib/taskDoneDust';
-import { statusOwnerOf, statusesOfList, statusesOfTask } from '../lib/listStatuses';
+import { statusOwnerOf, statusesOfTask } from '../lib/listStatuses';
 import { parseExceptions } from '../lib/recurrence';
+import { installWriteTracking, lastWriteSettledAt, writesInFlight } from '../lib/pendingWrites';
 
 export type StatusDef = {
   id: string;
@@ -773,6 +774,8 @@ interface TaskStore {
 // Appended to every request that loads Spaces or what is in them — see lib/archivedSpaces.ts.
 const archivedSpacesQS = () => (useTaskStore.getState().showArchivedSpaces ? '&archivedSpaces=1' : '');
 
+installWriteTracking();
+
 export const useTaskStore = create<TaskStore>((set, get) => {
   // Delete/restore for Space, Folder, List, Task, DocFolder, and Doc all go through the
   // server's soft-delete (`deletedAt`) + cascade instead of a real destructive delete — see
@@ -999,26 +1002,56 @@ export const useTaskStore = create<TaskStore>((set, get) => {
 
     // Same idea as refetchWorkspaces but for the flat `tasks` array — used after restoring a
     // deleted List/Folder/Space's tasks, as a safety net on top of the individual restore calls.
+    // A refetch is only applied when nothing from this tab could have changed underneath it: no write
+    // to that kind on its way, none settled while it was being read, and no change to the list on
+    // screen meanwhile. Otherwise its reply may be older than the screen, and it is tried again a
+    // moment later instead (lib/pendingWrites.ts) — up to a few times; the next poll covers the rest.
     refetchTasks: async () => {
-      try {
-        const userId = useSessionStore.getState().currentUserId ?? '';
-        const res = await fetch(`/api/tasks?userId=${userId}${archivedSpacesQS()}`);
-        const tasks = await res.json();
-        set({ tasks });
-      } catch (error) {
-        console.error('Error refetching tasks:', error);
-      }
+      const attempt = async (tries: number): Promise<void> => {
+        try {
+          if (writesInFlight('tasks') > 0) {
+            if (tries < 8) setTimeout(() => void attempt(tries + 1), 1200);
+            return;
+          }
+          const startedAt = Date.now();
+          const before = get().tasks;
+          const userId = useSessionStore.getState().currentUserId ?? '';
+          const res = await fetch(`/api/tasks?userId=${userId}${archivedSpacesQS()}`);
+          const tasks = await res.json();
+          if (writesInFlight('tasks') > 0 || lastWriteSettledAt('tasks') > startedAt || get().tasks !== before) {
+            if (tries < 8) setTimeout(() => void attempt(tries + 1), 1200);
+            return;
+          }
+          set({ tasks });
+        } catch (error) {
+          console.error('Error refetching tasks:', error);
+        }
+      };
+      await attempt(0);
     },
 
     refetchEvents: async () => {
-      try {
-        const userId = useSessionStore.getState().currentUserId ?? '';
-        const res = await fetch(`/api/events?userId=${userId}${archivedSpacesQS()}`);
-        const events = await res.json();
-        set({ events });
-      } catch (error) {
-        console.error('Error refetching events:', error);
-      }
+      const attempt = async (tries: number): Promise<void> => {
+        try {
+          if (writesInFlight('events') > 0) {
+            if (tries < 8) setTimeout(() => void attempt(tries + 1), 1200);
+            return;
+          }
+          const startedAt = Date.now();
+          const before = get().events;
+          const userId = useSessionStore.getState().currentUserId ?? '';
+          const res = await fetch(`/api/events?userId=${userId}${archivedSpacesQS()}`);
+          const events = await res.json();
+          if (writesInFlight('events') > 0 || lastWriteSettledAt('events') > startedAt || get().events !== before) {
+            if (tries < 8) setTimeout(() => void attempt(tries + 1), 1200);
+            return;
+          }
+          set({ events });
+        } catch (error) {
+          console.error('Error refetching events:', error);
+        }
+      };
+      await attempt(0);
     },
 
     setActiveView: (activeView) => set({ activeView }),
@@ -1369,11 +1402,14 @@ export const useTaskStore = create<TaskStore>((set, get) => {
         });
         const savedTask = await res.json();
 
-        set((state) => ({
-          tasks: state.tasks.map((t) =>
-            t.id === tempId ? { ...savedTask, assignees: savedTask.assignees || [], _localId: tempId } : t
-          ),
-        }));
+        set((state) => {
+          const saved = { ...savedTask, assignees: savedTask.assignees || [], _localId: tempId };
+          // Normally the optimistic row is still there to replace. If anything replaced the list in
+          // the meantime and it is gone, the task goes back in rather than staying lost until a reload.
+          if (state.tasks.some((t) => t.id === tempId)) return { tasks: state.tasks.map((t) => (t.id === tempId ? saved : t)) };
+          if (state.tasks.some((t) => t.id === savedTask.id)) return {};
+          return { tasks: [...state.tasks, saved] };
+        });
 
         // A fresh subtask create also logs on its immediate parent server-side — refresh the
         // parent's comments if they're already loaded (its modal open) so that shows up live.
