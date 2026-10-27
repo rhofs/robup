@@ -13416,3 +13416,20 @@ calendar to start once the keyboard is fully down, "bittelitt tregere".
 
 
 **Deployed 2026-10-23 as `d88b7f4`** (tag `deploy/2026-10-23_1320`). Pterodactyl backup `before-2026-10-23-event-recurrence` (bba78366) taken first — the panel now holds 9 of its 10 backups, so the next one needs an old one deleted (ask Robin which). The migration ran on start.
+
+### 2026-10-27 — question: how is a task shown in the Planner again? (answered, nothing built)
+
+- **User:** "hvordan funka den at den er synlig i planner igjen? Jeg husker ikke hvordan vi kan
+  toggle om en task skal vises i planner eller ikke?"
+- **Answer given:**
+  - The switch sits inside the date picker: "In Planner" / "Not in Planner". On desktop it is at
+    the bottom of the Start/Due calendar, in the task window and in a list row's date cells. On a
+    phone it is at the top left of the date sheet.
+  - A task kept out shows a crossed-out calendar icon next to its dates in the task window.
+  - The defaults are under Edit Space / Edit List → Planner.
+  - Subtasks never appear in the Planner, so they have no switch.
+  - A hidden task is reached from its List or My Assigned, not from the Planner.
+- **Learned:** the switch is hard to find (the user forgot where it was).
+- **Offered, not built:**
+  - "Hide from Planner / Show in Planner" in the task's right-click/"···" menu.
+  - "Hide from Planner" on a Planner bar's right-click.
