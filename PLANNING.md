@@ -13462,3 +13462,5 @@ calendar to start once the keyboard is fully down, "bittelitt tregere".
   The switch is on top-level tasks only, by design.
 - Tracker tested with a fake fetch under tsx; `next build` passes. Not seen in a browser.
 
+
+**Deployed 2026-10-27 as `fae394e`** (tag `deploy/2026-10-27_2347`). Web-only, no schema change, so no backup was taken.
