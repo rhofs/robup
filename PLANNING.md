@@ -13512,3 +13512,5 @@ calendar to start once the keyboard is fully down, "bittelitt tregere".
   the attribute. The command palette handles its own Escape.
 - `topOverlay` was tested with jsdom; `next build` passes. Not tried in a browser.
 
+
+**Deployed 2026-11-09 as `d602c98`** (tag `deploy/2026-11-09_1348`). Web-only.
