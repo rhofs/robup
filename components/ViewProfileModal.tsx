@@ -57,7 +57,7 @@ export default function ViewProfileModal({ userId, onClose, onStartDM }: ViewPro
           animate={{ opacity: 1 }}
           exit={{ opacity: 0 }}
           transition={{ duration: 0.15 }}
-          className="fixed inset-0 z-[60] flex items-center justify-center bg-scrim/70 backdrop-blur-xs"
+          data-escape-closes="" className="fixed inset-0 z-[60] flex items-center justify-center bg-scrim/70 backdrop-blur-xs"
           onClick={onClose}
         >
           <motion.div

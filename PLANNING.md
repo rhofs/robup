@@ -13486,3 +13486,29 @@ calendar to start once the keyboard is fully down, "bittelitt tregere".
 
 
 **Deployed 2026-10-28 as `d67af36`** (tag `deploy/2026-10-27_2350`). Web-only.
+
+### 2026-11-09 — Escape closes the window on top
+
+- **User:** "Kan vi fikse så det går an å trykke escape for å lukke vinduer som 'flyter' over, som
+  tasks som er åpen osv?"
+- **Built:**
+  - `lib/backdrop.ts`: `closeOnBackdrop` now also sets `data-escape-closes`. The same attribute
+    was added by hand to the backdrops that close on a plain onClick: the 7 context menus, the task
+    window's "···" menu, ConfirmDialog, ViewProfileModal, AttachmentPreview, the doc image dialog,
+    the Wiki's contents sheet, and the template save/apply dialogs.
+  - `topOverlay()` picks the visible marked backdrop with the highest z-index (on ties, the later
+    one in the DOM). `closeTopOverlay()` sets `pressedSelf` and `.click()`s it, so Escape does
+    exactly what a click outside does; there is no separate list of open windows to keep in sync.
+  - page.tsx has a global keydown handler:
+    - It ignores keys already handled (`defaultPrevented`) and IME composition.
+    - In a field (input/textarea/select/contenteditable), the first press only blurs it, so text
+      is not lost to a reflex.
+    - The task window (`data-task-window`) with a stack >1 pops one level.
+    - Otherwise it closes the top overlay.
+  - FloatingPopover and EmojiPicker now `preventDefault` when Escape closes them, so one press
+    closes only the dropdown, not the window under it. Tiptap's suggestion menus already mark the
+    key.
+- **Not covered:** the Planner's right-click day menu (no backdrop) and mobile-only sheets without
+  the attribute. The command palette handles its own Escape.
+- `topOverlay` was tested with jsdom; `next build` passes. Not tried in a browser.
+

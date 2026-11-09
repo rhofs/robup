@@ -5,7 +5,7 @@ import TaskTemplateEditor from '../components/TaskTemplateEditor';
 import { sortedStatusesOfTask, statusesOfTask } from '../lib/listStatuses';
 import { offerCompleteSubtasks } from '../lib/completeSubtasks';
 import { isDoneStatus } from '../lib/taskDoneDust';
-import { closeOnBackdrop } from '../lib/backdrop';
+import { closeOnBackdrop, closeTopOverlay, topOverlay } from '../lib/backdrop';
 import { Suspense, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { useRouter, usePathname, useSearchParams } from 'next/navigation';
 import dynamic from 'next/dynamic';
@@ -1625,6 +1625,10 @@ function PageContent() {
   }, [activeAdd]);
 
   const [modalTaskStack, setModalTaskStack] = useState<string[]>([]);
+  const modalTaskStackRef = useRef(modalTaskStack);
+  useEffect(() => {
+    modalTaskStackRef.current = modalTaskStack;
+  });
   // Where you were in the list when a task opened, put back when it closes: "når jeg trykker meg inn
   // på en task nede, og så krysser meg tilbake, så havner jeg øverst i lista". The list is emptied while
   // a task is open (filteredTasks returns nothing then — no reason to render rows behind a full-screen
@@ -4544,6 +4548,33 @@ function PageContent() {
       } else {
         useHistoryStore.getState().undo().then((label) => label && showToast(`Undid: ${label}`));
       }
+    };
+    window.addEventListener('keydown', handler);
+    return () => window.removeEventListener('keydown', handler);
+  }, []);
+
+  // Escape closes the window on top: a task, a dialog, a menu (lib/backdrop.ts closeTopOverlay) — one
+  // per press, so a task opened from another goes back to that one first. While
+  // typing, the first press only leaves the field (a description, a title): Escape in an editor already
+  // means "close this menu" or "cancel this edit", and losing a half-written thing to a reflex is worse
+  // than pressing twice. Whatever handled the key itself (an open dropdown, a "/" menu) marks it, and
+  // then nothing else happens.
+  useEffect(() => {
+    const handler = (e: KeyboardEvent) => {
+      if (e.key !== 'Escape' || e.defaultPrevented || e.isComposing) return;
+      const el = document.activeElement;
+      if (el instanceof HTMLElement && el.isConnected && (el.tagName === 'INPUT' || el.tagName === 'TEXTAREA' || el.tagName === 'SELECT' || el.isContentEditable)) {
+        el.blur();
+        return;
+      }
+      // A task opened from another (a subtask, a mention) goes back to the one it was opened from.
+      const top = topOverlay();
+      if (top?.hasAttribute('data-task-window') && modalTaskStackRef.current.length > 1) {
+        setModalTaskStack((stack) => stack.slice(0, -1));
+        e.preventDefault();
+        return;
+      }
+      if (closeTopOverlay()) e.preventDefault();
     };
     window.addEventListener('keydown', handler);
     return () => window.removeEventListener('keydown', handler);
@@ -8301,7 +8332,7 @@ function PageContent() {
       {/* ================= CONTEXT MENU: TASK ================= */}
       {taskMenu && (
         <>
-          <div className="fixed inset-0 z-[60]" onClick={() => setTaskMenu(null)} onContextMenu={(e) => { e.preventDefault(); setTaskMenu(null); }} />
+          <div data-escape-closes="" className="fixed inset-0 z-[60]" onClick={() => setTaskMenu(null)} onContextMenu={(e) => { e.preventDefault(); setTaskMenu(null); }} />
           <div className="fixed z-[61] w-48 bg-neutral-900 border border-neutral-800 rounded-xl shadow-2xl py-1" style={contextMenuPosition(taskMenu.x, taskMenu.y)} ref={(el) => fitMenuElement(el, taskMenu.x, taskMenu.y)}>
             <button
               onClick={() => {
@@ -8421,7 +8452,7 @@ function PageContent() {
       {/* ================= CONTEXT MENU: SPACE ================= */}
       {spaceMenu && (
         <>
-          <div className="fixed inset-0 z-[60]" onClick={() => setSpaceMenu(null)} onContextMenu={(e) => { e.preventDefault(); setSpaceMenu(null); }} />
+          <div data-escape-closes="" className="fixed inset-0 z-[60]" onClick={() => setSpaceMenu(null)} onContextMenu={(e) => { e.preventDefault(); setSpaceMenu(null); }} />
           <div className="fixed z-[61] w-48 bg-neutral-900 border border-neutral-800 rounded-xl shadow-2xl py-1" style={contextMenuPosition(spaceMenu.x, spaceMenu.y)} ref={(el) => fitMenuElement(el, spaceMenu.x, spaceMenu.y)}>
             <button onClick={() => startEditSpace(spaceMenu.space)} className="w-full text-left px-3 py-1.5 text-xs text-neutral-300 hover:bg-neutral-800/60 cursor-pointer flex items-center gap-2">
               <Pencil className="w-3.5 h-3.5" /> Edit Space
@@ -8477,7 +8508,7 @@ function PageContent() {
       {/* ================= CONTEXT MENU: FOLDER ================= */}
       {folderMenu && (
         <>
-          <div className="fixed inset-0 z-[60]" onClick={() => setFolderMenu(null)} onContextMenu={(e) => { e.preventDefault(); setFolderMenu(null); }} />
+          <div data-escape-closes="" className="fixed inset-0 z-[60]" onClick={() => setFolderMenu(null)} onContextMenu={(e) => { e.preventDefault(); setFolderMenu(null); }} />
           <div className="fixed z-[61] w-48 bg-neutral-900 border border-neutral-800 rounded-xl shadow-2xl py-1" style={contextMenuPosition(folderMenu.x, folderMenu.y)} ref={(el) => fitMenuElement(el, folderMenu.x, folderMenu.y)}>
             <button onClick={() => startEditFolder(folderMenu.folder)} className="w-full text-left px-3 py-1.5 text-xs text-neutral-300 hover:bg-neutral-800/60 cursor-pointer flex items-center gap-2">
               <Pencil className="w-3.5 h-3.5" /> Edit appearance
@@ -8518,7 +8549,7 @@ function PageContent() {
       {/* ================= CONTEXT MENU: LIST ================= */}
       {listMenu && (
         <>
-          <div className="fixed inset-0 z-[60]" onClick={() => setListMenu(null)} onContextMenu={(e) => { e.preventDefault(); setListMenu(null); }} />
+          <div data-escape-closes="" className="fixed inset-0 z-[60]" onClick={() => setListMenu(null)} onContextMenu={(e) => { e.preventDefault(); setListMenu(null); }} />
           <div className="fixed z-[61] w-48 bg-neutral-900 border border-neutral-800 rounded-xl shadow-2xl py-1" style={contextMenuPosition(listMenu.x, listMenu.y)} ref={(el) => fitMenuElement(el, listMenu.x, listMenu.y)}>
             <button
               onClick={() => startEditList(listMenu.list, listMenu.spaceId)}
@@ -8599,7 +8630,7 @@ function PageContent() {
       {/* ================= CONTEXT MENU: DOC ================= */}
       {docMenu && (
         <>
-          <div className="fixed inset-0 z-[60]" onClick={() => setDocMenu(null)} onContextMenu={(e) => { e.preventDefault(); setDocMenu(null); }} />
+          <div data-escape-closes="" className="fixed inset-0 z-[60]" onClick={() => setDocMenu(null)} onContextMenu={(e) => { e.preventDefault(); setDocMenu(null); }} />
           <div className="fixed z-[61] w-48 bg-neutral-900 border border-neutral-800 rounded-xl shadow-2xl py-1" style={contextMenuPosition(docMenu.x, docMenu.y)} ref={(el) => fitMenuElement(el, docMenu.x, docMenu.y)}>
             <button
               onClick={() => startEditDoc(docMenu.doc, docMenu.spaceId)}
@@ -8658,7 +8689,7 @@ function PageContent() {
       {/* ================= CONTEXT MENU: COLUMN ================= */}
       {columnMenu && (
         <>
-          <div className="fixed inset-0 z-[60]" onClick={() => setColumnMenu(null)} onContextMenu={(e) => { e.preventDefault(); setColumnMenu(null); }} />
+          <div data-escape-closes="" className="fixed inset-0 z-[60]" onClick={() => setColumnMenu(null)} onContextMenu={(e) => { e.preventDefault(); setColumnMenu(null); }} />
           <div className="fixed z-[61] w-48 bg-neutral-900 border border-neutral-800 rounded-xl shadow-2xl py-1" style={contextMenuPosition(columnMenu.x, columnMenu.y)} ref={(el) => fitMenuElement(el, columnMenu.x, columnMenu.y)}>
             <button
               onClick={() => {
@@ -8710,7 +8741,7 @@ function PageContent() {
       {/* ================= PICKER: TASK DROPPED ONTO FOLDER/SPACE WITH MULTIPLE LISTS ================= */}
       {taskListPicker && (
         <>
-          <div className="fixed inset-0 z-[60]" onClick={() => setTaskListPicker(null)} onContextMenu={(e) => { e.preventDefault(); setTaskListPicker(null); }} />
+          <div data-escape-closes="" className="fixed inset-0 z-[60]" onClick={() => setTaskListPicker(null)} onContextMenu={(e) => { e.preventDefault(); setTaskListPicker(null); }} />
           {/* Mobile: pinned to the screen rather than to the tap point, and nearly full width.
               A 224px menu positioned at a finger's x/y ran off the right edge and left barely
               enough room for a word, which is what made the truncation so damaging. Desktop keeps
@@ -9228,6 +9259,7 @@ function PageContent() {
           className="fixed inset-0 z-50 flex items-center justify-center bg-scrim/55 backdrop-blur-[3px] p-6 md:p-10"
           // Only a click that starts on the backdrop closes the task — not a text selection dragged out of it.
           {...closeOnBackdrop(() => setModalTaskStack([]))}
+          data-task-window=""
         >
           {/* Plain fade-in, no shared-layout zoom from the row (dropped layoutId here — TaskRow.tsx
               keeps its own layout/layoutId untouched, that still drives its independent list-reflow
@@ -9344,7 +9376,7 @@ function PageContent() {
                   {taskModalMenuOpen && (
                     <>
                       <div
-                        className="fixed inset-0 z-[60]"
+                        data-escape-closes="" className="fixed inset-0 z-[60]"
                         onClick={() => {
                           setTaskModalMenuOpen(false);
                           setTemplatesSubmenuOpen(false);
@@ -10806,7 +10838,7 @@ function PageContent() {
           is only a starting suggestion. */}
       {templateSaveTarget && (
         <div
-          className="fixed inset-0 z-[70] flex items-center justify-center bg-scrim/70 backdrop-blur-xs p-3"
+          data-escape-closes="" className="fixed inset-0 z-[70] flex items-center justify-center bg-scrim/70 backdrop-blur-xs p-3"
           onClick={() => setTemplateSaveTarget(null)}
         >
           <div
@@ -10847,7 +10879,7 @@ function PageContent() {
       {/* Pick a template to create from. */}
       {templatePicker && (
         <div
-          className="fixed inset-0 z-[70] flex items-center justify-center bg-scrim/70 backdrop-blur-xs p-3"
+          data-escape-closes="" className="fixed inset-0 z-[70] flex items-center justify-center bg-scrim/70 backdrop-blur-xs p-3"
           onClick={() => setTemplatePicker(null)}
         >
           <div

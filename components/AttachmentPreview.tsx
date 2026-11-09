@@ -33,7 +33,7 @@ export default function AttachmentPreview({ file, onClose }: { file: PreviewFile
 
   return (
     <div
-      className="fixed inset-0 z-[80] flex items-center justify-center bg-scrim/80 backdrop-blur-xs p-3"
+      data-escape-closes="" className="fixed inset-0 z-[80] flex items-center justify-center bg-scrim/80 backdrop-blur-xs p-3"
       onClick={onClose}
     >
       <div

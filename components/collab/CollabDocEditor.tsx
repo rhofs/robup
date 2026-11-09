@@ -658,7 +658,7 @@ export default function CollabDocEditor({
       )}
       {imageUrlDraft !== null && (
         <div
-          className="fixed inset-0 z-50 flex items-center justify-center bg-scrim/70 backdrop-blur-xs"
+          data-escape-closes="" className="fixed inset-0 z-50 flex items-center justify-center bg-scrim/70 backdrop-blur-xs"
           onClick={closeImageModal}
         >
           <div onClick={(e) => e.stopPropagation()} className="w-[380px] bg-neutral-900 border border-neutral-800 rounded-xl shadow-2xl overflow-hidden">

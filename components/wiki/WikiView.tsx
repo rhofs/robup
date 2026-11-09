@@ -537,7 +537,7 @@ export default function WikiView({ workspace, pageId, onOpenPage, onJump, onCont
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
             transition={{ duration: 0.2 }}
-            className="fixed inset-0 z-[60] flex flex-col justify-end bg-scrim/60"
+            data-escape-closes="" className="fixed inset-0 z-[60] flex flex-col justify-end bg-scrim/60"
             onClick={() => setTocOpen(false)}
           >
             <motion.div

@@ -95,7 +95,11 @@ export default function FloatingPopover({
       onClose();
     };
     const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') onClose();
+      // Marked as handled, so the page's Escape (lib/backdrop.ts) does not also close the window under it.
+      if (e.key === 'Escape') {
+        e.preventDefault();
+        onClose();
+      }
     };
     document.addEventListener('mousedown', onDocMouseDown);
     document.addEventListener('keydown', onKey);

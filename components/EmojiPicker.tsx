@@ -168,7 +168,10 @@ export default function EmojiPicker({
       onClose();
     };
     const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') onClose();
+      if (e.key === 'Escape') {
+        e.preventDefault();
+        onClose();
+      }
     };
     // Capture, so a click that lands on a button elsewhere closes this before that button's own
     // handler runs — otherwise picking something behind the panel does two things at once.
