@@ -1232,3 +1232,16 @@ html[data-theme='light'] .siqt-task-card {
 .no-scrollbar::-webkit-scrollbar {
   display: none;
 }
+
+/* Text people read can be selected and copied. The app shell is select-none (buttons, rows and drag
+   handles should not start a text selection), and user-select is inherited, so every place with real
+   prose has to opt back in — and a read-only Doc is not contenteditable, so it did not: "kan ikke
+   highlighte og kopiere tekst i WIKI" (2026-11-09). Every Doc and description editor, read-only or
+   not, and their previews (.ProseMirror); wiki titles; and anything marked .siqt-selectable
+   (comments, event comments, a Space's description). Chat messages carry select-text themselves. */
+.siqt-app-shell .ProseMirror,
+.siqt-app-shell .wiki-title,
+.siqt-app-shell .siqt-selectable {
+  -webkit-user-select: text;
+  user-select: text;
+}

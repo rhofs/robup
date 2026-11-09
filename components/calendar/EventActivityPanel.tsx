@@ -81,7 +81,7 @@ export default function EventActivityPanel({ eventId }: { eventId: string }) {
                 <span className="text-[10px] font-semibold text-neutral-300 truncate">{c.author?.name || 'Anonymous'}</span>
                 <span className="text-[9px] text-neutral-500 ml-auto shrink-0">{timeAgo(c.createdAt)}</span>
               </div>
-              <p className="text-[11px] text-neutral-300 whitespace-pre-wrap break-words">{c.body}</p>
+              <p className="siqt-selectable text-[11px] text-neutral-300 whitespace-pre-wrap break-words">{c.body}</p>
             </div>
           )
         )}

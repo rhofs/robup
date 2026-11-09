@@ -106,7 +106,7 @@ export function MentionChip({ kind, id, label, onJump }: { kind: MentionKind; id
 export default function MentionText({ text, onJump, className }: MentionTextProps) {
   const segments = parseMentions(text);
   return (
-    <div className={className}>
+    <div className={`siqt-selectable ${className ?? ''}`}>
       {segments.map((seg, i) =>
         seg.type === 'text' ? (
           <span key={i}>{seg.value}</span>

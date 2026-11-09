@@ -13514,3 +13514,19 @@ calendar to start once the keyboard is fully down, "bittelitt tregere".
 
 
 **Deployed 2026-11-09 as `d602c98`** (tag `deploy/2026-11-09_1348`). Web-only.
+
+### 2026-11-09 (continued) — [Bug] text could not be selected or copied in the Wiki (and elsewhere)
+
+- **User:** "kan ikke highlighte og kopiere tekst i WIKI, sjekk andre steder også. det bør kunne
+  funke".
+- **Cause:** the app shell is `select-none`, which is inherited. Only chat messages opted back in
+  (`select-text`). A read-only Doc (the Wiki's reading view) is not contenteditable, so nothing let
+  its text be selected. Comments, event comments, Doc comments, wiki titles and a Space's
+  description were the same.
+- **Fix:** one rule in globals.css, `.siqt-app-shell .ProseMirror, .wiki-title, .siqt-selectable
+  { user-select: text }`. It covers every Doc, wiki page, task description and description preview,
+  read-only or not. `.siqt-selectable` was added to MentionText (task comments), the
+  EventActivityPanel comment body, DocCommentsPanel comment bodies and SpaceHome's description.
+- **Rule from now on:** any new place showing prose people may want to copy needs
+  `siqt-selectable` (or `select-text`).
+- Built; the CSS is in the bundle. Not tried in a browser.

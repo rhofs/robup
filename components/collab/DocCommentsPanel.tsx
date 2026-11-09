@@ -138,7 +138,7 @@ function CommentRow({
         <div className="text-[10px] text-neutral-500">
           {author?.name ?? 'Unknown'} · {new Date(createdAt).toLocaleDateString()}
         </div>
-        <p className="text-[11px] text-neutral-200 break-words">{body}</p>
+        <p className="siqt-selectable text-[11px] text-neutral-200 break-words">{body}</p>
       </div>
     </div>
   );

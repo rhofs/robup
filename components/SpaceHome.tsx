@@ -277,7 +277,7 @@ function DescriptionBlock({ value, onCommit }: { value: string | null; onCommit:
       className="group flex items-start gap-2 px-3 py-2 rounded hover:bg-neutral-900/60 cursor-text -mx-3"
     >
       {value ? (
-        <p className="text-xs text-neutral-300 whitespace-pre-wrap flex-1">{value}</p>
+        <p className="siqt-selectable text-xs text-neutral-300 whitespace-pre-wrap flex-1">{value}</p>
       ) : (
         <p className="text-xs text-neutral-500 italic flex-1">Add a description…</p>
       )}
