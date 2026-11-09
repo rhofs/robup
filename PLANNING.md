@@ -13530,3 +13530,5 @@ calendar to start once the keyboard is fully down, "bittelitt tregere".
 - **Rule from now on:** any new place showing prose people may want to copy needs
   `siqt-selectable` (or `select-text`).
 - Built; the CSS is in the bundle. Not tried in a browser.
+
+**Deployed 2026-11-09 as `4248103`** (tag `deploy/2026-11-09_1415`). Web-only.
