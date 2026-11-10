@@ -13532,3 +13532,18 @@ calendar to start once the keyboard is fully down, "bittelitt tregere".
 - Built; the CSS is in the bundle. Not tried in a browser.
 
 **Deployed 2026-11-09 as `4248103`** (tag `deploy/2026-11-09_1415`). Web-only.
+
+### 2026-11-10 — the Planner's sidebar filter is folded away
+
+- **User:** "Kan du fikse så filtervalgene er noe man må utvide på planner siden, ettersom vi har
+  ved et uhell trykka der flere ganger, trodd at vi er i spaces."
+- **Cause:** on desktop the Planner's left sidebar showed the same Spaces/Lists tree as the Spaces
+  view, but there a click toggles a List's visibility. People clicked a List to open it and
+  silently hid it from the Planner.
+- **Built (page.tsx):**
+  - In the Planner, the sidebar now starts with a "Planner filter" header that shows the state:
+    "Showing everything", or e.g. "2 lists hidden" with an amber outline when anything is hidden.
+  - Workspaces, All/None and the tree appear only after clicking it. Open/closed is remembered per
+    browser (`siqt.plannerFilterOpen`, read after mount to keep hydration equal).
+  - The phone's filter sheet (MobileCalendarFilterSheet) was already a deliberate button; unchanged.
+- Built; not seen in a browser.

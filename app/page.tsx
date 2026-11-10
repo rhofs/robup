@@ -66,6 +66,7 @@ import {
   MessageCircle,
   ChevronUp,
   ChevronDown,
+  Filter,
   Lock,
   ChevronRight,
   ChevronLeft,
@@ -1725,6 +1726,26 @@ function PageContent() {
   // Workspaces hidden in the Planner that have no Lists to hide — their visibility can't be read off
   // calendarVisibleListIds, and their events still need hiding (calendarWorkspaceVisible).
   const [calendarHiddenWorkspaceIds, setCalendarHiddenWorkspaceIds] = useState<Set<string>>(new Set());
+  // The Planner's filter in the sidebar is folded away until opened: it is the same tree as Spaces,
+  // and clicking a List there — believing you were in Spaces — quietly hid it from the Planner ("ved
+  // et uhell trykka der flere ganger, trodd at vi er i spaces", 2026-11-10). Remembered per browser.
+  const [plannerFilterOpen, setPlannerFilterOpen] = useState(false);
+  // Read after mounting, not in the initializer: the server render has no localStorage, and the first
+  // client render must match it.
+  useEffect(() => {
+    let open = false;
+    try {
+      open = localStorage.getItem('siqt.plannerFilterOpen') === '1';
+    } catch {}
+    if (open) queueMicrotask(() => setPlannerFilterOpen(true));
+  }, []);
+  const togglePlannerFilter = () =>
+    setPlannerFilterOpen((open) => {
+      try {
+        localStorage.setItem('siqt.plannerFilterOpen', open ? '0' : '1');
+      } catch {}
+      return !open;
+    });
   const [columnMenuOpen, setColumnMenuOpen] = useState(false);
   const [clearOverdueConfirmOpen, setClearOverdueConfirmOpen] = useState(false);
   const [newFieldOpen, setNewFieldOpen] = useState(false);
@@ -6525,6 +6546,35 @@ function PageContent() {
               />
             ) : (
             <div className="space-y-3">
+              {activeView === 'calendar' && (() => {
+                // What is hidden right now, so the folded header still says when the Planner is filtered.
+                const hiddenLists = workspaces.flatMap((w) => w.spaces.flatMap((sp) => sp.lists)).filter((l) => !l.archived && !l.docId && !calendarVisibleListIds.has(l.id)).length;
+                const hiddenWorkspaces = workspaces.filter((w) => !calendarWorkspaceVisible(w)).length;
+                const filtered = hiddenLists > 0 || hiddenWorkspaces > 0;
+                return (
+                  <button
+                    onClick={togglePlannerFilter}
+                    className={`w-full flex items-center gap-2 px-2.5 py-2 rounded-lg border text-left cursor-pointer transition ${
+                      filtered ? 'border-amber-500/40 bg-amber-500/10 hover:bg-amber-500/15' : 'border-neutral-800 hover:bg-neutral-800/40'
+                    }`}
+                  >
+                    <Filter className={`w-3.5 h-3.5 shrink-0 ${filtered ? 'text-amber-400' : 'text-neutral-500'}`} />
+                    <span className="flex-1 min-w-0">
+                      <span className="block text-[12px] font-semibold text-neutral-200">Planner filter</span>
+                      <span className={`block text-[10.5px] truncate ${filtered ? 'text-amber-300/90' : 'text-neutral-500'}`}>
+                        {filtered
+                          ? [hiddenWorkspaces ? `${hiddenWorkspaces} workspace${hiddenWorkspaces === 1 ? '' : 's'}` : '', hiddenLists ? `${hiddenLists} list${hiddenLists === 1 ? '' : 's'}` : '']
+                              .filter(Boolean)
+                              .join(', ') + ' hidden'
+                          : 'Showing everything'}
+                      </span>
+                    </span>
+                    <ChevronDown className={`w-3.5 h-3.5 shrink-0 text-neutral-500 transition-transform ${plannerFilterOpen ? 'rotate-180' : ''}`} />
+                  </button>
+                );
+              })()}
+              {(activeView !== 'calendar' || plannerFilterOpen) && (
+              <>
               {/* The Planner shows every workspace you are in at once, so it can hide whole ones. The
                   Spaces & Lists below are the current workspace's (switch it at the top to filter
                   another's). */}
@@ -6791,6 +6841,8 @@ function PageContent() {
                   </div>
                 );
               })}
+              </>
+              )}
             </div>
             )}
           </div>
