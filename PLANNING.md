@@ -13567,3 +13567,37 @@ calendar to start once the keyboard is fully down, "bittelitt tregere".
 - Built; not seen in a browser.
 
 **Deployed 2026-11-10 as `064bb8e`** (tag `deploy/2026-11-10_1046`). Web-only.
+
+### 2026-11-10 (continued) — [Bug] an assigned event never reached Google Calendar
+
+- **User:** "jeg ikke får opp i google calendar, en event jeg er assigned på, har forsøkt å refreshe
+  etc, kan du se om noe er galt?"
+- **Found** in a read-only copy of the production DB (downloaded through the panel's file API to
+  /tmp/prodcopy, not kept):
+  - Robin (rhofseth@gmail.com) has a refresh token and three workspace calendars (created
+    2026-09-24, sync tokens set).
+  - But **only one EventGoogleSync row has ever existed (2026-09-28)**, and **no TaskGoogleSync
+    rows at all**. None of his 15 most recent assigned events (Oct–Nov) was ever pushed.
+  - The production console is wiped on every restart, so the actual Google error was not
+    available.
+- **Most likely cause (not confirmed):** the refresh token stopped working around Oct 1. Calendars
+  created Sep 24, the last success Sep 28, then nothing — exactly what a Google Cloud OAuth app in
+  "Testing" publishing status does: refresh tokens expire after 7 days.
+  - Every push then failed with invalid_grant, logged only to the console and swallowed by
+    `.catch(() => {})`.
+  - Settings kept showing "Google connected" with no way to reconnect.
+  - The production `.env` was not read (the auto-mode classifier blocked it), so the app's
+    configuration was not checked.
+- **Built:**
+  - `lib/google/calendarSync.ts` `recordSyncFailure`: every failed push/pull (and
+    `calendars.insert`, which was swallowed entirely) is appended to `logs/google-sync.jsonl`
+    (survives restarts; readable via the panel's file API) and to the console.
+  - On invalid_grant or 401 it clears `googleRefreshToken`/`googleEmail`, as the Docs export
+    already did, so Settings shows "Connect Google" again.
+  - Settings: a "Calendar not updating? Reconnect Google" link under the connected row.
+- **Not done / for the user:**
+  - Reconnect Google in Settings. Events edited after that sync; events never pushed sync on
+    their next edit (there is no backfill job).
+  - In Google Cloud Console, set the OAuth consent screen to "In production" so tokens stop
+    expiring weekly. Verify that is the cause by reading /logs/google-sync.jsonl after the next
+    failure.

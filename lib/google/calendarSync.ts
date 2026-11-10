@@ -95,9 +95,46 @@ async function getWorkspaceCalendarClient(userId: string, workspaceId: string) {
   try {
     const calendarRow = await creation;
     return { client, calendarId: calendarRow.googleCalendarId, calendarRow };
+  } catch (err) {
+    // Making the calendar is the first call to Google for a workspace, so a dead permission shows
+    // up here first — recorded (and cleared) like any other failed push, not swallowed.
+    await recordSyncFailure(userId, `calendars.insert(${workspaceId})`, err);
+    return null;
   } finally {
     calendarCreationLocks.delete(lockKey);
   }
+}
+
+// A failed push to Google, kept where it can be read after the fact. The console is all there was, and
+// it is wiped on every restart — so when "en event jeg er assigned på kommer ikke i Google Calendar"
+// (2026-11-10), there was no trace of why: one event had ever been pushed. logs/ is gitignored and
+// survives a reinstall; read it through the panel's file API (/logs/google-sync.jsonl).
+type GoogleError = { message?: string; code?: unknown; response?: { status?: number; data?: { error?: string | { message?: string }; error_description?: string } } };
+async function recordSyncFailure(userId: string, what: string, raw: unknown) {
+  const err = (raw ?? {}) as GoogleError;
+  const data = err.response?.data;
+  const message = data?.error_description || (typeof data?.error === 'object' ? data.error.message : undefined) || err.message || String(raw);
+  const code = (typeof data?.error === 'string' ? data.error : undefined) ?? err.code ?? err.response?.status ?? null;
+  console.error(`${what} failed:`, code, message);
+  try {
+    const fs = await import('node:fs/promises');
+    await fs.mkdir('logs', { recursive: true });
+    await fs.appendFile('logs/google-sync.jsonl', JSON.stringify({ at: new Date().toISOString(), userId, what, code, message: String(message).slice(0, 500) }) + '\n');
+  } catch {
+    // Logging must never break a sync.
+  }
+  // The person's Google permission is gone — revoked, or expired: a Google Cloud app still in
+  // "Testing" hands out refresh tokens that die after 7 days. Every push after that failed silently
+  // while Settings went on saying "Google connected". Cleared, as the Docs export already does, so
+  // Settings offers "Connect Google" again.
+  if (isAuthGone(err)) {
+    await prisma.user.update({ where: { id: userId }, data: { googleRefreshToken: null, googleEmail: null } }).catch(() => {});
+  }
+}
+
+function isAuthGone(err: GoogleError): boolean {
+  const e = err.response?.data?.error ?? err.message ?? '';
+  return e === 'invalid_grant' || (typeof e === 'string' && e.includes('invalid_grant')) || err.response?.status === 401;
 }
 
 function isNotFoundError(err: any): boolean {
@@ -253,7 +290,7 @@ export async function syncTaskForUser(taskId: string, userId: string): Promise<v
       // a fresh one instead of failing forever on the same dangling reference.
       await prisma.taskGoogleSync.delete({ where: { id: syncRow.id } }).catch(() => {});
     } else {
-      console.error('syncTaskForUser failed:', err?.message || err);
+      await recordSyncFailure(userId, `syncTaskForUser(${taskId})`, err);
     }
   }
 }
@@ -376,7 +413,7 @@ export async function syncEventForUser(eventId: string, userId: string): Promise
     if (isNotFoundError(err) && syncRow) {
       await prisma.eventGoogleSync.delete({ where: { id: syncRow.id } }).catch(() => {});
     } else {
-      console.error('syncEventForUser failed:', err?.message || err);
+      await recordSyncFailure(userId, `syncEventForUser(${eventId})`, err);
     }
   }
 }
@@ -471,6 +508,7 @@ export async function pullChangesFromGoogle(userId: string, workspaceId: string)
         await prisma.userWorkspaceGoogleCalendar.update({ where: { id: calendarRow.id }, data: { googleSyncToken: null } });
         return pullChangesFromGoogle(userId, workspaceId);
       }
+      await recordSyncFailure(userId, `pullChangesFromGoogle(${workspaceId})`, err);
       throw err;
     }
 

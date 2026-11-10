@@ -1334,6 +1334,13 @@ export default function SettingsPanel({
                       : 'Connect Google account for Docs export & Calendar sync'}
                   </span>
                 </a>
+                {/* A connection can die on Google's side without this app hearing of it until a
+                    sync fails; asking again is always safe and replaces the permission. */}
+                {user.googleEmail && (
+                  <a href="/api/google/oauth/start" className="block px-3 -mt-1 pb-2 pl-9 text-[11px] text-blue-400 hover:text-blue-300 cursor-pointer">
+                    Calendar not updating? Reconnect Google
+                  </a>
+                )}
                 <InstallRow />
                 <AndroidAppRow />
               </>
