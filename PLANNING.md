@@ -13601,3 +13601,5 @@ calendar to start once the keyboard is fully down, "bittelitt tregere".
   - In Google Cloud Console, set the OAuth consent screen to "In production" so tokens stop
     expiring weekly. Verify that is the cause by reading /logs/google-sync.jsonl after the next
     failure.
+
+**Deployed 2026-11-10 as `8bcb036`** (tag `deploy/2026-11-10_1052`). Web-only.
