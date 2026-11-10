@@ -1739,6 +1739,16 @@ function PageContent() {
     } catch {}
     if (open) queueMicrotask(() => setPlannerFilterOpen(true));
   }, []);
+  // Which workspaces in the Planner filter's tree are folded the other way from their default (the
+  // current one open, the rest closed). For this visit only.
+  const [plannerFilterOpenWs, setPlannerFilterOpenWs] = useState<Set<string>>(() => new Set());
+  const togglePlannerFilterWs = (id: string) =>
+    setPlannerFilterOpenWs((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
   const togglePlannerFilter = () =>
     setPlannerFilterOpen((open) => {
       try {
@@ -6575,50 +6585,9 @@ function PageContent() {
               })()}
               {(activeView !== 'calendar' || plannerFilterOpen) && (
               <>
-              {/* The Planner shows every workspace you are in at once, so it can hide whole ones. The
-                  Spaces & Lists below are the current workspace's (switch it at the top to filter
-                  another's). */}
-              {activeView === 'calendar' && workspaces.length > 1 && (
-                <div className="space-y-0.5 pb-2 border-b border-neutral-800/70">
-                  <p className="px-2 pb-1 text-[10px] font-bold text-neutral-500 uppercase tracking-wider">Workspaces</p>
-                  {[...workspaces]
-                    .sort((a, b) => Number(a.isPersonal) - Number(b.isPersonal))
-                    .map((ws) => {
-                      const on = calendarWorkspaceVisible(ws);
-                      return (
-                        <button
-                          key={ws.id}
-                          onClick={() => toggleCalendarWorkspace(ws)}
-                          title={on ? `Hide ${ws.isPersonal ? 'your personal tasks' : ws.name} in the Planner` : `Show ${ws.isPersonal ? 'your personal tasks' : ws.name} in the Planner`}
-                          className="group w-full flex items-center gap-2 px-2.5 py-1.5 rounded text-xs text-left hover:bg-neutral-800/40 cursor-pointer"
-                        >
-                          <span className="relative w-3.5 h-3.5 shrink-0 flex items-center justify-center">
-                            <span
-                              className="absolute w-2 h-2 rounded-full transition group-hover:opacity-0"
-                              style={{ backgroundColor: ws.color || '#6b7280', opacity: on ? 1 : 0.25 }}
-                            />
-                            {on ? (
-                              <Eye className="absolute w-3 h-3 text-neutral-300 opacity-0 group-hover:opacity-100 transition" />
-                            ) : (
-                              <EyeOff className="absolute w-3 h-3 text-neutral-600 opacity-0 group-hover:opacity-100 transition" />
-                            )}
-                          </span>
-                          <span className={`truncate ${on ? 'text-neutral-300' : 'text-neutral-600 line-through decoration-neutral-700'}`}>
-                            {ws.isPersonal ? 'Personal' : ws.name}
-                          </span>
-                          {ws.id === currentWorkspace?.id && <span className="ml-auto shrink-0 text-[9px] text-neutral-500">current</span>}
-                        </button>
-                      );
-                    })}
-                </div>
-              )}
               <div className="flex items-center justify-between px-2">
                 <p className="text-[10px] font-bold text-neutral-500 uppercase tracking-wider truncate">
-                  {activeView === 'calendar'
-                    ? workspaces.length > 1
-                      ? `Spaces in ${currentWorkspace?.isPersonal ? 'Personal' : currentWorkspace?.name ?? 'workspace'}`
-                      : 'Filter Spaces & Lists'
-                    : 'Spaces & Lists'}
+                  {activeView === 'calendar' ? 'Workspaces, Spaces & Lists' : 'Spaces & Lists'}
                 </p>
                 {activeView === 'calendar' && (
                   <div className="flex items-center gap-1.5">
@@ -6667,9 +6636,8 @@ function PageContent() {
                   className="w-full bg-neutral-950 border border-blue-500 rounded-lg px-2 py-1 text-[11px] text-app-strong focus:outline-none"
                 />
               )}
-              {[...(currentWorkspace?.spaces ?? [])]
-                .sort(archivedLast)
-                .map((space: HierarchySpace, spaceIndex, sortedSpaces) => {
+              {(() => {
+                const renderSidebarSpace = (space: HierarchySpace, spaceIndex: number, sortedSpaces: HierarchySpace[]) => {
                 const isSpaceActive = activeView === 'board' && activeSpaceId === space.id && activeListIds.size === 0 && modalTaskStack.length === 0;
                 const spaceListIds = collectListIdsUnder(space, null);
                 const spaceTasksCount = tasks.filter(
@@ -6840,7 +6808,66 @@ function PageContent() {
                     )}
                   </div>
                 );
-              })}
+                };
+                const sortedSpacesOf = (ws: HierarchyWorkspace | undefined | null) => [...(ws?.spaces ?? [])].sort(archivedLast);
+                // The Spaces view: the current workspace's tree.
+                if (activeView !== 'calendar') {
+                  return sortedSpacesOf(currentWorkspace).map((space, i, all) => renderSidebarSpace(space, i, all));
+                }
+                // The Planner shows every workspace at once, so its filter is one tree of them all — each
+                // workspace folds open to its Spaces and Lists ("mulig med spaces under workspaces og",
+                // 2026-11-10). The current one starts open.
+                return [...workspaces]
+                  .sort((a, b) => Number(a.isPersonal) - Number(b.isPersonal))
+                  .map((ws) => {
+                    const on = calendarWorkspaceVisible(ws);
+                    const open = plannerFilterOpenWs.has(ws.id) !== (ws.id === currentWorkspace?.id);
+                    const spaces = sortedSpacesOf(ws);
+                    return (
+                      <div key={ws.id} className="space-y-0.5">
+                        <div className="group flex items-center gap-1 rounded hover:bg-neutral-800/40">
+                          <button
+                            onClick={() => togglePlannerFilterWs(ws.id)}
+                            title={open ? 'Hide its Spaces' : 'Show its Spaces'}
+                            className="w-5 h-7 shrink-0 flex items-center justify-center text-neutral-500 hover:text-neutral-200 cursor-pointer"
+                          >
+                            {open ? <ChevronDown className="w-3.5 h-3.5" /> : <ChevronRight className="w-3.5 h-3.5" />}
+                          </button>
+                          <button
+                            onClick={() => toggleCalendarWorkspace(ws)}
+                            title={on ? `Hide ${ws.isPersonal ? 'your personal tasks' : ws.name} in the Planner` : `Show ${ws.isPersonal ? 'your personal tasks' : ws.name} in the Planner`}
+                            className="flex-1 min-w-0 flex items-center gap-2 pr-2 py-1.5 text-xs text-left cursor-pointer"
+                          >
+                            <span className="relative w-3.5 h-3.5 shrink-0 flex items-center justify-center">
+                              <span
+                                className="absolute w-2 h-2 rounded-full transition group-hover:opacity-0"
+                                style={{ backgroundColor: ws.color || '#6b7280', opacity: on ? 1 : 0.25 }}
+                              />
+                              {on ? (
+                                <Eye className="absolute w-3 h-3 text-neutral-300 opacity-0 group-hover:opacity-100 transition" />
+                              ) : (
+                                <EyeOff className="absolute w-3 h-3 text-neutral-600 opacity-0 group-hover:opacity-100 transition" />
+                              )}
+                            </span>
+                            <span className={`truncate font-medium ${on ? 'text-neutral-200' : 'text-neutral-600 line-through decoration-neutral-700'}`}>
+                              {ws.isPersonal ? 'Personal' : ws.name}
+                            </span>
+                            <span className="ml-auto shrink-0 text-[9px] text-neutral-500">{spaces.length}</span>
+                          </button>
+                        </div>
+                        {open && (
+                          <div className="ml-2.5 pl-1.5 border-l border-neutral-800/70 space-y-0.5">
+                            {spaces.length === 0 ? (
+                              <p className="px-2 py-1 text-[11px] text-neutral-600">No Spaces.</p>
+                            ) : (
+                              spaces.map((space, i, all) => renderSidebarSpace(space, i, all))
+                            )}
+                          </div>
+                        )}
+                      </div>
+                    );
+                  });
+              })()}
               </>
               )}
             </div>

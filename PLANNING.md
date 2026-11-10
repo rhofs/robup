@@ -13549,3 +13549,19 @@ calendar to start once the keyboard is fully down, "bittelitt tregere".
 - Built; not seen in a browser.
 
 **Deployed 2026-11-10 as `00d843f`** (tag `deploy/2026-11-10_0940`). Web-only.
+
+### 2026-11-10 (continued) — Planner filter: Spaces under every workspace
+
+- **User** (screenshot): the filter could hide whole workspaces, or Spaces of the current
+  workspace only. "får vi endra så det er mulig med spaces under workspaces og?"
+- **Built:** in the Planner, the filter is now one tree: workspace → its Spaces → their
+  Folders/Lists.
+  - Each workspace row has a fold chevron and its own eye toggle (`toggleCalendarWorkspace`).
+  - The current workspace starts open; `plannerFilterOpenWs` holds which ones the user flipped,
+    for this visit.
+  - The Space rows are the existing sidebar Space renderer, pulled into `renderSidebarSpace` (an
+    IIFE in the JSX, so its closures are unchanged) and used for any workspace.
+  - The old flat "Workspaces" list and the "Spaces in X" header are gone; the header reads
+    "Workspaces, Spaces & Lists", with All/None kept.
+  - The Spaces view itself is unchanged (current workspace only).
+- Built; not seen in a browser.
