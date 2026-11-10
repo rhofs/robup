@@ -13547,3 +13547,5 @@ calendar to start once the keyboard is fully down, "bittelitt tregere".
     browser (`siqt.plannerFilterOpen`, read after mount to keep hydration equal).
   - The phone's filter sheet (MobileCalendarFilterSheet) was already a deliberate button; unchanged.
 - Built; not seen in a browser.
+
+**Deployed 2026-11-10 as `00d843f`** (tag `deploy/2026-11-10_0940`). Web-only.
