@@ -13565,3 +13565,5 @@ calendar to start once the keyboard is fully down, "bittelitt tregere".
     "Workspaces, Spaces & Lists", with All/None kept.
   - The Spaces view itself is unchanged (current workspace only).
 - Built; not seen in a browser.
+
+**Deployed 2026-11-10 as `064bb8e`** (tag `deploy/2026-11-10_1046`). Web-only.
