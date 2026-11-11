@@ -13603,3 +13603,20 @@ calendar to start once the keyboard is fully down, "bittelitt tregere".
     failure.
 
 **Deployed 2026-11-10 as `8bcb036`** (tag `deploy/2026-11-10_1052`). Web-only.
+
+### 2026-11-11 — question: does Google sync need the app on Play Store? (answered, nothing built)
+
+- **User:** "Må jeg da få appen ut på PlayStore for å få google til å funke permanent?"
+- **Answer given:** no.
+  - The 7-day token expiry belongs to the Google Cloud project's OAuth consent screen
+    ("Publishing status: Testing"). It has nothing to do with the Android app or Play Store.
+    Google sign-in and sync run through siqt.no in either case.
+  - Fix: Google Cloud Console → Google Auth Platform / OAuth consent screen → Audience → "Publish
+    app" (In production). Then everyone reconnects once.
+  - Scopes requested (`lib/google/oauthClient.ts`): `drive.file`, `userinfo.email`,
+    `calendar.app.created`, all chosen as the narrowest.
+  - If Google still demands verification after publishing: unverified apps keep working with a
+    "Google hasn't verified this app" warning (Advanced → continue) and a 100-user cap. Fine for
+    this team, and verification can be done later.
+  - Not confirmed which of these scopes Google treats as sensitive. The console says so when
+    publishing.
