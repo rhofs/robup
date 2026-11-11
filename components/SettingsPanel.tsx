@@ -3,7 +3,7 @@
 import { closeOnBackdrop } from '../lib/backdrop';
 import { useEffect, useRef, useState } from 'react';
 import Papa from 'papaparse';
-import { X, Settings, Check, Trash2, Plus, Link2, Upload, Share2, Download, Monitor, Sun, Moon, Smartphone, ArrowLeft, ChevronRight, Pencil, Shield, UserPlus, Users, BookOpen } from 'lucide-react';
+import { X, Settings, Check, Trash2, Plus, Link2, Upload, Share2, Download, Monitor, Sun, Moon, Smartphone, ArrowLeft, ChevronRight, Pencil, Shield, UserPlus, Users, BookOpen, CalendarPlus } from 'lucide-react';
 import { readThemePreference, setThemePreference, type ThemePreference } from '../lib/theme';
 import {
   readHapticStrength,
@@ -1314,6 +1314,26 @@ export default function SettingsPanel({
             <div className="text-[10px] uppercase tracking-wide text-neutral-500 px-1 pt-3 pb-1">Account</div>
             {user ? (
               <>
+                {/* iPhone / Mac: the same feed, opened as webcal:// — iOS asks "Subscribe to this calendar?"
+                    and adds it to the Calendar app, which then refreshes it on its own ("integrering med
+                    ios kalenderen … for de med iphone", 2026-11-11). One-way: what is assigned to you,
+                    tasks with dates and Planner events. */}
+                <button
+                  onClick={async () => {
+                    if (!user) return;
+                    const res = await fetch(`/api/users/${user.id}`);
+                    const me = res.ok ? await res.json().catch(() => null) : null;
+                    if (!me?.calendarToken) return;
+                    window.location.href = `webcal://${window.location.host}/api/calendar/${me.calendarToken}`;
+                  }}
+                  className="w-full flex items-center gap-2.5 px-3 py-2.5 rounded hover:bg-neutral-800/60 cursor-pointer text-left transition"
+                >
+                  <CalendarPlus className="w-3.5 h-3.5 text-neutral-400 shrink-0" />
+                  <span className="text-xs text-neutral-300">
+                    Add to iPhone / Apple Calendar
+                    <span className="block text-neutral-500 mt-0.5">Your tasks and events, kept up to date in the Calendar app</span>
+                  </span>
+                </button>
                 <button
                   onClick={onCopyCalendarLink}
                   className="w-full flex items-center gap-2.5 px-3 py-2.5 rounded hover:bg-neutral-800/60 cursor-pointer text-left transition"

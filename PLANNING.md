@@ -13663,3 +13663,19 @@ calendar to start once the keyboard is fully down, "bittelitt tregere".
 
 **Deployed 2026-11-11 as `0a0ea6f`** (tag `deploy/2026-11-11_0856`). Web-only.
 - **Cause confirmed:** `/logs/google-sync.jsonl` holds `invalid_grant` for Robin's pull at 2026-11-10T14:57Z, so the old refresh token was dead (7-day Testing expiry), and it was cleared then. The reconnect on 2026-11-11 stored a new one. The http:// redirect URIs were removed from the OAuth client the same day; publishing to "In production" was still pending Google's propagation when this was written.
+
+### 2026-11-11 (continued) — iPhone calendar: a one-tap subscribe button
+
+- **User:** "Er det mulig å få til en integrering med ios kalenderen og, for de med iphone?"
+- **Already there:** the personal .ics feed (`/api/calendar/[token]`). It contains tasks with dates
+  that are assigned to you plus Planner events you are on, including RRULE for repeating events.
+  It was reachable only as "Copy personal calendar feed link", to paste by hand.
+- **Built:** Settings → Account → "Add to iPhone / Apple Calendar". It fetches the owner-only
+  `calendarToken` and navigates to `webcal://<host>/api/calendar/<token>`, so iOS/macOS asks
+  "Subscribe?" and the Calendar app keeps it updated.
+- **Told the user:**
+  - It is one-way (read-only in Apple Calendar), unlike Google's two-way sync.
+  - iOS decides how often it refreshes (Settings → Calendar → Accounts → Subscribed Calendars →
+    Fetch; often hourly).
+  - The link is personal: anyone who has it can read that person's calendar.
+- Not tried on an iPhone.
