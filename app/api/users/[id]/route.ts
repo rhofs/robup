@@ -75,8 +75,17 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
   }
 
   const data: any = {};
-  if (body.name !== undefined) data.name = body.name;
-  if (body.initials !== undefined) data.initials = body.initials;
+  // Your name is yours to change, nobody else's ("mulig å endre navn for brukerne", 2026-11-11). The
+  // initials follow it, the same way they are made at sign-up (app/api/auth/signup).
+  if (body.name !== undefined) {
+    if (callerId !== id) return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
+    const name = String(body.name).trim().replace(/\s+/g, ' ').slice(0, 80);
+    if (!name) return NextResponse.json({ error: 'A name cannot be empty' }, { status: 400 });
+    data.name = name;
+    const parts = name.split(' ');
+    data.initials = ((parts[0][0] ?? '') + (parts.length > 1 ? parts[parts.length - 1][0] : parts[0][1] ?? '')).toUpperCase() || '?';
+  }
+  if (body.initials !== undefined && body.name === undefined) data.initials = body.initials;
   if (body.color !== undefined) data.color = body.color;
   if (body.phone !== undefined) data.phone = body.phone;
   if (body.title !== undefined) data.title = body.title;

@@ -11,7 +11,7 @@ const PROFILE_COLORS = ['#618cd1', '#3b82f6', '#31a0b3', '#349f7c', '#84cc16', '
 
 type ProfilePageProps = {
   currentUser: AppUser | null;
-  onUpdate: (patch: { avatarUrl?: string | null; bio?: string | null; linkedinUrl?: string | null; websiteUrl?: string | null; color?: string }) => void;
+  onUpdate: (patch: { name?: string; avatarUrl?: string | null; bio?: string | null; linkedinUrl?: string | null; websiteUrl?: string | null; color?: string }) => void;
   // Separate from onUpdate above (which is fire-and-forget/always-optimistic, see
   // useTaskStore.ts's own updateUser) — a taken/invalid username is a real, expected outcome that
   // needs to actually reach the UI, not be silently swallowed.
@@ -39,7 +39,7 @@ export default function ProfilePage({ currentUser, onUpdate, onSetUsername }: Pr
       <div className="bg-neutral-900/60 border border-neutral-800/80 rounded p-5 space-y-4">
         <div className="flex items-center gap-4">
           <AvatarEditor user={currentUser} onCommit={(url) => onUpdate({ avatarUrl: url })} />
-          <div className="text-lg font-semibold text-app-strong">{currentUser.name}</div>
+          <NameField value={currentUser.name} onCommit={(name) => onUpdate({ name })} />
         </div>
 
         {/* Your own colour: the circle behind your initials wherever you have no picture, and the
@@ -620,5 +620,52 @@ function BioBlock({ value, onCommit }: { value: string | null; onCommit: (value:
       )}
       <Pencil className="w-3 h-3 text-neutral-600 opacity-0 group-hover:opacity-100 shrink-0 mt-0.5" />
     </div>
+  );
+}
+
+// Your name, changed in place: click it (or the pencil), type, Enter or click away to save, Escape to
+// keep the old one. Shown everywhere you appear — assignee pickers, chat, comments.
+function NameField({ value, onCommit }: { value: string; onCommit: (name: string) => void }) {
+  const [editing, setEditing] = useState(false);
+  const [draft, setDraft] = useState(value);
+  const commit = () => {
+    setEditing(false);
+    const next = draft.trim().replace(/\s+/g, ' ');
+    if (next && next !== value) onCommit(next);
+    else setDraft(value);
+  };
+  if (editing) {
+    return (
+      <input
+        autoFocus
+        value={draft}
+        maxLength={80}
+        onChange={(e) => setDraft(e.target.value)}
+        onBlur={commit}
+        onKeyDown={(e) => {
+          if (e.key === 'Enter') commit();
+          if (e.key === 'Escape') {
+            e.preventDefault();
+            setDraft(value);
+            setEditing(false);
+          }
+        }}
+        className="flex-1 min-w-0 bg-neutral-950 border border-blue-500 rounded-lg px-2 py-1 text-lg font-semibold text-app-strong focus:outline-none"
+      />
+    );
+  }
+  return (
+    <button
+      type="button"
+      onClick={() => {
+        setDraft(value);
+        setEditing(true);
+      }}
+      title="Change your name"
+      className="group flex items-center gap-2 min-w-0 text-left cursor-text"
+    >
+      <span className="text-lg font-semibold text-app-strong truncate">{value}</span>
+      <Pencil className="w-3.5 h-3.5 text-neutral-500 opacity-60 group-hover:opacity-100 shrink-0" />
+    </button>
   );
 }

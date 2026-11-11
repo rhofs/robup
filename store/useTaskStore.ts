@@ -1990,11 +1990,20 @@ export const useTaskStore = create<TaskStore>((set, get) => {
     updateUser: async (userId, patch) => {
       const oldUser = get().users.find((u) => u.id === userId);
       set((state) => ({ users: state.users.map((u) => (u.id === userId ? { ...u, ...patch } : u)) }));
-      await fetch(`/api/users/${userId}`, {
+      const res = await fetch(`/api/users/${userId}`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(patch),
-      });
+      }).catch(() => null);
+      // A new name comes back tidied, with new initials made from it — take the server's.
+      if (patch.name !== undefined && res?.ok) {
+        const saved = (await res.json().catch(() => null)) as { name?: string; initials?: string } | null;
+        if (saved?.name) {
+          set((state) => ({
+            users: state.users.map((u) => (u.id === userId ? { ...u, name: saved.name!, initials: saved.initials ?? u.initials } : u)),
+          }));
+        }
+      }
       if (oldUser) {
         const oldPatch: typeof patch = {};
         if (patch.name !== undefined) oldPatch.name = oldUser.name;

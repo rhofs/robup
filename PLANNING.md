@@ -13717,3 +13717,17 @@ calendar to start once the keyboard is fully down, "bittelitt tregere".
 - iPhones show the fix at their next fetch of the subscription (iOS decides when).
 
 **Deployed 2026-11-11 as `41f61ea`** (tag `deploy/2026-11-11_0920`). Web-only.
+
+### 2026-11-11 (continued) — users can change their own name
+
+- **User:** "Kan vi fikse så det er mulig å endre navn for brukerne? Eller har vi det?" There was
+  no way to: the API accepted `name`, but My Profile only displayed it.
+- **Built:**
+  - My Profile: the name is click-to-edit (`NameField`: Enter or blur saves, Escape keeps the old
+    one, a pencil hint).
+  - `PATCH /api/users/[id]`: `name` is now **self-only** (403 for anyone else; other fields keep
+    their old rules). It is trimmed, whitespace collapsed, at most 80 chars, never empty, and the
+    initials are re-derived as at sign-up.
+  - The store takes the saved name and initials from the response.
+  - Other people's screens show the new name after their next poll/reload.
+- Built; not seen in a browser.
