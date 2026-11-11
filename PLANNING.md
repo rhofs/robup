@@ -13653,3 +13653,10 @@ calendar to start once the keyboard is fully down, "bittelitt tregere".
 - **Follow-up (same day):** /terms gained "Price" (free for now; fees or limits may come if running costs grow, announced first), "No warranty" (as is / as available), "Your data and backups" (users keep their own copies; backups not promised complete or restorable) and a broad "Limitation of liability" (no liability for lost/corrupted/leaked data, downtime, third-party services, indirect loss). It says "to the fullest extent permitted by law": under Norwegian law liability for gross negligence or intent cannot be disclaimed fully, and the user was told so.
 
 **Deployed 2026-11-11 as `cbf5bc7`** (tag `deploy/2026-11-11_0840`). Web-only.
+
+### 2026-11-11 (continued) — Google reconnect landed on localhost:3000
+
+- **User** (screenshot): after "Reconnect Google", the browser went to `localhost:3000/?googleConnect=success` (connection refused).
+- **Cause:** `app/api/google/oauth/callback` redirected to `new URL(req.url).origin`. Behind `server/customServer.ts` that is localhost:3000.
+- **Not a failure:** the token had been saved (the redirect happens after the update).
+- **Fix:** it now uses `process.env.AUTH_URL ?? url.origin`, the same rule as the invite and password-reset links.

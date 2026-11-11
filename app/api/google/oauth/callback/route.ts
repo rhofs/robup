@@ -8,7 +8,10 @@ export async function GET(req: Request) {
   const url = new URL(req.url);
   const code = url.searchParams.get('code');
   const stateUserId = url.searchParams.get('state');
-  const origin = url.origin;
+  // The public address, not the request's: behind server/customServer.ts the request arrives as
+  // localhost:3000, so the old `url.origin` sent people to a page that does not exist after a
+  // successful connect (2026-11-11). Same rule as the invite and password-reset links.
+  const origin = process.env.AUTH_URL ?? url.origin;
 
   if (!code || !stateUserId) return new Response('Missing code or state', { status: 400 });
 
