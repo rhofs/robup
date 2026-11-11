@@ -13648,3 +13648,5 @@ calendar to start once the keyboard is fully down, "bittelitt tregere".
 **Deployed 2026-11-11 as `8b6af68`** (tag `deploy/2026-11-11_0828`). https://siqt.no/privacy answers 200 without a session.
 
 - **Follow-up:** `app/terms/page.tsx`, a short public terms of service for the optional "Application Terms of Service link" (`https://siqt.no/terms`), also excluded in proxy.ts.
+
+**Deployed 2026-11-11 as `dead404`** (tag `deploy/2026-11-11_0835`). /terms answers 200 without a session.
