@@ -13650,3 +13650,4 @@ calendar to start once the keyboard is fully down, "bittelitt tregere".
 - **Follow-up:** `app/terms/page.tsx`, a short public terms of service for the optional "Application Terms of Service link" (`https://siqt.no/terms`), also excluded in proxy.ts.
 
 **Deployed 2026-11-11 as `dead404`** (tag `deploy/2026-11-11_0835`). /terms answers 200 without a session.
+- **Follow-up (same day):** /terms gained "Price" (free for now; fees or limits may come if running costs grow, announced first), "No warranty" (as is / as available), "Your data and backups" (users keep their own copies; backups not promised complete or restorable) and a broad "Limitation of liability" (no liability for lost/corrupted/leaked data, downtime, third-party services, indirect loss). It says "to the fullest extent permitted by law": under Norwegian law liability for gross negligence or intent cannot be disclaimed fully, and the user was told so.

@@ -36,16 +36,37 @@ export default function TermsPage() {
           . You can disconnect at any time.
         </p>
 
-        <h2 className={h2}>Availability</h2>
+        <h2 className={h2}>Price</h2>
         <p className={p}>
-          Siqt is provided as it is. It is backed up regularly, but there is no guarantee that it is always available or free of errors, and Siqt
-          is not liable for losses caused by downtime or lost data. Keep your own copy of anything you cannot afford to lose.
+          Siqt is free to use for now. If use grows so that running it costs more — servers, storage, services it depends on — Siqt may introduce
+          fees or limits. You will be told before any change that costs you anything, and you can stop using Siqt instead.
+        </p>
+
+        <h2 className={h2}>No warranty</h2>
+        <p className={p}>
+          Siqt is provided &ldquo;as is&rdquo; and &ldquo;as available&rdquo;, without warranties of any kind, express or implied — including that it
+          will be available, uninterrupted, secure, free of errors, or fit for any particular purpose. Siqt may change, suspend or stop any part of
+          the service at any time.
+        </p>
+
+        <h2 className={h2}>Your data and backups</h2>
+        <p className={p}>
+          You are responsible for keeping your own copies of anything you put into Siqt that you cannot afford to lose. Siqt makes backups, but
+          does not promise that they are complete, current or restorable, and does not promise to restore anything.
+        </p>
+
+        <h2 className={h2}>Limitation of liability</h2>
+        <p className={p}>
+          To the fullest extent permitted by law, Siqt and the people behind it are not liable for any loss or damage arising from the use of, or
+          the inability to use, the service — including lost, corrupted or leaked data, lost work, lost income or profit, missed deadlines, and any
+          indirect or consequential loss — whatever the cause, including errors, downtime, security incidents, and the services Siqt relies on
+          (such as hosting, Google and email). You use Siqt at your own risk.
         </p>
 
         <h2 className={h2}>Ending</h2>
         <p className={p}>
           A workspace&apos;s administrator can remove members, and access can be ended if these terms are broken. These terms may be updated; the
-          date above shows the latest version.
+          date above shows the latest version, and continuing to use Siqt after a change means accepting it.
         </p>
       </div>
     </main>
