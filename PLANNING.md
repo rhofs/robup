@@ -13731,3 +13731,5 @@ calendar to start once the keyboard is fully down, "bittelitt tregere".
   - The store takes the saved name and initials from the response.
   - Other people's screens show the new name after their next poll/reload.
 - Built; not seen in a browser.
+
+**Deployed 2026-11-11 as `dad190c`** (tag `deploy/2026-11-11_1217`). Web-only.
