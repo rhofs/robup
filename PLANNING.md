@@ -13662,3 +13662,4 @@ calendar to start once the keyboard is fully down, "bittelitt tregere".
 - **Fix:** it now uses `process.env.AUTH_URL ?? url.origin`, the same rule as the invite and password-reset links.
 
 **Deployed 2026-11-11 as `0a0ea6f`** (tag `deploy/2026-11-11_0856`). Web-only.
+- **Cause confirmed:** `/logs/google-sync.jsonl` holds `invalid_grant` for Robin's pull at 2026-11-10T14:57Z, so the old refresh token was dead (7-day Testing expiry), and it was cleared then. The reconnect on 2026-11-11 stored a new one. The http:// redirect URIs were removed from the OAuth client the same day; publishing to "In production" was still pending Google's propagation when this was written.
