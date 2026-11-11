@@ -13625,3 +13625,22 @@ calendar to start once the keyboard is fully down, "bittelitt tregere".
   freely while unverified; a verified app's rename goes through review again. That is
   display-only: the client ID/secret and siqt.no's settings are unaffected and nobody has to
   reconnect because of it.
+
+### 2026-11-11 (continued) — a public privacy policy for Google's "In production" switch
+
+- **User** (screenshot of Google Auth Platform → Audience): "Publish app" is blocked. Google needs:
+  1. Branding: app name, support email, homepage URL and privacy policy URL.
+  2. No non-HTTPS redirect URIs on the OAuth client (583726017050-s2g9e0k…): the old
+     http://localhost / LAN nip.io dev URIs.
+- 9 test users are listed: the NGM team, rhofseth, robthesir, byblanco93 and runeloka.
+- **Built:** `app/privacy/page.tsx`, a public privacy policy (excluded in proxy.ts's matcher). It
+  covers what Siqt stores, the three Google scopes and their use, the Limited Use statement,
+  removal, and cookies. No contact address on the page (not chosen by the user).
+- **For the user, in Google Cloud:**
+  - Branding: homepage `https://siqt.no`, privacy `https://siqt.no/privacy`, authorized domain
+    `siqt.no`, and a support email.
+  - Clients: delete the http:// redirect URIs and origins; keep
+    `https://siqt.no/api/google/oauth/callback` and Auth.js's `https://siqt.no/api/auth/callback/google`.
+  - Then Audience → Publish app, and everyone reconnects.
+  - Consequence: Google sign-in on a local http dev server stops working (use a separate dev OAuth
+    client if ever needed).
