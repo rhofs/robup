@@ -13660,3 +13660,5 @@ calendar to start once the keyboard is fully down, "bittelitt tregere".
 - **Cause:** `app/api/google/oauth/callback` redirected to `new URL(req.url).origin`. Behind `server/customServer.ts` that is localhost:3000.
 - **Not a failure:** the token had been saved (the redirect happens after the update).
 - **Fix:** it now uses `process.env.AUTH_URL ?? url.origin`, the same rule as the invite and password-reset links.
+
+**Deployed 2026-11-11 as `0a0ea6f`** (tag `deploy/2026-11-11_0856`). Web-only.
