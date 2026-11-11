@@ -13715,3 +13715,5 @@ calendar to start once the keyboard is fully down, "bittelitt tregere".
   (UTC instants).
 - Tested with tsx under TZ=UTC: winter and summer Oslo midnights, and the two DST days.
 - iPhones show the fix at their next fetch of the subscription (iOS decides when).
+
+**Deployed 2026-11-11 as `41f61ea`** (tag `deploy/2026-11-11_0920`). Web-only.
