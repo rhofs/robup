@@ -13699,3 +13699,5 @@ calendar to start once the keyboard is fully down, "bittelitt tregere".
     and runs in the background).
 - Robin reconnected before this existed, so he presses the button once.
 - Built; not run against Google.
+
+**Deployed 2026-11-11 as `e32d79e`** (tag `deploy/2026-11-11_0917`). Web-only.
