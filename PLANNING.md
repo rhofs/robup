@@ -13620,3 +13620,8 @@ calendar to start once the keyboard is fully down, "bittelitt tregere".
     this team, and verification can be done later.
   - Not confirmed which of these scopes Google treats as sensitive. The console says so when
     publishing.
+- **Follow-up:** the Google Cloud OAuth app is named "RobUp" (the name shown on Google's consent
+  screen). It can be renamed under Google Auth Platform → Branding → App name, e.g. to "Siqt",
+  freely while unverified; a verified app's rename goes through review again. That is
+  display-only: the client ID/secret and siqt.no's settings are unaffected and nobody has to
+  reconnect because of it.
