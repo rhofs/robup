@@ -13681,3 +13681,21 @@ calendar to start once the keyboard is fully down, "bittelitt tregere".
 - Not tried on an iPhone.
 
 **Deployed 2026-11-11 as `b27d6b7`** (tag `deploy/2026-11-11_0900`). Web-only.
+
+### 2026-11-11 (continued) — send everything assigned to Google Calendar again
+
+- **User:** "er det en måte å refreshe alle eventsene man er assigned til på android? Det gikk
+  automatisk inn i kalenderen for de med iPhone".
+- **Cause:** the .ics feed (iPhone) is computed on every fetch, so everything assigned shows at
+  once. Google sync only pushes on change, so items assigned before connecting, or while the token
+  was dead, never arrived.
+- **Built:**
+  - `lib/google/calendarSync.ts` `resyncAllForUser(userId)` pushes every assigned, dated,
+    non-archived task and every assigned event, one at a time. It is idempotent: the sync rows
+    decide insert or update. One run per user at a time, and it stops if the permission dies
+    mid-way.
+  - It runs automatically at the end of the Google OAuth callback, and from Settings → "Send all my
+    tasks & events to Google Calendar" (`POST /api/google/calendar/resync`, which returns at once
+    and runs in the background).
+- Robin reconnected before this existed, so he presses the button once.
+- Built; not run against Google.

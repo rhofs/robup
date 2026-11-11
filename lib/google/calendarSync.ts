@@ -587,3 +587,37 @@ export async function pullChangesFromGoogle(userId: string, workspaceId: string)
   }
   return { created, updated, deleted };
 }
+
+// Everything assigned to one person, pushed to their Google calendars again — tasks with a date and
+// Planner events. Pushes happen only when something changes, so whatever was assigned while the
+// connection was dead (or before it existed) never arrived: "er det en måte å refreshe alle
+// eventsene man er assigned til på android?" (2026-11-11). Runs after connecting Google, and from
+// Settings. Each item is created or updated in place (the sync rows decide), so running it twice
+// makes no duplicates. One at a time, to stay well inside Google's rate limits.
+const resyncRunning = new Set<string>();
+export async function resyncAllForUser(userId: string): Promise<{ tasks: number; events: number } | null> {
+  if (resyncRunning.has(userId)) return null;
+  resyncRunning.add(userId);
+  try {
+    const user = await prisma.user.findUnique({ where: { id: userId }, select: { googleRefreshToken: true } });
+    if (!user?.googleRefreshToken) return { tasks: 0, events: 0 };
+    const [tasks, events] = await Promise.all([
+      prisma.task.findMany({
+        where: { deletedAt: null, archived: false, assignees: { some: { id: userId } }, OR: [{ startDate: { not: null } }, { dueDate: { not: null } }] },
+        select: { id: true },
+      }),
+      prisma.event.findMany({ where: { deletedAt: null, assignees: { some: { id: userId } } }, select: { id: true } }),
+    ]);
+    for (const e of events) {
+      await syncEventForUser(e.id, userId).catch((err) => recordSyncFailure(userId, `resync event ${e.id}`, err));
+      // Stop at once if the permission turned out to be dead (recordSyncFailure clears it).
+      if (!(await prisma.user.findUnique({ where: { id: userId }, select: { googleRefreshToken: true } }))?.googleRefreshToken) break;
+    }
+    for (const t of tasks) {
+      await syncTaskForUser(t.id, userId).catch((err) => recordSyncFailure(userId, `resync task ${t.id}`, err));
+    }
+    return { tasks: tasks.length, events: events.length };
+  } finally {
+    resyncRunning.delete(userId);
+  }
+}

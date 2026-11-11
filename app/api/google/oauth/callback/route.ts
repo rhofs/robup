@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import { google } from 'googleapis';
+import { resyncAllForUser } from '@/lib/google/calendarSync';
 import { prisma } from '@/lib/prisma';
 import { createGoogleOAuthClient } from '@/lib/google/oauthClient';
 import { getCurrentUserId } from '@/lib/auth/session';
@@ -43,6 +44,9 @@ export async function GET(req: Request) {
     where: { id: userId },
     data: { googleRefreshToken: tokens.refresh_token, googleEmail: profile.email ?? null },
   });
+
+  // Everything already assigned to them goes to the new calendars now, not only what changes next.
+  resyncAllForUser(userId).catch(() => {});
 
   return NextResponse.redirect(`${origin}/?googleConnect=success`);
 }
