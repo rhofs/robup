@@ -5,14 +5,19 @@ import { parseExceptions, parseRecurrence, toRRule } from '@/lib/recurrence';
 // RFC 5545 §3.3.11 — escape backslash, semicolon, comma, and newline in TEXT values.
 const icsEscape = (s: string) => s.replace(/\\/g, '\\\\').replace(/;/g, '\\;').replace(/,/g, '\\,').replace(/\n/g, '\\n');
 
-const icsDate = (d: Date) => {
-  const y = d.getUTCFullYear();
-  const m = String(d.getUTCMonth() + 1).padStart(2, '0');
-  const day = String(d.getUTCDate()).padStart(2, '0');
-  return `${y}${m}${day}`;
-};
+// An all-day date as the calendar day it is in Norway, not in UTC. A date with no time is stored as
+// Oslo midnight — 23:00 or 22:00 UTC the day before — so reading the UTC date put every task and
+// all-day event a day early on iPhones: "mandag blir til søndag" (2026-11-11). The same fix Google
+// sync got earlier (lib/google/calendarSync.ts localDateOnly).
+const osloDay = new Intl.DateTimeFormat('en-CA', { timeZone: 'Europe/Oslo', year: 'numeric', month: '2-digit', day: '2-digit' });
+const icsDate = (d: Date) => osloDay.format(d).replace(/-/g, '');
 
-const addDays = (d: Date, n: number) => new Date(d.getTime() + n * 86400000);
+// The calendar day after, in Oslo — ICS's all-day DTEND is exclusive. By calendar day, so a 23- or
+// 25-hour day at a change of clocks cannot skip or repeat one.
+const addDays = (d: Date, n: number) => {
+  const [y, m, day] = osloDay.format(d).split('-').map(Number);
+  return new Date(Date.UTC(y, m - 1, day + n, 12));
+};
 
 const icsStamp = (d: Date) => d.toISOString().replace(/[-:]/g, '').split('.')[0] + 'Z';
 

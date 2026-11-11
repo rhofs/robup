@@ -13701,3 +13701,17 @@ calendar to start once the keyboard is fully down, "bittelitt tregere".
 - Built; not run against Google.
 
 **Deployed 2026-11-11 as `e32d79e`** (tag `deploy/2026-11-11_0917`). Web-only.
+
+### 2026-11-11 (continued) — [Bug] iPhone calendar showed everything a day early
+
+- **User:** "dagene på iPhone kalenderen er forskjøvet en dag tidligere enn i siqt appen, altså
+  mandag blir til søndag".
+- **Cause:** the .ics feed's `icsDate` read the **UTC** date. A dateless task or all-day event is
+  stored as Oslo midnight (22:00/23:00 UTC the day before), so every all-day item landed a day
+  early. Google sync had the same bug and was fixed long ago with `localDateOnly` (Europe/Oslo);
+  the feed never got that fix.
+- **Fix** (`app/api/calendar/[token]/route.ts`): `icsDate` formats the day in Europe/Oslo, and the
+  exclusive DTEND adds a calendar day in Oslo (no ±1 h DST slip). Timed events were unaffected
+  (UTC instants).
+- Tested with tsx under TZ=UTC: winter and summer Oslo midnights, and the two DST days.
+- iPhones show the fix at their next fetch of the subscription (iOS decides when).
