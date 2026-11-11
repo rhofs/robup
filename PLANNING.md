@@ -13679,3 +13679,5 @@ calendar to start once the keyboard is fully down, "bittelitt tregere".
     Fetch; often hourly).
   - The link is personal: anyone who has it can read that person's calendar.
 - Not tried on an iPhone.
+
+**Deployed 2026-11-11 as `b27d6b7`** (tag `deploy/2026-11-11_0900`). Web-only.
