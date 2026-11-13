@@ -108,6 +108,7 @@ import { readStartPage } from '../lib/startPage';
 import OfficeContext from '../components/mobile/OfficeContext';
 import HomeContext from '../components/mobile/HomeContext';
 import { CHAT_PUSH_MS, CHAT_PUSH_EASE } from '../lib/chatTransition';
+import { armPush, releasePush } from '../lib/pushClock';
 import TaskListSentinel from '../components/TaskListSentinel';
 import { useSessionStore } from '../store/useSessionStore';
 import { useChatStore, holdChatUpdates } from '../store/useChatStore';
@@ -1013,6 +1014,7 @@ function PageContent() {
   // trap). The app shell is `overflow-hidden`, so starting off-screen right cannot leave a stray
   // horizontal scroll behind either.
   const boardPushControls = useAnimationControls();
+  const pushClockTokenRef = useRef(0);
   // The Home/Office layer a context push slides away from (or back to). Driven from the same moment
   // as the board, two frames after the push begins: animating from its own mount meant its first
   // frames were spent building it — the layer is a full HomeContext — so the screen behind visibly
@@ -1127,12 +1129,15 @@ function PageContent() {
 
   const startBoardPush = (dir: 'forward' | 'back', sheet: 'spaces' | 'personal' | 'context' = 'spaces') => {
     // Temporary: measure the first few List openings on a phone (lib/perfTrace.ts).
-    if (dir === 'forward') traceMoment('list-open', { main: '[data-trace="board-main"]', layer: '[data-trace="context-layer"]' });
+    if (dir === 'forward') traceMoment('list-open', { main: '[data-trace="board-main"]', layer: '[data-trace="context-layer"]', nav: '[data-trace="nav"]' });
     // TEMPORARY (2026-10-19): the way back too, for the DM → Home stutter.
-    else traceMoment('push-back', { main: '[data-trace="board-main"]', layer: '[data-trace="context-layer"]' }, 1000);
+    else traceMoment('push-back', { main: '[data-trace="board-main"]', layer: '[data-trace="context-layer"]', nav: '[data-trace="nav"]' }, 1000);
     // Fetched chat data waits for the slide to finish (useChatStore's holdChatUpdates): the two frames
     // before it starts, the slide, and a little to spare.
     holdChatUpdates(CHAT_PUSH_MS + 120);
+    // The nav and the Spaces drawer change pose in this same tap, but must not start moving until
+    // the board does, two frames from now (lib/pushClock.ts). Released in the effect below.
+    pushClockTokenRef.current = armPush();
     boardPushDirRef.current = dir;
     boardPushSheetRef.current = sheet;
     setBoardPushing(true);
@@ -1142,6 +1147,7 @@ function PageContent() {
   useEffect(() => {
     if (boardPushSeq === 0) return;
     const back = boardPushDirRef.current === 'back';
+    const clockToken = pushClockTokenRef.current;
 
     // Forward: the board arrives from the right. Back: it leaves to the right, uncovering the
     // drawer settling in behind it.
@@ -1207,6 +1213,8 @@ function PageContent() {
           if (safetyFired) parkBoard('none');
           else setBoardPushing(false);
         });
+      // And everything that was waiting for the board starts now, on this frame.
+      releasePush(clockToken);
       });
     });
 
@@ -1226,6 +1234,8 @@ function PageContent() {
       cancelAnimationFrame(frame);
       if (inner) cancelAnimationFrame(inner);
       window.clearTimeout(safety);
+      // A no-op if the frame above already ran, or if a newer push has armed the clock since.
+      releasePush(clockToken);
     };
   }, [boardPushSeq, boardPushControls, contextLayerControls, parkBoard]);
 

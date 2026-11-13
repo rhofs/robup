@@ -10,6 +10,7 @@ import FloatingPopover from '../FloatingPopover';
 import { hapticTap } from '../../lib/haptics';
 import { getChildFolders, getListsIn, getBoardDocsIn } from '../../lib/folderTree';
 import { CHAT_PUSH_MS, CHAT_PUSH_EASE } from '../../lib/chatTransition';
+import { useHeldUntilPushMoves, usePushArmed } from '../../lib/pushClock';
 
 // The same curve and duration the chat push uses, because this is the same gesture wearing a
 // different name: one full-screen surface replacing another. Two page transitions in one app that
@@ -169,6 +170,87 @@ function SpaceRowButton({
   );
 }
 
+// The sheet's outer, moving element, as a component of its own for one reason: it is the only part
+// that has to re-render when the push clock ticks (lib/pushClock.ts). Reading the clock in
+// MobileSpacesSheet itself would re-render the whole Space/Folder/List tree on the very frame the
+// slide starts — the most expensive render on mobile, at the worst possible moment. Here the tree
+// arrives as `children`, which React leaves alone when only this wrapper renders again.
+function SheetPushPane({ pushingOut, pushingIn, children }: { pushingOut: boolean; pushingIn: boolean; children: React.ReactNode }) {
+  // The pose follows the board, not the tap: `pushingOut`/`pushingIn` change two frames before the
+  // board starts to move.
+  const movingOut = useHeldUntilPushMoves(pushingOut);
+  const waitingToArrive = usePushArmed() && pushingIn;
+  return (
+    <motion.div
+      // A third of the way left, matching the chat push exactly — the asymmetry is the effect:
+      // the page behind moves a little, the page arriving moves all the way, and the difference
+      // between them reads as depth rather than as a carousel.
+      //
+      // The board now genuinely covers this, so no seam is left to hide: <main> carries the
+      // push and rises to z-40 while it moves, above this drawer's z-30. That is what the
+      // earlier full `-100%` exit was working around, and why it produced the vertical edge
+      // sweeping across the screen.
+      //
+      // It stays fully opaque for most of the travel and only goes at the very end.
+      //
+      // An earlier version faded it out over the first 60%, which emptied the left of the screen
+      // before the board had crossed it — the page behind disappeared and the list slid over
+      // nothing. The fade is not there to get this out of the way (the board covers it); it is
+      // there for one strip only. This drawer is `top-0` and covers the app's own global header,
+      // while <main> begins below it, so that top band is the single place it is still visible
+      // at the end. Letting go there hands the band back to the board's own identical header
+      // instead of leaving a displaced copy of it sitting a third to the left.
+      // initial matters only for the arriving case: the drawer mounts the moment Back is
+      // pressed, and without a starting offset it would simply appear and then have nothing
+      // left to animate.
+      // `transform` rather than framer's `x`, so the browser runs it off the main thread — see
+      // startBoardPush's effect in app/page.tsx. Nothing inside this sheet is `position: fixed`
+      // (its menus are portalled), so resting at translateX(0%) instead of `none` moves nothing.
+      // movingOut / waitingToArrive: the pose changes when the board starts moving, not at the
+      // tap that asked for it — see lib/pushClock.ts.
+      initial={pushingIn ? { transform: 'translateX(-33%)', opacity: 0 } : false}
+      animate={
+        movingOut
+          ? { transform: 'translateX(-33%)', opacity: [1, 1, 0] }
+          : waitingToArrive
+            ? { transform: 'translateX(-33%)', opacity: 0 }
+            : { transform: 'translateX(0%)', opacity: 1 }
+      }
+      transition={
+        movingOut
+          ? {
+              transform: CHAT_PUSH_TRANSITION,
+              // Held at full opacity through 78% of the movement, then released — see above.
+              opacity: { duration: CHAT_PUSH_MS / 1000, times: [0, 0.78, 1], ease: 'linear' },
+            }
+          : pushingIn
+            ? {
+                transform: CHAT_PUSH_TRANSITION,
+                // Solid quickly on the way in: it is the destination, and arriving faintly
+                // would read as the board having left something behind rather than as this
+                // page returning.
+                opacity: { duration: (CHAT_PUSH_MS * 0.35) / 1000, ease: 'easeOut' },
+              }
+            : { duration: 0 }
+      }
+      // pt-[env(safe-area-inset-top)]: this sheet is `top-0` and covers the global mobile
+      // header, so it has to repeat that header's own status-bar clearance — otherwise its
+      // title lands under the clock in the Android app, where the WebView is edge-to-edge.
+      // Kept on the container rather than on the h-14 title row below, so the whole sheet
+      // (search row included) shifts down together and lines up with the header it replaces.
+      className="fixed inset-x-0 top-0 z-30 md:hidden bg-neutral-950 flex flex-col pt-[env(safe-area-inset-top)]"
+      // Full height now, not stopped short above the nav — MobileBottomNav.tsx floats over
+      // content (`fixed`, translucent) rather than reserving its own lane, matching the same
+      // treatment as every other mobile scroll surface (see that file's own top comment). The
+      // tree list below carries its own bottom padding instead, so its last row can still
+      // scroll fully clear of the floating island.
+      style={{ bottom: 0 }}
+    >
+      {children}
+    </motion.div>
+  );
+}
+
 export default function MobileSpacesSheet({
   open,
   onClose,
@@ -263,63 +345,7 @@ export default function MobileSpacesSheet({
   return (
     <>
       {open && (
-        <motion.div
-          // A third of the way left, matching the chat push exactly — the asymmetry is the effect:
-          // the page behind moves a little, the page arriving moves all the way, and the difference
-          // between them reads as depth rather than as a carousel.
-          //
-          // The board now genuinely covers this, so no seam is left to hide: <main> carries the
-          // push and rises to z-40 while it moves, above this drawer's z-30. That is what the
-          // earlier full `-100%` exit was working around, and why it produced the vertical edge
-          // sweeping across the screen.
-          //
-          // It stays fully opaque for most of the travel and only goes at the very end.
-          //
-          // An earlier version faded it out over the first 60%, which emptied the left of the screen
-          // before the board had crossed it — the page behind disappeared and the list slid over
-          // nothing. The fade is not there to get this out of the way (the board covers it); it is
-          // there for one strip only. This drawer is `top-0` and covers the app's own global header,
-          // while <main> begins below it, so that top band is the single place it is still visible
-          // at the end. Letting go there hands the band back to the board's own identical header
-          // instead of leaving a displaced copy of it sitting a third to the left.
-          // initial matters only for the arriving case: the drawer mounts the moment Back is
-          // pressed, and without a starting offset it would simply appear and then have nothing
-          // left to animate.
-          // `transform` rather than framer's `x`, so the browser runs it off the main thread — see
-          // startBoardPush's effect in app/page.tsx. Nothing inside this sheet is `position: fixed`
-          // (its menus are portalled), so resting at translateX(0%) instead of `none` moves nothing.
-          initial={pushingIn ? { transform: 'translateX(-33%)', opacity: 0 } : false}
-          animate={pushingOut ? { transform: 'translateX(-33%)', opacity: [1, 1, 0] } : { transform: 'translateX(0%)', opacity: 1 }}
-          transition={
-            pushingOut
-              ? {
-                  transform: CHAT_PUSH_TRANSITION,
-                  // Held at full opacity through 78% of the movement, then released — see above.
-                  opacity: { duration: CHAT_PUSH_MS / 1000, times: [0, 0.78, 1], ease: 'linear' },
-                }
-              : pushingIn
-                ? {
-                    transform: CHAT_PUSH_TRANSITION,
-                    // Solid quickly on the way in: it is the destination, and arriving faintly
-                    // would read as the board having left something behind rather than as this
-                    // page returning.
-                    opacity: { duration: (CHAT_PUSH_MS * 0.35) / 1000, ease: 'easeOut' },
-                  }
-                : { duration: 0 }
-          }
-          // pt-[env(safe-area-inset-top)]: this sheet is `top-0` and covers the global mobile
-          // header, so it has to repeat that header's own status-bar clearance — otherwise its
-          // title lands under the clock in the Android app, where the WebView is edge-to-edge.
-          // Kept on the container rather than on the h-14 title row below, so the whole sheet
-          // (search row included) shifts down together and lines up with the header it replaces.
-          className="fixed inset-x-0 top-0 z-30 md:hidden bg-neutral-950 flex flex-col pt-[env(safe-area-inset-top)]"
-          // Full height now, not stopped short above the nav — MobileBottomNav.tsx floats over
-          // content (`fixed`, translucent) rather than reserving its own lane, matching the same
-          // treatment as every other mobile scroll surface (see that file's own top comment). The
-          // tree list below carries its own bottom padding instead, so its last row can still
-          // scroll fully clear of the floating island.
-          style={{ bottom: 0 }}
-        >
+        <SheetPushPane pushingOut={pushingOut} pushingIn={pushingIn}>
           {/* h-14, matching the global mobile header's own fixed height exactly (app/page.tsx) —
               this row used to size itself from py-3 + the title text's line-height, which came out
               a few px shorter, pushing the search row (and everything in it) up slightly compared
@@ -541,7 +567,7 @@ export default function MobileSpacesSheet({
             })}
           </div>
           </div>
-        </motion.div>
+        </SheetPushPane>
       )}
     </>
   );

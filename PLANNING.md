@@ -2483,6 +2483,14 @@ Picked up right after the office's "merged single island" popup-menu work (previ
 
 ## Known bugs / things to remember
 
+- **Everything that moves in one push must be started on the same frame** (2026-11-13). For a
+  browser-run animation framer fixes the start time at the moment the animation is *created*, not
+  when it is first shown. Two elements started a few frames apart therefore stay that far apart for
+  the whole slide — and "a few frames" on the main thread during a tap is 25–85ms on a phone, which
+  is 15–50px. The board waits two frames before it moves; anything declarative (`animate={…}` on a
+  prop that flips in the tap) does not. `lib/pushClock.ts` exists to hold those until the board
+  starts. A new element that should travel with a push reads `useHeldUntilPushMoves`, in a small
+  wrapper component of its own, rather than animating straight off the prop.
 - **A slide must animate `transform`, not framer's `x` — and `controls.set()` must not be what
   creates the value** (2026-11-13). framer-motion runs `x`/`y`/`scale` itself, in JavaScript, one
   style write per frame on the main thread. Only `transform`, `opacity`, `clipPath` and `filter` are
@@ -13910,3 +13918,57 @@ calendar to start once the keyboard is fully down, "bittelitt tregere".
     but removing it without seeing a phone would be a guess.
 
 **Deployed 2026-11-13 as `d709d30`** (tag `deploy/2026-11-13_1401`). Web-only.
+
+### 2026-11-13 (continued) — the nav and the page behind it moved out of step; first traces from real phones
+
+- **User,** after trying `d709d30`: "Når jeg går inn i en samtale, så ser jeg at floating menyen og
+  bakgrunnen forskyver seg ulikt."
+- **Cause — a side effect of the change above, not a new bug in the nav.** A board push waits two
+  frames before `<main>` and the context layer start moving. The floating nav and the Spaces drawer
+  are declarative animations and start at the tap. While framer ran everything in JavaScript the
+  gap was two frames. As browser-run animations each one's start time is fixed when it is
+  *created*, and the two-frame wait is on the main thread — so the gap became two frames plus
+  however long the main thread was busy in between. The traces put that at 25–85ms on Robin's
+  phone, i.e. the nav 15–50px ahead of the background mid-slide.
+- **Built — `lib/pushClock.ts`, one clock per push:**
+  - `startBoardPush` calls `armPush()` in the tap; the push effect calls `releasePush(token)` in
+    the same frame it starts the board (and in its cleanup). The token stops an older push's
+    cleanup from releasing a newer one; a 1s timer releases a clock nobody else does, so the nav
+    can never be left frozen.
+  - `useHeldUntilPushMoves(value)` returns the value from before the tap for as long as the clock
+    is armed. The nav's slide reads `hidden` through it; the drawer reads `pushingOut` through it,
+    and on the way back it sits at its starting pose (`-33%`, transparent) until the clock is
+    released.
+  - **The moving wrappers are now their own small components** — `NavSlide` in
+    `MobileBottomNav.tsx`, `SheetPushPane` in `MobileSpacesSheet.tsx` — and only they read the
+    clock. Reading it in the parents would re-render the nav island and the whole Space tree on
+    the very frame the slide starts. Content arrives as `children`, which React skips.
+  - Not on the clock, on purpose: the Chat tab's own list → conversation slide. Nothing there
+    waits two frames, so the nav, the list and the panel all start at the tap and already agree.
+- **First traces from real devices** (read from production's `logs/client-traces.jsonl` after the
+  rotation fix; 9 entries, two users):
+  - **The native path is really taken**: `mainAnim` 1 and `layerAnim` 2 (transform + opacity)
+    during every push, on Android WebView (Chrome 157, 120Hz) and on iOS Safari. That was the
+    unverified part of the entry above.
+  - Main-thread frames of 136, 211, 242 and 340ms happened *during* slides that nonetheless
+    advanced every 8ms on the Android phone. Before today each of those was a visible stop.
+  - **Still there, measured, not fixed:** (1) **190–246ms from the tap to the first frame** on
+    Android — one `onclick` task, React rendering the page. It is a late start rather than a
+    stutter, and it is now the largest thing left. (2) **The slide skips its first ~60ms**: a
+    58–92ms React scheduler task lands right after the animations are created, and because
+    framer pins the start time at creation, the first frame shown is already 17–20px in. Small
+    on this curve (slow start), but real. Not attempted: framer has no public way to leave the
+    start time unset, and waiting for the main thread to go quiet would add to (1).
+  - **An iPhone (another user) had the whole app sitting 14px left and 12px up, at rest**, for at
+    least a minute: every `…Left` reads -14, `scrollY` and `vvTop` 12, no zoom (`vvH` = `innerH`).
+    The document itself seems to be scrolled. **Cause unknown, and not known whether it is older
+    than today.** The traces now also record `scrollX`, `innerW`, `docW` and `vvLeft`, and the nav's
+    left edge (`navLeft`) — read them next session before guessing.
+- **Verified:** typecheck; lint unchanged (page.tsx 74, MobileBottomNav 18, MobileSpacesSheet 2,
+  pushClock clean). A second jsdom script (not in the repo) with the real `lib/pushClock.ts`: at
+  the tap neither nav nor drawer starts; main, nav and drawer get their native animations on the
+  same frame, in both directions; the page and the nav's children do not re-render when the clock
+  is released; the drawer mounts at its starting pose on the way back; an unreleased clock lets go
+  after a second. The earlier push script still passes.
+- **Not verified:** not seen on a device. The next traces answer it directly — `navLeft` and
+  `layerLeft` should now move on the same frames.

@@ -6,6 +6,7 @@ import { AnimatePresence, motion } from 'framer-motion';
 import type { NavTab, MenuTile } from './navTypes';
 import { CONTEXT_NAV_TAB_IDS } from './navTypes';
 import { CHAT_PUSH_MS, CHAT_PUSH_EASE } from '../../lib/chatTransition';
+import { useHeldUntilPushMoves } from '../../lib/pushClock';
 import { hapticTap } from '../../lib/haptics';
 import AppLauncherGridContent from './AppLauncherGrid';
 import type { HierarchyWorkspace } from '../../store/useTaskStore';
@@ -250,6 +251,47 @@ function NavPill({
   );
 }
 
+// The nav's outer, moving element. A component of its own so that it alone re-renders when the push
+// clock ticks (lib/pushClock.ts) — the island inside arrives as `children` and is left alone, which
+// keeps the frame the slide starts on as cheap as it can be.
+function NavSlide({ hidden, behind, children }: { hidden: boolean; behind: boolean; children: React.ReactNode }) {
+  // `hidden` as far as the *slide* is concerned. In a board push `hidden` flips at the tap, while the
+  // page the nav leaves with starts moving two frames later; this follows the page.
+  const slideHidden = useHeldUntilPushMoves(hidden);
+  return (
+    <motion.div
+      // For lib/perfTrace.ts: its left edge, frame by frame, next to the page it should move with.
+      data-trace="nav"
+      className="fixed inset-x-0 bottom-0 md:hidden"
+      // `transform` rather than framer's `x`: the browser then runs it off the main thread, in step
+      // with the page it leaves with (see startBoardPush's effect in app/page.tsx). initial={false}
+      // because there is no animating from the `none` an element starts with — it mounts in place.
+      initial={false}
+      animate={slideHidden ? { transform: 'translateX(-33%)', opacity: [1, 1, 0] } : { transform: 'translateX(0%)', opacity: 1 }}
+      transition={
+        slideHidden
+          ? {
+              transform: { duration: CHAT_PUSH_MS / 1000, ease: CHAT_PUSH_EASE },
+              // Held opaque through most of the travel, then released — the nav should read as
+              // leaving with the page, not as dimming in place.
+              opacity: { duration: CHAT_PUSH_MS / 1000, times: [0, 0.78, 1], ease: 'linear' },
+            }
+          : {
+              transform: { duration: CHAT_PUSH_MS / 1000, ease: CHAT_PUSH_EASE },
+              opacity: { duration: (CHAT_PUSH_MS * 0.35) / 1000, ease: 'easeOut' },
+            }
+      }
+      style={{
+        pointerEvents: hidden ? 'none' : undefined,
+        willChange: 'transform',
+        zIndex: behind ? 35 : 50,
+      }}
+    >
+      {children}
+    </motion.div>
+  );
+}
+
 export default function MobileBottomNav({
   navTabs,
   menuOpen,
@@ -450,32 +492,7 @@ export default function MobileBottomNav({
       </AnimatePresence>
 
 
-      <motion.div
-        className="fixed inset-x-0 bottom-0 md:hidden"
-        // `transform` rather than framer's `x`: the browser then runs it off the main thread, in step
-        // with the page it leaves with (see startBoardPush's effect in app/page.tsx). initial={false}
-        // because there is no animating from the `none` an element starts with — it mounts in place.
-        initial={false}
-        animate={hidden ? { transform: 'translateX(-33%)', opacity: [1, 1, 0] } : { transform: 'translateX(0%)', opacity: 1 }}
-        transition={
-          hidden
-            ? {
-                transform: { duration: CHAT_PUSH_MS / 1000, ease: CHAT_PUSH_EASE },
-                // Held opaque through most of the travel, then released — the nav should read as
-                // leaving with the page, not as dimming in place.
-                opacity: { duration: CHAT_PUSH_MS / 1000, times: [0, 0.78, 1], ease: 'linear' },
-              }
-            : {
-                transform: { duration: CHAT_PUSH_MS / 1000, ease: CHAT_PUSH_EASE },
-                opacity: { duration: (CHAT_PUSH_MS * 0.35) / 1000, ease: 'easeOut' },
-              }
-        }
-        style={{
-          pointerEvents: hidden ? 'none' : undefined,
-          willChange: 'transform',
-          zIndex: behind ? 35 : 50,
-        }}
-      >
+      <NavSlide hidden={hidden} behind={behind}>
         <motion.div
           // Only `height` is ever animated here — a plain number, not a shape/string — and the
           // rounding/clipping (`rounded-[32px] overflow-hidden`) below is completely static, so
@@ -654,7 +671,7 @@ export default function MobileBottomNav({
           </nav>
           </div>
         </motion.div>
-      </motion.div>
+      </NavSlide>
     </>
   );
 }

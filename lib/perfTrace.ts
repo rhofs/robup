@@ -66,6 +66,13 @@ export function traceMoment(kind: string, selectors: Record<string, string>, dur
       vvH: vv ? Math.round(vv.height) : null,
       vvTop: vv ? Math.round(vv.offsetTop) : null,
       scrollY: Math.round(window.scrollY),
+      // Sideways too (2026-11-13): an iPhone's traces showed every element 14px left of where it should
+      // be, at rest, with scrollY 12 — the document itself scrolled. These say whether that is the
+      // window, and whether the document is wider than the screen.
+      scrollX: Math.round(window.scrollX),
+      innerW: window.innerWidth,
+      docW: document.documentElement.scrollWidth,
+      vvLeft: vv ? Math.round(vv.offsetLeft) : null,
       kb: (window as unknown as { __siqtKb?: number }).__siqtKb ?? null,
     };
     for (const [name, sel] of Object.entries(selectors)) {
