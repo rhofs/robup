@@ -2,10 +2,12 @@
 
 import { useEffect, useState } from 'react';
 import { AnimatePresence } from 'framer-motion';
-import { X, MapPin, CalendarDays, Clock, Plus, Repeat } from 'lucide-react';
+import { X, MapPin, Plus, Repeat } from 'lucide-react';
 import { HierarchyWorkspace, AppUser, useTaskStore } from '../../store/useTaskStore';
 import { suggestEventAttendees } from '../../lib/assigneeSuggestions';
 import DateSheet from '../mobile/DateSheet';
+import DatesField from './DatesField';
+import { dropTime, eventRange } from '../../lib/eventDates';
 import { closeOnBackdrop } from '../../lib/backdrop';
 import BelongsToPicker, { type BelongsTo } from '../BelongsToPicker';
 import FloatingPopover from '../FloatingPopover';
@@ -162,10 +164,8 @@ export default function QuickCreatePopover({
       if (!canCreateEvent) return;
       onCreateEvent({
         title: title.trim(),
-        startDate: eventStart!,
-        endDate: eventEnd ?? eventStart!,
         // All day unless a time was added — as on the phone, where a time is what makes it timed.
-        allDay: !hasTime(eventStart) && !hasTime(eventEnd ?? eventStart),
+        ...eventRange(eventStart!, eventEnd),
         spaceId: eventHome.spaceId,
         workspaceId: eventHome.workspaceId,
         assigneeIds,
@@ -465,100 +465,6 @@ function Field({
         {hint && <span className="ml-auto text-[11px] text-neutral-500">{hint}</span>}
       </div>
       {children}
-    </div>
-  );
-}
-
-
-const parseIso = (iso: string | null) => (iso ? new Date(iso) : null);
-const hasTime = (iso: string | null) => {
-  const d = parseIso(iso);
-  return !!d && (d.getHours() !== 0 || d.getMinutes() !== 0);
-};
-// The same date with no time (midnight is how "no time" is stored).
-const dropTime = (iso: string | null) => {
-  const d = parseIso(iso);
-  if (!d) return iso;
-  d.setHours(0, 0, 0, 0);
-  return d.toISOString();
-};
-const fmtDay = (iso: string) => {
-  const d = new Date(iso);
-  return `${d.getDate()}/${d.getMonth() + 1}/${String(d.getFullYear()).slice(2)}`;
-};
-const fmtTime = (iso: string) => {
-  const d = new Date(iso);
-  return `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`;
-};
-
-// One "Dates" field, as on the phone: a tap opens the date picker (DateSheet as a window) for the
-// range. Under it, once a date is chosen, its time — "Add time" straight to the clock, without going
-// into the dates first ("under datoene så står det 'Add time' når man har valgt dato, så man ikke må
-// inn på selve datoen") — or the time it has, with a cross to take it off.
-function DatesField({
-  start,
-  end,
-  endName,
-  onOpen,
-  onClearTime,
-}: {
-  start: string | null;
-  end: string | null;
-  endName: 'Due' | 'End';
-  onOpen: (time?: 'start' | 'end') => void;
-  onClearTime: (which: 'start' | 'end') => void;
-}) {
-  const timeChip = (which: 'start' | 'end', iso: string | null, name: string) => {
-    if (!iso) return null;
-    return hasTime(iso) ? (
-      <span className="inline-flex items-center gap-1 h-7 pl-2 pr-1 rounded-lg bg-neutral-800/70 text-[11.5px] text-neutral-200">
-        <button onClick={() => onOpen(which)} className="inline-flex items-center gap-1.5 cursor-pointer">
-          <Clock className="w-3 h-3 text-neutral-400" /> {name} {fmtTime(iso)}
-        </button>
-        <button onClick={() => onClearTime(which)} title="Remove time" className="w-5 h-5 rounded flex items-center justify-center text-neutral-500 hover:text-app-strong cursor-pointer">
-          <X className="w-3 h-3" />
-        </button>
-      </span>
-    ) : (
-      <button
-        onClick={() => onOpen(which)}
-        className="inline-flex items-center gap-1 h-7 px-2 rounded-lg border border-dashed border-neutral-700 text-[11.5px] text-neutral-400 hover:text-app-strong hover:border-neutral-500 cursor-pointer"
-      >
-        <Plus className="w-3 h-3" /> Add {name.toLowerCase()} time
-      </button>
-    );
-  };
-  return (
-    <div className="space-y-2">
-      <button
-        onClick={() => onOpen()}
-        className="w-full h-10 px-3 rounded-lg bg-neutral-950 border border-neutral-700 hover:border-neutral-600 flex items-center gap-2.5 text-left cursor-pointer"
-      >
-        <CalendarDays className="w-4 h-4 text-neutral-500 shrink-0" />
-        {start || end ? (
-          <span className="text-[13px] text-app-strong truncate">
-            {start && (
-              <>
-                <span className="text-neutral-500">Start</span> {fmtDay(start)}
-              </>
-            )}
-            {start && end && <span className="text-neutral-600"> → </span>}
-            {end && (
-              <>
-                <span className="text-neutral-500">{endName}</span> {fmtDay(end)}
-              </>
-            )}
-          </span>
-        ) : (
-          <span className="text-[13px] text-neutral-500">Set dates</span>
-        )}
-      </button>
-      {(start || end) && (
-        <div className="flex flex-wrap items-center gap-1.5">
-          {timeChip('start', start, 'Start')}
-          {timeChip('end', end, endName)}
-        </div>
-      )}
     </div>
   );
 }

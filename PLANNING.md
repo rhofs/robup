@@ -13783,3 +13783,44 @@ calendar to start once the keyboard is fully down, "bittelitt tregere".
   Save seemed heavy, and it could not be looked at. A sans-serif face instead of mono — same reason.
 
 **Deployed 2026-11-13 as `7560b4f`** (tag `deploy/2026-11-13_0942`). Web-only.
+
+### 2026-11-13 (continued) — one way to pick a time: the clock face, also when editing
+
+- **User (two screenshots):** the clock only comes up when *creating* an event; editing one gives a
+  dropdown menu. "Kan vi få det så det er likt med klokke der man endrer tid? Så det går igjen?
+  Føles mer gjennomført da." Also likes "Add start time" / "Add end time" under the dates when
+  creating, and asked whether the edit window could have the same, or whether it would get messy.
+- **Answer given:** not messy — it is the same field, so the two windows now read alike.
+- **Built:**
+  - **Event window (`EventDetailModal`)**: the Start/End popovers and the "All day" checkbox are
+    replaced by the create window's Dates field — now its own file,
+    `components/calendar/DatesField.tsx`, used by both. Dates open `DateSheet` (a window on desktop,
+    the bottom sheet on a phone); "+ Add start time" / "+ Add end time" open the clock directly; a set
+    time is a chip with a cross.
+  - **All day is derived when editing too** (no time on either end), by one rule for create and
+    edit: `lib/eventDates.ts` `eventRange`. It also stops an end landing before its start: a start
+    time with no end time used to leave the end at midnight the same day — *before* the start — in
+    both create flows; the end now becomes an hour after the start (kept inside the day).
+  - An event stored as all-day shows no times in the edit window even if times are still on it (the
+    old checkbox could be ticked on a 12:00–14:00 event) — matching how the Planner draws it.
+  - Saving the date window with nothing changed writes nothing (no activity entry, no Google push).
+  - **`DatePickerPopover` (desktop; task rows, the task window, quick add, custom date fields)**:
+    its typed time box + quarter-hour dropdown (`TimeField`) is gone. "+ Add time" and the time chip
+    open the clock (`TimeDialSheet` as a window, portalled to `<body>`); the popover closes as the
+    clock opens, since any press outside the popover closes it anyway. A chosen 00:00 is stored as
+    00:01, as DateSheet does (midnight means "no time").
+- **Given up on purpose:** typing an exact time (e.g. "14:07") in the desktop popover. The clock
+  reaches every minute; consistency was what was asked for. Bring a typed field back *inside the
+  clock* (the two boxes on top) if it is missed, not as a second picker.
+- **Considered, not done:** "+ Add start time" opens the clock *inside* the date window, so after
+  the clock's Save one lands on "Choose dates" and presses Save again. That is how create already
+  worked and Robin said he likes it; saving straight from the clock would be one click fewer.
+  Offered, not built.
+- **Verified:** typecheck; lint (page.tsx still 74; DatePickerPopover one error fewer than before);
+  `eventRange` cases with a script; a jsdom run of the real `EventDetailModal` and
+  `DatePickerPopover` — chips shown, × patches, the chip opens the clock on that end's time, an
+  unchanged save writes nothing, an all-day event gains 09:00–10:00 from "Add start time", the task
+  popover's Add time → clock → Save → `09:00`, Clear removes it. None of these scripts are in the
+  repo (no test runner here).
+- **Not verified:** anything visual — no browser on this server. In particular the edit window's
+  layout with the wider Dates field, and the clock opening from a task row inside the task window.

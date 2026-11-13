@@ -16,6 +16,7 @@ import ColorSwatchPicker from '../ColorSwatchPicker';
 import LocationAutocompleteInput from '../LocationAutocompleteInput';
 import { EVENT_COLOR_CHOICES } from '../calendar/EventDetailModal';
 import DateSheet from './DateSheet';
+import { eventRange } from '../../lib/eventDates';
 import { useSheetDrag } from './sheetDrag';
 
 // "New" on a phone — the Planner's quick create, redone after ClickUp's mobile task sheet (the user's
@@ -171,14 +172,11 @@ export default function MobileQuickCreateSheet({
     if (isTask) {
       onCreateTask({ title: title.trim(), spaceId, listId, startDate: start, dueDate: taskDue });
     } else {
-      const eventEnd = end ?? start!;
       onCreateEvent({
         title: title.trim(),
-        startDate: start!,
-        endDate: eventEnd,
         // All day unless a time was picked — the choice the old form made with a checkbox, made by
-        // whether "Add time" was used.
-        allDay: !hasTime(start) && !hasTime(eventEnd),
+        // whether "Add time" was used (lib/eventDates.ts).
+        ...eventRange(start!, end),
         spaceId: eventHome.spaceId,
         workspaceId: eventHome.workspaceId,
         assigneeIds,

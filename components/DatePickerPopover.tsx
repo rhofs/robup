@@ -1,10 +1,12 @@
 'use client';
 
-import { useEffect, useMemo, useRef, useState } from 'react';
-import { ChevronDown, ChevronLeft, ChevronRight, X } from 'lucide-react';
+import { useEffect, useMemo, useState } from 'react';
+import { createPortal } from 'react-dom';
+import { ChevronLeft, ChevronRight, Clock, Plus, X } from 'lucide-react';
 import FloatingPopover from './FloatingPopover';
 import { AnimatePresence } from 'framer-motion';
 import DateSheet from './mobile/DateSheet';
+import TimeDialSheet from './mobile/TimeDialSheet';
 import { useIsMobile } from '../hooks/useIsMobile';
 
 type DatePickerPopoverProps = {
@@ -70,14 +72,16 @@ const formatShort = (d: Date) => {
   return d.getFullYear() === new Date().getFullYear() ? base : `${base} ${d.getFullYear()}`;
 };
 
-// Quarter-hour options for the time dropdown below — a plain, quick "pick a common time" list.
-// The text input right next to it still accepts anything (e.g. 14:07), this is just a shortcut.
-const TIME_OPTIONS = Array.from({ length: 96 }, (_, i) => `${pad(Math.floor(i / 4))}:${pad((i % 4) * 15)}`);
-
 export default function DatePickerPopover({ value, onChange, placeholder = 'Not set', align = 'left', badgeColorHex, tooltip, label = 'Date', showLabel = false, plannerToggle }: DatePickerPopoverProps) {
   const [open, setOpen] = useState(false);
   const isMobile = useIsMobile();
-  const [showTimeInput, setShowTimeInput] = useState(false);
+  // The clock face (TimeDialSheet as a window) — the one way a time is picked anywhere in the app. This
+  // popover used to have its own: a text box and a dropdown of quarter hours ("ikke om jeg endrer, da
+  // får jeg en dropdown meny … Føles mer gjennomført", 2026-11-13).
+  const [clockOpen, setClockOpen] = useState(false);
+  // Whether the clock has been opened here at all — its layer on <body> is only made then (there is
+  // one of these pickers per date cell of every row), and stays so the clock can animate away.
+  const [clockUsed, setClockUsed] = useState(false);
 
   const selected = useMemo(() => {
     if (!value) return null;
@@ -90,10 +94,7 @@ export default function DatePickerPopover({ value, onChange, placeholder = 'Not 
   const [viewMonth, setViewMonth] = useState(() => startOfDay(selected || today));
 
   useEffect(() => {
-    if (open) {
-      setViewMonth(startOfDay(selected || today));
-      setShowTimeInput(hasTime);
-    }
+    if (open) setViewMonth(startOfDay(selected || today));
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open]);
 
@@ -110,8 +111,24 @@ export default function DatePickerPopover({ value, onChange, placeholder = 'Not 
   const commitTime = (hh: number, mm: number) => {
     const base = selected || today;
     const next = new Date(base);
-    next.setHours(hh, mm, 0, 0);
+    // 00:00 is how "no time" is stored, so a chosen midnight is kept one minute past it (as DateSheet).
+    next.setHours(hh, hh === 0 && mm === 0 ? 1 : mm, 0, 0);
     onChange(next.toISOString());
+  };
+
+  const clearTime = () => {
+    if (!selected) return;
+    const next = new Date(selected);
+    next.setHours(0, 0, 0, 0);
+    onChange(next.toISOString());
+  };
+
+  // The clock takes over from the popover rather than opening on top of it: the popover closes on any
+  // press outside itself, which a press on the clock is.
+  const openClock = () => {
+    setOpen(false);
+    setClockUsed(true);
+    setClockOpen(true);
   };
 
   const calendarDays = useMemo(() => {
@@ -178,6 +195,7 @@ export default function DatePickerPopover({ value, onChange, placeholder = 'Not 
   }
 
   return (
+    <>
     <FloatingPopover
       open={open}
       onClose={() => setOpen(false)}
@@ -254,10 +272,7 @@ export default function DatePickerPopover({ value, onChange, placeholder = 'Not 
               {formatShort(selected)}
               <button
                 type="button"
-                onClick={() => {
-                  onChange(null);
-                  setShowTimeInput(false);
-                }}
+                onClick={() => onChange(null)}
                 className="text-neutral-400 hover:text-app-strong cursor-pointer"
               >
                 <X className="w-3 h-3" />
@@ -266,15 +281,23 @@ export default function DatePickerPopover({ value, onChange, placeholder = 'Not 
           </div>
           <div className="flex items-center gap-2">
             <span className="text-[9px] uppercase tracking-wide text-neutral-500 w-9 shrink-0">Time</span>
-            {showTimeInput ? (
-              <TimeField value={selected} onCommit={commitTime} />
+            {hasTime ? (
+              <span className="flex items-center gap-1.5 text-[11px] bg-neutral-800 text-neutral-200 rounded pl-2 pr-2.5 py-1">
+                <button type="button" onClick={openClock} title="Change time" className="flex items-center gap-1.5 tabular-nums cursor-pointer hover:text-app-strong">
+                  <Clock className="w-3 h-3 text-neutral-400" />
+                  {pad(selected.getHours())}:{pad(selected.getMinutes())}
+                </button>
+                <button type="button" onClick={clearTime} title="Remove time" className="text-neutral-400 hover:text-app-strong cursor-pointer">
+                  <X className="w-3 h-3" />
+                </button>
+              </span>
             ) : (
               <button
                 type="button"
-                onClick={() => setShowTimeInput(true)}
-                className="text-[11px] text-blue-400 hover:text-blue-300 cursor-pointer"
+                onClick={openClock}
+                className="inline-flex items-center gap-1 text-[11px] rounded px-2 py-1 border border-dashed border-neutral-700 text-neutral-400 hover:text-app-strong hover:border-neutral-500 cursor-pointer"
               >
-                + Add time
+                <Plus className="w-3 h-3" /> Add time
               </button>
             )}
           </div>
@@ -282,90 +305,32 @@ export default function DatePickerPopover({ value, onChange, placeholder = 'Not 
       )}
       {plannerToggle && <div className="px-3 py-2 border-t border-neutral-800 flex justify-end">{plannerToggle}</div>}
     </FloatingPopover>
-  );
-}
-
-// Replaces a bare native <input type="time"> — reported as looking dated (that's the browser's
-// own spinner/clock chrome, not styled by this app at all, and inconsistent across browsers).
-// Same pattern the font-size dropdown already established (components/collab/DocFormatPanel.tsx):
-// a plain text input for typing an exact value, plus a chevron-anchored FloatingPopover with a
-// scrollable list of common presets — this app fully controls both, unlike a native widget.
-function TimeField({ value, onCommit }: { value: Date; onCommit: (hh: number, mm: number) => void }) {
-  const currentLabel = `${pad(value.getHours())}:${pad(value.getMinutes())}`;
-  const [text, setText] = useState(currentLabel);
-  const [menuOpen, setMenuOpen] = useState(false);
-  const selectedRef = useRef<HTMLButtonElement>(null);
-
-  // Synced from the real value whenever it changes elsewhere (picked from the list below, or
-  // committed via Enter/blur) — but not on every keystroke, so typing a partial value like "14:"
-  // isn't stomped by a re-render before it's actually committed.
-  useEffect(() => {
-    setText(currentLabel);
-  }, [currentLabel]);
-
-  useEffect(() => {
-    if (menuOpen) selectedRef.current?.scrollIntoView({ block: 'center' });
-  }, [menuOpen]);
-
-  const commitText = (raw: string) => {
-    const match = raw.trim().match(/^(\d{1,2}):(\d{2})$/);
-    if (!match || Number(match[1]) > 23 || Number(match[2]) > 59) {
-      setText(currentLabel); // invalid — snap back to the last real value instead of accepting garbage
-      return;
-    }
-    onCommit(Number(match[1]), Number(match[2]));
-  };
-
-  return (
-    <div className="flex items-center gap-1">
-      <input
-        type="text"
-        inputMode="numeric"
-        value={text}
-        onChange={(e) => setText(e.target.value)}
-        onBlur={(e) => commitText(e.target.value)}
-        onKeyDown={(e) => {
-          if (e.key === 'Enter') (e.target as HTMLInputElement).blur();
-        }}
-        placeholder="HH:MM"
-        className="w-14 bg-neutral-900 border border-neutral-700 rounded-lg px-2 py-1 text-[11px] text-neutral-200 text-center focus:outline-none focus:border-blue-500"
-      />
-      <FloatingPopover
-        open={menuOpen}
-        onClose={() => setMenuOpen(false)}
-        panelClassName="w-16 max-h-48 overflow-y-auto bg-neutral-900 border border-neutral-800 rounded-xl shadow-xl py-1"
-        anchor={
-          <button
-            type="button"
-            title="Common times"
-            onClick={() => setMenuOpen((o) => !o)}
-            className="w-6 h-7 rounded flex items-center justify-center cursor-pointer hover:bg-neutral-800 text-neutral-400"
-          >
-            <ChevronDown className="w-3.5 h-3.5" />
-          </button>
-        }
-      >
-        {TIME_OPTIONS.map((t) => {
-          const isSelected = t === currentLabel;
-          return (
-            <button
-              key={t}
-              ref={isSelected ? selectedRef : undefined}
-              type="button"
-              onClick={() => {
-                const [hh, mm] = t.split(':').map(Number);
-                onCommit(hh, mm);
-                setMenuOpen(false);
-              }}
-              className={`w-full text-center px-2 py-1 text-[11px] cursor-pointer hover:bg-neutral-800 ${
-                isSelected ? 'text-blue-400 font-semibold' : 'text-neutral-300'
-              }`}
-            >
-              {t}
-            </button>
-          );
-        })}
-      </FloatingPopover>
-    </div>
+    {/* On <body>, not here: this picker sits in rows and windows that are transformed (which would
+        pin a `fixed` layer to them, not the screen). A portal still bubbles React events to where it
+        was rendered — a press on the clock must not reach the row behind it and open or drag it. */}
+    {clockUsed &&
+      createPortal(
+        <div className="contents" onClick={(e) => e.stopPropagation()} onPointerDown={(e) => e.stopPropagation()} onMouseDown={(e) => e.stopPropagation()}>
+          <AnimatePresence>
+            {clockOpen && (
+              <TimeDialSheet
+                dialog
+                initial={selected && hasTime ? { h: selected.getHours(), m: selected.getMinutes() } : null}
+                onClose={() => setClockOpen(false)}
+                onClear={() => {
+                  clearTime();
+                  setClockOpen(false);
+                }}
+                onSave={(h, m) => {
+                  commitTime(h, m);
+                  setClockOpen(false);
+                }}
+              />
+            )}
+          </AnimatePresence>
+        </div>,
+        document.body
+      )}
+    </>
   );
 }

@@ -6,9 +6,13 @@ import { pickableMembers } from '../../lib/workspaceMembers';
 import BelongsToPicker from '../BelongsToPicker';
 import AssigneePicker, { PersonPill } from '../AssigneePicker';
 import { suggestEventAttendees } from '../../lib/assigneeSuggestions';
-import { X, Trash2, Check, MapPin } from 'lucide-react';
+import { X, Trash2, MapPin } from 'lucide-react';
 import { Event, HierarchyWorkspace, AppUser, useTaskStore } from '../../store/useTaskStore';
-import DatePickerPopover from '../DatePickerPopover';
+import DatesField from './DatesField';
+import DateSheet from '../mobile/DateSheet';
+import { AnimatePresence } from 'framer-motion';
+import { useIsMobile } from '../../hooks/useIsMobile';
+import { dropTime, eventRange } from '../../lib/eventDates';
 import FloatingPopover from '../FloatingPopover';
 import ColorSwatchPicker from '../ColorSwatchPicker';
 import EventActivityPanel from './EventActivityPanel';
@@ -62,8 +66,17 @@ export default function EventDetailModal({ event, workspaces, users, currentUser
   const [titleDraft, setTitleDraft] = useState(event?.title ?? '');
   const [editingTitle, setEditingTitle] = useState(false);
   const [assigneePickerOpen, setAssigneePickerOpen] = useState(false);
+  // The date window (DateSheet), opened on the dates or straight on one end's clock.
+  const [dateDialog, setDateDialog] = useState<{ time?: 'start' | 'end' } | null>(null);
+  const isMobile = useIsMobile();
 
   if (!event) return null;
+  // An all-day event shows no times, whatever is stored on it — the old "All day" checkbox could be
+  // ticked on an event that kept its 12:00–14:00.
+  const startIso = new Date(event.startDate).toISOString();
+  const endIso = new Date(event.endDate).toISOString();
+  const shownStart = event.allDay ? dropTime(startIso)! : startIso;
+  const shownEnd = event.allDay ? dropTime(endIso)! : endIso;
   const repeats = !!parseRecurrence(event.recurrence);
 
   // Per-assignee sync now (see EventGoogleSync in schema.prisma) — the badge only speaks for the
@@ -79,6 +92,7 @@ export default function EventDetailModal({ event, workspaces, users, currentUser
   };
 
   return (
+    <>
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-scrim/70 backdrop-blur-xs" {...closeOnBackdrop(onClose)}>
       <div onClick={(e) => e.stopPropagation()} className="w-[420px] bg-neutral-900 border border-neutral-800 rounded-xl shadow-2xl overflow-hidden">
         {/* Same "where did this come from" tell as the ClickUp reference screenshot (Google icon
@@ -144,55 +158,22 @@ export default function EventDetailModal({ event, workspaces, users, currentUser
               }}
             />
           </div>
-          <div className="grid grid-cols-2 gap-3">
-            <div className="space-y-1.5">
-              <label className="text-[10px] uppercase tracking-wide text-neutral-500 font-semibold">Start</label>
-              <div className="bg-neutral-950 border border-neutral-700 rounded-lg px-1 py-0.5 inline-block">
-                <DatePickerPopover
-                  value={new Date(event.startDate).toISOString()}
-                  label="Start"
-                  onChange={(v) => {
-                    if (!v) return;
-                    // Dragging start past the current end (or vice versa below) used to leave the
-                    // event with start > end — a real "went back in time" state nothing else in
-                    // this app expects. Snapping the other edge to match, rather than rejecting
-                    // the change, mirrors what the Planner drag-resize handlers already do
-                    // (CalendarView.tsx's handleEventDragEnd).
-                    onUpdate(new Date(v) > new Date(event.endDate) ? { startDate: v, endDate: v } : { startDate: v });
-                  }}
-                  placeholder="Not set"
-                />
-              </div>
-            </div>
-            <div className="space-y-1.5">
-              <label className="text-[10px] uppercase tracking-wide text-neutral-500 font-semibold">End</label>
-              <div className="bg-neutral-950 border border-neutral-700 rounded-lg px-1 py-0.5 inline-block">
-                <DatePickerPopover
-                  value={new Date(event.endDate).toISOString()}
-                  label="End"
-                  onChange={(v) => {
-                    if (!v) return;
-                    onUpdate(new Date(v) < new Date(event.startDate) ? { startDate: v, endDate: v } : { endDate: v });
-                  }}
-                  placeholder="Not set"
-                />
-              </div>
-            </div>
+          {/* The same Dates field as creating an event (components/calendar/DatesField.tsx): the dates
+              open the date window, and the times sit under them — "Add start time" / "Add end time"
+              straight to the clock face. This used to be two small popovers with a time dropdown and
+              an "All day" checkbox, unlike anything in the create window ("Klokka kommer kun når jeg
+              lager eventet, ikke om jeg endrer", 2026-11-13). All day is now what it is when creating:
+              no time on either end (lib/eventDates.ts). */}
+          <div className="space-y-1.5">
+            <label className="text-[10px] uppercase tracking-wide text-neutral-500 font-semibold">Dates</label>
+            <DatesField
+              start={shownStart}
+              end={shownEnd}
+              endName="End"
+              onOpen={(time) => setDateDialog({ time })}
+              onClearTime={(which) => onUpdate(which === 'start' ? eventRange(dropTime(shownStart)!, shownEnd) : eventRange(shownStart, dropTime(shownEnd)))}
+            />
           </div>
-
-          <button
-            onClick={() => onUpdate({ allDay: !event.allDay })}
-            className="flex items-center gap-2 text-[11px] text-neutral-400 hover:text-neutral-200 cursor-pointer"
-          >
-            <span
-              className={`w-3.5 h-3.5 rounded-xs border flex items-center justify-center transition ${
-                event.allDay ? 'bg-blue-500/20 border-blue-500/60 text-blue-400' : 'border-neutral-600'
-              }`}
-            >
-              {event.allDay && <Check className="w-2.5 h-2.5" />}
-            </span>
-            All day
-          </button>
 
           {/* Repeating — "Kunne sette events som recurring" (2026-10-23). The dates above are the
               first occurrence's; changing them moves the whole series. */}
@@ -201,7 +182,7 @@ export default function EventDetailModal({ event, workspaces, users, currentUser
             <RepeatPicker value={event.recurrence} startDate={event.startDate} onChange={(recurrence) => onUpdate({ recurrence })} />
             {repeats && (
               <p className="text-[10.5px] text-neutral-500">
-                Start and End are the first time it happens — changing them moves every occurrence. Drag one in the Planner to move only that one.
+                The dates are the first time it happens — changing them moves every occurrence. Drag one in the Planner to move only that one.
               </p>
             )}
           </div>
@@ -323,5 +304,27 @@ export default function EventDetailModal({ event, workspaces, users, currentUser
         </div>
       </div>
     </div>
+    <AnimatePresence>
+      {dateDialog && (
+        <DateSheet
+          dialog={!isMobile}
+          initialTimeFor={dateDialog.time}
+          start={shownStart}
+          end={shownEnd}
+          endName="End"
+          onClose={() => setDateDialog(null)}
+          onSave={(st, en) => {
+            // An event always has dates: clearing both in the window changes nothing.
+            const first = st ?? en;
+            if (first) {
+              const next = eventRange(first, en ?? st);
+              if (next.startDate !== startIso || next.endDate !== endIso || next.allDay !== event.allDay) onUpdate(next);
+            }
+            setDateDialog(null);
+          }}
+        />
+      )}
+    </AnimatePresence>
+    </>
   );
 }
