@@ -13824,3 +13824,5 @@ calendar to start once the keyboard is fully down, "bittelitt tregere".
   repo (no test runner here).
 - **Not verified:** anything visual — no browser on this server. In particular the edit window's
   layout with the wider Dates field, and the clock opening from a task row inside the task window.
+
+**Deployed 2026-11-13 as `4ca2053`** (tag `deploy/2026-11-13_1004`). Web-only.
