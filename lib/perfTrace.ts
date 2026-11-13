@@ -77,6 +77,13 @@ export function traceMoment(kind: string, selectors: Record<string, string>, dur
       const r = el.getBoundingClientRect();
       s[`${name}Top`] = Math.round(r.top);
       s[`${name}Bottom`] = Math.round(r.bottom);
+      // Left, and how many browser-run animations the element has (2026-11-13). The pushes moved from
+      // framer's `x` to `transform` so the browser runs them off the main thread; a count of 0 on
+      // <main> during a push means framer fell back to its own JavaScript animation after all, which
+      // is invisible any other way. Note what `dt` does and does not say from now on: it is how busy
+      // the main thread was, no longer how smooth the slide looked.
+      s[`${name}Left`] = Math.round(r.left);
+      s[`${name}Anim`] = typeof el.getAnimations === 'function' ? el.getAnimations().length : null;
     }
     samples.push(s);
     last = now;

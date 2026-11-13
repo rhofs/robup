@@ -1099,6 +1099,27 @@ function PageContent() {
   // one render in between where both were false: the drawer unmounted, then remounted an instant
   // later already sitting at its animation target, invisible. Reported exactly — "hovedsida
   // klipper bare rett ut, så den skyves over et tomt område."
+  // Puts <main> and <header> somewhere without moving them there. Two calls, and the first one is
+  // not redundant.
+  //
+  // `controls.set()` on a value framer has not seen yet creates that value WITHOUT an owner element,
+  // and framer only hands an animation to the browser when the value has one. So a push that began
+  // with a plain `.set({ transform })` still ran in JavaScript on the main thread — silently, with
+  // nothing in the console and nothing wrong on screen except the stutter it was meant to remove.
+  // Found by printing framer's own decision, not by looking at the page.
+  //
+  // `.start()` creates the value the right way (owned), which is why it goes first; with duration 0
+  // it only writes the value on the next frame, so `.set()` after it is what makes the write happen
+  // now. `initial={{ transform: 'none' }}` on both elements belongs to the same fix: it gives that
+  // first `.start()` a known value to begin from instead of one read back out of the DOM.
+  const parkBoard = useCallback(
+    (transform: string) => {
+      void boardPushControls.start({ transform, transition: { duration: 0 } });
+      boardPushControls.set({ transform });
+    },
+    [boardPushControls]
+  );
+
   const startContextPush = (dir: 'forward' | 'back', which: 'home' | 'office') => {
     pushContextRef.current = which;
     startBoardPush(dir, 'context');
@@ -1106,7 +1127,7 @@ function PageContent() {
 
   const startBoardPush = (dir: 'forward' | 'back', sheet: 'spaces' | 'personal' | 'context' = 'spaces') => {
     // Temporary: measure the first few List openings on a phone (lib/perfTrace.ts).
-    if (dir === 'forward') traceMoment('list-open', { main: '[data-trace="board-main"]' });
+    if (dir === 'forward') traceMoment('list-open', { main: '[data-trace="board-main"]', layer: '[data-trace="context-layer"]' });
     // TEMPORARY (2026-10-19): the way back too, for the DM → Home stutter.
     else traceMoment('push-back', { main: '[data-trace="board-main"]', layer: '[data-trace="context-layer"]' }, 1000);
     // Fetched chat data waits for the slide to finish (useChatStore's holdChatUpdates): the two frames
@@ -1124,7 +1145,19 @@ function PageContent() {
 
     // Forward: the board arrives from the right. Back: it leaves to the right, uncovering the
     // drawer settling in behind it.
-    boardPushControls.set({ x: back ? 0 : '100%' });
+    // `transform`, not framer's `x`, here and in every other push in the app (2026-11-13).
+    //
+    // framer-motion runs `x` in JavaScript: one style write per frame, on the main thread. A push is
+    // exactly when the main thread is busiest — the incoming screen mounts, its fetches answer, the
+    // outgoing one unmounts — so every long task in those 520ms was a visible skip. Several rounds of
+    // "hakker" were spent removing such tasks one at a time. `transform` (like `opacity`) is one of
+    // the few values framer hands to the browser as a native animation, which runs on the compositor
+    // and keeps moving while the main thread is busy.
+    //
+    // Two rules come with it. Never animate from or to `none` — framer cannot interpolate it and
+    // jumps — so every push sets an explicit translateX first. And do not mix `x`/`y`/`scale` with
+    // `transform` on one element: the shorthand values rebuild `transform` and overwrite it.
+    parkBoard(back ? 'translateX(0%)' : 'translateX(100%)');
 
     // Started on the next frame rather than immediately. Going back mounts the Spaces tree, which
     // is the most expensive render on mobile in this app — the one measured at 370ms of blocked
@@ -1147,23 +1180,32 @@ function PageContent() {
       if (boardPushSheetRef.current === 'context') {
         void contextLayerControls.start(
           back
-            ? { x: 0, opacity: 1, transition: { x: CHAT_PUSH_TRANSITION, opacity: { duration: (CHAT_PUSH_MS * 0.35) / 1000, ease: 'easeOut' } } }
+            ? {
+                transform: 'translateX(0%)',
+                opacity: 1,
+                transition: { transform: CHAT_PUSH_TRANSITION, opacity: { duration: (CHAT_PUSH_MS * 0.35) / 1000, ease: 'easeOut' } },
+              }
             : {
-                x: '-33%',
+                transform: 'translateX(-33%)',
                 opacity: [1, 1, 0],
-                transition: { x: CHAT_PUSH_TRANSITION, opacity: { duration: CHAT_PUSH_MS / 1000, times: [0, 0.78, 1], ease: 'linear' } },
+                transition: { transform: CHAT_PUSH_TRANSITION, opacity: { duration: CHAT_PUSH_MS / 1000, times: [0, 0.78, 1], ease: 'linear' } },
               }
         );
       }
       void boardPushControls
-        .start({ x: back ? '100%' : 0, transition: CHAT_PUSH_TRANSITION })
+        .start({ transform: back ? 'translateX(100%)' : 'translateX(0%)', transition: CHAT_PUSH_TRANSITION })
         // Ended by the animation's own completion, NOT by a timer running alongside it. A parallel
         // `setTimeout(CHAT_PUSH_MS)` finished a frame too early — because of the rAF delay above —
         // so the reset to x:0 fired while the movement was still running, and the movement then
         // drove the page straight back off the right edge. `.set()` does not cancel an animation in
         // flight; it only loses to it. That is what blanked Planner, Chat and Docs a second time.
         .then(() => {
-          if (!cancelled) setBoardPushing(false);
+          if (cancelled) return;
+          // The backstop below got there first: the push is already over and the effect that parks
+          // the page has already run. This completion has just written its final keyframe after it
+          // — x:100% on the way back — so park the page again, or it stays off the right edge.
+          if (safetyFired) parkBoard('none');
+          else setBoardPushing(false);
         });
       });
     });
@@ -1172,8 +1214,11 @@ function PageContent() {
     // settle — and `boardPushing` stuck true would leave the drawer mounted over the app with no
     // way to dismiss it. Deliberately longer than the movement so it never wins the race it is
     // insuring against.
+    let safetyFired = false;
     const safety = window.setTimeout(() => {
-      if (!cancelled) setBoardPushing(false);
+      if (cancelled) return;
+      safetyFired = true;
+      setBoardPushing(false);
     }, CHAT_PUSH_MS + 250);
 
     return () => {
@@ -1182,7 +1227,7 @@ function PageContent() {
       if (inner) cancelAnimationFrame(inner);
       window.clearTimeout(safety);
     };
-  }, [boardPushSeq, boardPushControls, contextLayerControls]);
+  }, [boardPushSeq, boardPushControls, contextLayerControls, parkBoard]);
 
   // THE BOARD MUST NEVER BE LEFT OFF-SCREEN, and this is the guarantee of it.
   //
@@ -1197,8 +1242,14 @@ function PageContent() {
   // somewhere off the edge. The drawer still covers it at that instant, so the correction is never
   // seen. Idempotent on the forward direction, which already finishes at 0.
   useEffect(() => {
-    if (!boardPushing) boardPushControls.set({ x: 0 });
-  }, [boardPushing, boardPushControls]);
+    if (boardPushing) return;
+    // stop() first: a native animation outlives a plain set() — the value is written, and the
+    // animation goes on drawing over it. `none` rather than translateX(0): a transform, even an
+    // empty one, makes <main> the containing block of every `position: fixed` element inside it and
+    // a stacking context of its own. At rest it must be neither.
+    boardPushControls.stop();
+    parkBoard('none');
+  }, [boardPushing, boardPushControls, parkBoard]);
 
   // Going back to the Spaces drawer, as the reverse of picking a List.
   //
@@ -5830,8 +5881,12 @@ function PageContent() {
           to, and matching <main>'s z-40 while moving is what puts both above the drawer. Checked
           for `position: fixed` descendants before wrapping it, as ever — there are none. */}
       <motion.header
+        // See parkBoard for why this is here.
+        initial={{ transform: 'none' }}
         animate={boardPushControls}
-        style={{ zIndex: boardPushing ? 40 : undefined }}
+        // willChange for the length of the push only: its own layer before the movement starts,
+        // rather than one the browser has to build on the first moving frame.
+        style={{ zIndex: boardPushing ? 40 : undefined, willChange: boardPushing ? 'transform' : undefined }}
         // px-5 on mobile, px-3 from md up: the title sat noticeably closer to the edge than anything
         // below it, which reads as the page starting before its own margin does.
         className="relative h-[calc(3.5rem+env(safe-area-inset-top))] pt-[env(safe-area-inset-top)] shrink-0 border-b-0 md:border-b border-neutral-800/80 bg-neutral-950 flex items-center px-5 md:px-3 gap-4"
@@ -6931,8 +6986,10 @@ function PageContent() {
           when idle so nothing else in the app has to reason about a permanently raised main. */}
       <motion.main
         data-trace="board-main"
+        // See parkBoard for why this is here.
+        initial={{ transform: 'none' }}
         animate={boardPushControls}
-        style={{ zIndex: boardPushing ? 40 : undefined }}
+        style={{ zIndex: boardPushing ? 40 : undefined, willChange: boardPushing ? 'transform' : undefined }}
         className="flex-1 flex flex-col h-full overflow-hidden bg-neutral-950 relative"
       >
         {/* Mobile: no border framing this row at all, and the same bg-neutral-950 as the title bar
@@ -7102,9 +7159,9 @@ function PageContent() {
               // left — the same fraction the outgoing pane travels. Enter and exit share it, so
               // going back the pill returns from the left alongside the list rather than arriving
               // from the opposite side.
-              initial={{ x: '-83%', opacity: 0 }}
-              animate={{ x: '-50%', opacity: 1 }}
-              exit={{ x: '-83%', opacity: 0 }}
+              initial={{ transform: 'translateX(-83%)', opacity: 0 }}
+              animate={{ transform: 'translateX(-50%)', opacity: 1 }}
+              exit={{ transform: 'translateX(-83%)', opacity: 0 }}
               transition={CHAT_PUSH_TRANSITION}
               className="md:hidden absolute left-1/2 top-1/2 -translate-y-1/2 w-[min(calc(100%-88px),420px)]">
               <button
@@ -7899,7 +7956,7 @@ function PageContent() {
                           // over it, on top for the whole journey ("starter 2/3 ferdig lukka").
                           className="absolute inset-0 z-0 overflow-y-auto px-3 py-3 pb-28 bg-neutral-900 rounded-t-2xl"
                           initial={false}
-                          animate={{ x: activeChatEntity ? '-33%' : 0 }}
+                          animate={{ transform: activeChatEntity ? 'translateX(-33%)' : 'translateX(0%)' }}
                           transition={CHAT_PUSH_TRANSITION}
                         >
                             <ChatSidebar
@@ -7931,9 +7988,9 @@ function PageContent() {
                             // inset drew a hard line across the top of the panel — "chatten klipper
                             // på en måte i toppen... hadde sett bedre hvis det gikk hele veien opp".
                             className="absolute inset-0 z-10 bg-neutral-950"
-                            initial={chatFromContext ? false : { x: '100%' }}
-                            animate={{ x: 0 }}
-                            exit={{ x: '100%' }}
+                            initial={chatFromContext ? false : { transform: 'translateX(100%)' }}
+                            animate={{ transform: 'translateX(0%)' }}
+                            exit={{ transform: 'translateX(100%)' }}
                             transition={CHAT_PUSH_TRANSITION}
                           >
                             <ChatPanel />
@@ -10567,7 +10624,9 @@ function PageContent() {
             // It was never visible for a single frame, which is why forward still looked exactly
             // like it had before the layer existed.
             initial={
-              boardPushDirRef.current === 'back' ? { x: '-33%', opacity: 0 } : { x: 0, opacity: 1 }
+              boardPushDirRef.current === 'back'
+                ? { transform: 'translateX(-33%)', opacity: 0 }
+                : { transform: 'translateX(0%)', opacity: 1 }
             }
             // Started by the push effect, on the same frame as the board — not on mount, when this
             // layer's first frames go to building it (see contextLayerControls).

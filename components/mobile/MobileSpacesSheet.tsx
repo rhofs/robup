@@ -285,18 +285,21 @@ export default function MobileSpacesSheet({
           // initial matters only for the arriving case: the drawer mounts the moment Back is
           // pressed, and without a starting offset it would simply appear and then have nothing
           // left to animate.
-          initial={pushingIn ? { x: '-33%', opacity: 0 } : false}
-          animate={pushingOut ? { x: '-33%', opacity: [1, 1, 0] } : { x: 0, opacity: 1 }}
+          // `transform` rather than framer's `x`, so the browser runs it off the main thread — see
+          // startBoardPush's effect in app/page.tsx. Nothing inside this sheet is `position: fixed`
+          // (its menus are portalled), so resting at translateX(0%) instead of `none` moves nothing.
+          initial={pushingIn ? { transform: 'translateX(-33%)', opacity: 0 } : false}
+          animate={pushingOut ? { transform: 'translateX(-33%)', opacity: [1, 1, 0] } : { transform: 'translateX(0%)', opacity: 1 }}
           transition={
             pushingOut
               ? {
-                  x: CHAT_PUSH_TRANSITION,
+                  transform: CHAT_PUSH_TRANSITION,
                   // Held at full opacity through 78% of the movement, then released — see above.
                   opacity: { duration: CHAT_PUSH_MS / 1000, times: [0, 0.78, 1], ease: 'linear' },
                 }
               : pushingIn
                 ? {
-                    x: CHAT_PUSH_TRANSITION,
+                    transform: CHAT_PUSH_TRANSITION,
                     // Solid quickly on the way in: it is the destination, and arriving faintly
                     // would read as the board having left something behind rather than as this
                     // page returning.

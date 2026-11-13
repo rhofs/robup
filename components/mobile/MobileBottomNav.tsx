@@ -452,17 +452,21 @@ export default function MobileBottomNav({
 
       <motion.div
         className="fixed inset-x-0 bottom-0 md:hidden"
-        animate={hidden ? { x: '-33%', opacity: [1, 1, 0] } : { x: 0, opacity: 1 }}
+        // `transform` rather than framer's `x`: the browser then runs it off the main thread, in step
+        // with the page it leaves with (see startBoardPush's effect in app/page.tsx). initial={false}
+        // because there is no animating from the `none` an element starts with — it mounts in place.
+        initial={false}
+        animate={hidden ? { transform: 'translateX(-33%)', opacity: [1, 1, 0] } : { transform: 'translateX(0%)', opacity: 1 }}
         transition={
           hidden
             ? {
-                x: { duration: CHAT_PUSH_MS / 1000, ease: CHAT_PUSH_EASE },
+                transform: { duration: CHAT_PUSH_MS / 1000, ease: CHAT_PUSH_EASE },
                 // Held opaque through most of the travel, then released — the nav should read as
                 // leaving with the page, not as dimming in place.
                 opacity: { duration: CHAT_PUSH_MS / 1000, times: [0, 0.78, 1], ease: 'linear' },
               }
             : {
-                x: { duration: CHAT_PUSH_MS / 1000, ease: CHAT_PUSH_EASE },
+                transform: { duration: CHAT_PUSH_MS / 1000, ease: CHAT_PUSH_EASE },
                 opacity: { duration: (CHAT_PUSH_MS * 0.35) / 1000, ease: 'easeOut' },
               }
         }

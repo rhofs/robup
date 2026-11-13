@@ -2483,6 +2483,25 @@ Picked up right after the office's "merged single island" popup-menu work (previ
 
 ## Known bugs / things to remember
 
+- **A slide must animate `transform`, not framer's `x` — and `controls.set()` must not be what
+  creates the value** (2026-11-13). framer-motion runs `x`/`y`/`scale` itself, in JavaScript, one
+  style write per frame on the main thread. Only `transform`, `opacity`, `clipPath` and `filter` are
+  handed to the browser (`element.animate`), which keeps moving while the main thread is busy. A
+  page push is exactly when it is busy, so every push driven by `x` skipped whenever a render or a
+  fetch landed in its 520ms — several rounds of "hakker" were spent removing such tasks one by one.
+  Three traps, none of which shows any error:
+  - `controls.set({ transform })` on a value framer has not seen yet creates it **without an owner
+    element**, and framer then silently animates it in JavaScript after all. The value must first
+    be created by `.start()`, a declarative `animate`, or an `initial` — see `parkBoard` in
+    `app/page.tsx`.
+  - Never animate from or to `none`: framer cannot interpolate it and jumps. Always an explicit
+    `translateX(…%)` on both ends.
+  - Do not mix `x`/`y`/`scale` with `transform` on one element — the shorthand rebuilds `transform`
+    and overwrites it. And `transform` at rest on `<main>` must be `none`: any transform makes it the
+    containing block of every `position: fixed` descendant.
+  Also true of this version (framer-motion 12.42): `onUpdate` or `transformTemplate` on the element
+  turns the native path off, as do `type: 'inertia'` and `repeatType: 'mirror'`.
+
 - **A background refetch must not land on top of this tab's own writes** (2026-10-27).
   `refetchTasks`/`refetchEvents` replace the whole list with the server's reply. A reply read while
   a create or edit from this tab was in flight is older than the screen: new rows vanished and edits
@@ -13826,3 +13845,66 @@ calendar to start once the keyboard is fully down, "bittelitt tregere".
   layout with the wider Dates field, and the clock opening from a task row inside the task window.
 
 **Deployed 2026-11-13 as `4ca2053`** (tag `deploy/2026-11-13_1004`). Web-only.
+
+### 2026-11-13 (continued) — the pushes stuttered because framer ran them on the main thread
+
+- **User:** "Kan du se over animasjonen til DM-> inn i en samtale og tilbake. Synes den hakker.
+  Gjerne se over de andre animasjonene og hvor den beveger seg fra høyre til venstre, inn i liste
+  osv." The same complaint as the three rounds on 2026-10-19, which each removed one slow task from
+  the slide and did not end it.
+- **Cause (found by reading framer-motion, not by measuring):** every push in the app animated
+  framer's `x` (`x: '100%'`, `x: '-33%'`). framer runs `x` in JavaScript — one style write per frame
+  on the main thread — so the slide stops for as long as anything else holds the main thread. The
+  earlier rounds were all true and all beside the point: there will always be another task. Only
+  `transform`, `opacity`, `clipPath` and `filter` are handed to the browser as a native animation,
+  which runs off the main thread.
+- **Built — every horizontal push now animates `transform: translateX(…%)` instead of `x`:**
+  - `app/page.tsx`: the board push (`<main>` + `<header>`, `boardPushControls`), the context layer
+    (`contextLayerControls` and its `initial`), the chat list (`-33%`) and the chat panel
+    (enter/exit `100%`), and the search pill.
+  - `components/mobile/MobileSpacesSheet.tsx` (the drawer's `-33%`) and
+    `components/mobile/MobileBottomNav.tsx` (the nav leaving with the page; `initial={false}` added
+    so it mounts in place rather than "animating" from `none`).
+  - Same duration and curve as before (`CHAT_PUSH_MS` 520, `CHAT_PUSH_EASE`); nothing about the
+    choreography was changed, only who runs it.
+  - `<main>`/`<header>` get `willChange: 'transform'` for the length of the push only, and rest at
+    `transform: none` (a transform at rest would make `<main>` the containing block of every fixed
+    element inside it).
+  - **`parkBoard`** (new, `app/page.tsx`): `.start({ transform, duration 0 })` followed by
+    `.set({ transform })`, with `initial={{ transform: 'none' }}` on both elements. The first version
+    of this change used a plain `.set()` and *still ran in JavaScript*: `.set()` creates the value
+    without an owner element and framer then quietly takes the JS path. Nothing on screen or in the
+    console says so; it was found by printing framer's decision in a test. Written up under "Known
+    bugs / things to remember".
+  - The end of a push is stricter than it was: the rest effect now `stop()`s before parking (a
+    native animation outlives a plain `set()`), and if the backstop timer ends the push before the
+    animation reports finished, the completion handler parks the page again — otherwise the late
+    finish writes `translateX(100%)` after the reset and the page stays off the right edge (the
+    blank-screen bug of October, in a new form).
+- **Traces:** `logs/client-traces.jsonl` on production had been full (2 MB) since 2026-10-19, and
+  the route dropped everything after that — so there were no traces for this report.
+  `app/api/debug/trace/route.ts` now rotates (full file → `client-traces.1.jsonl`, new file starts).
+  `lib/perfTrace.ts` also records each element's `Left` and its number of browser-run animations
+  (`mainAnim`, `layerAnim`, `panelAnim`, `listAnim`): **0 during a push means framer fell back to
+  JavaScript.** From now on a long `dt` in a trace says the main thread was busy, not that the slide
+  looked bad — the two are no longer the same thing, which is the point of the change.
+- **Verified:** typecheck; lint unchanged (page.tsx 74, MobileBottomNav 18, MobileSpacesSheet 2 —
+  all as before). A jsdom script with a stand-in `element.animate` (not in the repo; no test runner
+  here) showing that framer calls it for `<main>` with `['translateX(100%)','translateX(0%)']`,
+  520ms, `cubic-bezier(0.42, 0, 0.18, 1)`; that the old `x` never reaches it; that the list, panel
+  (enter and exit), nav and context layer all take the native path; that an interrupted push is
+  cancelled and parked at `none`; and that the backstop-first race ends at `none`.
+- **Not verified — and this matters:** nothing was seen on a phone or in any browser. jsdom has no
+  compositor, so "smooth" is an inference from how browsers treat `transform` animations, not an
+  observation. Percent translates on an element with `will-change: transform` are composited in
+  Chrome/WebView; not checked on iOS Safari. **First thing next session: read the new traces** — the
+  `…Anim` counts say whether the native path is really taken on the device.
+- **Left alone on purpose:**
+  - Bottom sheets and other `y`/`scale` animations (`y: '100%'` etc.). Same mechanism, so the same
+    fix would apply, but they are a different family with their own rest-state risks (fixed
+    children, drag gestures that need `y` as a motion value). Offered as a follow-up, not built.
+  - The ~100–120ms between the tap and the first moving frame (React committing the incoming
+    screen). That is a late start, not a stutter, and is untouched.
+  - The two-frame delay before the board starts moving. It was added so the slide's first frames
+    did not compete with the mount; with the browser running the slide it may no longer be needed,
+    but removing it without seeing a phone would be a guess.
