@@ -13908,3 +13908,5 @@ calendar to start once the keyboard is fully down, "bittelitt tregere".
   - The two-frame delay before the board starts moving. It was added so the slide's first frames
     did not compete with the mount; with the browser running the slide it may no longer be needed,
     but removing it without seeing a phone would be a guess.
+
+**Deployed 2026-11-13 as `d709d30`** (tag `deploy/2026-11-13_1401`). Web-only.
