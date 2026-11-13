@@ -13781,3 +13781,5 @@ calendar to start once the keyboard is fully down, "bittelitt tregere".
   Robin to judge. The top hour/minute boxes were deliberately left as they were.
 - **Considered and left:** a filled (white) active time box like the knob — three white blocks with
   Save seemed heavy, and it could not be looked at. A sans-serif face instead of mono — same reason.
+
+**Deployed 2026-11-13 as `7560b4f`** (tag `deploy/2026-11-13_0942`). Web-only.
