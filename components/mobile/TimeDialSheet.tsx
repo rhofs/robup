@@ -2,27 +2,95 @@
 
 import SheetLayer from './SheetLayer';
 import { useSheetDrag } from './sheetDrag';
-import { useRef, useState } from 'react';
-import { motion } from 'framer-motion';
+import { useEffect, useRef, useState } from 'react';
+import { AnimatePresence, animate, motion, useMotionTemplate, useMotionValue, useTransform } from 'framer-motion';
 import { fullViewportBox, liveOverlayStyle, overlayStyle, useVisibleViewport } from '../../hooks/useVisibleViewport';
 import { X } from 'lucide-react';
 import { hapticTap } from '../../lib/haptics';
 import { closeOnBackdrop } from '../../lib/backdrop';
+import {
+  DIAL_CENTER as C,
+  DIAL_SIZE as SIZE,
+  INNER_RING as INNER,
+  KNOB_RADIUS,
+  OUTER_RING as OUTER,
+  handTarget,
+  hourAt,
+  minuteAt,
+  pointOnDial,
+  shortestTurn,
+  type DialMode,
+} from '../../lib/clockHand';
 
 // "Pick time": a 24-hour clock face, modelled on ClickUp's (the user's screenshot). Hours on two
 // rings — 1–12 outside, 13–23 and 0 inside, each under the hour it shares a position with — then
 // minutes on one ring. Tap or drag; lifting a finger on an hour moves on to the minutes, the way
 // Android's own clock picker does. The two boxes on top switch between hour and minute by hand.
+//
+// How the hand is drawn (2026-11-13, after "streken kommer umiddelbart … mens ballen kommer etter"):
+// one animated angle and one animated length (lib/clockHand.ts), and everything that moves — the
+// line, the knob, the dot inside it — is computed from those two on the same frame. Before, the line
+// was plain SVG that jumped to the new time while the knob was a separate element springing after it.
+//
+// The knob is not an element carrying a number. It is a second copy of the whole face in the knob's
+// colours, clipped to a circle that travels with the hand — so the numbers never move or swap; the
+// knob passes over them and they change colour underneath it.
 
-const SIZE = 280;
-const C = SIZE / 2;
-const OUTER = SIZE * 0.4;
-const INNER = SIZE * 0.265;
 const pad = (n: number) => String(n).padStart(2, '0');
 
-function pointAt(index: number, radius: number) {
-  const a = (index / 12) * 2 * Math.PI;
-  return { x: C + radius * Math.sin(a), y: C - radius * Math.cos(a) };
+// A press or a change of ring/mode: the hand sweeps there, with a hint of weight.
+const SETTLE = { type: 'spring', stiffness: 380, damping: 32 } as const;
+// Under a dragging finger: critically damped and quick, so it keeps up without wobbling.
+const FOLLOW = { type: 'spring', stiffness: 1400, damping: 75 } as const;
+// How long the hand rests on a picked hour before the face turns to minutes — long enough to see it
+// land, short enough not to be waited for.
+const ADVANCE_MS = 260;
+
+const LABEL = 'absolute -translate-x-1/2 -translate-y-1/2 font-mono tabular-nums';
+
+// The numbers of the face, once per colour scheme: 'face' as they normally look, 'knob' as they look
+// under the knob. Hour and minute sets cross-fade when the mode changes.
+function DialLabels({ mode, tone }: { mode: DialMode; tone: 'face' | 'knob' }) {
+  const strong = tone === 'knob' ? 'text-neutral-900' : 'text-app-strong';
+  const soft = tone === 'knob' ? 'text-neutral-900' : 'text-neutral-400';
+  const at = (deg: number, r: number) => {
+    const p = pointOnDial(deg, r);
+    return { left: p.x, top: p.y };
+  };
+  return (
+    <AnimatePresence initial={false}>
+      <motion.div
+        key={mode}
+        className="absolute inset-0"
+        initial={{ opacity: 0, scale: 0.92 }}
+        animate={{ opacity: 1, scale: 1 }}
+        exit={{ opacity: 0, scale: 1.06 }}
+        transition={{ duration: 0.18, ease: 'easeOut' }}
+      >
+        {mode === 'hour'
+          ? Array.from({ length: 12 }, (_, i) => (
+              <div key={i} className="contents">
+                <span className={`${LABEL} text-[15px] ${strong}`} style={at(i * 30, OUTER)}>
+                  {i === 0 ? 12 : i}
+                </span>
+                <span className={`${LABEL} text-[13px] ${soft}`} style={at(i * 30, INNER)}>
+                  {i === 0 ? '00' : i + 12}
+                </span>
+              </div>
+            ))
+          : Array.from({ length: 60 }, (_, i) =>
+              i % 5 === 0 ? (
+                <span key={i} className={`${LABEL} text-[15px] ${strong}`} style={at(i * 6, OUTER)}>
+                  {pad(i)}
+                </span>
+              ) : tone === 'face' ? (
+                // The minutes in between, as marks to aim at.
+                <span key={i} className="absolute -translate-x-1/2 -translate-y-1/2 w-[3px] h-[3px] rounded-full bg-neutral-600" style={at(i * 6, OUTER)} />
+              ) : null
+            )}
+      </motion.div>
+    </AnimatePresence>
+  );
 }
 
 export default function TimeDialSheet({
@@ -46,40 +114,66 @@ export default function TimeDialSheet({
   const visible = useVisibleViewport();
   const [h, setH] = useState(initial?.h ?? 9);
   const [m, setM] = useState(initial?.m ?? 0);
-  const [mode, setMode] = useState<'hour' | 'minute'>('hour');
+  const [mode, setMode] = useState<DialMode>('hour');
   const dialRef = useRef<HTMLDivElement>(null);
   const dragging = useRef(false);
+  // True once a press has turned into a drag — the hand then follows (FOLLOW) rather than sweeps.
+  const following = useRef(false);
+  const advance = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const target = handTarget(mode, h, m);
+  const angle = useMotionValue(target.deg);
+  const reach = useMotionValue(target.r);
+  const x = useTransform(() => C + reach.get() * Math.sin((angle.get() * Math.PI) / 180));
+  const y = useTransform(() => C - reach.get() * Math.cos((angle.get() * Math.PI) / 180));
+  const knobClip = useMotionTemplate`circle(${KNOB_RADIUS}px at ${x}px ${y}px)`;
+
+  // The angle the hand has been sent to, whole turns included — see shortestTurn.
+  const turned = useRef(target.deg);
+  useEffect(() => {
+    turned.current += shortestTurn(turned.current, target.deg);
+    const spring = following.current ? FOLLOW : SETTLE;
+    const running = [animate(angle, turned.current, spring), animate(reach, target.r, spring)];
+    return () => running.forEach((a) => a.stop());
+  }, [target.deg, target.r, angle, reach]);
+
+  const cancelAdvance = () => {
+    if (advance.current) clearTimeout(advance.current);
+    advance.current = null;
+  };
+  useEffect(() => cancelAdvance, []);
+
+  const goTo = (next: DialMode) => {
+    cancelAdvance();
+    setMode(next);
+  };
 
   // Where on the face a pointer is, as an angle from 12 o'clock (clockwise) and a distance from the
   // centre — which ring it is on decides whether 3 means 3 or 15.
-  const pick = (clientX: number, clientY: number, commit: boolean) => {
+  const pick = (clientX: number, clientY: number) => {
     const box = dialRef.current?.getBoundingClientRect();
     if (!box) return;
-    const dx = clientX - (box.left + box.width / 2);
-    const dy = clientY - (box.top + box.height / 2);
     const scale = SIZE / box.width;
-    const dist = Math.hypot(dx, dy) * scale;
-    const angle = (Math.atan2(dx, -dy) * 180) / Math.PI;
-    const deg = (angle + 360) % 360;
+    const dx = (clientX - (box.left + box.width / 2)) * scale;
+    const dy = (clientY - (box.top + box.height / 2)) * scale;
     if (mode === 'hour') {
-      const idx = Math.round(deg / 30) % 12;
-      const inner = dist < (OUTER + INNER) / 2;
-      const hour = inner ? (idx === 0 ? 0 : idx + 12) : idx === 0 ? 12 : idx;
+      const hour = hourAt(dx, dy);
       if (hour !== h) hapticTap();
       setH(hour);
-      if (commit) setMode('minute');
     } else {
-      const minute = Math.round(deg / 6) % 60;
+      const minute = minuteAt(dx, dy);
       if (minute !== m && minute % 5 === 0) hapticTap();
       setM(minute);
     }
   };
 
-  const handPoint =
-    mode === 'hour'
-      ? pointAt(h % 12, h === 0 || h > 12 ? INNER : OUTER)
-      : pointAt(m / 5, OUTER);
-  const selectedLabel = mode === 'hour' ? String(h) : pad(m);
+  const release = (e: React.PointerEvent, pickToo: boolean) => {
+    if (!dragging.current) return;
+    dragging.current = false;
+    following.current = false;
+    if (pickToo) pick(e.clientX, e.clientY);
+    if (pickToo && mode === 'hour') advance.current = setTimeout(() => setMode('minute'), ADVANCE_MS);
+  };
 
   const inner = (
     <>
@@ -91,14 +185,14 @@ export default function TimeDialSheet({
           </button>
         </div>
 
-        <div className="flex items-center justify-center gap-3 pt-2 pb-5 font-mono">
+        <div className="flex items-center justify-center gap-3 pt-2 pb-5 font-mono tabular-nums">
           {(['hour', 'minute'] as const).map((which, i) => (
             <div key={which} className="contents">
-              {i === 1 && <span className="text-2xl font-semibold text-app-strong">:</span>}
+              {i === 1 && <span className="text-2xl font-semibold text-neutral-500">:</span>}
               <button
-                onClick={() => setMode(which)}
+                onClick={() => goTo(which)}
                 className={`w-16 h-16 rounded-2xl text-[26px] font-semibold text-app-strong cursor-pointer transition ${
-                  mode === which ? 'bg-neutral-800 ring-2 ring-app-strong' : 'bg-neutral-800/60'
+                  mode === which ? 'bg-neutral-800 ring-2 ring-app-strong' : 'bg-neutral-800/60 hover:bg-neutral-800'
                 }`}
               >
                 {which === 'hour' ? pad(h) : pad(m)}
@@ -110,61 +204,41 @@ export default function TimeDialSheet({
         <div className="flex justify-center">
           <div
             ref={dialRef}
-            className="relative rounded-full bg-neutral-800/50 touch-none select-none"
+            className="relative rounded-full bg-neutral-800/50 ring-1 ring-inset ring-neutral-700/40 touch-none select-none cursor-pointer"
             style={{ width: SIZE, height: SIZE }}
             onPointerDown={(e) => {
+              cancelAdvance();
               dragging.current = true;
-              (e.target as HTMLElement).setPointerCapture?.(e.pointerId);
-              pick(e.clientX, e.clientY, false);
+              following.current = false;
+              e.currentTarget.setPointerCapture?.(e.pointerId);
+              pick(e.clientX, e.clientY);
             }}
-            onPointerMove={(e) => dragging.current && pick(e.clientX, e.clientY, false)}
-            onPointerUp={(e) => {
+            onPointerMove={(e) => {
               if (!dragging.current) return;
-              dragging.current = false;
-              pick(e.clientX, e.clientY, true);
+              following.current = true;
+              pick(e.clientX, e.clientY);
             }}
+            onPointerUp={(e) => release(e, true)}
+            onPointerCancel={(e) => release(e, false)}
           >
             <svg width={SIZE} height={SIZE} className="absolute inset-0 pointer-events-none">
-              <line x1={C} y1={C} x2={handPoint.x} y2={handPoint.y} className="stroke-app-strong" strokeWidth={2} />
-              <circle cx={C} cy={C} r={4} className="fill-neutral-900 stroke-app-strong" strokeWidth={2} />
+              <motion.line x1={C} y1={C} x2={x} y2={y} className="stroke-app-strong" strokeWidth={2} strokeLinecap="round" />
+              <circle cx={C} cy={C} r={3.5} className="fill-app-strong" />
             </svg>
-            <motion.div
-              className="absolute w-11 h-11 -ml-[22px] -mt-[22px] rounded-full bg-app-strong text-neutral-900 flex items-center justify-center text-[15px] font-semibold font-mono pointer-events-none"
-              animate={{ left: handPoint.x, top: handPoint.y }}
-              transition={{ type: 'spring', stiffness: 600, damping: 40 }}
-            >
-              {selectedLabel}
+            <div className="absolute inset-0 pointer-events-none">
+              <DialLabels mode={mode} tone="face" />
+            </div>
+            <motion.div className="absolute inset-0 rounded-full bg-app-strong pointer-events-none" style={{ clipPath: knobClip }}>
+              <DialLabels mode={mode} tone="knob" />
+              {/* A minute between two numbers has nothing under the knob to show — mark its centre. */}
+              <motion.span
+                className="absolute left-0 top-0 -ml-[3px] -mt-[3px] w-1.5 h-1.5 rounded-full bg-neutral-900"
+                style={{ x, y }}
+                initial={false}
+                animate={{ opacity: mode === 'minute' && m % 5 !== 0 ? 1 : 0 }}
+                transition={{ duration: 0.12 }}
+              />
             </motion.div>
-            {mode === 'hour'
-              ? Array.from({ length: 12 }, (_, i) => {
-                  const outer = pointAt(i, OUTER);
-                  const inner = pointAt(i, INNER);
-                  const outerLabel = i === 0 ? 12 : i;
-                  const innerLabel = i === 0 ? 0 : i + 12;
-                  return (
-                    <div key={i} className="contents">
-                      {outerLabel !== h && (
-                        <span className="absolute -translate-x-1/2 -translate-y-1/2 text-[15px] font-mono text-app-strong pointer-events-none" style={{ left: outer.x, top: outer.y }}>
-                          {outerLabel}
-                        </span>
-                      )}
-                      {innerLabel !== h && (
-                        <span className="absolute -translate-x-1/2 -translate-y-1/2 text-[13px] font-mono text-neutral-400 pointer-events-none" style={{ left: inner.x, top: inner.y }}>
-                          {innerLabel}
-                        </span>
-                      )}
-                    </div>
-                  );
-                })
-              : Array.from({ length: 12 }, (_, i) => {
-                  const p = pointAt(i, OUTER);
-                  const label = pad(i * 5);
-                  return label === pad(m) ? null : (
-                    <span key={i} className="absolute -translate-x-1/2 -translate-y-1/2 text-[15px] font-mono text-app-strong pointer-events-none" style={{ left: p.x, top: p.y }}>
-                      {label}
-                    </span>
-                  );
-                })}
           </div>
         </div>
 

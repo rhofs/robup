@@ -13733,3 +13733,51 @@ calendar to start once the keyboard is fully down, "bittelitt tregere".
 - Built; not seen in a browser.
 
 **Deployed 2026-11-11 as `dad190c`** (tag `deploy/2026-11-11_1217`). Web-only.
+
+### 2026-11-13 — question: does Google sign-in work for new people? (answered, nothing built)
+
+- **User:** "Funker innlogging med google nå, for nye?"
+- **Checked:** `https://siqt.no/api/auth/providers` lists `google` with callback
+  `https://siqt.no/api/auth/callback/google` — the https URI that was kept in the OAuth client.
+- **Answer given:** the server side is ready; who gets in depends on the OAuth app's publishing status
+  in Google Cloud. In "Testing", only the listed test users (9 at the time); anyone else is blocked by
+  Google before reaching Siqt. "In production": anyone, behind the "Google hasn't verified this app"
+  warning, up to 100 users before verification. A new person lands in an empty account until invited
+  to a workspace.
+- **Not confirmed:** whether "Publish app" has gone through — Robin was asked and has not said. Not
+  tested with a real new Google account either (cannot be scripted).
+
+### 2026-11-13 (continued) — the "Pick time" clock face: hand and knob move as one, and a cleaner look
+
+- **User:** the clock when picking a time on a task is "litt off" and "ikke super pen"; dragging the
+  hand from the inner ring outwards, "streken kommer umiddelbart, så den blinker liksom, mens ballen
+  kommer etter" — same when changing the time: the line goes before the ball.
+- **Cause:** in `components/mobile/TimeDialSheet.tsx` the line was plain SVG drawn straight from
+  state (jumped at once), while the knob was a separate `motion.div` springing `left`/`top` after it.
+  Two elements, two clocks.
+- **Built:**
+  - `lib/clockHand.ts` (new): the face's geometry. The hand is an **angle and a length**, not an x/y
+    point; `shortestTurn` keeps a running angle so 55 → 05 goes over the top, not back through 30.
+  - The component animates those two motion values (`animate()` springs) and derives the line's end,
+    the knob and the dot from them — one source, same frame. Animating the angle also makes the hand
+    sweep round the face instead of cutting across it.
+  - Two springs: `SETTLE` for a press or a mode change (a sweep), `FOLLOW` (critically damped, fast)
+    once a press has become a drag.
+  - The knob is no longer an element carrying a number: it is a second copy of the face in the knob's
+    colours, clipped (`clip-path: circle(…)`) to a circle that travels with the hand. Numbers stay
+    put and change colour as the knob passes — the Material clock's technique.
+  - Looks: round-capped hand, solid pivot, a faint ring round the face, small marks for the minutes
+    between the numbers, a dot in the knob on an in-between minute (the exact value is in the box
+    above), hour/minute numbers cross-fade on mode change, `00` instead of `0` on the inner ring.
+  - After picking an hour the hand rests there 260 ms before the face turns to minutes (it used to
+    switch on the same frame, so a tapped hour was never seen landing).
+  - `pointercancel` is handled (a cancelled touch no longer leaves the dial "dragging").
+- **Verified:** typecheck, lint, and a jsdom run of the real component (not kept in the repo — there
+  is no test runner here): the line's end and the knob's centre never differ by more than 0.01 px
+  while sampled through a ring change, a 0 → 37 minute drag and a 55 → 05 wrap; the hour → minute
+  hand-over; Save returns the picked time.
+- **Not verified:** how it *looks*. This server has no browser, so nothing was seen — colours, the
+  clip-path knob on iOS Safari / Android WebView, and whether the springs feel right are all for
+  Robin to judge. The top hour/minute boxes were deliberately left as they were.
+- **Considered and left:** a filled (white) active time box like the knob — three white blocks with
+  Save seemed heavy, and it could not be looked at. A sans-serif face instead of mono — same reason.
