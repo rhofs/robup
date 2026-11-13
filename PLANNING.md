@@ -13972,3 +13972,5 @@ calendar to start once the keyboard is fully down, "bittelitt tregere".
   after a second. The earlier push script still passes.
 - **Not verified:** not seen on a device. The next traces answer it directly — `navLeft` and
   `layerLeft` should now move on the same frames.
+
+**Deployed 2026-11-13 as `01fd6f8`** (tag `deploy/2026-11-13_1425`). Web-only.
