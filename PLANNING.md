@@ -13974,3 +13974,10 @@ calendar to start once the keyboard is fully down, "bittelitt tregere".
   `layerLeft` should now move on the same frames.
 
 **Deployed 2026-11-13 as `01fd6f8`** (tag `deploy/2026-11-13_1425`). Web-only.
+
+**Confirmed by Robin on his phone, 2026-11-13, on `01fd6f8`:** "Nå virker det endelig som det funker
+som det skal." That covers both rounds as he sees them — the pushes no longer stutter, and the nav
+and the background move together. Still open from the entries above, none of it started: the
+190–250ms from tap to first frame on Android, the ~60ms the slide skips at its start, and the
+iPhone whose whole app sat 14px left / 12px up (the new `scrollX`/`docW`/`navLeft` trace fields
+have not been read yet). Bottom sheets and other `y`/`scale` animations still run in JavaScript.
