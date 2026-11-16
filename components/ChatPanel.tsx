@@ -11,7 +11,8 @@ import ChatComposerInput from './ChatComposerInput';
 import { chatMentionScope } from '../lib/chatMentionScope';
 import EmojiPicker from './EmojiPicker';
 import { useChatChannelConnection } from '../lib/collab/useChatChannelConnection';
-import { uploadChatFile } from '../lib/uploadChatFile';
+import { usePendingAttachments } from '../hooks/usePendingAttachments';
+import PendingAttachmentsBar from './PendingAttachmentsBar';
 import { formatBytes } from '../lib/formatBytes';
 import FloatingPopover from './FloatingPopover';
 import { useIsMobile } from '../hooks/useIsMobile';
@@ -31,50 +32,6 @@ const COMPOSER_MAX_HEIGHT_PX = 160;
 const QUICK_REACTIONS = ['👍', '❤️', '😂', '😮', '😢', '🎉', '🙏', '👀'];
 
 const GROUP_WINDOW_MS = 5 * 60 * 1000;
-// Client-side mirror of app/api/uploads/image/route.ts's own two allowlists/caps — rejects
-// obviously bad picks before ever hitting the network; the route re-validates both independently
-// regardless (this is purely a faster/friendlier failure for the composer, not the real gate).
-const MAX_IMAGE_BYTES = 8 * 1024 * 1024;
-const MAX_FILE_BYTES = 20 * 1024 * 1024;
-const ALLOWED_IMAGE_TYPES = new Set(['image/png', 'image/jpeg', 'image/gif', 'image/webp']);
-const ALLOWED_FILE_TYPES = new Set([
-  'application/pdf',
-  'application/msword',
-  'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
-  'application/vnd.ms-excel',
-  'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
-  'application/vnd.ms-powerpoint',
-  'application/vnd.openxmlformats-officedocument.presentationml.presentation',
-  'text/plain',
-  'text/csv',
-  'application/zip',
-  'application/x-zip-compressed',
-  'application/vnd.rar',
-  'application/x-7z-compressed',
-  'audio/mpeg',
-  'audio/wav',
-  'video/mp4',
-  'video/quicktime',
-]);
-
-// Shared by the file-input onChange handler and the drag-and-drop onDrop handler — both end up
-// with a plain File and need the exact same validate-then-preview treatment. Exported so
-// ChatThreadPanel.tsx's composer can reuse the exact same allowlists/caps instead of maintaining
-// its own copy.
-export type PickedAttachment = { file: File; kind: 'image' | 'file'; previewUrl: string | null };
-
-export function validatePickedFile(file: File): { kind: 'image' | 'file' } | { error: string } {
-  if (ALLOWED_IMAGE_TYPES.has(file.type)) {
-    if (file.size > MAX_IMAGE_BYTES) return { error: 'Image is too large (max 8MB)' };
-    return { kind: 'image' };
-  }
-  if (ALLOWED_FILE_TYPES.has(file.type)) {
-    if (file.size > MAX_FILE_BYTES) return { error: 'File is too large (max 20MB)' };
-    return { kind: 'file' };
-  }
-  return { error: 'Unsupported file type' };
-}
-
 function dayLabel(iso: string): string {
   const d = new Date(iso);
   const dk = dateKey(d);
@@ -207,14 +164,11 @@ export default function ChatPanel() {
   const [emojiOpen, setEmojiOpen] = useState(false);
   const emojiButtonRef = useRef<HTMLButtonElement>(null);
   const insertIntoComposer = useRef<((text: string) => void) | null>(null);
-  // Media (Phase 6) + generic files (this pass). Picked but not-yet-sent attachment — shows a
-  // local blob-URL preview immediately for images (before any network call), uploaded only once
-  // the user actually hits Send, same "don't touch the network until the user commits" convention
-  // CollabDocEditor's own image picker uses. previewUrl is null for a non-image file — no useful
-  // thumbnail to show, just an icon + filename + size.
-  const [pendingAttachment, setPendingAttachment] = useState<PickedAttachment | null>(null);
-  const [attachmentError, setAttachmentError] = useState<string | null>(null);
-  const [uploadingAttachment, setUploadingAttachment] = useState(false);
+  // Picked, dropped or pasted but not yet sent — previews straight away, uploaded only once the
+  // user actually hits Send, same "don't touch the network until the user commits" convention
+  // CollabDocEditor's own image picker uses. Several per message; see the hook.
+  const attachments = usePendingAttachments();
+  const { add: addAttachments, clear: clearAttachments } = attachments;
   const fileInputRef = useRef<HTMLInputElement>(null);
   // Drag-and-drop over the whole panel (message list + composer), Discord/Slack-style. A counter,
   // not a boolean — dragenter/dragleave fire on every nested element a dragged file passes over,
@@ -470,17 +424,8 @@ export default function ChatPanel() {
   useEffect(() => {
     if (activeChannelId) fetchMessages(activeChannelId);
     setReplyTarget(null);
-    setPendingAttachment(null);
-    setAttachmentError(null);
-  }, [activeChannelId, fetchMessages]);
-
-  // Blob URLs are only good for this tab's lifetime — revoke on replace/unmount so a run of
-  // picked-then-discarded images doesn't quietly leak memory.
-  useEffect(() => {
-    return () => {
-      if (pendingAttachment?.previewUrl) URL.revokeObjectURL(pendingAttachment.previewUrl);
-    };
-  }, [pendingAttachment]);
+    clearAttachments();
+  }, [activeChannelId, fetchMessages, clearAttachments]);
 
   const onRealtimeSignal = useCallback(() => {
     if (activeChannelId) fetchMessages(activeChannelId);
@@ -503,29 +448,10 @@ export default function ChatPanel() {
     }
   };
 
-  const processPickedFile = (file: File) => {
-    setAttachmentError(null);
-    const result = validatePickedFile(file);
-    if ('error' in result) {
-      setAttachmentError(result.error);
-      return;
-    }
-    setPendingAttachment((prev) => {
-      if (prev?.previewUrl) URL.revokeObjectURL(prev.previewUrl);
-      return { file, kind: result.kind, previewUrl: result.kind === 'image' ? URL.createObjectURL(file) : null };
-    });
-  };
-
   const handleFileInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
+    const files = Array.from(e.target.files ?? []);
     e.target.value = ''; // lets picking the exact same file again re-fire onChange
-    if (file) processPickedFile(file);
-  };
-
-  const clearPendingAttachment = () => {
-    if (pendingAttachment?.previewUrl) URL.revokeObjectURL(pendingAttachment.previewUrl);
-    setPendingAttachment(null);
-    setAttachmentError(null);
+    addAttachments(files);
   };
 
   // Drag-and-drop over the whole panel. preventDefault on dragOver is required for onDrop to ever
@@ -552,23 +478,17 @@ export default function ChatPanel() {
     e.preventDefault();
     dragCounterRef.current = 0;
     setDragActive(false);
-    const file = e.dataTransfer.files?.[0];
-    if (file) processPickedFile(file);
+    addAttachments(Array.from(e.dataTransfer.files ?? []));
   };
 
   const handleSend = async () => {
     const trimmed = draft.trim();
     // An attachment-only message (no text) is valid, same as Discord/Slack.
-    if ((!trimmed && !pendingAttachment) || !activeChannelId || sending || uploadingAttachment) return;
+    if ((!trimmed && attachments.items.length === 0) || !activeChannelId || sending || attachments.uploading) return;
     setSending(true);
     try {
-      let attachment: { url: string; fileName: string; byteSize: number; kind: 'image' | 'file' } | undefined;
-      if (pendingAttachment) {
-        setUploadingAttachment(true);
-        attachment = await uploadChatFile(pendingAttachment.file);
-        setUploadingAttachment(false);
-      }
-      const sent = await postMessage(activeChannelId, { body: trimmed, quotedMessageId: replyTarget?.id, attachment });
+      const uploaded = await attachments.uploadAll();
+      const sent = await postMessage(activeChannelId, { body: trimmed, quotedMessageId: replyTarget?.id, attachments: uploaded });
       if (sent) {
         // "Chat scroller ikke automatisk ned når jeg sender ny meld i DMs" (desktop, 2026-10-23): the
         // message effect above does this too, but sending is the one moment it must not be missed.
@@ -576,11 +496,15 @@ export default function ChatPanel() {
         setDraft('');
         if (activeChannelId) delete chatDrafts[activeChannelId];
         setReplyTarget(null);
-        clearPendingAttachment();
+        clearAttachments();
+      } else if (uploaded.length > 0) {
+        // The files are up but the message was refused. Saying nothing here used to be survivable
+        // with one small image; after waiting for six photos to upload it is not. What was
+        // uploaded is remembered, so pressing Send again does not send the files twice.
+        attachments.setError('Could not send — try again');
       }
     } catch (err) {
-      setAttachmentError(err instanceof Error ? err.message : 'Upload failed');
-      setUploadingAttachment(false);
+      attachments.setError(err instanceof Error ? err.message : 'Upload failed');
     } finally {
       setSending(false);
     }
@@ -864,33 +788,18 @@ export default function ChatPanel() {
           </button>
         </div>
       )}
-      {pendingAttachment && (
-        <div
-          className={`flex items-center gap-2 px-2.5 py-1.5 border border-b-0 border-neutral-800 bg-neutral-900/80 ${
-            replyTarget ? '' : 'rounded-t-xl mt-2'
-          }`}
-        >
-          {pendingAttachment.previewUrl ? (
-            <img src={pendingAttachment.previewUrl} alt="" className="w-9 h-9 rounded object-cover border border-neutral-700 shrink-0" />
-          ) : (
-            <span className="w-9 h-9 rounded bg-neutral-800 border border-neutral-700 shrink-0 flex items-center justify-center text-neutral-400">
-              <FileText className="w-4 h-4" />
-            </span>
-          )}
-          <span className="min-w-0 flex-1 truncate text-[11px] text-neutral-400">
-            {pendingAttachment.file.name} <span className="text-neutral-600">· {formatBytes(pendingAttachment.file.size)}</span>
-          </span>
-          <button onClick={clearPendingAttachment} title="Remove attachment" className="shrink-0 text-neutral-500 hover:text-neutral-200 cursor-pointer">
-            <X className="w-3 h-3" />
-          </button>
-        </div>
-      )}
-      {attachmentError && <p className="text-[11px] text-red-400 mt-2 px-1">{attachmentError}</p>}
+      <PendingAttachmentsBar
+        items={attachments.items}
+        onRemove={attachments.remove}
+        busy={attachments.uploading}
+        className={`px-2.5 py-2 border border-b-0 border-neutral-800 bg-neutral-900/80 ${replyTarget ? '' : 'rounded-t-xl mt-2'}`}
+      />
+      {attachments.error && <p className="text-[11px] text-red-400 mt-2 px-1">{attachments.error}</p>}
       <div
         className={`flex items-end gap-2 border border-neutral-800 bg-neutral-900/80 focus-within:border-blue-500/60 transition ${
           isMobile ? 'px-3 py-2.5 backdrop-blur-sm' : 'px-2.5 py-2'
         } ${
-          replyTarget || pendingAttachment
+          replyTarget || attachments.items.length > 0
             ? isMobile
               ? 'rounded-b-[26px]'
               : 'rounded-b-xl'
@@ -902,7 +811,7 @@ export default function ChatPanel() {
               : 'rounded-xl mt-2'
         }`}
       >
-        <input ref={fileInputRef} type="file" onChange={handleFileInputChange} className="hidden" />
+        <input ref={fileInputRef} type="file" multiple onChange={handleFileInputChange} className="hidden" />
         {!isMobile && (
           <div className="relative shrink-0">
             {emojiOpen && (
@@ -932,7 +841,7 @@ export default function ChatPanel() {
         )}
         <button
           onClick={() => fileInputRef.current?.click()}
-          title="Attach a file or image"
+          title="Attach files or images"
           className="shrink-0 w-7 h-7 rounded-lg flex items-center justify-center text-neutral-500 hover:text-blue-400 hover:bg-neutral-800/60 cursor-pointer transition"
         >
           <Paperclip className="w-4 h-4" />
@@ -955,10 +864,11 @@ export default function ChatPanel() {
           getGroupMentions={() => mentionScope.groups}
           maxHeight={COMPOSER_MAX_HEIGHT_PX}
           insertRef={insertIntoComposer}
+          onPasteFiles={addAttachments}
         />
         <button
           onClick={handleSend}
-          disabled={(!draft.trim() && !pendingAttachment) || sending || uploadingAttachment}
+          disabled={(!draft.trim() && attachments.items.length === 0) || sending || attachments.uploading}
           title="Send"
           className="shrink-0 w-7 h-7 rounded-lg flex items-center justify-center bg-blue-600 hover:bg-blue-500 disabled:opacity-30 disabled:cursor-not-allowed text-white cursor-pointer transition"
         >
@@ -970,14 +880,14 @@ export default function ChatPanel() {
   );
 }
 
-// Rendered below a message's body whenever it carries image attachments — one per message in v1
-// (the composer only ever lets you pick one at a time), but this maps over the array since the
-// schema itself is a genuine one-to-many relation, so a future multi-attachment composer needs no
-// render-side change. An image attachment renders as a capped thumbnail, click-through to the
-// full image in a new tab; a non-image "file" attachment renders as a small card (icon, filename,
-// size) that downloads on click instead.
+// Rendered below a message's body whenever it carries attachments, in the order they were attached.
+// An image renders as a capped thumbnail, click-through to the full image in a new tab; a non-image
+// "file" renders as a small card (icon, filename, size) that downloads on click instead. Several
+// images in one message get smaller tiles, so two sit side by side on a phone rather than each
+// taking a screen's width of scrolling.
 export function AttachmentGrid({ attachments }: { attachments: ChatAttachment[] }) {
   if (attachments.length === 0) return null;
+  const severalImages = attachments.filter((a) => a.kind !== 'file').length > 1;
   return (
     <div className="flex flex-wrap gap-1.5 mt-1">
       {attachments.map((a) =>
@@ -1000,7 +910,7 @@ export function AttachmentGrid({ attachments }: { attachments: ChatAttachment[] 
         ) : (
           <a key={a.id} href={a.url} target="_blank" rel="noopener noreferrer" title={a.fileName ?? undefined}>
             {/* Decoded off the main thread, and only fetched near the screen. */}
-            <img src={a.url} alt={a.fileName ?? ''} loading="lazy" decoding="async" className="max-w-[240px] max-h-[240px] rounded-lg border border-neutral-800 object-cover" />
+            <img src={a.url} alt={a.fileName ?? ''} loading="lazy" decoding="async" className={`rounded-lg border border-neutral-800 object-cover ${severalImages ? 'w-[150px] h-[150px]' : 'max-w-[240px] max-h-[240px]'}`} />
           </a>
         )
       )}

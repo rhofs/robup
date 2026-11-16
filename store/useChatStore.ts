@@ -73,9 +73,9 @@ export type ChatMessage = {
   reactions: ChatReaction[];
 };
 
-// What postMessage/postThreadReply accept for a pending image — already-uploaded (POST
+// What postMessage/postThreadReply accept for each pending image or file — already-uploaded (POST
 // /api/uploads/image?context=chat happens in the composer, before this is ever called), so this
-// is just the resulting url/fileName/byteSize to attach server-side.
+// is just the resulting url/fileName/byteSize to attach server-side. A message takes several.
 export type PendingChatAttachment = { url: string; fileName?: string; byteSize?: number; kind?: 'image' | 'file' };
 
 interface ChatStore {
@@ -163,7 +163,7 @@ interface ChatStore {
   loadedChannelIds: string[];
   postMessage: (
     channelId: string,
-    opts: { id?: string; body: string; quotedMessageId?: string; attachment?: PendingChatAttachment }
+    opts: { id?: string; body: string; quotedMessageId?: string; attachments?: PendingChatAttachment[] }
   ) => Promise<ChatMessage | null>;
   // Hard delete (v1 decision, no soft-delete/Trash for individual messages) — mirrors
   // deleteDocComment's own shape: no history push of its own, it's purely the undo *target*
@@ -177,7 +177,7 @@ interface ChatStore {
   postThreadReply: (
     rootId: string,
     channelId: string,
-    opts: { id?: string; body: string; quotedMessageId?: string; attachment?: PendingChatAttachment }
+    opts: { id?: string; body: string; quotedMessageId?: string; attachments?: PendingChatAttachment[] }
   ) => Promise<ChatMessage | null>;
   // Immediate optimistic local patch + fire-and-forget POST, no history push — mirrors
   // resolveDocComment's own shape (low-stakes, instantly reversible by clicking again, not the

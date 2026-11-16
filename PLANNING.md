@@ -13981,3 +13981,59 @@ and the background move together. Still open from the entries above, none of it 
 190–250ms from tap to first frame on Android, the ~60ms the slide skips at its start, and the
 iPhone whose whole app sat 14px left / 12px up (the new `scrollX`/`docW`/`navLeft` trace fields
 have not been read yet). Bottom sheets and other `y`/`scale` animations still run in JavaScript.
+
+### 2026-11-16 — chat: pasting images, and several attachments in one message
+
+- **User:** "Jeg kan ikke copy/paste bilder i chat/rom på siqt", and while that was being built:
+  "jeg kan heller ikke sende flere bilder samtidig, samt selecte fler i select browsern".
+- **Cause of the paste.** The chat composer became a TipTap editor (text and mentions, nothing
+  else) and nobody gave it a paste handler for files. Its schema has no image node, so a pasted
+  image parsed to nothing and the paste did nothing — no error, no preview. The paperclip and
+  drag-and-drop still worked, which is why it went unnoticed. Not known whether paste ever worked
+  in the old `<textarea>` composer; nothing in the history suggests it did.
+- **Cause of the single attachment.** A deliberate v1 cut: one pending file held as a single value
+  in `ChatPanel`, the same again in `ChatThreadPanel`, `<input type="file">` without `multiple`,
+  only the first dropped file read, and both routes taking one `attachment`. The `ChatAttachment`
+  table was one-to-many from the start, so **no schema change and no migration**.
+- **Built:**
+  - `lib/pastedFile.ts` — which pastes are file pastes. Files win unless the clipboard's HTML has
+    real text in it: Word/Excel/PowerPoint copy a *picture of the selection* beside the text, and
+    attaching that instead of pasting the text is a known annoyance elsewhere. A screenshot has no
+    HTML; a browser's "Copy image" has HTML that is only an `<img>`; a file copied in a file
+    manager has only its name as plain text — all three attach.
+  - `ChatComposerInput` takes `onPasteFiles` (through a ref, updated in an effect — the editor's
+    handlers are fixed when it is created).
+  - `hooks/usePendingAttachments.ts` — the list of pending files, now shared by the main feed and
+    threads: add (validates each, names every file left out and why), remove one, clear, and
+    `uploadAll`. **Up to 10 per message** (`MAX_CHAT_ATTACHMENTS` in `lib/chatAttachment.ts`, also
+    enforced by the routes with a 400 rather than silent trimming). Uploads go one at a time, in
+    order, at Send. What has been uploaded is remembered per file, so a send that fails on the
+    fourth image does not upload the first three again on the next press.
+  - `components/PendingAttachmentsBar.tsx` — one tile per file above the composer, each with its
+    own remove button, in a row that scrolls sideways (wrapping would push the conversation off a
+    phone's screen above the keyboard).
+  - The file pickers are `multiple`; a drop takes every file, not the first.
+  - Routes (`channels/[id]/messages`, `messages/[id]/thread`) read `attachments` (a list) **and
+    still the old single `attachment`** — tabs and phones running yesterday's JavaScript keep
+    sending that until they reload. Order is kept without a position column: rows of one message
+    get `createdAt` one millisecond apart and reads sort by it (`CHAT_ATTACHMENTS_IN_ORDER`).
+  - A message with several images shows them as 150px tiles (two side by side on a phone); a
+    single image is unchanged. The push text says "📎 3 attachments".
+  - If the files upload but the message itself is refused, the composer now says so. It used to
+    stay silent.
+- **Verified:** typecheck, production build. Lint: ChatPanel 10 → 9 problems, ChatThreadPanel 2 → 1
+  (the preview `<img>` moved out), ChatComposerInput 7 unchanged, new files clean. Two scripts
+  outside the repo: (1) the real composer, hook and bar in jsdom — pasting a screenshot, a browser
+  "Copy image", two copied files and an items-only clipboard all become tiles; spreadsheet cells
+  and plain text still paste as text; picking three at once; bad files named; the cap of 10;
+  removing one; a failed upload retried without re-uploading; previews freed. (2) A throwaway
+  SQLite file built from the committed migrations: six attachments written the way the routes do
+  come back in attach order on every read, the old single shape still stores, the cap is refused.
+- **Not verified:** nothing was seen in a browser or on a phone. In particular unknown: whether
+  the Android app's WebView delivers an image pasted from the keyboard's clipboard as a paste
+  event with a file at all, and whether its file chooser honours `multiple` (Capacitor's chooser
+  is supposed to). The look of the tile row is unseen.
+- **Left alone:** pasting an image when the caret is *not* in the composer (clicked in the message
+  list, then Ctrl+V) still does nothing — a page-wide paste listener would have to decide between
+  two open composers and stay out of every other editor. Task comments and task attachments were
+  not touched. Uploaded files of a message that never got sent stay on disk, as before.

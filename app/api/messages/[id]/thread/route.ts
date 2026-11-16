@@ -4,7 +4,7 @@ import { prisma, publicUserSelect } from '@/lib/prisma';
 import { getCurrentUserId } from '@/lib/auth/session';
 import { ensureChannelAccess } from '@/lib/auth/chatAccess';
 import { broadcastChatSignal } from '@/lib/collab/broadcastChatSignal';
-import { validateChatAttachment } from '@/lib/chatAttachment';
+import { validateChatAttachments, chatAttachmentRows, CHAT_ATTACHMENTS_IN_ORDER } from '@/lib/chatAttachment';
 
 // Thread replies to one root message — deliberately a *separate* id namespace from
 // /api/channels/[id]/messages rather than a query param on it: the main feed route only ever
@@ -25,7 +25,7 @@ export async function GET(_req: Request, { params }: { params: Promise<{ id: str
 
   const replies = await prisma.chatMessage.findMany({
     where: { threadRootId: rootId },
-    include: { author: { select: publicUserSelect }, attachments: true, reactions: { include: { user: { select: publicUserSelect } } } },
+    include: { author: { select: publicUserSelect }, attachments: CHAT_ATTACHMENTS_IN_ORDER, reactions: { include: { user: { select: publicUserSelect } } } },
     orderBy: { createdAt: 'asc' },
   });
   return NextResponse.json(replies);
@@ -47,8 +47,9 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
   if (!channel) return NextResponse.json({ error: 'Not authorized for this channel' }, { status: 403 });
 
   const body = await req.json();
-  const attachment = validateChatAttachment(body.attachment);
-  if ((!body.body || !body.body.trim()) && !attachment) {
+  const attachments = validateChatAttachments(body);
+  if ('error' in attachments) return NextResponse.json({ error: attachments.error }, { status: 400 });
+  if ((!body.body || !body.body.trim()) && attachments.length === 0) {
     return NextResponse.json({ error: 'Message cannot be empty' }, { status: 400 });
   }
 
@@ -78,9 +79,9 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
         body: body.body || '',
         threadRootId: rootId,
         ...quoteData,
-        ...(attachment ? { attachments: { create: attachment } } : {}),
+        ...(attachments.length ? { attachments: { create: chatAttachmentRows(attachments) } } : {}),
       },
-      include: { author: { select: publicUserSelect }, attachments: true, reactions: { include: { user: { select: publicUserSelect } } } },
+      include: { author: { select: publicUserSelect }, attachments: CHAT_ATTACHMENTS_IN_ORDER, reactions: { include: { user: { select: publicUserSelect } } } },
     }),
     prisma.chatMessage.update({ where: { id: rootId }, data: { threadReplyCount: { increment: 1 } } }),
     // A thread reply is still activity in that channel — keep GET /api/dms's recency sort in sync.

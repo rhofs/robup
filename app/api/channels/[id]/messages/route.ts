@@ -3,7 +3,7 @@ import { prisma, publicUserSelect } from '@/lib/prisma';
 import { getCurrentUserId } from '@/lib/auth/session';
 import { ensureChannelAccess } from '@/lib/auth/chatAccess';
 import { broadcastChatSignal } from '@/lib/collab/broadcastChatSignal';
-import { validateChatAttachment } from '@/lib/chatAttachment';
+import { validateChatAttachments, chatAttachmentRows, CHAT_ATTACHMENTS_IN_ORDER } from '@/lib/chatAttachment';
 import { sendPushToUser } from '@/lib/push';
 import { mentionsToPlainText } from '@/lib/mentions';
 import { notifyChatMentions } from '@/lib/mentionRecipients';
@@ -33,7 +33,7 @@ export async function GET(req: Request, { params }: { params: Promise<{ id: stri
 
   const messages = await prisma.chatMessage.findMany({
     where: { channelId, threadRootId: null },
-    include: { author: { select: publicUserSelect }, attachments: true, reactions: { include: { user: { select: publicUserSelect } } } },
+    include: { author: { select: publicUserSelect }, attachments: CHAT_ATTACHMENTS_IN_ORDER, reactions: { include: { user: { select: publicUserSelect } } } },
     orderBy: { createdAt: 'asc' },
   });
 
@@ -61,10 +61,11 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
   if (!channel) return NextResponse.json({ error: 'Not authorized for this channel' }, { status: 403 });
 
   const body = await req.json();
-  const attachment = validateChatAttachment(body.attachment);
+  const attachments = validateChatAttachments(body);
+  if ('error' in attachments) return NextResponse.json({ error: attachments.error }, { status: 400 });
   // An image-only message (no text) is valid, same as Discord/Slack — only reject when there's
   // neither a real body nor an attachment to send.
-  if ((!body.body || !body.body.trim()) && !attachment) {
+  if ((!body.body || !body.body.trim()) && attachments.length === 0) {
     return NextResponse.json({ error: 'Message cannot be empty' }, { status: 400 });
   }
 
@@ -97,9 +98,9 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
       authorId: userId,
       body: body.body || '',
       ...quoteData,
-      ...(attachment ? { attachments: { create: attachment } } : {}),
+      ...(attachments.length ? { attachments: { create: chatAttachmentRows(attachments) } } : {}),
     },
-    include: { author: { select: publicUserSelect }, attachments: true, reactions: { include: { user: { select: publicUserSelect } } } },
+    include: { author: { select: publicUserSelect }, attachments: CHAT_ATTACHMENTS_IN_ORDER, reactions: { include: { user: { select: publicUserSelect } } } },
   });
 
   // Denormalized recency for the DM/group-chat list's sort order (GET /api/dms) — a real channel
@@ -131,7 +132,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
     .findMany({ where: { channelId, userId: { not: userId } }, select: { userId: true, muted: true } })
     .then((members) => {
       const title = channel.type === 'dm' || channel.type === 'group_dm' ? (message.author?.name ?? 'Someone') : `#${channel.name}`;
-      const body = mentionsToPlainText(message.body ?? '').trim() || (attachment ? '📎 Attachment' : '');
+      const body = mentionsToPlainText(message.body ?? '').trim() || (attachments.length > 1 ? `📎 ${attachments.length} attachments` : attachments.length ? '📎 Attachment' : '');
       for (const m of members) {
         // Muted (backlog #6) — the message still lands and stores normally, this member just
         // doesn't get pinged about it. Matches the unread-badge skip in lib/chatUnread.ts.

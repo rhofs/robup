@@ -11,6 +11,7 @@ import { ClientMentionNode } from './collab/mentionNodeView';
 import { ChatHashMention, chatAtSuggestion } from './collab/chatMentionNode';
 import { chatDocToText, chatTextToDoc } from '../lib/collab/chatDoc';
 import { runMentionJump } from '../lib/mentionJump';
+import { pastedFiles } from '../lib/pastedFile';
 import type { GroupMentionScope } from '../lib/mentionOptions';
 
 // The chat composer, as a real editor rather than a <textarea>.
@@ -31,6 +32,7 @@ export default function ChatComposerInput({
   getGroupMentions,
   maxHeight,
   insertRef,
+  onPasteFiles,
 }: {
   value: string;
   onChange: (text: string) => void;
@@ -45,6 +47,10 @@ export default function ChatComposerInput({
   // is what keeps the caret where it was — appending to the string would land every emoji at the
   // end of the message no matter where you were typing.
   insertRef?: React.MutableRefObject<((text: string) => void) | null>;
+  // Files pasted into the composer (a screenshot, a copied image, copied files). The editor has
+  // nowhere to put them — its schema is text and mentions — so they are handed to the caller, which
+  // treats them exactly like files picked with the paperclip or dropped on the panel.
+  onPasteFiles?: (files: File[]) => void;
 }) {
   // Read through a ref by the two options below. `useEditor` runs its extension list ONCE, so
   // anything passed by value there is frozen at whatever the first conversation was — which is
@@ -63,6 +69,12 @@ export default function ChatComposerInput({
   getGroupMentionsRef.current = getGroupMentions;
   const scopedWorkspaceId = () => getWorkspaceIdRef.current();
   const scopedGroups = () => getGroupMentionsRef.current?.() ?? null;
+  // Through a ref for the same reason: the caller's handler closes over that render's state. Kept
+  // current from an effect rather than during render — a paste cannot arrive in between.
+  const onPasteFilesRef = useRef(onPasteFiles);
+  useEffect(() => {
+    onPasteFilesRef.current = onPasteFiles;
+  });
 
   const editor = useEditor({
     // Required by Tiptap in React 18+ SSR: without it the first client render can differ from the
@@ -95,6 +107,15 @@ export default function ChatComposerInput({
           return true;
         }
         return false;
+      },
+      // Without this a pasted image did nothing at all: there is no image node to parse it into.
+      // See lib/pastedFile.ts for when a clipboard with a file on it is still a text paste.
+      handlePaste: (_view, event) => {
+        const files = onPasteFilesRef.current ? pastedFiles(event.clipboardData) : [];
+        if (files.length === 0) return false;
+        event.preventDefault();
+        onPasteFilesRef.current?.(files);
+        return true;
       },
     },
     onUpdate: ({ editor: e }) => onChange(chatDocToText(e.getJSON())),

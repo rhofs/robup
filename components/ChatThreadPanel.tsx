@@ -1,14 +1,14 @@
 'use client';
 
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { Send, Reply, X, MessagesSquare, Paperclip, FileText, UploadCloud } from 'lucide-react';
+import { Send, Reply, X, MessagesSquare, Paperclip, UploadCloud } from 'lucide-react';
 import { useChatStore, type ChatMessage } from '../store/useChatStore';
 import { useSessionStore } from '../store/useSessionStore';
 import { renderChatMessageBody } from '../lib/chatFormat';
 import { useChatChannelConnection } from '../lib/collab/useChatChannelConnection';
-import { uploadChatFile } from '../lib/uploadChatFile';
-import { formatBytes } from '../lib/formatBytes';
-import { timeLabel, QuotedPreview, MessageActions, AttachmentGrid, ReactionBar, validatePickedFile, type PickedAttachment } from './ChatPanel';
+import { usePendingAttachments } from '../hooks/usePendingAttachments';
+import PendingAttachmentsBar from './PendingAttachmentsBar';
+import { timeLabel, QuotedPreview, MessageActions, AttachmentGrid, ReactionBar } from './ChatPanel';
 import { useIsMobile } from '../hooks/useIsMobile';
 import { useTaskStore } from '../store/useTaskStore';
 import ChatComposerInput from './ChatComposerInput';
@@ -75,9 +75,8 @@ export default function ChatThreadPanel({
   const [replyTarget, setReplyTarget] = useState<{ id: string; authorName: string; body: string } | null>(null);
   const [draft, setDraft] = useState('');
   const [sending, setSending] = useState(false);
-  const [pendingAttachment, setPendingAttachment] = useState<PickedAttachment | null>(null);
-  const [attachmentError, setAttachmentError] = useState<string | null>(null);
-  const [uploadingAttachment, setUploadingAttachment] = useState(false);
+  const attachments = usePendingAttachments();
+  const { add: addAttachments, clear: clearAttachments } = attachments;
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [dragActive, setDragActive] = useState(false);
   const dragCounterRef = useRef(0);
@@ -86,15 +85,8 @@ export default function ChatThreadPanel({
     fetchThread(rootMessage.id);
     setReplyTarget(null);
     setDraft('');
-    setPendingAttachment(null);
-    setAttachmentError(null);
-  }, [rootMessage.id, fetchThread]);
-
-  useEffect(() => {
-    return () => {
-      if (pendingAttachment?.previewUrl) URL.revokeObjectURL(pendingAttachment.previewUrl);
-    };
-  }, [pendingAttachment]);
+    clearAttachments();
+  }, [rootMessage.id, fetchThread, clearAttachments]);
 
   // Same channel-wide signal the main feed listens to (a thread reply broadcasts through the
   // channel's own room, not a separate one per thread — see the thread route's own comment) — a
@@ -106,29 +98,10 @@ export default function ChatThreadPanel({
   }, [rootMessage.id, fetchThread]);
   useChatChannelConnection(rootMessage.channelId, onRealtimeSignal);
 
-  const processPickedFile = (file: File) => {
-    setAttachmentError(null);
-    const result = validatePickedFile(file);
-    if ('error' in result) {
-      setAttachmentError(result.error);
-      return;
-    }
-    setPendingAttachment((prev) => {
-      if (prev?.previewUrl) URL.revokeObjectURL(prev.previewUrl);
-      return { file, kind: result.kind, previewUrl: result.kind === 'image' ? URL.createObjectURL(file) : null };
-    });
-  };
-
   const handleFileInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
+    const files = Array.from(e.target.files ?? []);
     e.target.value = '';
-    if (file) processPickedFile(file);
-  };
-
-  const clearPendingAttachment = () => {
-    if (pendingAttachment?.previewUrl) URL.revokeObjectURL(pendingAttachment.previewUrl);
-    setPendingAttachment(null);
-    setAttachmentError(null);
+    addAttachments(files);
   };
 
   const handleDragEnter = (e: React.DragEvent) => {
@@ -151,30 +124,28 @@ export default function ChatThreadPanel({
     e.preventDefault();
     dragCounterRef.current = 0;
     setDragActive(false);
-    const file = e.dataTransfer.files?.[0];
-    if (file) processPickedFile(file);
+    addAttachments(Array.from(e.dataTransfer.files ?? []));
   };
 
   const handleSend = async () => {
     const trimmed = draft.trim();
-    if ((!trimmed && !pendingAttachment) || sending || uploadingAttachment) return;
+    if ((!trimmed && attachments.items.length === 0) || sending || attachments.uploading) return;
     setSending(true);
     try {
-      let attachment: { url: string; fileName: string; byteSize: number; kind: 'image' | 'file' } | undefined;
-      if (pendingAttachment) {
-        setUploadingAttachment(true);
-        attachment = await uploadChatFile(pendingAttachment.file);
-        setUploadingAttachment(false);
-      }
-      const sent = await postThreadReply(rootMessage.id, rootMessage.channelId, { body: trimmed, quotedMessageId: replyTarget?.id, attachment });
+      const uploaded = await attachments.uploadAll();
+      const sent = await postThreadReply(rootMessage.id, rootMessage.channelId, { body: trimmed, quotedMessageId: replyTarget?.id, attachments: uploaded });
       if (sent) {
         setDraft('');
         setReplyTarget(null);
-        clearPendingAttachment();
+        clearAttachments();
+      } else if (uploaded.length > 0) {
+        // The files are up but the message was refused. Saying nothing here used to be survivable
+        // with one small image; after waiting for six photos to upload it is not. What was
+        // uploaded is remembered, so pressing Send again does not send the files twice.
+        attachments.setError('Could not send — try again');
       }
     } catch (err) {
-      setAttachmentError(err instanceof Error ? err.message : 'Upload failed');
-      setUploadingAttachment(false);
+      attachments.setError(err instanceof Error ? err.message : 'Upload failed');
     } finally {
       setSending(false);
     }
@@ -307,33 +278,22 @@ export default function ChatThreadPanel({
           </button>
         </div>
       )}
-      {pendingAttachment && (
-        <div className={`flex items-center gap-2 px-2 py-1.5 border border-b-0 border-neutral-800 bg-neutral-900/80 ${replyTarget ? '' : 'rounded-t-lg mt-2'}`}>
-          {pendingAttachment.previewUrl ? (
-            <img src={pendingAttachment.previewUrl} alt="" className="w-8 h-8 rounded object-cover border border-neutral-700 shrink-0" />
-          ) : (
-            <span className="w-8 h-8 rounded bg-neutral-800 border border-neutral-700 shrink-0 flex items-center justify-center text-neutral-400">
-              <FileText className="w-3.5 h-3.5" />
-            </span>
-          )}
-          <span className="min-w-0 flex-1 truncate text-[10px] text-neutral-400">
-            {pendingAttachment.file.name} <span className="text-neutral-600">· {formatBytes(pendingAttachment.file.size)}</span>
-          </span>
-          <button onClick={clearPendingAttachment} title="Remove attachment" className="shrink-0 text-neutral-500 hover:text-neutral-200 cursor-pointer">
-            <X className="w-3 h-3" />
-          </button>
-        </div>
-      )}
-      {attachmentError && <p className="text-[10px] text-red-400 mt-1">{attachmentError}</p>}
+      <PendingAttachmentsBar
+        items={attachments.items}
+        onRemove={attachments.remove}
+        busy={attachments.uploading}
+        className={`px-2 py-1.5 border border-b-0 border-neutral-800 bg-neutral-900/80 ${replyTarget ? '' : 'rounded-t-lg mt-2'}`}
+      />
+      {attachments.error && <p className="text-[10px] text-red-400 mt-1">{attachments.error}</p>}
       <div
         className={`flex items-end gap-2 px-2 py-1.5 border border-neutral-800 bg-neutral-900/60 focus-within:border-blue-500/60 transition ${
-          replyTarget || pendingAttachment ? 'rounded-b-lg' : 'rounded-lg mt-2'
+          replyTarget || attachments.items.length > 0 ? 'rounded-b-lg' : 'rounded-lg mt-2'
         }`}
       >
-        <input ref={fileInputRef} type="file" onChange={handleFileInputChange} className="hidden" />
+        <input ref={fileInputRef} type="file" multiple onChange={handleFileInputChange} className="hidden" />
         <button
           onClick={() => fileInputRef.current?.click()}
-          title="Attach a file or image"
+          title="Attach files or images"
           className="shrink-0 w-6 h-6 rounded-lg flex items-center justify-center text-neutral-500 hover:text-blue-400 hover:bg-neutral-800/60 cursor-pointer transition"
         >
           <Paperclip className="w-3.5 h-3.5" />
@@ -349,10 +309,11 @@ export default function ChatThreadPanel({
           getWorkspaceId={() => mentionScope.workspaceId}
           getGroupMentions={() => mentionScope.groups}
           maxHeight={COMPOSER_MAX_HEIGHT_PX}
+          onPasteFiles={addAttachments}
         />
         <button
           onClick={handleSend}
-          disabled={(!draft.trim() && !pendingAttachment) || sending || uploadingAttachment}
+          disabled={(!draft.trim() && attachments.items.length === 0) || sending || attachments.uploading}
           title="Send"
           className="shrink-0 w-6 h-6 rounded-lg flex items-center justify-center bg-blue-600 hover:bg-blue-500 disabled:opacity-30 disabled:cursor-not-allowed text-white cursor-pointer transition"
         >
