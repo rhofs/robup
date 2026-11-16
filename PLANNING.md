@@ -14039,3 +14039,32 @@ have not been read yet). Bottom sheets and other `y`/`scale` animations still ru
   not touched. Uploaded files of a message that never got sent stay on disk, as before.
 
 **Deployed 2026-11-16 as `44682dc`** (tag `deploy/2026-11-16_1957`). Web-only.
+
+### 2026-11-16 (continued) — chat images open in the app, not in a new tab
+
+- **User:** "Kan vi fikse, så jeg kan åpne bilder i siqt? At det ikke åpner en ny fane i browseren?"
+- **Cause.** A chat image was a link with `target="_blank"`. The task modal has had an in-app
+  preview (`components/AttachmentPreview.tsx`) for a while, written for exactly this reason — in
+  the Android app a new tab is a different browser — and chat never got it.
+- **Built:**
+  - `AttachmentLightbox` (in `AttachmentPreview.tsx`): the same preview, for a caller that cannot
+    render it at the top of the page. **Through a portal to `<body>`** — a conversation sits in
+    panes that carry a transform, and `position: fixed` inside a transformed element is fixed to
+    that element rather than the screen. Back closes it (`useBackLayer`), Escape closes it (the
+    backdrop already carries `data-escape-closes`), so do the × and a click outside.
+  - `AttachmentPreview` takes an optional `nav`: with several images in one message it shows
+    "2 of 3", arrows on both sides, the arrow keys, and a sideways swipe on a touch screen. It
+    wraps round at the ends. Only the message's images are counted; files are not part of it.
+  - `AttachmentGrid` (main feed and threads): the image is still an `<a href>`, so Ctrl/Cmd-click,
+    middle-click and "copy link address" behave as before; a plain click or tap opens the preview.
+    Focus is taken out of the composer first — otherwise the arrow keys move the caret and Enter
+    sends the draft from behind the preview.
+- **Verified:** typecheck, production build, lint (ChatPanel 9, AttachmentPreview clean). A jsdom
+  script outside the repo with the real `AttachmentGrid`: opens the clicked image, under `<body>`
+  and not inside the transformed pane; next/previous by button, key and swipe; a tap or vertical
+  drag does not step; Escape, Back and × each close it and Back is released afterwards; modified
+  clicks are left to the browser; a single image has no arrows; the preview goes with its message.
+- **Not verified:** not seen in a browser or on a phone — how the image sits in the preview card
+  at phone size in particular.
+- **Not built:** pinch-to-zoom or any zoom in the preview. Images in Docs and file cards in chat
+  (which download) were not touched. The build's `::highlight` CSS warning is older than this.

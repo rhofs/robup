@@ -13,6 +13,7 @@ import EmojiPicker from './EmojiPicker';
 import { useChatChannelConnection } from '../lib/collab/useChatChannelConnection';
 import { usePendingAttachments } from '../hooks/usePendingAttachments';
 import PendingAttachmentsBar from './PendingAttachmentsBar';
+import { AttachmentLightbox } from './AttachmentPreview';
 import { formatBytes } from '../lib/formatBytes';
 import FloatingPopover from './FloatingPopover';
 import { useIsMobile } from '../hooks/useIsMobile';
@@ -881,15 +882,28 @@ export default function ChatPanel() {
 }
 
 // Rendered below a message's body whenever it carries attachments, in the order they were attached.
-// An image renders as a capped thumbnail, click-through to the full image in a new tab; a non-image
+// An image renders as a capped thumbnail that opens in the app's own preview (it was a new browser
+// tab, which in the Android app is a different browser altogether), stepping through the message's
+// other images from there; a non-image
 // "file" renders as a small card (icon, filename, size) that downloads on click instead. Several
 // images in one message get smaller tiles, so two sit side by side on a phone rather than each
 // taking a screen's width of scrolling.
 export function AttachmentGrid({ attachments }: { attachments: ChatAttachment[] }) {
+  // Which of this message's images is open, by its place among them.
+  const [openImage, setOpenImage] = useState<number | null>(null);
   if (attachments.length === 0) return null;
-  const severalImages = attachments.filter((a) => a.kind !== 'file').length > 1;
+  const images = attachments.filter((a) => a.kind !== 'file');
+  const severalImages = images.length > 1;
   return (
     <div className="flex flex-wrap gap-1.5 mt-1">
+      {openImage !== null && (
+        <AttachmentLightbox
+          files={images.map((a) => ({ url: a.url, fileName: a.fileName, kind: 'image', byteSize: a.byteSize }))}
+          index={openImage}
+          onIndex={setOpenImage}
+          onClose={() => setOpenImage(null)}
+        />
+      )}
       {attachments.map((a) =>
         a.kind === 'file' ? (
           <a
@@ -908,7 +922,21 @@ export function AttachmentGrid({ attachments }: { attachments: ChatAttachment[] 
             <Download className="w-3.5 h-3.5 text-neutral-500 shrink-0" />
           </a>
         ) : (
-          <a key={a.id} href={a.url} target="_blank" rel="noopener noreferrer" title={a.fileName ?? undefined}>
+          // Still a link, so Ctrl/Cmd-click, middle-click and "copy link address" keep working; a
+          // plain click or tap opens it here instead.
+          <a
+            key={a.id}
+            href={a.url}
+            title={a.fileName ?? undefined}
+            onClick={(e) => {
+              if (e.metaKey || e.ctrlKey || e.shiftKey || e.altKey || e.button !== 0) return;
+              e.preventDefault();
+              // Out of the composer: with the caret still there, the arrow keys would move it and
+              // Enter would send the draft from behind the preview.
+              if (document.activeElement instanceof HTMLElement) document.activeElement.blur();
+              setOpenImage(images.indexOf(a));
+            }}
+          >
             {/* Decoded off the main thread, and only fetched near the screen. */}
             <img src={a.url} alt={a.fileName ?? ''} loading="lazy" decoding="async" className={`rounded-lg border border-neutral-800 object-cover ${severalImages ? 'w-[150px] h-[150px]' : 'max-w-[240px] max-h-[240px]'}`} />
           </a>
