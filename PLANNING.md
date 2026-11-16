@@ -14037,3 +14037,5 @@ have not been read yet). Bottom sheets and other `y`/`scale` animations still ru
   list, then Ctrl+V) still does nothing — a page-wide paste listener would have to decide between
   two open composers and stay out of every other editor. Task comments and task attachments were
   not touched. Uploaded files of a message that never got sent stay on disk, as before.
+
+**Deployed 2026-11-16 as `44682dc`** (tag `deploy/2026-11-16_1957`). Web-only.
