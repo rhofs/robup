@@ -14068,3 +14068,5 @@ have not been read yet). Bottom sheets and other `y`/`scale` animations still ru
   at phone size in particular.
 - **Not built:** pinch-to-zoom or any zoom in the preview. Images in Docs and file cards in chat
   (which download) were not touched. The build's `::highlight` CSS warning is older than this.
+
+**Deployed 2026-11-16 as `a846f5b`** (tag `deploy/2026-11-16_2009`). Web-only.
