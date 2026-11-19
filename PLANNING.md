@@ -14092,3 +14092,5 @@ have not been read yet). Bottom sheets and other `y`/`scale` animations still ru
   phone's browser (Capacitor's `allowNavigation` lists only siqt.no), but that is not checked; nor
   whether a long-press on a link shows the browser's own link menu instead of the message actions.
 - **Not built:** link previews (title/image cards), and links typed as `[text](url)`.
+
+**Deployed 2026-11-19 as `a320ac0`** (tag `deploy/2026-11-19_1552`). Web-only.
