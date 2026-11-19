@@ -14070,3 +14070,25 @@ have not been read yet). Bottom sheets and other `y`/`scale` animations still ru
   (which download) were not touched. The build's `::highlight` CSS warning is older than this.
 
 **Deployed 2026-11-16 as `a846f5b`** (tag `deploy/2026-11-16_2009`). Web-only.
+
+### 2026-11-19 — web addresses in chat messages are links
+
+- **User:** "Kan ikke trykke på links i chat. Det er bare vanlig tekst"
+- **Cause.** Never built: `lib/chatFormat.tsx` knew code blocks, inline code, bold and italic, and
+  a URL was just text.
+- **Built (in `lib/chatFormat.tsx`, so main feed and threads both get it):**
+  - `http(s)://…` and `www.…` become links. Trailing sentence punctuation is left out, and so is a
+    closing bracket the address did not open (`(https://x.no)`), while an address's own brackets
+    are kept (Wikipedia's `Mercury_(planet)`).
+  - Links are found **before** bold/italic, for the same reason mentions are: `_` and `*` inside an
+    address would otherwise be read as italics and cut it in half. Inside backticks or a code block
+    an address stays code.
+  - Only web addresses are ever made links (no `javascript:` from a message). Another site opens in
+    a new tab (`noopener noreferrer`); an address on siqt.no itself opens in place.
+  - The link stops the click there, so the message's own handlers do not also react to the tap.
+- **Verified:** typecheck, lint clean, production build. A script outside the repo renders bodies
+  through the real formatter: 30 cases, all pass.
+- **Not verified:** not seen on a phone. In the Android app another site *should* open in the
+  phone's browser (Capacitor's `allowNavigation` lists only siqt.no), but that is not checked; nor
+  whether a long-press on a link shows the browser's own link menu instead of the message actions.
+- **Not built:** link previews (title/image cards), and links typed as `[text](url)`.
