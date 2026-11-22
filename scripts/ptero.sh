@@ -4,7 +4,8 @@
 #
 #   scripts/ptero.sh status              power state, memory, uptime, and which commit siqt.no runs
 #   scripts/ptero.sh restart|start|stop  power signal
-#   scripts/ptero.sh reinstall           runs the egg's install script (git sync + build), then waits
+#   scripts/ptero.sh reinstall [commit]  runs the egg's install script (git sync + build), then waits
+#                                        for that commit to answer and tags it (default: HEAD)
 #   scripts/ptero.sh wait [commit]       waits until siqt.no answers — and, given a commit, runs it
 #   scripts/ptero.sh rollback <ref>      puts main back to <ref> (a deploy/… tag or a commit) with a
 #                                        revert commit — history kept — pushes it, and reinstalls
@@ -139,8 +140,14 @@ case "${1:-status}" in
     # of 521 on 2026-09-25 before anyone pressed Start.
     api POST /power '{"signal":"start"}' >/dev/null
     echo "Started."
-    wait_up "${2:-}"
-    tag_deploy "${2:-}"
+    # Defaults to HEAD when no commit is named. Both of the steps below are no-ops without one —
+    # wait_up stops checking WHICH commit answered, and tag_deploy returns straight away — so a bare
+    # `reinstall` used to deploy successfully, verify nothing, and leave no rollback point, saying
+    # nothing about either. That is the wrong default for the common case: what is being deployed is
+    # almost always what is checked out.
+    deployed="${2:-$(git rev-parse --short HEAD)}"
+    wait_up "$deployed"
+    tag_deploy "$deployed"
     ;;
   rollback)
     target="${2:?usage: scripts/ptero.sh rollback <deploy tag or commit>}"

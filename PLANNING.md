@@ -14220,3 +14220,29 @@ than doing nothing if it is not), and how the tool bar wraps on a narrow phone.
 
 **Not built:** text as an annotation tool, and moving or deleting a shape after it is drawn — undo is
 the only way back. Both are real gaps; neither was asked for.
+
+### 2026-11-22 (continued) — deployed, and committing/pushing/deploying is now the default
+
+**Deployed 2026-11-22 as `8b20890`** (tag `deploy/2026-11-22_2022`). Zoom and image mark-up, plus the
+three PLANNING commits before it. Web-only — the Android app is a shell around siqt.no, so it has
+them already.
+
+**Robin's instruction: "Gjør det automatisk så jeg får testa etter hver gang."** From now on a change
+is not finished at the commit — it is committed, pushed and deployed in the same turn, unless there
+is a reason not to and that reason is said out loud. This is the right default here for a reason
+worth writing down: **the phone app cannot see anything that is not on siqt.no.** It loads the live
+site, so a build sitting in a branch, or on the Tailscale instance, is invisible to the surface most
+of this app's problems are reported from. "Committed" and "testable" were two different things, and
+that gap is most of why so much has shipped unlooked-at.
+
+The cost, stated once rather than every time: a reinstall takes siqt.no down for roughly four
+minutes while it builds, so anyone using it at that moment sees a 521.
+
+**And `ptero.sh reinstall` had a trap**, found by walking into it. It tags the deploy and verifies
+which commit answered **only when given a commit** — `tag_deploy` returns immediately without one,
+and `wait_up` stops checking *which* commit came back. So a bare `reinstall` deployed successfully,
+verified nothing, and left no rollback point, while saying nothing about any of it. It now defaults
+to `HEAD`, which is what is being deployed in almost every case.
+
+That matters more now than it did: a step that runs after every change is exactly the step that must
+not fail quietly.
