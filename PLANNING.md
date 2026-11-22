@@ -14131,3 +14131,23 @@ Verified rather than assumed: signup → sign-in → session → `GET /api/works
 
 The repo moved from `~/pliqt` to `~/siqt` (around 13 Nov). Anything written down with the old path —
 including older entries in this file — is stale.
+
+### 2026-11-22 — My Assigned Tasks: the open question is closed, nothing changes
+
+The question left hanging on 2026-10-14 — should subtasks that are *not* yours show at all (muted,
+behind a toggle) or only yours? — is answered: **keep what is there.** "Behold det som det er nå, for
+vi bruker det, og det funker."
+
+What that means concretely, so nobody has to go and read the code to find out what was kept: others'
+subtasks sit behind **"+ N other subtasks · show"** — muted, no status circle, with their assignees
+shown; when only the head is yours, the "· show" sits on the progress line. That is the
+"muted, behind a toggle" option, and it has been in use since `dc23d6b` (14 Oct).
+
+**Do not rebuild this.** The "Later option" sketched in the same entry — a ClickUp-style
+"Group by: Task / List / Due date / None" — is **not** wanted. It was a proposal, it was considered
+for five weeks of real use, and the verdict is that the current shape works. A future session
+reading the old entry will find an open question; this is its answer.
+
+The ideas pages (`public/ideas/my-assigned.html`, `logo.html`) are now genuinely dead — they exist
+only to illustrate a choice that has been made twice over. Still not removed; they are public URLs,
+so that is Robin's call rather than a tidy-up to do unasked.
