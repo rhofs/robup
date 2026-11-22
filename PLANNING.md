@@ -14094,3 +14094,40 @@ have not been read yet). Bottom sheets and other `y`/`scale` animations still ru
 - **Not built:** link previews (title/image cards), and links typed as `[text](url)`.
 
 **Deployed 2026-11-19 as `a320ac0`** (tag `deploy/2026-11-19_1552`). Web-only.
+
+## 2026-11-22 — a local instance, reachable over Tailscale
+
+Asked for a local Siqt that could be reached from another machine. Running, and written down here
+because a server nobody remembers starting is one nobody notices is still running.
+
+**Address:** `http://100.64.30.23:3099` — the host's Tailscale address (`cov0549`). Sign in as
+`robin@local.test`. It is **not** on the public internet: `next start -H 100.64.30.23` binds that one
+interface, and `curl` to `213.170.135.134:3099` is refused. That mattered here — `firewalld` is not
+running on this box, so a bind to `0.0.0.0` would have published a new port straight to the internet
+on the machine that also serves siqt.no.
+
+**Its own database**, at `/home/robin/siqt-local/local.db`, built from the migrations and seeded
+through the app's own API (signup, then a workspace, Space, List and six tasks). Production's
+database lives in the Pterodactyl container and was never touched. The checkout at `~/siqt` has no
+`.db` file at all, which is worth knowing: it is a plain dev checkout, not the thing being served.
+
+**Start/stop:** `/home/robin/siqt-local/start.sh`, which carries its own `AUTH_SECRET`
+(`/home/robin/siqt-local/auth.secret`, 0600 — not production's). Stop with
+`pkill -f "next start -H 100.64.30.23"`. Nothing restarts it on boot, deliberately.
+
+**What does NOT work on it: the collab sidecar.** Over plain HTTP the client connects straight to
+`ws://<host>:1234` (see `lib/collab/collabWsUrl.ts` — the `/collab` proxy in `customServer.ts` only
+exists for HTTPS), and production already holds port 1234. Hocuspocus is started with a port and no
+address in `server/collabServer.ts`, so a second instance cannot be put on a different interface
+without a code change. Consequence: realtime doc co-editing and chat's live push are absent on this
+instance; everything else — board, lists, sorting, columns, DMs, tasks — works. **If this comes up
+again, the honest fix is to let `collabServer.ts` take a bind address from the environment the way it
+already takes a port.**
+
+Verified rather than assumed: signup → sign-in → session → `GET /api/workspaces`, then
+`POST /api/tasks/reorder` moved the last task to the front and a fresh read showed it there.
+
+### Also noted
+
+The repo moved from `~/pliqt` to `~/siqt` (around 13 Nov). Anything written down with the old path —
+including older entries in this file — is stale.
