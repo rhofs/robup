@@ -14246,3 +14246,32 @@ to `HEAD`, which is what is being deployed in almost every case.
 
 That matters more now than it did: a step that runs after every change is exactly the step that must
 not fail quietly.
+
+### 2026-11-22 (continued) — [Bug] the image was invisible in the preview, and visible in the editor
+
+"Jeg ser ikke bildet før jeg trykker edit."
+
+The preview card had a **max**-height and no height, so its real size came from its contents. That
+worked while the image was an ordinary child — the image was what gave the card its height. Zoom made
+the image absolutely positioned, which it has to be in order to be panned around inside a fixed
+frame, and an absolutely positioned child is out of flow: it contributes no height at all. The body's
+`flex-1` then had nothing to grow into, the card collapsed to its header strip, and the picture was
+never drawn.
+
+The mark-up editor is its own full-screen layer with a genuinely definite height, which is exactly
+why the same image appeared there the moment the pen was pressed. That contrast was the whole
+diagnosis.
+
+Images now get a definite height (`h-[calc(100dvh-2rem)]`); everything else is still sized by its
+content. Filling the screen is the better answer for a picture anyway — a lightbox that shrinks to a
+small image leaves nowhere to zoom into.
+
+**The general lesson, and it is cheap to repeat:** taking a child out of flow silently removes
+whatever height it was giving its parent, and a parent sized by its content then has nothing left to
+be. Nothing errors; the element is simply not there.
+
+**Still unclear from the report:** "ser kun comment, som jeg ikke kan gjøre tror jeg?" — which
+surface this was on. The pen only exists in chat, since that is the only place a marked-up copy has
+somewhere to go. If the image was opened from a *task*, there is no pen there, and the collapsed card
+would have left the task's comment box showing behind it, which fits what was described. Asked rather
+than guessed at.

@@ -72,7 +72,25 @@ export default function AttachmentPreview({
     >
       <div
         onClick={(e) => e.stopPropagation()}
-        className="w-full max-w-4xl max-h-[calc(100dvh-2rem)] bg-neutral-900 border border-neutral-800 rounded-2xl shadow-2xl overflow-hidden flex flex-col"
+        // An image gets a DEFINITE height; everything else is still sized by its content.
+        //
+        // This card had only a max-height, so its real height came from what was inside it. That
+        // worked while the image was an ordinary child — it gave the card its size. Zoom made the
+        // image absolutely positioned (it has to be, to be panned around inside a fixed frame), and
+        // an absolutely positioned child is out of flow: it contributes no height at all. So the
+        // body's `flex-1` had nothing to grow into, the card collapsed to its header, and the
+        // picture was simply not drawn. Reported as "jeg ser ikke bildet før jeg trykker edit" — the
+        // mark-up editor is its own full-screen layer with a real height, which is why the same
+        // image appeared there.
+        //
+        // The lesson is general: taking a child out of flow silently removes whatever height it was
+        // giving its parent, and a parent sized by its content has nothing left to be.
+        //
+        // Filling the screen is also the better answer for a picture — a lightbox that shrinks to a
+        // small image leaves nowhere to zoom into.
+        className={`w-full max-w-4xl bg-neutral-900 border border-neutral-800 rounded-2xl shadow-2xl overflow-hidden flex flex-col ${
+          isImage ? 'h-[calc(100dvh-2rem)]' : 'max-h-[calc(100dvh-2rem)]'
+        }`}
       >
         <div className="px-4 py-3 flex items-center gap-2 border-b border-neutral-800 shrink-0">
           <span className="min-w-0 flex-1">
