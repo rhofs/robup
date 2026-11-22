@@ -14151,3 +14151,72 @@ reading the old entry will find an open question; this is its answer.
 The ideas pages (`public/ideas/my-assigned.html`, `logo.html`) are now genuinely dead — they exist
 only to illustrate a choice that has been made twice over. Still not removed; they are public URLs,
 so that is Robin's call rather than a tidy-up to do unasked.
+
+## 2026-11-22 (continued) — four answers, and images can be zoomed and marked up
+
+Robin went through the open list. Recording the answers, because three of them close items that have
+been sitting open for weeks and would otherwise be asked again.
+
+### Closed
+
+- **Google "Publish app" — treat as done.** "Svogern min kom inn og jeg tror han signa opp med
+  google... jeg mener jeg trykka publish." A brother-in-law signing in with Google is real evidence
+  the app is no longer limited to the nine listed test users. **Caveat kept honestly:** nobody has
+  looked at the Google Cloud console, and if he happened to be one of the nine test users the
+  evidence proves nothing. If a *new* person is ever blocked by Google before reaching Siqt, this is
+  the first thing to check, not the server.
+- **The time picker (clock face) is fine.** "Denne funker ok, ikke noe mer på den enda i allefall."
+  The follow-ups offered on 13 Nov — "+ Add start time" opening the clock inside the date window —
+  stay not wanted for now.
+- **Several images in one chat message works** (desktop). Still not tried in the phone app, which is
+  where the two real unknowns live: whether the Android WebView delivers a keyboard-pasted image as
+  a paste event at all, and whether its file chooser honours `multiple`.
+
+### Still open
+
+- **The image preview has still not been looked at** on a phone or in a browser.
+- **The traces.** Robin: "litt usikker på denne, og hva jeg må gjøre?" — answered in chat; the short
+  version is that the phone records them by itself and the only manual step is getting the file out
+  of the Pterodactyl container, which this account cannot read (`/var/lib/pterodactyl/volumes` is
+  root-only). Nothing has been collected yet.
+
+### Built: zoom, and marking up an image
+
+"Jeg trenger at vi kan se bildet større, zoome inn etc. Faktisk, om vi kan legge til en funksjon hvor
+man kan edite, med markører osv, og lagre som ny i chat, og med kommentar om man ønsker."
+
+**Zoom** (`components/AttachmentPreview.tsx`, new `ZoomableImage`). Pinch, wheel, double-tap, and
++/− buttons in the header; drag to pan; the level shows in the subtitle once it is not at rest.
+
+The part that needed deciding: **zoom and "swipe to the next image" are the same fingers.** The rule
+is positional rather than modal — at rest a one-finger drag belongs to the gallery, zoomed in it
+belongs to the image, and two fingers always mean zoom. So there is no mode to enter or leave. The
+old container-level touch swipe is kept for non-images (PDFs in a gallery) and skipped for images,
+which now own their gestures; otherwise both would fire and a swipe would step two.
+
+Buttons as well as gestures, deliberately: a pinch does not exist on a desktop mouse, and neither a
+pinch nor a wheel announces that zoom is there at all.
+
+**Mark-up** (`components/ImageAnnotator.tsx`). Pen, arrow, rectangle, ellipse; six colours, three
+widths; undo and clear. Three decisions, each with an obvious alternative rejected:
+
+1. **It never touches the original.** Saving makes a new file. What someone else sent stays as they
+   sent it, and the marked-up copy arrives as its own message with its own author.
+2. **The comment is the composer.** Saving drops the file in as a pending attachment, so the text
+   box, the reply quote, the emoji button and Send all already work and behave as they do everywhere
+   else. A message box inside the editor would have been a worse copy of the one ten pixels below.
+3. **Shapes are data in the image's own pixel coordinates**, not paint. Undo is dropping the last
+   one, and the export is drawn once at the image's true size — so a mark made on a phone-sized view
+   of a 4000px screenshot is sharp in the result rather than upscaled. Stroke width is scaled on the
+   way in for the same reason: a 4px line on a 4000px image is invisible on the phone drawing it.
+
+The button only appears where a marked-up copy has somewhere to go — chat. The task modal's preview
+has no composer, so it does not offer a button that would then have to ask "and now where?".
+
+**Not verified:** nothing seen in a browser or on a phone. Specific unknowns: whether `canvas.toBlob`
+is reached at all for images served from this app's own uploads route (the canvas is loaded with
+`crossOrigin = 'anonymous'`; same-origin should be fine, and the save path reports the failure rather
+than doing nothing if it is not), and how the tool bar wraps on a narrow phone.
+
+**Not built:** text as an annotation tool, and moving or deleting a shape after it is drawn — undo is
+the only way back. Both are real gaps; neither was asked for.

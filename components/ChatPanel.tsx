@@ -13,7 +13,8 @@ import EmojiPicker from './EmojiPicker';
 import { useChatChannelConnection } from '../lib/collab/useChatChannelConnection';
 import { usePendingAttachments } from '../hooks/usePendingAttachments';
 import PendingAttachmentsBar from './PendingAttachmentsBar';
-import { AttachmentLightbox } from './AttachmentPreview';
+import { AttachmentLightbox, type PreviewFile } from './AttachmentPreview';
+import ImageAnnotator from './ImageAnnotator';
 import { formatBytes } from '../lib/formatBytes';
 import FloatingPopover from './FloatingPopover';
 import { useIsMobile } from '../hooks/useIsMobile';
@@ -482,6 +483,10 @@ export default function ChatPanel() {
     addAttachments(Array.from(e.dataTransfer.files ?? []));
   };
 
+  // The image currently being marked up, if any. Held here because what comes out of the editor
+  // goes into this panel's own composer.
+  const [annotating, setAnnotating] = useState<PreviewFile | null>(null);
+
   const handleSend = async () => {
     const trimmed = draft.trim();
     // An attachment-only message (no text) is valid, same as Discord/Slack.
@@ -677,7 +682,7 @@ export default function ChatPanel() {
                       </div>
                       {first.quotedBodySnapshot && <QuotedPreview authorName={resolveAuthorName(first.quotedAuthorId)} body={first.quotedBodySnapshot} />}
                       {first.body && <div className="text-[15px] md:text-[13px] text-neutral-200 break-words leading-snug select-text">{renderChatMessageBody(first.body)}</div>}
-                      <AttachmentGrid attachments={first.attachments} />
+                      <AttachmentGrid attachments={first.attachments} onAnnotate={setAnnotating} />
                       <ReactionBar reactions={first.reactions} currentUserId={currentUserId} onToggle={(emoji) => handleToggleReaction(first.id, emoji)} />
                       {first.threadReplyCount > 0 && (
                         <button
@@ -713,7 +718,7 @@ export default function ChatPanel() {
                       <div className="min-w-0 flex-1">
                         {m.quotedBodySnapshot && <QuotedPreview authorName={resolveAuthorName(m.quotedAuthorId)} body={m.quotedBodySnapshot} />}
                         {m.body && <div className="text-[15px] md:text-[13px] text-neutral-200 break-words leading-snug select-text">{renderChatMessageBody(m.body)}</div>}
-                        <AttachmentGrid attachments={m.attachments} />
+                        <AttachmentGrid attachments={m.attachments} onAnnotate={setAnnotating} />
                         <ReactionBar reactions={m.reactions} currentUserId={currentUserId} onToggle={(emoji) => handleToggleReaction(m.id, emoji)} />
                         {m.threadReplyCount > 0 && (
                           <button
@@ -742,6 +747,22 @@ export default function ChatPanel() {
         ))}
       </div>
       </div>
+
+      {annotating && (
+        <ImageAnnotator
+          src={annotating.url}
+          fileName={annotating.fileName}
+          onCancel={() => setAnnotating(null)}
+          onSave={(file) => {
+            // Into the composer, not straight out as a message. The marked-up copy is a new
+            // attachment like any other, so the text box, the reply quote and Send all behave the
+            // way they already do — and "med kommentar om man ønsker" is simply typing before
+            // pressing Send, with no second idea of what a message is.
+            attachments.add([file]);
+            setAnnotating(null);
+          }}
+        />
+      )}
 
       {/* The composer, and on mobile it FLOATS over the conversation rather than sitting below it.
           
@@ -888,7 +909,15 @@ export default function ChatPanel() {
 // "file" renders as a small card (icon, filename, size) that downloads on click instead. Several
 // images in one message get smaller tiles, so two sit side by side on a phone rather than each
 // taking a screen's width of scrolling.
-export function AttachmentGrid({ attachments }: { attachments: ChatAttachment[] }) {
+export function AttachmentGrid({
+  attachments,
+  onAnnotate,
+}: {
+  attachments: ChatAttachment[];
+  // Threaded down from the panel rather than handled here: marking up an image ends in the
+  // composer, and a message's attachment row knows nothing about the composer.
+  onAnnotate?: (file: PreviewFile) => void;
+}) {
   // Which of this message's images is open, by its place among them.
   const [openImage, setOpenImage] = useState<number | null>(null);
   if (attachments.length === 0) return null;
@@ -902,6 +931,7 @@ export function AttachmentGrid({ attachments }: { attachments: ChatAttachment[] 
           index={openImage}
           onIndex={setOpenImage}
           onClose={() => setOpenImage(null)}
+          onAnnotate={onAnnotate}
         />
       )}
       {attachments.map((a) =>
