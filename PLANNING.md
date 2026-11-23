@@ -14354,3 +14354,8 @@ build**, with its database migrated to match. Running `npm run build` here on ma
 The password for `robin@local.test` on the local instance was not written down anywhere and was reset
 on Robin's request (2026-11-23). It is in `/home/robin/siqt-local/password.txt` (0600), not in this
 file. Test database only.
+
+An API key for testing the `agent-api` branch on the local instance (made by Robin for
+`robin@local.test`, 2026-11-23) is in `/home/robin/siqt-local/api-key.txt` (0600), not in this file.
+Checked working the same day: `GET /api/v1/workspaces` and MCP `tools/list` on
+`http://100.64.30.23:3099` both answer with it. Test database only. It has no meaning on production.
