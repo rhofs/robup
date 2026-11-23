@@ -14339,3 +14339,79 @@ a token is allowed to do (read-only vs. write, per workspace), marking agent cha
 log ("via agent"), rate limiting, and that delete/trash should be left out of or be harder in the
 first version. Prompt injection: task text an agent reads can contain instructions, so the agent's
 tools should not be able to do more than the user intended.
+
+## 2026-11-23 (continued) — branch `agent-api`: API keys + MCP server, built for testing. NOT on main, NOT deployed
+
+Robin: "Kan du lage en ny gren for siqt, hvor vi tester å lage 1. og 2. Hvordan går vi fram for å
+teste den grenen før vi implementerer?" Options 1 and 2 from the entry above are built on the branch
+`agent-api` (pushed). **Production is untouched and main does not contain any of this.**
+
+### What is on the branch
+
+- **`ApiToken`** (migration `20261123125628_add_api_tokens`, one new table, nothing existing altered).
+  A key is `siqt_` + 32 random bytes, shown once; only its SHA-256 is stored. Scope `write` or `read`.
+  At most 10 per person. 120 requests a minute per key (`lib/rateLimit.ts`, in memory).
+- **Settings → You → Account → "AI agents & API keys"** (`components/ApiTokensSettings.tsx`): create
+  (name, optional read-only), see the key once with a ready `claude mcp add …` command, list, revoke.
+  Routes `app/api/me/tokens` — session cookie only; a key cannot manage keys.
+- **`/api/mcp`** — a stateless MCP server (Streamable HTTP, JSON answers, no SDK dependency: the
+  route file says why). Bearer key in the `Authorization` header.
+- **`/api/v1/…`** — the same operations as plain REST: `GET /workspaces`, `GET|POST /tasks`,
+  `GET|PATCH /tasks/:id`, `POST /tasks/:id/comments`.
+- **Six operations, and that list is the permission model** (`lib/agent/operations.ts`):
+  `list_workspaces`, `search_tasks`, `get_task`, `create_task`, `update_task`, `add_comment`.
+  A read key gets the first three.
+
+### How it is put together, and why
+
+**A key is NOT accepted by `getCurrentUserId()` from the request.** That was the first idea (it is
+how option 1 was described) and it was dropped: it would have opened every route in the app to a key
+at once — deleting, privacy settings, account, making more keys. Instead a key is only checked by
+`/api/mcp` and `/api/v1`, and the operations then call **the app's own route handlers in-process**
+(`tasks` GET/POST, `tasks/[id]` PATCH, comments, workspaces) inside `runAsUser()`
+(`lib/auth/actAs.ts`, an AsyncLocalStorage that `getCurrentUserId()` consults first). So the access
+rules, activity log, notifications and Google Calendar sync are the existing ones, not copies. Checked:
+`GET /api/tasks` with a key in the header answers `[]`, and `/api/me/tokens` answers 401.
+
+**Decisions taken by default — Robin has not been asked about each, change them if wrong:**
+- No delete/trash, no moving between Lists or parents, no privacy fields, nothing outside tasks.
+- Activity entries written during an agent call get ` (via <key name>)` appended; a comment gets a
+  last line `— via <key name>`. Done after the fact by matching author + task + time, because the
+  route handlers write the entries — crude, but it avoids touching the handlers.
+- A date-only value means midnight in Norway, like the app's date picker.
+- `update_task` refuses to change a description once the task has a description **Doc**
+  (`Doc.descriptionTaskId` — made the first time anyone opens the task): `Task.description` is then
+  only a mirror and would be overwritten. The agent is told to comment instead. A real limitation.
+- A List with no statuses of its own or its Space's reports the built-in four (To Do, In Progress,
+  Review, Done) — a fifth copy of that list, since it only exists in client components.
+- "Sign out everywhere" does not revoke keys. Keys are revoked one by one in Settings.
+
+### Verified, and not
+
+Verified on the local Tailscale instance (`http://100.64.30.23:3099`, its own database — now migrated,
+copy from before at `~/siqt-local/local.db.before-agent-api`, and **running the branch's build**):
+every operation over MCP with curl; wrong status / unknown task / unknown List refusals; read key
+cannot write; revoked key gets 401; REST routes; and Claude Code's own MCP client reports
+"✔ Connected". A test task "Agent-test: klipp trailer v2" (archived) is left in the local database.
+
+**Not verified:** the Settings UI has not been opened in a browser — it typechecks, lints and builds,
+nothing more. No test with two users (that someone else's private task stays hidden rests on the
+existing handlers, which is the design, but it was not exercised). claude.ai / ChatGPT connectors are
+not expected to work: they need OAuth (option 3), not built.
+
+Seen on the way, pre-existing, not touched: the activity line "Dato endret til …" prints the UTC day,
+so a date set to 15 July reads "2026-07-14" in summer time. Same for dates set in the app.
+
+### To test (Robin)
+
+1. Open `http://100.64.30.23:3099` over Tailscale, sign in as `robin@local.test`, Settings → You →
+   "AI agents & API keys", create a key.
+2. Run the `claude mcp add …` line it shows, start Claude Code, ask it to make a task.
+3. Check the result in the local instance.
+
+### To go live, when decided
+
+Merge `agent-api` into main, **take a Pterodactyl backup first** (the branch has a migration, and a
+code rollback does not undo a migration — though this one only adds a table), then
+`scripts/ptero.sh reinstall`. The checkout at `~/siqt` is left on **main**; the local instance keeps
+serving the branch's build until someone runs `npm run build` on main.

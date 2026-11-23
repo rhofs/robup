@@ -22,6 +22,7 @@ import { Capacitor } from '@capacitor/core';
 import ColorSwatchPicker from './ColorSwatchPicker';
 import { readStartPage, setStartPage, type StartPage } from '../lib/startPage';
 import { copyToClipboard } from '../lib/copyToClipboard';
+import ApiTokensSettings from './ApiTokensSettings';
 
 // Moved here from the now-deleted AccountSettingsPanel.tsx along with the rest of the Account
 // tab's content (see the tab === 'account' branch below).
@@ -1368,6 +1369,7 @@ export default function SettingsPanel({
                 )}
                 <InstallRow />
                 <AndroidAppRow />
+                <ApiTokensSettings />
               </>
             ) : (
               <p className="text-xs text-neutral-500 px-1 py-1">Signed-out session — try reloading the page.</p>

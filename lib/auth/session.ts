@@ -1,5 +1,6 @@
 import { auth } from '@/auth';
 import { prisma } from '@/lib/prisma';
+import { actingAs } from '@/lib/auth/actAs';
 
 // Every API route that needs to know "who is asking" calls this instead of trusting a
 // client-supplied ?userId= — proxy.ts only gates page routes, so this is each Route Handler's
@@ -14,6 +15,11 @@ import { prisma } from '@/lib/prisma';
 // signed in" — which is what actually happened the first time this shipped (create-workspace
 // crashed with an unhandled 500, surfacing to the client as a JSON-parse error on an empty body).
 export async function getCurrentUserId(): Promise<string | null> {
+  // An agent acting for someone with their API key — already verified, and only ever set in-process
+  // by lib/agent/operations.ts (see lib/auth/actAs.ts). Never read from the request.
+  const agent = actingAs();
+  if (agent) return agent.userId;
+
   const session = await auth();
   const userId = session?.user?.id;
   if (!userId) return null;

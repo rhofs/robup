@@ -633,6 +633,7 @@ model User {
   pushSubscriptions PushSubscription[]
   deviceTokens      DeviceToken[]
   passwordResetTokens PasswordResetToken[]
+  apiTokens     ApiToken[]
   // Null until the first-run walkthrough is finished or dismissed. Stored on the user rather than
   // in localStorage so it follows the person across devices — someone who onboarded on their
   // laptop shouldn't be walked through it again the first time they open the app on their phone.
@@ -654,6 +655,25 @@ model User {
 // link. A leaked database therefore can't be used to reset anyone's password, the same reasoning
 // that makes User.password a bcrypt hash rather than the password. Single-use (usedAt) and
 // short-lived (expiresAt), so an old link found in a mailbox months later is inert.
+// A key a person hands to their own AI agent (or script) so it can act as them — through
+// /api/mcp and /api/v1 only, never the rest of the API (lib/auth/apiToken.ts). The key itself is
+// shown once and never stored: only its SHA-256, the same rule as PasswordResetToken. `prefix` is
+// the first few characters, kept so the list in Settings can tell two keys apart.
+model ApiToken {
+  id         String    @id @default(uuid())
+  name       String
+  tokenHash  String    @unique @map("token_hash")
+  prefix     String
+  // 'write' | 'read'. A read key cannot create or change anything.
+  scope      String    @default("write")
+  userId     String    @map("user_id")
+  user       User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  lastUsedAt DateTime? @map("last_used_at")
+  createdAt  DateTime  @default(now()) @map("created_at")
+
+  @@index([userId])
+}
+
 model PasswordResetToken {
   id        String    @id @default(uuid())
   token     String    @unique
