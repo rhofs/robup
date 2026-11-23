@@ -14378,3 +14378,24 @@ meeting is an obvious thing to say to an agent, so it is the first gap a real us
 a workspace log, calendar events, moving/sorting, bulk changes with dry run, keys limited to chosen
 workspaces, a per-workspace off switch. It now holds **two** migrations. Decisions and test results
 are in PLANNING.md on the branch. Still not merged, still not deployed; the local instance serves it.
+
+## 2026-11-23 (continued) — [Bug] a task moved to another List left its subtasks behind
+
+Found from the agent work: the agent API had to refuse moving a task with subtasks, because the
+app's own move (`PATCH /api/tasks/[id]` with `listId`) changed **only that one row**. The subtasks
+kept showing under it — they are found by `parentId` — while still registered in the List it had
+left: counted there, governed by that List's statuses and privacy. Nobody had reported it; it does
+not look wrong on screen.
+
+Fixed on main: the route moves the whole subtree (`collectTaskSubtreeIds`, now exported from
+`lib/trashCascade.ts`), and `optimisticSetList` in the store mirrors it. Undo goes through the same
+two places, so it brings the subtree back.
+
+**Also fixed, same route:** moving to another List never checked access to the *target* List — only
+to the task. Any List id was accepted, including a private one the caller cannot see. Now 403.
+
+Verified on the local instance (which runs the `agent-api` build, with this merged in): a person's
+session moving a task with a child and a grandchild → all three rows in the new List; a member moving
+a task into a private List → 403. **Not looked at in a browser**, and tasks whose subtasks were
+stranded by earlier moves are **not repaired** — no check has been made of whether production has
+any. A query for subtasks whose `list_id` differs from their parent's would answer that.
