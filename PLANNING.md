@@ -14463,3 +14463,8 @@ description Docs, creating Lists/Folders, recurring events and task series, atta
 messages, reading Docs/wiki, "my day" summaries (one call for what is due and what is assigned),
 moving an event to the personal workspace, and subtask status sets. See the chat reply of this date
 for the order they were recommended in.
+
+**Deployed 2026-11-23 as `17ce408`** (tag `deploy/2026-11-23_1450`) — live task/event updates. The fixed
+`ptero.sh reinstall` (no argument) waited for the right commit and tagged it by itself this time.
+Whether the live updates actually work in production is **not confirmed** — waiting on Robin's
+two-window test.
