@@ -88,7 +88,7 @@ export async function cascadeDocFolder(docFolderId: string, when: Date | null) {
   ]);
 }
 
-async function collectTaskSubtreeIds(rootTaskId: string): Promise<string[]> {
+export async function collectTaskSubtreeIds(rootTaskId: string): Promise<string[]> {
   const ids: string[] = [rootTaskId];
   let frontier = [rootTaskId];
   while (frontier.length > 0) {

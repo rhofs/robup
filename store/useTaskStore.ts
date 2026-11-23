@@ -1600,8 +1600,20 @@ export const useTaskStore = create<TaskStore>((set, get) => {
 
     optimisticSetList: (taskId, listId) => {
       const oldListId = get().tasks.find((t) => t.id === taskId)?.listId;
+      // Its subtasks go with it, at every depth — the server moves the whole subtree
+      // (app/api/tasks/[id]), and Undo goes through here again, which brings them back the same way.
+      const moving = new Set([taskId]);
+      for (let grew = true, guard = 0; grew && guard < 30; guard++) {
+        grew = false;
+        for (const t of get().tasks) {
+          if (t.parentId && moving.has(t.parentId) && !moving.has(t.id)) {
+            moving.add(t.id);
+            grew = true;
+          }
+        }
+      }
       set((state) => ({
-        tasks: state.tasks.map((t) => (t.id === taskId ? { ...t, listId } : t)),
+        tasks: state.tasks.map((t) => (moving.has(t.id) ? { ...t, listId } : t)),
       }));
       fetch(`/api/tasks/${taskId}`, {
         method: 'PATCH',
