@@ -14367,3 +14367,9 @@ First real use (2026-11-23): on Robin's request, created "test fra Claude" in Pe
 ten subtasks (a fake video project, due dates 25 Nov–17 Dec) through MCP `create_task` with
 `parentId`. All eleven came back with the right parent and dates. Done with curl, not with Claude
 Code's MCP client, because the server was registered mid-session and its tools only load in a new one.
+Robin then asked for an event ("Møte hos Gaagle", Robin attending, Monday 30 Nov 10:00). **The agent
+API cannot do this: it has no event operations, only tasks.** Created it through the ordinary
+`POST /api/events` with the saved session cookie instead (`/home/robin/siqt-local/cookies.txt`),
+10:00–11:00 Oslo time, stored as 09:00Z; the one-hour length was my choice. Not yet decided: adding
+`create_event` (and maybe `search_events`) to `lib/agent/operations.ts` on the branch. Asking for a
+meeting is an obvious thing to say to an agent, so it is the first gap a real user would hit.
