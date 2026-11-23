@@ -14339,3 +14339,14 @@ a token is allowed to do (read-only vs. write, per workspace), marking agent cha
 log ("via agent"), rate limiting, and that delete/trash should be left out of or be harder in the
 first version. Prompt injection: task text an agent reads can contain instructions, so the agent's
 tools should not be able to do more than the user intended.
+
+## 2026-11-23 (continued) — branch `agent-api` exists (API keys + MCP server), not merged
+
+Options 1 and 2 from the AI-agent entry above are built on the branch `agent-api` (pushed, commit
+69c8a88) for testing. **Nothing of it is on main or in production.** The full record — what was
+built, the design, what is and is not verified, how to test and how to go live — is in PLANNING.md
+**on that branch** and comes along when it is merged. It contains a migration (one new table,
+`ApiToken`), so going live needs a backup first.
+
+The local Tailscale instance (`http://100.64.30.23:3099`) is currently serving **that branch's
+build**, with its database migrated to match. Running `npm run build` here on main replaces it.
