@@ -11,3 +11,9 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
   const { id } = await params;
   return runV1(req, 'update_task', { ...(await jsonBody(req)), taskId: id });
 }
+
+// DELETE /api/v1/tasks/:id — to the Trash (with its subtasks); it can be restored.
+export async function DELETE(req: Request, { params }: { params: Promise<{ id: string }> }) {
+  const { id } = await params;
+  return runV1(req, 'trash_task', { taskId: id });
+}

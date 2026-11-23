@@ -1,4 +1,5 @@
 import { prisma } from '@/lib/prisma';
+import { actingAs, type HeldNotification } from '@/lib/auth/actAs';
 import { sendPushToUser } from '@/lib/push';
 import { taskUrl } from '@/lib/pushTargets';
 
@@ -12,15 +13,19 @@ import { taskUrl } from '@/lib/pushTargets';
 // Never notifies the actor about their own action. Assigning yourself a task is the single most
 // common way to use assignment, and being told about it is noise that teaches people to ignore the
 // bell — which costs more than the one real notification it would otherwise deliver.
-export async function notify(params: {
-  userIds: string[];
-  actorId: string | null;
-  type: string;
-  title: string;
-  body?: string | null;
-  taskId?: string | null;
-  url?: string;
-}): Promise<void> {
+// An agent's action can touch fifty tasks; the people involved should hear about it once. While an
+// agent is acting (lib/auth/actAs.ts) notifications are held rather than sent, and the action sends
+// one per person when it is done (lib/agent/changes.ts → deliverHeld).
+export async function notify(params: HeldNotification): Promise<void> {
+  const held = actingAs()?.held;
+  if (held) {
+    held.push(params);
+    return;
+  }
+  return deliverNotification(params);
+}
+
+export async function deliverNotification(params: HeldNotification): Promise<void> {
   const recipients = [...new Set(params.userIds)].filter((id) => id && id !== params.actorId);
   if (recipients.length === 0) return;
 

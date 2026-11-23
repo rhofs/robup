@@ -16,18 +16,38 @@ const PREFIX = 'siqt_';
 const hash = (raw: string) => crypto.createHash('sha256').update(raw).digest('hex');
 
 export type TokenScope = 'read' | 'write';
-export type VerifiedToken = { tokenId: string; userId: string; name: string; scope: TokenScope };
+// `workspaceIds`: the workspaces the key was limited to when it was made, or null for all of its
+// owner's. What it actually reaches is narrower still — see lib/agent/shared.ts's openWorkspaceIds.
+export type VerifiedToken = { tokenId: string; userId: string; name: string; scope: TokenScope; workspaceIds: string[] | null };
+
+export const parseWorkspaceIds = (json: string | null): string[] | null => {
+  if (!json) return null;
+  try {
+    const ids = JSON.parse(json);
+    return Array.isArray(ids) ? ids.filter((id): id is string => typeof id === 'string') : null;
+  } catch {
+    return null;
+  }
+};
 
 export const MAX_TOKENS_PER_USER = 10;
 
 // The key is returned here and nowhere else, ever: only its hash is kept.
-export async function createApiToken(userId: string, name: string, scope: TokenScope) {
+export async function createApiToken(userId: string, name: string, scope: TokenScope, workspaceIds: string[] | null) {
   const raw = PREFIX + crypto.randomBytes(32).toString('base64url');
   const row = await prisma.apiToken.create({
-    data: { userId, name, scope, tokenHash: hash(raw), prefix: raw.slice(0, PREFIX.length + 4) },
-    select: { id: true, name: true, scope: true, prefix: true, createdAt: true, lastUsedAt: true },
+    data: {
+      userId,
+      name,
+      scope,
+      tokenHash: hash(raw),
+      prefix: raw.slice(0, PREFIX.length + 4),
+      workspaceIdsJson: workspaceIds ? JSON.stringify(workspaceIds) : null,
+    },
+    select: { id: true, name: true, scope: true, prefix: true, createdAt: true, lastUsedAt: true, workspaceIdsJson: true },
   });
-  return { ...row, token: raw };
+  const { workspaceIdsJson, ...rest } = row;
+  return { ...rest, workspaceIds: parseWorkspaceIds(workspaceIdsJson), token: raw };
 }
 
 export type TokenCheck =
@@ -44,7 +64,7 @@ export async function verifyApiToken(req: Request): Promise<TokenCheck> {
   }
   const row = await prisma.apiToken.findUnique({
     where: { tokenHash: hash(raw) },
-    select: { id: true, userId: true, name: true, scope: true, lastUsedAt: true },
+    select: { id: true, userId: true, name: true, scope: true, lastUsedAt: true, workspaceIdsJson: true },
   });
   if (!row) return { ok: false, status: 401, error: 'Unknown or revoked API key.' };
   if (!checkRateLimit(`api-token:${row.id}`, 120, 60_000)) {
@@ -57,6 +77,12 @@ export async function verifyApiToken(req: Request): Promise<TokenCheck> {
   }
   return {
     ok: true,
-    token: { tokenId: row.id, userId: row.userId, name: row.name, scope: row.scope === 'read' ? 'read' : 'write' },
+    token: {
+      tokenId: row.id,
+      userId: row.userId,
+      name: row.name,
+      scope: row.scope === 'read' ? 'read' : 'write',
+      workspaceIds: parseWorkspaceIds(row.workspaceIdsJson),
+    },
   };
 }

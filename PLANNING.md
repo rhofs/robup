@@ -14448,3 +14448,101 @@ API cannot do this: it has no event operations, only tasks.** Created it through
 10:00–11:00 Oslo time, stored as 09:00Z; the one-hour length was my choice. Not yet decided: adding
 `create_event` (and maybe `search_events`) to `lib/agent/operations.ts` on the branch. Asking for a
 meeting is an obvious thing to say to an agent, so it is the first gap a real user would hit.
+
+## 2026-11-23 (continued) — branch `agent-api`, round 2: actions, undo, events, bulk, scoping. Still NOT on main
+
+After testing round 1, Robin hit the first gap (no events) and asked for more reach — sorting, changing
+many tasks at once — "men at vi må fool proofe det, så om noe feil skjer, så kan vi resette".
+
+### Decided (Robin's answers to the proposal)
+
+- **One thing an agent does = one step**: one log entry, one notification per person, one undo —
+  reversible from a log **in the workspace**. Yes.
+- **Preview before applying** (dry run). Yes.
+- **Caps / automatic pause / "pause key" button: dropped.** ("Denne dropper vi.") Not built. What
+  remains is the per-key rate limit from round 1 (120/min) and a technical bound of 100 changes per
+  call. Do not re-propose the caps without a new reason.
+- **Narrower keys**: yes, but one key must be able to cover several workspaces, so nobody needs an
+  agent per workspace. Built as: all workspaces by default, optionally limited to chosen ones.
+- One collected notification; a request id against duplicates; an admin switch to turn agents off
+  per workspace; and **test that private tasks stay hidden, also from other people's agents**.
+- Robin was unsure what "instructions hidden in text" meant. Answered in chat: it is text inside a
+  task that an agent reads as an order. Undo covers what such an agent *changes*; it cannot cover
+  what it *reads and repeats elsewhere*, which is why scoping a key matters. Nothing built for it.
+
+### What was built
+
+**`lib/agent/changes.ts` — the action.** Every change goes through `performAction`: all changes are
+planned (validated) first, so one impossible change stops the whole call before anything happens;
+`dryRun` returns the plan and does nothing; then they run in order through the app's own route
+handlers. An `AgentAction` row (new table) records each change with what it replaced.
+
+- **Change types**: `create_task`, `update_task`, `move_task` (place before/after another task,
+  under a parent, out to top level, or to another List in the same workspace), `trash_task`,
+  `add_comment`, `create_event`, `update_event`, `trash_event`. Each is also its own tool (an action
+  of one); `apply_changes` takes up to 100. Inside one call a `create_task` can carry `ref: "p"` and
+  later ones `parentId: "$p"` — a task with its subtasks as one step.
+- **Reading added**: `search_events`, `list_my_actions`. `search_tasks` within a List now returns
+  board order (needed to sort).
+- **Undo** (`undoAction`): created → Trash; trashed → restored; changed fields → old values, **only
+  where the value is still the one the agent left** (a person's later change wins, and the report
+  says which fields were left alone); moved → back, with its old neighbours' order restored; comment
+  → removed. Allowed for the key's owner and for workspace owner/admins; carried out as the owner.
+  Also a tool (`undo_action`, own actions only).
+- **Notifications**: `notify()` holds instead of sends while an agent acts (`ActingAs.held`); the
+  action then sends one per person — the ordinary one if they were touched once, a summary line
+  ("Robin's agent made 4 changes involving you" + the agent's summary) if several. Undo sends none.
+- **Idempotency**: `requestId` on every changing tool; `@@unique([tokenId, requestId])`; the row is
+  created *before* the work so a concurrent duplicate meets the index. A repeat returns the first
+  result with `repeated: true`.
+- **Scope** (`openWorkspaceIds` in `lib/agent/shared.ts`): member ∩ the key's `workspaceIdsJson`
+  (null = all) ∩ `Workspace.agentsAllowed`. Every read and write goes through it. One action must
+  stay within one workspace.
+- **UI**: Settings → Workspace → **Agent activity** (`components/AgentActivityLog.tsx`, every member,
+  Undo where allowed); Settings → Workspace → Features → **AI agents** switch (owner/admin); key
+  creation gets "Only some workspaces".
+- **REST**: `/api/v1/events`, `/events/:id`, `/tasks/:id/move`, `DELETE /tasks/:id` (Trash),
+  `/changes`, `/actions`, `/actions/:id/undo`.
+- `lib/agent/operations.ts` is now only the tool list; shared helpers moved to `lib/agent/shared.ts`.
+
+**Migration `…_agent_actions`**: `AgentAction` table, `ApiToken.workspace_ids_json`,
+`Workspace.agents_allowed`. **Hand-edited**: Prisma generated a full rebuild of `Workspace` (new
+table, copy, drop, rename) to add one column; replaced with `ALTER TABLE … ADD COLUMN`, and checked
+with `migrate diff` against the schema ("No difference detected"). The branch now has two migrations.
+
+### Limits worth knowing
+
+- A task **with subtasks** cannot be moved to another List by an agent: the app's own move changes
+  only the one row and would leave the subtasks behind in the old List. Refused with that reason.
+- The log's privacy rule: a change is described only to someone who can open the thing changed **and
+  every other task its label names**; otherwise it is counted, not named, and the agent's free-text
+  summary is replaced by "N changes". The second half was a leak found in testing — "Move A above B"
+  showed private B's title to a member who could see A. Fixed with `RecordedChange.mentions`.
+- Activity lines are still tagged after the fact (author + task + time), now also "(agent action
+  undone)" for undo.
+- An event has no privacy of its own in this app (workspace members see all events) — unchanged.
+- Dry run is offered, not enforced: nothing stops an agent from applying without previewing. The
+  server instructions tell it to preview large or risky sets and show the user.
+
+### Verified on the local instance (two users: Robin = owner, "Kari Test" = member)
+
+Events (timed, all-day, moving the start keeps the length, search); same `requestId` twice → one
+event; dry run adds nothing; a bad change in a batch → nothing done; task + 3 subtasks via `$ref`;
+four assignments → **one** notification, a single assignment → the ordinary one; sorting and undo of
+sorting; undo after a person changed one field (title put back, status left, said so); undo twice
+refused; trash + undo; a person undoing a whole action through the session route.
+**Private task** (Robin made a subtask private): Kari's agent gets nothing from search, parent's
+subtask list, get, update, comment, trash, move, create-under, a batch touching it, or REST; Robin's
+own agent still sees it. Kari's agent cannot see Robin's Personal workspace, cannot undo or list
+Robin's actions; Kari as a member cannot undo Robin's action (403) or switch agents back on (403).
+A key limited to Personal reaches nothing in the other workspace. Agents switched off → both keys
+lose the workspace for read, write and undo; on again → back.
+
+**Not verified:** none of the three UI pieces has been opened in a browser (typecheck, lint, build
+only). Not tested with roles in `accessJson` (only the plain private flag). Google Calendar sync of
+agent-made events not tested (no Google connection on the local instance).
+
+Left in the local test database: user `kari@local.test` (member of New Game Media, with a key
+`Kari agent` whose value is not kept anywhere durable), the private task "Manus" and its siblings in
+the Trash, events "Møte hos Gaagle" and "Heldags", and backups `local.db.before-agent-api` /
+`local.db.before-agent-actions`.

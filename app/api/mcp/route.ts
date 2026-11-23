@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 import { verifyApiToken, type VerifiedToken } from '@/lib/auth/apiToken';
-import { AgentError, baseUrlFor, callTool, toolsFor } from '@/lib/agent/operations';
+import { AgentError, baseUrlFor, callTool, newCall, toolsFor } from '@/lib/agent/operations';
 
 // Siqt as an MCP server — the protocol AI agents (Claude, Cursor and others) use to reach tools.
 // An agent is pointed at https://<host>/api/mcp with an API key from Settings and can then do what
@@ -34,16 +34,16 @@ async function handle(msg: RpcMessage, token: VerifiedToken, req: Request) {
         // then decides whether it can live with that.
         protocolVersion: PROTOCOL_VERSIONS.includes(asked) ? asked : PROTOCOL_VERSIONS[0],
         capabilities: { tools: {} },
-        serverInfo: { name: 'siqt', title: 'Siqt', version: '0.1.0' },
+        serverInfo: { name: 'siqt', title: 'Siqt', version: '0.2.0' },
         instructions:
-          'Siqt is a task manager. Call list_workspaces first: it gives the List ids, the status names each List uses, and the member ids, which the other tools need. Dates are days (YYYY-MM-DD). You act as the person who made this API key and see exactly what they see. You cannot delete anything.',
+          'Siqt is a task manager with a calendar. Call list_workspaces first: it gives the workspace and List ids, the status names each List uses, and the member ids, which the other tools need. You act as the person who made this API key and see what they see. When a request means more than one change, make them in ONE apply_changes call — that is one step for the user, one notification, and one thing to undo; for a large or risky set, call it with dryRun: true first and show the user what would change. Always send a requestId when changing something. Nothing is deleted for good: trash_task and trash_event can be restored, and every action can be undone with undo_action.',
       });
     }
     case 'ping':
       return result(id, {});
     case 'tools/list':
       return result(id, {
-        tools: toolsFor(token).map((t) => ({
+        tools: toolsFor(newCall(token, baseUrlFor(req))).map((t) => ({
           name: t.name,
           description: t.description,
           inputSchema: t.inputSchema,
@@ -53,7 +53,7 @@ async function handle(msg: RpcMessage, token: VerifiedToken, req: Request) {
     case 'tools/call': {
       const name = typeof msg.params?.name === 'string' ? msg.params.name : '';
       try {
-        const value = await callTool(name, msg.params?.arguments, { token, baseUrl: baseUrlFor(req) });
+        const value = await callTool(name, msg.params?.arguments, newCall(token, baseUrlFor(req)));
         return result(id, { content: [{ type: 'text', text: JSON.stringify(value, null, 2) }] });
       } catch (err) {
         // A refusal the agent can read and act on ("there is no status X, the statuses are …") is a

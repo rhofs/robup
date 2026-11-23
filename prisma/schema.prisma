@@ -67,6 +67,11 @@ model Workspace {
   // switched on by an owner or admin in workspace settings. Off hides it everywhere and closes its
   // API, but keeps any pages: turning it back on brings the wiki back as it was.
   wikiEnabled        Boolean @default(false) @map("wiki_enabled")
+  // Whether members' AI agents (API keys — ApiToken) may work in this workspace. On by default; an
+  // owner or admin can switch it off, and then no key sees or changes anything here, whoever made
+  // it (lib/agent/scope.ts). People are unaffected.
+  agentsAllowed      Boolean @default(true) @map("agents_allowed")
+  agentActions       AgentAction[]
   // Who may edit the wiki besides owners and admins (who always can): the same {type:'user'|'role',
   // id} list accessJson uses everywhere else, read with the same parser (lib/auth/visibility.ts).
   wikiEditorsJson    String  @default("[]") @map("wiki_editors_json")
@@ -634,6 +639,7 @@ model User {
   deviceTokens      DeviceToken[]
   passwordResetTokens PasswordResetToken[]
   apiTokens     ApiToken[]
+  agentActions  AgentAction[]
   // Null until the first-run walkthrough is finished or dismissed. Stored on the user rather than
   // in localStorage so it follows the person across devices — someone who onboarded on their
   // laptop shouldn't be walked through it again the first time they open the app on their phone.
@@ -666,12 +672,49 @@ model ApiToken {
   prefix     String
   // 'write' | 'read'. A read key cannot create or change anything.
   scope      String    @default("write")
+  // Which workspaces the key reaches: a JSON list of ids, or null for every workspace its owner is
+  // in (the default — one key for all of them, so nobody needs an agent per workspace).
+  workspaceIdsJson String? @map("workspace_ids_json")
+  actions    AgentAction[]
   userId     String    @map("user_id")
   user       User      @relation(fields: [userId], references: [id], onDelete: Cascade)
   lastUsedAt DateTime? @map("last_used_at")
   createdAt  DateTime  @default(now()) @map("created_at")
 
   @@index([userId])
+}
+
+// One thing an agent did — one call, however many tasks it touched. This is the unit a person
+// sees in the workspace's agent log, the unit that sends (at most) one notification per person, and
+// the unit that is undone. `changesJson` holds, per change, what it was and what stood there before
+// (lib/agent/changes.ts), which is what makes undo possible without restoring a backup.
+model AgentAction {
+  id          String    @id @default(uuid())
+  // The key that did it. Kept by name as well, because revoking a key must not erase the record of
+  // what it did.
+  tokenId     String?   @map("token_id")
+  token       ApiToken? @relation(fields: [tokenId], references: [id], onDelete: SetNull)
+  tokenName   String    @map("token_name")
+  userId      String    @map("user_id")
+  user        User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  workspaceId String    @map("workspace_id")
+  workspace   Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  summary     String
+  // Sent by the agent, once per thing it means to do. A second call with the same id from the same
+  // key is answered with `resultJson` instead of being done again — agents retry when a call is
+  // slow, and without this a retry is a duplicate task.
+  requestId   String?   @map("request_id")
+  changesJson String    @map("changes_json")
+  resultJson  String?   @map("result_json")
+  // 'done' | 'partial' (stopped part-way; what was done is recorded) | 'undone'
+  status      String    @default("done")
+  undoneAt    DateTime? @map("undone_at")
+  undoneById  String?   @map("undone_by_id")
+  undoReport  String?   @map("undo_report")
+  createdAt   DateTime  @default(now()) @map("created_at")
+
+  @@unique([tokenId, requestId])
+  @@index([workspaceId, createdAt])
 }
 
 model PasswordResetToken {

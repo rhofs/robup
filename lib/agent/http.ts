@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 import { verifyApiToken } from '@/lib/auth/apiToken';
-import { AgentError, baseUrlFor, callTool } from '@/lib/agent/operations';
+import { AgentError, baseUrlFor, callTool, newCall } from '@/lib/agent/operations';
 
 // The plain-HTTP face of the agent operations (/api/v1/*): check the key, run one operation, answer
 // in JSON. Every v1 route is this function with a different operation name, which is what keeps
@@ -14,7 +14,7 @@ export async function runV1(req: Request, tool: string, args: Record<string, unk
     );
   }
   try {
-    return NextResponse.json(await callTool(tool, args, { token: check.token, baseUrl: baseUrlFor(req) }));
+    return NextResponse.json(await callTool(tool, args, newCall(check.token, baseUrlFor(req))));
   } catch (err) {
     if (err instanceof AgentError) return NextResponse.json({ error: err.message }, { status: err.status });
     console.error(`Agent API: ${tool} failed`, err);

@@ -295,6 +295,8 @@ export type HierarchyWorkspace = {
   avatarUrl: string | null;
   // Whether the Wiki is switched on for this workspace (off by default). Gates the nav entries.
   wikiEnabled: boolean;
+  // Whether members' AI agents (API keys) may work in this workspace. On unless switched off.
+  agentsAllowed?: boolean;
   // How many Spaces in this workspace are archived — sent even while they are hidden, for the
   // sidebar's "Archived spaces (N)" row.
   archivedSpaceCount: number;
@@ -565,6 +567,7 @@ interface TaskStore {
       color?: string | null;
       avatarUrl?: string | null;
       wikiEnabled?: boolean;
+      agentsAllowed?: boolean;
     }
   ) => Promise<void>;
   addWorkspaceMember: (workspaceId: string, userId: string) => Promise<void>;

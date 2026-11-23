@@ -3,17 +3,32 @@
 import { useEffect, useState } from 'react';
 import { Bot, Check, Copy, Plus, Trash2 } from 'lucide-react';
 import { copyToClipboard } from '../lib/copyToClipboard';
+import { useTaskStore } from '../store/useTaskStore';
 
 // Settings → "AI agents & API": the keys a person gives their own AI agent so it can work in Siqt
 // as them (app/api/me/tokens, lib/auth/apiToken.ts). A key is shown once, when it is made — after
 // that only its first characters, because the server never keeps the key itself.
-type TokenRow = { id: string; name: string; scope: 'read' | 'write'; prefix: string; createdAt: string; lastUsedAt: string | null };
+type TokenRow = {
+  id: string;
+  name: string;
+  scope: 'read' | 'write';
+  prefix: string;
+  createdAt: string;
+  lastUsedAt: string | null;
+  // null: every workspace its owner is in.
+  workspaceIds: string[] | null;
+};
 
 export default function ApiTokensSettings() {
   const [open, setOpen] = useState(false);
   const [tokens, setTokens] = useState<TokenRow[] | null>(null);
   const [name, setName] = useState('');
   const [readOnly, setReadOnly] = useState(false);
+  // One key reaches all of your workspaces unless it is narrowed here — so nobody needs a key (or
+  // an agent) per workspace; narrowing is for an agent you would rather keep to one place.
+  const workspaces = useTaskStore((s) => s.workspaces);
+  const [limited, setLimited] = useState(false);
+  const [chosen, setChosen] = useState<string[]>([]);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   // The key just made — in memory only, gone when this panel closes.
@@ -38,7 +53,7 @@ export default function ApiTokensSettings() {
     const res = await fetch('/api/me/tokens', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ name: name.trim(), scope: readOnly ? 'read' : 'write' }),
+      body: JSON.stringify({ name: name.trim(), scope: readOnly ? 'read' : 'write', ...(limited ? { workspaceIds: chosen } : {}) }),
     }).catch(() => null);
     setBusy(false);
     const data = res ? await res.json().catch(() => null) : null;
@@ -51,6 +66,8 @@ export default function ApiTokensSettings() {
     setFresh({ name: row.name, token });
     setName('');
     setReadOnly(false);
+    setLimited(false);
+    setChosen([]);
   };
 
   const revoke = async (row: TokenRow) => {
@@ -92,8 +109,9 @@ export default function ApiTokensSettings() {
       {open && (
         <div className="mx-3 mb-2 p-3 rounded-lg border border-neutral-800 space-y-3">
           <p className="text-[11px] text-neutral-400 leading-relaxed">
-            A key lets an agent see what you can see and create, edit, finish and comment on tasks as you. It cannot
-            delete anything. Anyone holding the key can do the same, so treat it like a password.
+            A key lets an agent see what you can see, and create and change tasks and calendar events as you. Nothing
+            is deleted for good, and everything an agent does can be undone under Workspace → Agent activity. Anyone
+            holding the key can do the same, so treat it like a password.
           </p>
 
           {fresh && (
@@ -139,7 +157,11 @@ export default function ApiTokensSettings() {
                         {t.scope === 'read' && <span className="ml-1.5 text-[10px] text-neutral-500">read-only</span>}
                       </span>
                       <span className="block text-[10px] text-neutral-500">
-                        {t.prefix}… · {t.lastUsedAt ? `last used ${new Date(t.lastUsedAt).toLocaleDateString()}` : 'never used'}
+                        {t.prefix}… ·{' '}
+                        {t.workspaceIds
+                          ? t.workspaceIds.map((id) => workspaces.find((w) => w.id === id)?.name ?? 'a workspace').join(', ')
+                          : 'all workspaces'}{' '}
+                        · {t.lastUsedAt ? `last used ${new Date(t.lastUsedAt).toLocaleDateString()}` : 'never used'}
                       </span>
                     </span>
                     <button
@@ -167,7 +189,7 @@ export default function ApiTokensSettings() {
               />
               <button
                 onClick={create}
-                disabled={!name.trim() || busy}
+                disabled={!name.trim() || busy || (limited && chosen.length === 0)}
                 className="shrink-0 flex items-center gap-1 text-xs px-2.5 py-1.5 rounded border border-neutral-700 text-neutral-200 hover:border-neutral-600 disabled:opacity-40 cursor-pointer"
               >
                 <Plus className="w-3.5 h-3.5" /> Create key
@@ -177,6 +199,24 @@ export default function ApiTokensSettings() {
               <input type="checkbox" checked={readOnly} onChange={(e) => setReadOnly(e.target.checked)} />
               Read-only — the agent can look but not change anything
             </label>
+            <label className="flex items-center gap-1.5 text-[11px] text-neutral-400 cursor-pointer">
+              <input type="checkbox" checked={limited} onChange={(e) => setLimited(e.target.checked)} />
+              Only some workspaces — otherwise the key works in all of yours
+            </label>
+            {limited && (
+              <div className="pl-5 space-y-1">
+                {workspaces.map((w) => (
+                  <label key={w.id} className="flex items-center gap-1.5 text-[11px] text-neutral-300 cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={chosen.includes(w.id)}
+                      onChange={(e) => setChosen((c) => (e.target.checked ? [...c, w.id] : c.filter((id) => id !== w.id)))}
+                    />
+                    {w.name}
+                  </label>
+                ))}
+              </div>
+            )}
             {error && <p className="text-[11px] text-red-400">{error}</p>}
           </div>
         </div>

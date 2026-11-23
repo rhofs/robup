@@ -3,7 +3,7 @@
 import { closeOnBackdrop } from '../lib/backdrop';
 import { useEffect, useRef, useState } from 'react';
 import Papa from 'papaparse';
-import { X, Settings, Check, Trash2, Plus, Link2, Upload, Share2, Download, Monitor, Sun, Moon, Smartphone, ArrowLeft, ChevronRight, Pencil, Shield, UserPlus, Users, BookOpen, CalendarPlus } from 'lucide-react';
+import { X, Settings, Check, Trash2, Plus, Link2, Upload, Share2, Download, Monitor, Sun, Moon, Smartphone, ArrowLeft, ChevronRight, Pencil, Bot, Shield, UserPlus, Users, BookOpen, CalendarPlus } from 'lucide-react';
 import { readThemePreference, setThemePreference, type ThemePreference } from '../lib/theme';
 import {
   readHapticStrength,
@@ -23,6 +23,7 @@ import ColorSwatchPicker from './ColorSwatchPicker';
 import { readStartPage, setStartPage, type StartPage } from '../lib/startPage';
 import { copyToClipboard } from '../lib/copyToClipboard';
 import ApiTokensSettings from './ApiTokensSettings';
+import AgentActivityLog from './AgentActivityLog';
 
 // Moved here from the now-deleted AccountSettingsPanel.tsx along with the rest of the Account
 // tab's content (see the tab === 'account' branch below).
@@ -368,7 +369,7 @@ export default function SettingsPanel({
   // initialTab is kept as the caller-facing shape so no call site had to change when this panel was
   // split in two — the old tab names still say enough to land in the right place.
   const [section, setSection] = useState<'you' | 'workspace'>(initialTab === 'account' ? 'you' : 'workspace');
-  const [sub, setSub] = useState<null | 'roles' | 'invite' | 'import' | 'profile' | 'members'>(
+  const [sub, setSub] = useState<null | 'roles' | 'invite' | 'import' | 'profile' | 'members' | 'agents'>(
     initialTab === 'roles' || initialTab === 'invite' || initialTab === 'import' ? initialTab : null
   );
   const [weekNumbersHidden, setWeekNumbersHidden] = useState(() => readHideWeekNumbers());
@@ -573,7 +574,9 @@ export default function SettingsPanel({
                     ? 'Work profile'
                     : sub === 'members'
                       ? `People in ${workspace.name}`
-                      : 'Settings'}
+                      : sub === 'agents'
+                        ? `Agent activity in ${workspace.name}`
+                        : 'Settings'}
           </h3>
           <button
             onClick={onClose}
@@ -604,7 +607,11 @@ export default function SettingsPanel({
           </div>
         )}
 
-        {sub === 'members' ? (
+        {sub === 'agents' ? (
+          <div className="px-4 pb-4 h-[26rem] overflow-y-auto">
+            <AgentActivityLog workspaceId={workspace.id} />
+          </div>
+        ) : sub === 'members' ? (
           <div className="px-4 pb-4 space-y-0.5 h-[26rem] overflow-y-auto">
             {workspace.members.map((m) => {
               const isOwner = m.workspaceRole === 'owner';
@@ -1428,6 +1435,19 @@ export default function SettingsPanel({
                 <ChevronRight className="w-4 h-4 text-neutral-600 shrink-0" />
               </button>
             )}
+            {/* What members' AI agents have done here, with Undo. Open to every member, and shown
+                for a personal workspace too — your own agent works there as well. */}
+            <button
+              onClick={() => setSub('agents')}
+              className="w-full flex items-center gap-2.5 px-3 py-3 rounded-xl hover:bg-neutral-800/50 active:bg-neutral-800 cursor-pointer text-left transition"
+            >
+              <Bot className="w-4 h-4 text-neutral-500 shrink-0" />
+              <span className="min-w-0 flex-1">
+                <span className="block text-xs text-neutral-200">Agent activity</span>
+                <span className="block text-[11px] text-neutral-500">What AI agents have changed here — and undo it</span>
+              </span>
+              <ChevronRight className="w-4 h-4 text-neutral-600 shrink-0" />
+            </button>
             {/* Sub-screens, not tabs. Each of these is something you go and do once and come
                 back from; a tab implies a place you might sit in. Hidden for a personal workspace,
                 which has nobody to govern: no roles to assign, no one to invite, no shared board to
@@ -1493,6 +1513,21 @@ export default function SettingsPanel({
                     disabled={!canManage}
                     label="Wiki"
                     onChange={(on) => updateWorkspaceDetails(workspace.id, { wikiEnabled: on })}
+                  />
+                </div>
+                <div className="flex items-center gap-2.5 px-3 py-3 rounded-xl">
+                  <Bot className="w-4 h-4 text-neutral-500 shrink-0" />
+                  <span className="min-w-0 flex-1">
+                    <span className="block text-xs text-neutral-200">AI agents</span>
+                    <span className="block text-[11px] text-neutral-500">
+                      Let members connect their own AI agents to this workspace. Off stops every agent here at once.
+                    </span>
+                  </span>
+                  <Switch
+                    checked={workspace.agentsAllowed !== false}
+                    disabled={!canManage}
+                    label="AI agents"
+                    onChange={(on) => updateWorkspaceDetails(workspace.id, { agentsAllowed: on })}
                   />
                 </div>
               </div>
