@@ -14399,3 +14399,8 @@ session moving a task with a child and a grandchild → all three rows in the ne
 a task into a private List → 403. **Not looked at in a browser**, and tasks whose subtasks were
 stranded by earlier moves are **not repaired** — no check has been made of whether production has
 any. A query for subtasks whose `list_id` differs from their parent's would answer that.
+
+**Deployed 2026-11-23 as `74f566f`** (tag `deploy/2026-11-23_1410`, set by hand). `scripts/ptero.sh reinstall HEAD` deployed
+correctly and then hung: it waited for a version literally named "HEAD". The argument is now resolved
+with `git rev-parse --short`, so a ref, a full hash or nothing all work. The site was up the whole
+time after its normal restart; only the script's wait and the tag were affected.

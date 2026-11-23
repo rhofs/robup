@@ -145,7 +145,10 @@ case "${1:-status}" in
     # `reinstall` used to deploy successfully, verify nothing, and leave no rollback point, saying
     # nothing about either. That is the wrong default for the common case: what is being deployed is
     # almost always what is checked out.
-    deployed="${2:-$(git rev-parse --short HEAD)}"
+    # Whatever was named is resolved to the short hash the site reports. `reinstall HEAD` used to
+    # wait for a version literally called "HEAD", which never answers: the deploy went through and
+    # the script then hung for its full fifteen minutes and tagged nothing (2026-11-23).
+    deployed="$(git rev-parse --short "${2:-HEAD}")"
     wait_up "$deployed"
     tag_deploy "$deployed"
     ;;
