@@ -14350,3 +14350,7 @@ built, the design, what is and is not verified, how to test and how to go live â
 
 The local Tailscale instance (`http://100.64.30.23:3099`) is currently serving **that branch's
 build**, with its database migrated to match. Running `npm run build` here on main replaces it.
+
+The password for `robin@local.test` on the local instance was not written down anywhere and was reset
+on Robin's request (2026-11-23). It is in `/home/robin/siqt-local/password.txt` (0600), not in this
+file. Test database only.
