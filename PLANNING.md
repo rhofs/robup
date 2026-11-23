@@ -14415,3 +14415,36 @@ Merge `agent-api` into main, **take a Pterodactyl backup first** (the branch has
 code rollback does not undo a migration — though this one only adds a table), then
 `scripts/ptero.sh reinstall`. The checkout at `~/siqt` is left on **main**; the local instance keeps
 serving the branch's build until someone runs `npm run build` on main.
+## 2026-11-23 (continued) — branch `agent-api` exists (API keys + MCP server), not merged
+
+Options 1 and 2 from the AI-agent entry above are built on the branch `agent-api` (pushed, commit
+69c8a88) for testing. **Nothing of it is on main or in production.** The full record — what was
+built, the design, what is and is not verified, how to test and how to go live — is in PLANNING.md
+**on that branch** and comes along when it is merged. It contains a migration (one new table,
+`ApiToken`), so going live needs a backup first.
+
+The local Tailscale instance (`http://100.64.30.23:3099`) is currently serving **that branch's
+build**, with its database migrated to match. Running `npm run build` here on main replaces it.
+
+The password for `robin@local.test` on the local instance was not written down anywhere and was reset
+on Robin's request (2026-11-23). It is in `/home/robin/siqt-local/password.txt` (0600), not in this
+file. Test database only.
+
+An API key for testing the `agent-api` branch on the local instance (made by Robin for
+`robin@local.test`, 2026-11-23) is in `/home/robin/siqt-local/api-key.txt` (0600), not in this file.
+Checked working the same day: `GET /api/v1/workspaces` and MCP `tools/list` on
+`http://100.64.30.23:3099` both answer with it. Test database only. It has no meaning on production.
+That key is also registered in Claude Code as the MCP server `siqt` (2026-11-23, local scope, i.e. in
+`~/.claude.json` for the `/home/robin/siqt` project only); `claude mcp get siqt` reported Connected.
+Remove it with `claude mcp remove siqt -s local`. It points at the local instance, so it stops working
+whenever that instance is not serving the `agent-api` build.
+First real use (2026-11-23): on Robin's request, created "test fra Claude" in Personal / My tasks with
+ten subtasks (a fake video project, due dates 25 Nov–17 Dec) through MCP `create_task` with
+`parentId`. All eleven came back with the right parent and dates. Done with curl, not with Claude
+Code's MCP client, because the server was registered mid-session and its tools only load in a new one.
+Robin then asked for an event ("Møte hos Gaagle", Robin attending, Monday 30 Nov 10:00). **The agent
+API cannot do this: it has no event operations, only tasks.** Created it through the ordinary
+`POST /api/events` with the saved session cookie instead (`/home/robin/siqt-local/cookies.txt`),
+10:00–11:00 Oslo time, stored as 09:00Z; the one-hour length was my choice. Not yet decided: adding
+`create_event` (and maybe `search_events`) to `lib/agent/operations.ts` on the branch. Asking for a
+meeting is an obvious thing to say to an agent, so it is the first gap a real user would hit.
