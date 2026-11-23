@@ -6,6 +6,7 @@ import { getWorkspaceRole, canManageWorkspace, keepWorkspaceMembers, getTaskAudi
 import { ensureListAccess, ensureTaskAccess } from '@/lib/auth/resourceAccess';
 import { syncTaskForAllRelevantUsers, deleteTaskGoogleSyncs } from '@/lib/google/calendarSync';
 import { notify } from '@/lib/notifications';
+import { signalWorkspaceChanged } from '@/lib/collab/broadcastWorkspaceChange';
 
 export async function PATCH(req: Request, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
@@ -20,6 +21,7 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
     await cascadeTask(id, null);
     const task = await prisma.task.findUniqueOrThrow({ where: { id }, include: { assignees: { select: publicUserSelect } } });
     syncTaskForAllRelevantUsers(task.id).catch(() => {});
+    signalWorkspaceChanged(access.space.workspaceId);
     return NextResponse.json(task);
   }
 
@@ -222,6 +224,7 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
     syncTaskForAllRelevantUsers(task.id).catch(() => {});
   }
 
+  signalWorkspaceChanged(access.space.workspaceId);
   return NextResponse.json(task);
 }
 
@@ -229,7 +232,8 @@ export async function DELETE(req: Request, { params }: { params: Promise<{ id: s
   const { id } = await params;
   const userId = await getCurrentUserId();
   if (!userId) return NextResponse.json({ error: 'Not authenticated' }, { status: 401 });
-  if (!(await ensureTaskAccess(id, userId))) return NextResponse.json({ error: 'Not authorized for this task' }, { status: 403 });
+  const access = await ensureTaskAccess(id, userId);
+  if (!access) return NextResponse.json({ error: 'Not authorized for this task' }, { status: 403 });
 
   const permanent = new URL(req.url).searchParams.get('permanent') === 'true';
   if (permanent) {
@@ -243,5 +247,6 @@ export async function DELETE(req: Request, { params }: { params: Promise<{ id: s
     // deletedAt now set and removes every assignee's calendar copy the normal way.
     syncTaskForAllRelevantUsers(id).catch(() => {});
   }
+  signalWorkspaceChanged(access.space.workspaceId);
   return NextResponse.json({ ok: true });
 }

@@ -79,8 +79,11 @@ const server = new Server({
     // open a short-lived connection here purely to broadcast "something changed," with no real
     // user identity of its own. Safe when CHAT_BROADCAST_SECRET is unset: `undefined ===
     // providedToken` is never true for a real (non-empty) token.
+    // The presence rooms are let in the same way, for the one other thing the app's server says
+    // over this sidecar: "tasks or events in this workspace just changed"
+    // (lib/collab/broadcastWorkspaceChange.ts). The secret can still open nothing that holds content.
     if (
-      isChatDocumentName(documentName) &&
+      (isChatDocumentName(documentName) || isPresenceDocumentName(documentName)) &&
       providedToken &&
       process.env.CHAT_BROADCAST_SECRET &&
       providedToken === process.env.CHAT_BROADCAST_SECRET

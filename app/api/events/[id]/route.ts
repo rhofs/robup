@@ -5,6 +5,7 @@ import { getCurrentUserId } from '@/lib/auth/session';
 import { ensureEventAccess } from '@/lib/auth/resourceAccess';
 import { getAccessContext, keepWorkspaceMembers } from '@/lib/auth/access';
 import { syncEventForAllRelevantUsers, deleteEventGoogleSyncs } from '@/lib/google/calendarSync';
+import { signalWorkspaceChanged } from '@/lib/collab/broadcastWorkspaceChange';
 
 // Event itself has no isPrivate of its own (workspace-scoped only), so a plain membership check
 // is the whole story here — no canSee/ancestor-chain needed the way Task/Space/List/Folder/Doc
@@ -30,6 +31,7 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
     // syncEventForUser's own 404 handling clears it, and the *next* sync (any future edit) will
     // create a fresh one; not retried inline here.
     syncEventForAllRelevantUsers(event.id).catch(() => {});
+    signalWorkspaceChanged(event.workspaceId);
     return NextResponse.json(event);
   }
 
@@ -146,6 +148,8 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
   // calendar-relevant.
   syncEventForAllRelevantUsers(event.id).catch(() => {});
 
+  signalWorkspaceChanged(event.workspaceId);
+  if (moving) signalWorkspaceChanged(existing.workspaceId);
   return NextResponse.json(event);
 }
 
@@ -153,7 +157,8 @@ export async function DELETE(req: Request, { params }: { params: Promise<{ id: s
   const { id } = await params;
   const userId = await getCurrentUserId();
   if (!userId) return NextResponse.json({ error: 'Not authenticated' }, { status: 401 });
-  if (!(await ensureEventAccess(id, userId))) return NextResponse.json({ error: 'Not authorized for this event' }, { status: 403 });
+  const access = await ensureEventAccess(id, userId);
+  if (!access) return NextResponse.json({ error: 'Not authorized for this event' }, { status: 403 });
 
   // Remove every assignee's Google-side copy before the row goes away — whether this is a soft
   // (trash) or permanent delete, a trashed Event shouldn't linger on anyone's calendar any more
@@ -168,5 +173,6 @@ export async function DELETE(req: Request, { params }: { params: Promise<{ id: s
     await prisma.event.update({ where: { id }, data: { deletedAt: new Date() } });
   }
 
+  signalWorkspaceChanged(access.event.workspaceId);
   return NextResponse.json({ ok: true });
 }

@@ -3,6 +3,7 @@ import { prisma } from '@/lib/prisma';
 import { getCurrentUserId } from '@/lib/auth/session';
 import { ensureListAccess } from '@/lib/auth/resourceAccess';
 import { canSee } from '@/lib/auth/access';
+import { signalChangeIn } from '@/lib/collab/broadcastWorkspaceChange';
 
 // Reordering a list, as ONE request instead of one request per task.
 //
@@ -89,6 +90,7 @@ export async function POST(req: Request) {
   // Deliberately no activity entries and no calendar sync. Position is not a property of the work —
   // it says nothing about what the task is, when it is due or who owns it — and a hundred "moved"
   // rows in the activity feed would bury the changes that do matter.
+  signalChangeIn({ listId });
   return NextResponse.json({ ok: true, count: ids.length, ids });
 }
 
@@ -167,5 +169,6 @@ async function reorderByGesture(
   await prisma.$transaction(ordered.map((id, index) => prisma.task.update({ where: { id }, data: { order: index } })));
 
   // The caller applies this rather than its own prediction — it is what was actually stored.
+  signalChangeIn({ listId: dragged.listId });
   return NextResponse.json({ ok: true, count: ordered.length, ids: ordered });
 }

@@ -14575,3 +14575,92 @@ key (`/home/robin/siqt-local/api-key.txt`) over MCP: `create_event` "Møte med T
 call again with the same `requestId` → the same event, no duplicate. `trash_event` on the copy made
 earlier through the cookie route → trashed, with an `actionId`. `search_events "TV 2"` → only the new
 one. Not checked: how it looks in the calendar UI.
+## 2026-11-23 (continued) — [Bug] a task moved to another List left its subtasks behind
+
+Found from the agent work: the agent API had to refuse moving a task with subtasks, because the
+app's own move (`PATCH /api/tasks/[id]` with `listId`) changed **only that one row**. The subtasks
+kept showing under it — they are found by `parentId` — while still registered in the List it had
+left: counted there, governed by that List's statuses and privacy. Nobody had reported it; it does
+not look wrong on screen.
+
+Fixed on main: the route moves the whole subtree (`collectTaskSubtreeIds`, now exported from
+`lib/trashCascade.ts`), and `optimisticSetList` in the store mirrors it. Undo goes through the same
+two places, so it brings the subtree back.
+
+**Also fixed, same route:** moving to another List never checked access to the *target* List — only
+to the task. Any List id was accepted, including a private one the caller cannot see. Now 403.
+
+Verified on the local instance (which runs the `agent-api` build, with this merged in): a person's
+session moving a task with a child and a grandchild → all three rows in the new List; a member moving
+a task into a private List → 403. **Not looked at in a browser**, and tasks whose subtasks were
+stranded by earlier moves are **not repaired** — no check has been made of whether production has
+any. A query for subtasks whose `list_id` differs from their parent's would answer that.
+
+**Deployed 2026-11-23 as `74f566f`** (tag `deploy/2026-11-23_1410`, set by hand). `scripts/ptero.sh reinstall HEAD` deployed
+correctly and then hung: it waited for a version literally named "HEAD". The argument is now resolved
+with `git rev-parse --short`, so a ref, a full hash or nothing all work. The site was up the whole
+time after its normal restart; only the script's wait and the tag were affected.
+Larger test the same day: 10 "Videoforslag: …" tasks in My tasks, 6–7 subtasks each (79 tasks in
+total, ~80 MCP calls in a row) through `create_task`. Every one came back with the right parent and
+nothing failed. "Møte med TV 2" (Mon 7 Dec 10–12 Oslo, Robin attending) was again made through the
+cookie route, because the agent API still has no events.
+**Correction, later the same day:** this was only true of the build serving the instance at the time
+of these tests. Round 2 on the branch added `create_event`/`update_event`/`trash_event`/
+`search_events`, and they have since been run with this key (see the branch's PLANNING). The TV 2
+meeting was re-made by the agent, and the cookie-made copy is in the Trash.
+**These test tasks were in the wrong workspace.** Robin meant New Game Media (the test workspace),
+not Personal. "My tasks" only matches a List in Personal, and I took the name literally without
+asking. An agent cannot move a task to another workspace (`move_task` and `apply_changes` stay
+within one workspace), so the 90 tasks and both meetings were re-created through the agent in
+**New Game Media / Produksjon / Episoder** with the same titles, descriptions, statuses and due dates
+(`apply_changes`, 92 changes, action `da7632fb…`). The Personal copies went to the Trash in a second
+`apply_changes` (action `bfe4eb42…`). Both steps used a dry run first. NGM now holds **two** "Møte hos
+Gaagle": this one (30 Nov 10:00) and an older one (1 Dec 14:30) left over from round-2 testing.
+Open question, not decided: should an agent be able to move tasks between workspaces? Today the only
+way is to re-create them and trash the originals, which drops comments, activity and attachments.
+
+## 2026-11-23 (continued) — tasks and events now update live (built, deployed, NOT tested)
+
+Robin, watching an agent add tasks: "dette burde jo skje live og ikke kun ved refresh". Asked whether
+the agent goes through the code or MCP: through MCP → the agent API → the app's own routes. The delay
+was never the agent's: **tasks and events had no live updates for anyone**, only the 30-second poll
+(board/calendar views). The same wait applied to a colleague's change.
+
+(The full page reloads he also saw on the test instance were most likely `UpdateReloader` reacting to
+my rebuilding it several times that day — it reloads when the reported commit changes.)
+
+**Built on main:** after a task or event is created, changed, trashed or reordered, the route calls
+`signalWorkspaceChanged` (`lib/collab/broadcastWorkspaceChange.ts`), which sends `{type:
+'data-changed'}` into the workspace's **presence room** on the Hocuspocus sidecar — the room every
+open app already holds for "who is online". `usePresenceConnection` hears it and calls
+`refetchTasks` + `refetchEvents` (600 ms gather; the refetch already yields to this tab's own
+in-flight writes). The signal carries no data, so access rules stay where they are: in the API.
+Server side it waits for 400 ms of quiet (max 2 s), so an agent action touching fifty tasks sends
+once. `CHAT_BROADCAST_SECRET` now also opens presence rooms (`server/collabServer.ts`). The poll
+stays as the fallback.
+
+Considered and turned down: a separate SSE channel just for this. It would have worked on the local
+instance without the sidecar, but leaves the app with two live systems to keep alive.
+
+Not covered: comments (fetched per open task), duplicate/series/template routes, Lists/Spaces/Docs.
+They still arrive by poll or reload.
+
+**NOT TESTED AT ALL beyond typecheck/lint.** The local instance has no sidecar, and Robin said not to
+set one up: "om det går live når vi pusher og merger, så trenger vi ikke teste det nå". So the first
+real test is production: two windows on the same workspace, change a task in one, watch the other.
+If nothing happens within a second or two, the first things to check are that `CHAT_BROADCAST_SECRET`
+is set in the production environment (chat's live delivery depends on the same variable) and the
+sidecar's log for authentication failures on `__workspace-presence__:` rooms.
+
+### Also asked: what more should an agent be able to do?
+
+Suggested, nothing decided or built: custom fields (read and set), reading and writing task
+description Docs, creating Lists/Folders, recurring events and task series, attachments, chat
+messages, reading Docs/wiki, "my day" summaries (one call for what is due and what is assigned),
+moving an event to the personal workspace, and subtask status sets. See the chat reply of this date
+for the order they were recommended in.
+
+**Deployed 2026-11-23 as `17ce408`** (tag `deploy/2026-11-23_1450`) — live task/event updates. The fixed
+`ptero.sh reinstall` (no argument) waited for the right commit and tagged it by itself this time.
+Whether the live updates actually work in production is **not confirmed** — waiting on Robin's
+two-window test.
