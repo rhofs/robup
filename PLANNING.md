@@ -14363,3 +14363,7 @@ That key is also registered in Claude Code as the MCP server `siqt` (2026-11-23,
 `~/.claude.json` for the `/home/robin/siqt` project only); `claude mcp get siqt` reported Connected.
 Remove it with `claude mcp remove siqt -s local`. It points at the local instance, so it stops working
 whenever that instance is not serving the `agent-api` build.
+First real use (2026-11-23): on Robin's request, created "test fra Claude" in Personal / My tasks with
+ten subtasks (a fake video project, due dates 25 Nov–17 Dec) through MCP `create_task` with
+`parentId`. All eleven came back with the right parent and dates. Done with curl, not with Claude
+Code's MCP client, because the server was registered mid-session and its tools only load in a new one.
