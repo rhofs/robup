@@ -14306,3 +14306,36 @@ next refresh). It now snapshots the dragged task's own siblings.
 Deployed as f156c72 (tag `deploy/2026-11-23_1151`). **Confirmed working by Robin** on the deployed
 site ("det funker!"). An empty expanded task has no subtask rows to aim at, so that case still goes
 through the nest dwell.
+
+## 2026-11-23 (continued) — Question: letting users connect their own AI agents (nothing built)
+
+Robin asked what the options are for letting users connect their own AI agents (Claude, ChatGPT,
+Cursor and the like) to Siqt so the agent can create tasks etc. on request. **Info only, explicitly
+"ikke gjør noe enda".** Nothing decided or built.
+
+What stands in the way today: every API route identifies the caller through `getCurrentUserId()`,
+which only reads the Auth.js session **cookie**. An agent has no cookie, so there is no way in at all.
+Any option needs a second way to say who is calling. It has to resolve to the same `userId`, so the
+existing access checks (`ensureListAccess`, `canSee`) keep working unchanged. A second permission
+system must not be built.
+
+Options presented:
+1. **Personal API tokens + REST** — a token per user (shown once, only its hash stored, revocable,
+   like the password-reset tokens), accepted by `getCurrentUserId()` as `Authorization: Bearer`.
+   This is the base layer for everything else. It also opens up n8n/Zapier/scripts, and with an
+   OpenAPI description, ChatGPT "Actions".
+2. **Remote MCP server** (a route in this app, e.g. `/api/mcp`) with a small set of purpose-made tools
+   (find lists, search tasks, create/update a task, comment). It is the standard agents speak. With a
+   bearer token it works in Claude Code, Cursor and similar tools straight away.
+3. **OAuth on top of MCP** — needed for the one-click "add connector" in claude.ai/ChatGPT. Auth.js
+   only provides sign-in, not an OAuth authorization server, so this is the largest piece. Build it
+   later, if at all.
+4. Smaller alternatives: a local MCP/CLI package that uses a token, or email-to-task. **Opposite
+   direction**: an assistant inside Siqt itself, where Siqt calls the Claude API. That means API costs
+   for the operator and is a separate product decision.
+
+Recommendation given: 1 → 2 first, 3 later if there is demand. Points to settle when building: what
+a token is allowed to do (read-only vs. write, per workspace), marking agent changes in the activity
+log ("via agent"), rate limiting, and that delete/trash should be left out of or be harder in the
+first version. Prompt injection: task text an agent reads can contain instructions, so the agent's
+tools should not be able to do more than the user intended.
