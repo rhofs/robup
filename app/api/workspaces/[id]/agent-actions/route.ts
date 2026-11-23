@@ -2,7 +2,7 @@ import { NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { getCurrentUserId } from '@/lib/auth/session';
 import { canManageWorkspace, getWorkspaceRole } from '@/lib/auth/access';
-import { ensureEventAccess, ensureTaskAccess } from '@/lib/auth/resourceAccess';
+import { ensureDocAccess, ensureEventAccess, ensureFolderAccess, ensureListAccess, ensureTaskAccess } from '@/lib/auth/resourceAccess';
 import type { RecordedChange } from '@/lib/agent/changes';
 
 // The workspace's agent log (Settings → Workspace → Agent activity): what members' AI agents have
@@ -34,17 +34,33 @@ export async function GET(_req: Request, { params }: { params: Promise<{ id: str
 
   // Asked once per task or event, however many log lines mention it.
   const seen = new Map<string, Promise<boolean>>();
-  const canOpenOne = (kind: 't' | 'e', targetId: string): Promise<boolean> => {
+  type Kind = 't' | 'e' | 'l' | 'f' | 'd';
+  const check: Record<Kind, (id: string) => Promise<unknown>> = {
+    t: (id) => ensureTaskAccess(id, userId),
+    e: (id) => ensureEventAccess(id, userId),
+    l: (id) => ensureListAccess(id, userId),
+    f: (id) => ensureFolderAccess(id, userId),
+    d: (id) => ensureDocAccess(id, userId),
+  };
+  const canOpenOne = (kind: Kind, targetId: string): Promise<boolean> => {
     const key = `${kind}:${targetId}`;
-    if (!seen.has(key)) {
-      seen.set(key, (kind === 't' ? ensureTaskAccess(targetId, userId) : ensureEventAccess(targetId, userId)).then((a) => !!a));
-    }
+    if (!seen.has(key)) seen.set(key, check[kind](targetId).then((a) => !!a));
     return seen.get(key)!;
   };
   // The thing changed, and every other task its description names.
   const canOpen = async (change: RecordedChange): Promise<boolean> => {
     const undo = change.undo;
-    const checks = ['taskId' in undo ? canOpenOne('t', undo.taskId) : canOpenOne('e', undo.eventId), ...(change.mentions ?? []).map((id) => canOpenOne('t', id))];
+    const target =
+      'taskId' in undo
+        ? canOpenOne('t', undo.taskId)
+        : 'eventId' in undo
+          ? canOpenOne('e', undo.eventId)
+          : 'listId' in undo
+            ? canOpenOne('l', undo.listId)
+            : 'folderId' in undo
+              ? canOpenOne('f', undo.folderId)
+              : canOpenOne('d', undo.docId);
+    const checks = [target, ...(change.mentions ?? []).map((id) => canOpenOne('t', id))];
     return (await Promise.all(checks)).every(Boolean);
   };
 

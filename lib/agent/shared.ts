@@ -1,6 +1,6 @@
 import { prisma } from '@/lib/prisma';
 import type { VerifiedToken } from '@/lib/auth/apiToken';
-import { ensureEventAccess, ensureListAccess, ensureTaskAccess } from '@/lib/auth/resourceAccess';
+import { ensureDocAccess, ensureEventAccess, ensureFolderAccess, ensureListAccess, ensureSpaceAccess, ensureTaskAccess } from '@/lib/auth/resourceAccess';
 import { isRichHtml, richToPlainText } from '@/lib/richText';
 import { GET as workspacesGET } from '@/app/api/workspaces/route';
 import { GET as tasksGET } from '@/app/api/tasks/route';
@@ -188,17 +188,24 @@ export type RawWorkspace = {
   name: string;
   isPersonal?: boolean;
   members: { id: string; name: string; username: string | null }[];
+  wikiEnabled?: boolean;
   spaces: {
     id: string;
     name: string;
+    customFields: FieldDef[];
+    spaceDocs: { id: string; title: string; content: string; taskId: string | null; parentId: string | null; archived: boolean; updatedAt: string }[];
     statuses: RawStatus[];
     folders: { id: string; name: string; parentId: string | null }[];
     lists: { id: string; name: string; folderId: string | null; archived: boolean; statuses: RawStatus[] }[];
   }[];
 };
+// A custom field of a Space — for every List in it (listId null) or for one List.
+export type FieldDef = { id: string; name: string; type: 'text' | 'number' | 'date' | 'dropdown'; options: { label: string }[]; listId: string | null };
+
 export type RawTask = {
   id: string;
   title: string;
+  customFieldValues?: string;
   description: string | null;
   status: string;
   listId: string;
@@ -223,6 +230,45 @@ export type RawEvent = {
   spaceId: string | null;
   recurrence: string | null;
   assignees: { id: string; name: string }[];
+};
+
+// The custom fields that apply to each List: its Space's general ones and its own.
+export const fieldsByList = (call: AgentCall): Promise<Map<string, FieldDef[]>> =>
+  memo(call, 'fields', async () => {
+    const out = new Map<string, FieldDef[]>();
+    for (const ws of await loadWorkspaces(call)) {
+      for (const space of ws.spaces) {
+        for (const list of space.lists) out.set(list.id, (space.customFields ?? []).filter((f) => f.listId === null || f.listId === list.id));
+      }
+    }
+    return out;
+  });
+
+export const fieldValues = (json: string | null | undefined): Record<string, string> => {
+  try {
+    const v = JSON.parse(json || '{}');
+    return v && typeof v === 'object' && !Array.isArray(v) ? (v as Record<string, string>) : {};
+  } catch {
+    return {};
+  }
+};
+
+// A task's custom fields by name, the way a person reads them. Empty ones are left out.
+export function namedFieldValues(json: string | null | undefined, defs: FieldDef[] | undefined): Record<string, string> | undefined {
+  const values = fieldValues(json);
+  const out: Record<string, string> = {};
+  for (const def of defs ?? []) {
+    const v = values[def.id];
+    if (v !== undefined && v !== null && String(v) !== '') out[def.name] = def.type === 'date' ? osloDay(customDate(String(v))) ?? String(v) : String(v);
+  }
+  return Object.keys(out).length ? out : undefined;
+}
+
+// A stored custom date: a plain day is that day; anything else is an instant.
+const customDate = (v: string): string | null => {
+  if (/^\d{4}-\d{2}-\d{2}$/.test(v)) return `${v}T12:00:00Z`;
+  const d = new Date(v);
+  return Number.isNaN(d.getTime()) ? null : d.toISOString();
 };
 
 // Only the workspaces this key reaches — so nothing downstream can list, search or name what is in
@@ -314,8 +360,13 @@ export function matchStatus(wanted: string, allowed: string[]): string {
   return hit;
 }
 
-export function shapeTask(t: RawTask, call: AgentCall, opts: { subtaskCount?: number; fullDescription?: boolean } = {}) {
+export function shapeTask(
+  t: RawTask,
+  call: AgentCall,
+  opts: { subtaskCount?: number; fullDescription?: boolean; fields?: Map<string, FieldDef[]> } = {}
+) {
   const description = plain(t.description);
+  const customFields = opts.fields ? namedFieldValues(t.customFieldValues, opts.fields.get(t.listId)) : undefined;
   return {
     id: t.id,
     title: t.title,
@@ -327,6 +378,7 @@ export function shapeTask(t: RawTask, call: AgentCall, opts: { subtaskCount?: nu
     dueDate: osloDay(t.dueDate),
     archived: t.archived,
     description: description && !opts.fullDescription && description.length > 300 ? `${description.slice(0, 300)}…` : description,
+    ...(customFields ? { customFields } : {}),
     ...(opts.subtaskCount !== undefined ? { subtaskCount: opts.subtaskCount } : {}),
     updatedAt: t.updatedAt,
     url: `${call.baseUrl}/?modal=${t.id}`,
@@ -344,7 +396,7 @@ export function shapeEvent(e: RawEvent, call: AgentCall) {
     description: plain(e.description),
     attendees: e.assignees.map((a) => ({ id: a.id, name: a.name })),
     workspaceId: e.workspaceId,
-    ...(e.recurrence ? { repeats: true } : {}),
+    ...(e.recurrence ? { repeat: describeRepeat(e.recurrence) } : {}),
     url: `${call.baseUrl}/?event=${e.id}`,
   };
 }
@@ -376,6 +428,54 @@ export async function visibleEvent(id: string, call: AgentCall) {
     throw new AgentError(`No event with id "${id}" that you can see.`, 404);
   }
   return access;
+}
+
+export async function visibleSpace(id: string, call: AgentCall) {
+  const access = await ensureSpaceAccess(id, call.token.userId);
+  if (!access || access.space.deletedAt || !(await openWorkspaceIds(call)).has(access.space.workspaceId)) {
+    throw new AgentError(`No Space with id "${id}" that you can see. Use list_workspaces to find it.`, 404);
+  }
+  return access;
+}
+
+export async function visibleFolder(id: string, call: AgentCall) {
+  const access = await ensureFolderAccess(id, call.token.userId);
+  if (!access || access.folder.deletedAt || !(await openWorkspaceIds(call)).has(access.space.workspaceId)) {
+    throw new AgentError(`No folder with id "${id}" that you can see. Use list_workspaces to find it.`, 404);
+  }
+  return access;
+}
+
+// The workspace a Doc belongs to, whichever way it hangs: a wiki page, a Space's doc, a task's doc
+// or a task's description.
+export async function docWorkspaceId(doc: { wikiWorkspaceId: string | null; spaceId: string | null; taskId: string | null; descriptionTaskId: string | null }): Promise<string | null> {
+  if (doc.wikiWorkspaceId) return doc.wikiWorkspaceId;
+  if (doc.spaceId) return (await prisma.space.findUnique({ where: { id: doc.spaceId }, select: { workspaceId: true } }))?.workspaceId ?? null;
+  const taskId = doc.taskId ?? doc.descriptionTaskId;
+  if (!taskId) return null;
+  const task = await prisma.task.findUnique({ where: { id: taskId }, select: { list: { select: { space: { select: { workspaceId: true } } } } } });
+  return task?.list.space.workspaceId ?? null;
+}
+
+export async function visibleDoc(id: string, call: AgentCall) {
+  const access = await ensureDocAccess(id, call.token.userId);
+  const workspaceId = access && !access.doc.deletedAt ? await docWorkspaceId(access.doc) : null;
+  if (!access || !workspaceId || !(await openWorkspaceIds(call)).has(workspaceId)) {
+    throw new AgentError(`No doc with id "${id}" that you can see.`, 404);
+  }
+  return { ...access, workspaceId };
+}
+
+// How an event repeats, said plainly: stored as {freq, interval, until?, count?} (lib/recurrence.ts).
+export function describeRepeat(json: string | null): Json | undefined {
+  try {
+    const r = JSON.parse(json ?? 'null');
+    if (!r?.freq) return undefined;
+    const every = ({ daily: 'day', weekly: 'week', monthly: 'month', yearly: 'year' } as Record<string, string>)[r.freq];
+    return { every, ...(r.interval > 1 ? { interval: r.interval } : {}), ...(r.until ? { until: r.until } : {}), ...(r.count ? { times: r.count } : {}) };
+  } catch {
+    return undefined;
+  }
 }
 
 // Where links should point. AUTH_URL is this deployment's own public address; without it (local

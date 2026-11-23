@@ -1,10 +1,14 @@
 import { prisma } from '@/lib/prisma';
+import { loadDocJSONForExport } from '@/lib/collab/loadDocForExport';
+import { docJSONToPlainText } from '@/lib/collab/docJSONToPlainText';
+import { getWikiAccess } from '@/lib/auth/wikiAccess';
 import { runAsUser } from '@/lib/auth/actAs';
 import { GET as commentsGET } from '@/app/api/tasks/[id]/comments/route';
 import { CHANGE_TYPES, MAX_CHANGES, performAction, undoAction } from '@/lib/agent/changes';
 import {
   AgentError,
   bool,
+  fieldsByList,
   folderPath,
   internal,
   loadEvents,
@@ -20,6 +24,7 @@ import {
   statusNames,
   str,
   unwrap,
+  visibleDoc,
   visibleTask,
   type AgentCall,
   type Json,
@@ -60,7 +65,7 @@ const CHANGE_FIELDS: Record<string, { title: string; properties: Json; required:
   create_task: {
     title: 'Creates a task in a List — or, with parentId, a subtask. It is added at the bottom.',
     properties: {
-      listId: { type: 'string', description: 'From list_workspaces.' },
+      listId: { type: 'string', description: 'From list_workspaces. In apply_changes it can be "$name", the ref of a List created earlier in the same call.' },
       title: { type: 'string' },
       description: { type: 'string', description: 'Plain text.' },
       status: { type: 'string', description: 'One of the List’s status names. Left out, the task gets the first one.' },
@@ -71,6 +76,7 @@ const CHANGE_FIELDS: Record<string, { title: string; properties: Json; required:
         type: 'string',
         description: 'Make it a subtask of this task (same List). In apply_changes it can be "$name", the ref of a task created earlier in the same call.',
       },
+      customFields: { type: 'object', description: 'Custom fields to set, by name: { "Field name": "value" }. The List\u2019s fields and their options are in list_workspaces. null empties a field.', additionalProperties: true },
       ref: { type: 'string', description: 'Only in apply_changes: a name for this new task, so later changes in the same call can use "$name" as parentId.' },
     },
     required: ['listId', 'title'],
@@ -87,6 +93,7 @@ const CHANGE_FIELDS: Record<string, { title: string; properties: Json; required:
       dueDate: { type: ['string', 'null'] },
       assigneeIds: { type: 'array', items: { type: 'string' } },
       archived: { type: 'boolean' },
+      customFields: { type: 'object', description: 'Custom fields to set, by name: { "Field name": "value" }. The List\u2019s fields and their options are in list_workspaces. null empties a field.', additionalProperties: true },
     },
     required: ['taskId'],
   },
@@ -123,11 +130,13 @@ const CHANGE_FIELDS: Record<string, { title: string; properties: Json; required:
       location: { type: 'string' },
       description: { type: 'string' },
       attendeeIds: { type: 'array', items: { type: 'string' }, description: 'Member ids from list_workspaces — who takes part.' },
+      repeat: { type: ['object', 'null'], description: 'Make it repeat: { "every": "day" | "week" | "month" | "year", "interval": 2 (every second…), and either "until": "2027-06-30" or "times": 10 }. null stops it repeating.', additionalProperties: true },
     },
     required: ['workspaceId', 'title', 'start'],
   },
   update_event: {
-    title: 'Changes a calendar event. Only the fields sent are changed. Moving only the start keeps its length. attendeeIds replaces the whole list.',
+    title:
+      'Changes a calendar event. Only the fields sent are changed. Moving only the start keeps its length. attendeeIds replaces the whole list. workspaceId moves it to another workspace — to the personal one to make it private.',
     properties: {
       eventId: { type: 'string' },
       title: { type: 'string' },
@@ -136,6 +145,8 @@ const CHANGE_FIELDS: Record<string, { title: string; properties: Json; required:
       location: { type: 'string' },
       description: { type: 'string' },
       attendeeIds: { type: 'array', items: { type: 'string' } },
+      repeat: { type: ['object', 'null'], description: 'Make it repeat: { "every": "day" | "week" | "month" | "year", "interval": 2 (every second…), and either "until": "2027-06-30" or "times": 10 }. null stops it repeating.', additionalProperties: true },
+      workspaceId: { type: 'string', description: 'Move the event to this workspace. Attendees who are not members there are taken off it.' },
     },
     required: ['eventId'],
   },
@@ -143,6 +154,47 @@ const CHANGE_FIELDS: Record<string, { title: string; properties: Json; required:
     title: 'Moves a calendar event to the Trash. It can be restored.',
     properties: { eventId: { type: 'string' } },
     required: ['eventId'],
+  },
+  repeat_task: {
+    title:
+      'Repeats a task: makes copies of it (with its subtasks, assignees and fields), each with its dates moved one step further on. A weekly task for the next 8 weeks is times: 8, everyDays: 7. Tasks do not repeat by themselves — this creates the copies now. (Events can repeat by rule: see create_event.)',
+    properties: {
+      taskId: { type: 'string' },
+      times: { type: 'integer', minimum: 1, maximum: 60, description: 'How many more copies to make.' },
+      everyDays: { type: 'integer', minimum: 1, description: 'Days between each copy: 1 daily, 7 weekly, 14 every other week.' },
+    },
+    required: ['taskId', 'times', 'everyDays'],
+  },
+  create_list: {
+    title: 'Creates a List in a Space, optionally inside a folder. It starts with the Space\u2019s statuses.',
+    properties: {
+      spaceId: { type: 'string', description: 'From list_workspaces.' },
+      name: { type: 'string' },
+      folderId: { type: 'string', description: 'A folder in that Space. In apply_changes it can be "$name", the ref of a folder created earlier in the same call.' },
+      ref: { type: 'string', description: 'Only in apply_changes: a name for this new List, so later create_task changes in the same call can use "$name" as listId.' },
+    },
+    required: ['spaceId', 'name'],
+  },
+  create_folder: {
+    title: 'Creates a folder in a Space (for grouping Lists), optionally inside another folder.',
+    properties: {
+      spaceId: { type: 'string', description: 'From list_workspaces.' },
+      name: { type: 'string' },
+      parentFolderId: { type: 'string' },
+      ref: { type: 'string', description: 'Only in apply_changes: a name for this new folder, so a later create_list can use "$name" as folderId.' },
+    },
+    required: ['spaceId', 'name'],
+  },
+  create_doc: {
+    title:
+      'Creates a Doc with text in it — on a task (taskId) or in a Space\u2019s Docs (spaceId). Write the content as Markdown: headings, bullet / numbered / check lists, quotes, code blocks, bold, italic and links become real formatting. Existing Docs cannot be changed from here, only read (get_doc).',
+    properties: {
+      title: { type: 'string' },
+      content: { type: 'string', description: 'Markdown.' },
+      taskId: { type: 'string', description: 'Attach the doc to this task. In apply_changes it can be "$name", the ref of a task created earlier in the same call.' },
+      spaceId: { type: 'string', description: 'Or: put it in this Space\u2019s Docs.' },
+    },
+    required: ['title'],
   },
 };
 
@@ -172,7 +224,7 @@ const TOOLS: ToolDef[] = [
   {
     name: 'list_workspaces',
     description:
-      'Start here. Lists the workspaces this key reaches (one of them is the user\u2019s personal, private workspace), with their Spaces and Lists (each with its id, its path, and the statuses its tasks can have) and the members (id and name, for assigning tasks and inviting to events). Use the ids from this in the other tools.',
+      'Start here. Lists the workspaces this key reaches (one of them is the user\u2019s personal, private workspace), with their Spaces, folders and Lists (each List with its id, its path, the statuses its tasks can have, and its custom fields) and the members (id and name, for assigning tasks and inviting to events). Use the ids from this in the other tools.',
     inputSchema: { type: 'object', properties: {}, additionalProperties: false },
     write: false,
     run: async (_args, call) => {
@@ -184,17 +236,27 @@ const TOOLS: ToolDef[] = [
         // goes — an event has no privacy setting of its own, the workspace is the setting.
         ...(ws.isPersonal ? { personal: true, note: 'Private to the user. Put private events and tasks here.' } : {}),
         members: ws.members.map((m) => ({ id: m.id, name: m.name, ...(m.username ? { username: m.username } : {}), ...(m.id === call.token.userId ? { you: true } : {}) })),
+        ...(ws.wikiEnabled ? { wiki: 'This workspace has a wiki (its handbook). search_docs finds its pages.' } : {}),
         spaces: ws.spaces.map((space) => ({
           id: space.id,
           name: space.name,
+          ...(space.folders.length
+            ? { folders: space.folders.map((f) => ({ id: f.id, path: [...folderPath(space.folders, f.parentId), f.name].join(' / ') })) }
+            : {}),
           lists: space.lists
             .filter((l) => !l.archived)
-            .map((l) => ({
-              id: l.id,
-              name: l.name,
-              path: [space.name, ...folderPath(space.folders, l.folderId), l.name].join(' / '),
-              statuses: statusNames(l.statuses.length ? l.statuses : space.statuses),
-            })),
+            .map((l) => {
+              const fields = (space.customFields ?? []).filter((f) => f.listId === null || f.listId === l.id);
+              return {
+                id: l.id,
+                name: l.name,
+                path: [space.name, ...folderPath(space.folders, l.folderId), l.name].join(' / '),
+                statuses: statusNames(l.statuses.length ? l.statuses : space.statuses),
+                ...(fields.length
+                  ? { customFields: fields.map((f) => ({ name: f.name, type: f.type, ...(f.type === 'dropdown' ? { options: f.options.map((o) => o.label) } : {}) })) }
+                  : {}),
+              };
+            }),
         })),
       }));
     },
@@ -237,6 +299,7 @@ const TOOLS: ToolDef[] = [
       const limit = typeof rawLimit === 'number' && Number.isFinite(rawLimit) ? Math.min(200, Math.max(1, Math.floor(rawLimit))) : 50;
 
       const all = await loadTasks(call);
+      const fields = await fieldsByList(call);
       let listsInWorkspace: Set<string> | null = null;
       if (workspaceId) {
         const ws = (await loadWorkspaces(call)).find((w) => w.id === workspaceId);
@@ -273,13 +336,13 @@ const TOOLS: ToolDef[] = [
       return {
         total: matches.length,
         shown: Math.min(limit, matches.length),
-        tasks: matches.slice(0, limit).map((t) => shapeTask(t, call, { subtaskCount: childCount.get(t.id) ?? 0 })),
+        tasks: matches.slice(0, limit).map((t) => shapeTask(t, call, { subtaskCount: childCount.get(t.id) ?? 0, fields })),
       };
     },
   },
   {
     name: 'get_task',
-    description: 'One task in full: its whole description, its subtasks in order, and its most recent comments.',
+    description: 'One task in full: its whole description, its custom fields, its subtasks in order, the Docs attached to it (read them with get_doc), and its most recent comments.',
     inputSchema: { type: 'object', properties: { taskId: { type: 'string' } }, required: ['taskId'], additionalProperties: false },
     write: false,
     run: async (args, call) => {
@@ -289,12 +352,15 @@ const TOOLS: ToolDef[] = [
       const task = all.find((t) => t.id === taskId);
       if (!task) throw new AgentError(`No task with id "${taskId}" that you can see.`, 404);
       const comments = await unwrap<RawComment[]>(await commentsGET(internal(`/api/tasks/${taskId}/comments`), params(taskId)));
+      const fields = await fieldsByList(call);
+      const docs = await prisma.doc.findMany({ where: { taskId, deletedAt: null }, orderBy: { order: 'asc' }, select: { id: true, title: true } });
       return {
-        ...shapeTask(task, call, { fullDescription: true }),
+        ...shapeTask(task, call, { fullDescription: true, fields }),
+        ...(docs.length ? { docs } : {}),
         subtasks: all
           .filter((t) => t.parentId === taskId)
           .sort((a, b) => (a.order ?? 0) - (b.order ?? 0) || new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime())
-          .map((t) => shapeTask(t, call)),
+          .map((t) => shapeTask(t, call, { fields })),
         comments: comments
           .filter((c) => c.type === 'comment')
           .slice(-20)
@@ -303,9 +369,103 @@ const TOOLS: ToolDef[] = [
     },
   },
   {
+    name: 'search_docs',
+    description:
+      'Finds Docs and wiki pages the user can see, by words in the title or text. Covers the Docs of each Space, Docs attached to tasks, and the workspace wiki (the handbook) where there is one. Returns titles with a short excerpt; read one in full with get_doc. With no query it lists them.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        query: { type: 'string' },
+        workspaceId: { type: 'string' },
+        kind: { type: 'string', enum: ['doc', 'wiki'], description: 'Only Docs, or only wiki pages.' },
+        limit: { type: 'integer', minimum: 1, maximum: 100 },
+      },
+      additionalProperties: false,
+    },
+    write: false,
+    run: async (args, call) => {
+      const query = str(args, 'query')?.trim().toLowerCase();
+      const workspaceId = str(args, 'workspaceId');
+      const kind = str(args, 'kind');
+      const rawLimit = args.limit;
+      const limit = typeof rawLimit === 'number' && Number.isFinite(rawLimit) ? Math.min(100, Math.max(1, Math.floor(rawLimit))) : 30;
+      const words = query ? query.split(/\s+/) : [];
+      const hit = (title: string, text: string) => words.every((w) => `${title}\n${text}`.toLowerCase().includes(w));
+      const excerpt = (text: string) => {
+        const flat = text.replace(/\s+/g, ' ').trim();
+        const at = words.length ? Math.max(0, flat.toLowerCase().indexOf(words[0]) - 60) : 0;
+        return flat.length > 200 ? `${at > 0 ? '…' : ''}${flat.slice(at, at + 200)}…` : flat;
+      };
+      const out: Json[] = [];
+      for (const ws of await loadWorkspaces(call)) {
+        if (workspaceId && ws.id !== workspaceId) continue;
+        if (kind !== 'wiki') {
+          for (const space of ws.spaces) {
+            for (const d of space.spaceDocs ?? []) {
+              if (d.archived || !hit(d.title, d.content)) continue;
+              out.push({ id: d.id, kind: 'doc', title: d.title, where: `${ws.name} / ${space.name}`, excerpt: excerpt(d.content), updatedAt: d.updatedAt });
+            }
+          }
+        }
+        // The wiki answers for itself whether this person may read it (off, or not a member → null).
+        if (kind !== 'doc' && ws.wikiEnabled && (await getWikiAccess(ws.id, call.token.userId))) {
+          const pages = await prisma.doc.findMany({
+            where: { wikiWorkspaceId: ws.id, deletedAt: null },
+            select: { id: true, title: true, content: true, updatedAt: true },
+            orderBy: [{ order: 'asc' }, { createdAt: 'asc' }],
+          });
+          for (const p of pages) {
+            if (hit(p.title, p.content)) out.push({ id: p.id, kind: 'wiki', title: p.title, where: `${ws.name} / Wiki`, excerpt: excerpt(p.content), updatedAt: p.updatedAt });
+          }
+        }
+      }
+      // Docs attached to tasks: found through the tasks this key can see, never past them.
+      if (kind !== 'wiki') {
+        const tasks = await loadTasks(call);
+        const titleOf = new Map(tasks.map((t) => [t.id, t.title]));
+        let reach = tasks.map((t) => t.id);
+        if (workspaceId) {
+          const ws = (await loadWorkspaces(call)).find((w) => w.id === workspaceId);
+          const lists = new Set(ws?.spaces.flatMap((sp) => sp.lists.map((l) => l.id)) ?? []);
+          reach = tasks.filter((t) => lists.has(t.listId)).map((t) => t.id);
+        }
+        const taskDocs = await prisma.doc.findMany({
+          where: { taskId: { in: reach }, deletedAt: null, spaceId: null },
+          select: { id: true, title: true, content: true, taskId: true, updatedAt: true },
+        });
+        for (const d of taskDocs) {
+          if (hit(d.title, d.content)) out.push({ id: d.id, kind: 'doc', title: d.title, where: `On the task "${titleOf.get(d.taskId!) ?? ''}"`, excerpt: excerpt(d.content), updatedAt: d.updatedAt });
+        }
+      }
+      return { total: out.length, shown: Math.min(limit, out.length), docs: out.slice(0, limit) };
+    },
+  },
+  {
+    name: 'get_doc',
+    description: 'One Doc or wiki page in full, as text. Works for a Space\u2019s Docs, Docs attached to a task, a task\u2019s description, and wiki pages.',
+    inputSchema: { type: 'object', properties: { docId: { type: 'string' } }, required: ['docId'], additionalProperties: false },
+    write: false,
+    run: async (args, call) => {
+      const docId = requiredStr(args, 'docId');
+      const { doc } = await visibleDoc(docId, call);
+      const text = docJSONToPlainText(loadDocJSONForExport(doc));
+      const subpages = await prisma.doc.findMany({ where: { parentId: docId, deletedAt: null }, orderBy: { order: 'asc' }, select: { id: true, title: true } });
+      return {
+        id: doc.id,
+        kind: doc.wikiWorkspaceId ? 'wiki' : 'doc',
+        title: doc.title,
+        ...(doc.taskId ? { taskId: doc.taskId } : {}),
+        ...(doc.descriptionTaskId ? { descriptionOfTaskId: doc.descriptionTaskId } : {}),
+        text: text.length > 60_000 ? `${text.slice(0, 60_000)}\n\n… (cut off: the doc is longer than this)` : text,
+        ...(subpages.length ? { subpages } : {}),
+        updatedAt: doc.updatedAt,
+      };
+    },
+  },
+  {
     name: 'search_events',
     description:
-      'Finds calendar events (meetings, appointments) the user can see, soonest first. All filters are optional. A repeating event is listed once, at its first occurrence, marked repeats.',
+      'Finds calendar events (meetings, appointments) the user can see, soonest first. All filters are optional. A repeating event is listed once, at its first occurrence, with how it repeats.',
     inputSchema: {
       type: 'object',
       properties: {
@@ -330,7 +490,8 @@ const TOOLS: ToolDef[] = [
       const matches = (await loadEvents(call)).filter((e) => {
         if (workspaceId && e.workspaceId !== workspaceId) return false;
         if (attendingMe && !e.assignees.some((a) => a.id === call.token.userId)) return false;
-        if (from && (osloDay(e.endDate) ?? '') < from) return false;
+        // A repeating event is stored at its first occurrence; it may well still be going on.
+        if (from && !e.recurrence && (osloDay(e.endDate) ?? '') < from) return false;
         if (to && (osloDay(e.startDate) ?? '') > to) return false;
         if (query) {
           const haystack = `${e.title}\n${plain(e.description) ?? ''}\n${e.location ?? ''}`.toLowerCase();
@@ -341,7 +502,7 @@ const TOOLS: ToolDef[] = [
       return { total: matches.length, shown: Math.min(limit, matches.length), events: matches.slice(0, limit).map((e) => shapeEvent(e, call)) };
     },
   },
-  ...['create_task', 'update_task', 'move_task', 'trash_task', 'add_comment', 'create_event', 'update_event', 'trash_event'].map(singleChangeTool),
+  ...['create_task', 'update_task', 'move_task', 'trash_task', 'repeat_task', 'add_comment', 'create_event', 'update_event', 'trash_event', 'create_list', 'create_folder', 'create_doc'].map(singleChangeTool),
   {
     name: 'apply_changes',
     description: `Makes several changes as ONE step: one entry in the workspace’s agent log, one notification per person involved, and one thing to undo. Use it whenever the user’s request means more than one change (creating a task with subtasks, updating many tasks, sorting a List). All changes must be in the same workspace; at most ${MAX_CHANGES} per call. Everything is checked first — if any change is not possible, nothing is done. Send dryRun: true to get the list of what would change without changing anything; do that and show it to the user before a large or risky set of changes.`,

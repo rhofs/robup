@@ -14664,3 +14664,75 @@ for the order they were recommended in.
 `ptero.sh reinstall` (no argument) waited for the right commit and tagged it by itself this time.
 Whether the live updates actually work in production is **not confirmed** — waiting on Robin's
 two-window test.
+
+## 2026-11-23 (continued) — branch `agent-api`, round 3: fields, docs, wiki, repeating, Lists/folders, private events
+
+Robin's answers to "what more should an agent be able to do" (the list is in main's entry on live
+updates):
+
+- "My day" in one call: **dropped.** Do not build.
+- Chat messages: **wait.**
+- Everything else: yes. Built here.
+
+### Built
+
+- **Custom fields**: `list_workspaces` lists each List's fields (type, dropdown options); tasks carry
+  `customFields` by name in `search_tasks` / `get_task`; `create_task` / `update_task` take
+  `customFields: { "Name": value }` (name or id, case-insensitive; dropdown options and numbers are
+  checked; a plain day is stored as the day, like the app's picker). Undo is per field.
+- **Repeating**: events take `repeat: { every: day|week|month|year, interval?, until? | times? }` on
+  create and update (null stops it) — the app's own `Event.recurrence`. **Tasks** have no repeat rule
+  in this app; `repeat_task { taskId, times, everyDays }` uses the existing "series" route, which
+  makes dated copies now. That difference is said in the tool description.
+- **Docs and wiki, reading**: `search_docs` (Space Docs, Docs on tasks, wiki pages) and `get_doc`
+  (also a task's description Doc), as text from the stored Yjs document. Wiki pages only where the
+  wiki is on and the person is a member (`getWikiAccess`). `get_task` lists the task's Docs.
+- **Docs, creating**: `create_doc { title, content (Markdown), taskId | spaceId }`.
+  `lib/agent/markdown.ts` turns the Markdown into a real document (headings, bullet/numbered/check
+  lists, quotes, code, bold, italic, links), checked against the editor schema, plain text as the
+  fallback. Written straight to the new row — safe only because nobody can have a seconds-old doc open.
+- **Lists and folders**: `create_list`, `create_folder`, with `ref`s — so one `apply_changes` can make
+  a folder, a List in it, tasks in the List, subtasks, and a Doc on a task (verified as one action,
+  and undone as one).
+- **Private events**: `update_event { workspaceId }` moves an event to another workspace — the personal
+  one to make it private. Attendees who are not members there are dropped by the app's route; they
+  are recorded, so undo brings them back (verified).
+- REST: `/api/v1/docs`, `/api/v1/docs/:id`. Everything else is reachable through `/api/v1/changes`.
+
+### NOT built, and why — the answer to Robin's "litt usikker hva du mener" on descriptions
+
+Agents can **read** every description and Doc. They can **write** a description on a task nobody has
+opened yet, and create new Docs. They **cannot change an existing Doc** — including a description
+once someone has opened the task, when it becomes a live Doc. Reason: an open Doc lives in the
+collab sidecar's memory and is saved from there; a change written to the database underneath it is
+overwritten by the next save, silently. Doing it properly means sending the change *through* the
+sidecar, as a collaborator would. That is a separate piece of work touching the most valuable data
+in the app, and the local instance has no sidecar to test it against. Proposed, not started.
+
+Also not built: creating or editing wiki pages (read only); attachments; Spaces.
+
+### Verified on the local instance
+
+Fields: listed; set on create and update; wrong option / unknown field refused with what exists; dry
+run shows from→to by field name; undo after a person changed one of two fields put one back and left
+the other. Repeating weekly event, found by a search starting later than its first day; moved to the
+personal workspace → the other member's agent no longer finds it; undo → back, with both attendees.
+`repeat_task` ×3 weekly → dates (and a custom date field) moved 7/14/21 days; undo trashed the three.
+The folder+List+task+subtask+Doc action; the Doc read back with its structure; made private via its
+task → the other member's agent gets neither `get_doc` nor a search hit. Wiki: 12 seeded pages found
+and read; switched off → nothing found, page refused.
+
+**Not verified:** still nothing in a browser — in particular that a Doc created from Markdown *opens
+and renders* in the editor (it passes the schema check and reads back correctly, which is not the
+same thing). Monthly/yearly repeats not exercised.
+
+Left in the local database: three custom fields on the "Produksjon" Space (Prioritet, Timer,
+Publiseres), event "Ukemøte", List "Ferdige episoder", and trashed test items. The wiki is off again
+but its 12 seeded pages remain.
+
+### Asked, not done: reading "Siqt - Bugs and features" in New Game Media (production)
+
+Robin wants me to read that List so bugs can be picked up from it. I have no way into production
+data today except through the hosting panel — and the agent API is exactly the door built for this.
+So it waits on the branch going live: merge, backup, deploy, then Robin makes a key (limited to New
+Game Media, read-only is enough) and it is registered here. Not merged without his go-ahead.

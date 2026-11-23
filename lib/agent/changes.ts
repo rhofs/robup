@@ -9,11 +9,25 @@ import { POST as reorderPOST } from '@/app/api/tasks/reorder/route';
 import { POST as commentsPOST } from '@/app/api/tasks/[id]/comments/route';
 import { POST as eventsPOST } from '@/app/api/events/route';
 import { PATCH as eventPATCH, DELETE as eventDELETE } from '@/app/api/events/[id]/route';
+import { POST as seriesPOST } from '@/app/api/tasks/[id]/series/route';
+import { POST as listsPOST } from '@/app/api/lists/route';
+import { DELETE as listDELETE } from '@/app/api/lists/[id]/route';
+import { POST as foldersPOST } from '@/app/api/folders/route';
+import { DELETE as folderDELETE } from '@/app/api/folders/[id]/route';
+import { POST as taskDocsPOST } from '@/app/api/tasks/[id]/docs/route';
+import { POST as spaceDocsPOST } from '@/app/api/spaces/[id]/docs/route';
+import { DELETE as docDELETE } from '@/app/api/docs/[id]/route';
+import { contentFromJSON } from '@/lib/collab/docContent';
+import { normalizeRecurrence } from '@/lib/recurrence';
+import { markdownToDocJSON } from '@/lib/agent/markdown';
 import {
   AgentError,
+  BUILT_IN_STATUSES,
   allowedStatuses,
   bool,
   dateArg,
+  fieldValues,
+  fieldsByList,
   internal,
   listPath,
   loadEvents,
@@ -31,7 +45,9 @@ import {
   strList,
   unwrap,
   visibleEvent,
+  visibleFolder,
   visibleList,
+  visibleSpace,
   visibleTask,
   type AgentCall,
   type Json,
@@ -67,6 +83,8 @@ type TaskFields = {
   dueDate?: string | null;
   assigneeIds?: string[];
   archived?: boolean;
+  // Only the fields that were touched, by field id. '' is "empty".
+  customFields?: Record<string, string>;
 };
 type EventFields = {
   title?: string;
@@ -76,6 +94,9 @@ type EventFields = {
   endDate?: string;
   allDay?: boolean;
   assigneeIds?: string[];
+  recurrence?: string | null;
+  workspaceId?: string;
+  spaceId?: string | null;
 };
 type Place = { listId: string; parentId: string | null };
 
@@ -84,6 +105,11 @@ export type UndoRecord =
   | { kind: 'task_updated'; taskId: string; before: TaskFields; after: TaskFields }
   | { kind: 'task_moved'; taskId: string; before: Place & { order: string[] }; after: Place }
   | { kind: 'task_trashed'; taskId: string }
+  // taskId: the task that was repeated; taskIds: the copies made of it.
+  | { kind: 'tasks_copied'; taskId: string; taskIds: string[] }
+  | { kind: 'list_created'; listId: string }
+  | { kind: 'folder_created'; folderId: string }
+  | { kind: 'doc_created'; docId: string }
   | { kind: 'comment_added'; taskId: string; commentId: string }
   | { kind: 'event_created'; eventId: string }
   | { kind: 'event_updated'; eventId: string; before: EventFields; after: EventFields }
@@ -105,7 +131,75 @@ type Planned = {
 };
 // `pending`: tasks an earlier change in the same action will create, by the name the agent gave
 // them (`ref`), so a later change can make subtasks under a task that does not exist yet.
-type PlanCtx = { call: AgentCall; pending: Map<string, { listId: string; workspaceId: string; title: string }> };
+// A pending List or folder (created earlier in the same call) can likewise be named as "$ref".
+type Pending = { kind: 'task' | 'list' | 'folder'; listId?: string; spaceId: string; workspaceId: string; title: string };
+type PlanCtx = { call: AgentCall; pending: Map<string, Pending> };
+
+function claimRef(ref: string | undefined, pending: Map<string, Pending>, value: Pending) {
+  if (!ref) return;
+  if (!/^[A-Za-z0-9_-]{1,40}$/.test(ref)) throw new AgentError('"ref" may only use letters, digits, - and _.');
+  if (pending.has(ref)) throw new AgentError(`ref "${ref}" is used twice in this call.`);
+  pending.set(ref, value);
+}
+const fromRef = (refs: Map<string, string>, value: string): string => {
+  if (!value.startsWith('$')) return value;
+  const id = refs.get(value.slice(1));
+  if (!id) throw new AgentError(`What "${value}" refers to was not created.`);
+  return id;
+};
+
+// What an agent sends for custom fields — { "Field name or id": value } — as field id → stored
+// string, checked against the fields this List really has. null or "" empties a field.
+async function resolveCustomFields(raw: unknown, listId: string, call: AgentCall): Promise<Record<string, string> | undefined> {
+  if (raw === undefined || raw === null) return undefined;
+  if (typeof raw !== 'object' || Array.isArray(raw)) throw new AgentError('"customFields" must be an object like { "Field name": "value" }.');
+  const defs = (await fieldsByList(call)).get(listId) ?? [];
+  const out: Record<string, string> = {};
+  for (const [key, value] of Object.entries(raw as Json)) {
+    const def = defs.find((d) => d.id === key) ?? defs.find((d) => d.name.toLowerCase() === key.trim().toLowerCase());
+    if (!def) {
+      throw new AgentError(
+        defs.length ? `This List has no custom field "${key}". Its fields are: ${defs.map((d) => `"${d.name}"`).join(', ')}.` : `This List has no custom fields, so "${key}" cannot be set.`
+      );
+    }
+    if (value === null || value === '') {
+      out[def.id] = '';
+      continue;
+    }
+    if (typeof value !== 'string' && typeof value !== 'number') throw new AgentError(`The value for "${def.name}" must be text or a number.`);
+    const text = String(value).trim();
+    if (def.type === 'dropdown') {
+      const hit = def.options.find((o) => o.label.toLowerCase() === text.toLowerCase());
+      if (!hit) throw new AgentError(`"${def.name}" has no option "${text}". The options are: ${def.options.map((o) => `"${o.label}"`).join(', ')}.`);
+      out[def.id] = hit.label;
+    } else if (def.type === 'number') {
+      if (!Number.isFinite(Number(text))) throw new AgentError(`"${def.name}" is a number field; "${text}" is not a number.`);
+      out[def.id] = text;
+    } else if (def.type === 'date') {
+      const when = parseWhen(text, def.name);
+      // A plain day is stored as the day itself — what the app's own picker stores without a time.
+      out[def.id] = /^\d{4}-\d{2}-\d{2}$/.test(text) ? text : when.iso;
+    } else {
+      out[def.id] = text;
+    }
+  }
+  return out;
+}
+
+// { every: 'week', interval?: 2, until?: '2027-06-30', times?: 10 } → what the app stores
+// (lib/recurrence.ts). null stops the repeating.
+function repeatArg(args: Json): string | null | undefined {
+  const raw = args.repeat;
+  if (raw === undefined) return undefined;
+  if (raw === null || raw === false) return null;
+  if (typeof raw !== 'object' || Array.isArray(raw)) throw new AgentError('"repeat" must be like { "every": "week" }, or null to stop it repeating.');
+  const r = raw as Json;
+  const freq = ({ day: 'daily', week: 'weekly', month: 'monthly', year: 'yearly' } as Record<string, string>)[String(r.every)];
+  if (!freq) throw new AgentError('"repeat.every" must be "day", "week", "month" or "year".');
+  const rule = normalizeRecurrence({ freq, interval: r.interval ?? 1, until: r.until ?? null, count: r.until ? null : r.times ?? null });
+  if (!rule) throw new AgentError('That repeat rule could not be understood.');
+  return rule;
+}
 
 const sameSet = (a: string[] | undefined, b: string[] | undefined) =>
   !!a && !!b && a.length === b.length && [...a].sort().join() === [...b].sort().join();
@@ -125,6 +219,7 @@ async function taskFields(taskId: string) {
       listId: true,
       parentId: true,
       deletedAt: true,
+      customFieldValues: true,
       assignees: { select: { id: true, name: true } },
     },
   });
@@ -139,6 +234,7 @@ async function taskFields(taskId: string) {
       dueDate: t.dueDate?.toISOString() ?? null,
       archived: t.archived,
       assigneeIds: t.assignees.map((a) => a.id).sort(),
+      customFields: fieldValues(t.customFieldValues),
     } satisfies TaskFields,
   };
 }
@@ -155,6 +251,8 @@ async function eventFields(eventId: string) {
       allDay: true,
       deletedAt: true,
       workspaceId: true,
+      spaceId: true,
+      recurrence: true,
       assignees: { select: { id: true, name: true } },
     },
   });
@@ -169,6 +267,9 @@ async function eventFields(eventId: string) {
       endDate: e.endDate.toISOString(),
       allDay: e.allDay,
       assigneeIds: e.assignees.map((a) => a.id).sort(),
+      recurrence: e.recurrence,
+      workspaceId: e.workspaceId,
+      spaceId: e.spaceId,
     } satisfies EventFields,
   };
 }
@@ -186,7 +287,7 @@ async function siblingOrder(place: Place): Promise<string[]> {
 const readTask = async (id: string, call: AgentCall) => {
   call.memo.clear();
   const task = (await loadTasks(call)).find((t) => t.id === id);
-  return task ? shapeTask(task, call, { fullDescription: true }) : { id };
+  return task ? shapeTask(task, call, { fullDescription: true, fields: await fieldsByList(call) }) : { id };
 };
 const readEvent = async (id: string, call: AgentCall) => {
   call.memo.clear();
@@ -208,6 +309,9 @@ const diff = (before: Json, after: Json) => {
 
 const readable = (fields: TaskFields | EventFields, names: Map<string, string>, allDay = true): Json => {
   const out: Json = { ...fields };
+  delete out.customFields;
+  delete out.spaceId;
+  if ('recurrence' in out) out.recurrence = out.recurrence ? 'repeats' : 'does not repeat';
   for (const key of ['startDate', 'dueDate', 'endDate'] as const) {
     const v = (fields as Record<string, unknown>)[key];
     if (typeof v === 'string') out[key] = key === 'dueDate' ? osloDay(v) : osloMoment(v, allDay);
@@ -237,12 +341,16 @@ const planners: Record<string, (args: Json, ctx: PlanCtx) => Promise<Planned>> =
     const assigneeIds = strList(args, 'assigneeIds');
     const ref = str(args, 'ref');
 
-    const list = await visibleList(listId, call);
+    // The List: a real one, or one an earlier change in this call will create.
+    const newList = listId.startsWith('$') ? pending.get(listId.slice(1)) : undefined;
+    if (listId.startsWith('$') && newList?.kind !== 'list') throw new AgentError(`listId "${listId}" does not match the ref of an earlier create_list in this call.`);
+    const list = newList ? null : await visibleList(listId, call);
+    const workspaceId = newList?.workspaceId ?? list!.space.workspaceId;
     let parentTitle: string | null = null;
     let realParent: string | null = null;
     if (parentArg?.startsWith('$')) {
       const waiting = pending.get(parentArg.slice(1));
-      if (!waiting) throw new AgentError(`parentId "${parentArg}" does not match the ref of an earlier create_task in this call.`);
+      if (waiting?.kind !== 'task') throw new AgentError(`parentId "${parentArg}" does not match the ref of an earlier create_task in this call.`);
       if (waiting.listId !== listId) throw new AgentError('A subtask has to be in the same List as its parent task.');
       parentTitle = waiting.title;
     } else if (parentArg) {
@@ -251,28 +359,31 @@ const planners: Record<string, (args: Json, ctx: PlanCtx) => Promise<Planned>> =
       parentTitle = parent.task.title;
       realParent = parentArg;
     }
-    const allowed = await allowedStatuses(listId, realParent);
+    // A List that does not exist yet has no statuses of its own: its Space's, or the built-in four.
+    const allowed = newList
+      ? await prisma.status
+          .findMany({ where: { spaceId: newList.spaceId, listId: null, taskId: null }, orderBy: { order: 'asc' }, select: { name: true } })
+          .then((rows) => (rows.length ? rows.map((r) => r.name) : BUILT_IN_STATUSES))
+      : await allowedStatuses(listId, realParent);
     const wanted = str(args, 'status');
     const status = wanted ? matchStatus(wanted, allowed) : allowed[0];
-    if (ref) {
-      if (!/^[A-Za-z0-9_-]{1,40}$/.test(ref)) throw new AgentError('"ref" may only use letters, digits, - and _.');
-      if (pending.has(ref)) throw new AgentError(`ref "${ref}" is used twice in this call.`);
-      pending.set(ref, { listId, workspaceId: list.space.workspaceId, title });
-    }
-    const where = await listPath(listId, call);
+    if (newList && args.customFields !== undefined) throw new AgentError('Custom fields cannot be set on a task in a List created in the same call. Set them in a second call.');
+    const customFields = newList ? undefined : await resolveCustomFields(args.customFields, listId, call);
+    claimRef(ref, pending, { kind: 'task', listId, spaceId: newList?.spaceId ?? list!.space.id, workspaceId, title });
+    const where = newList ? `the new List "${newList.title}"` : await listPath(listId, call);
     return {
       type: 'create_task',
       label: parentTitle ? `Create subtask "${title}" under "${parentTitle}"` : `Create task "${title}" in ${where}`,
-      workspaceId: list.space.workspaceId,
+      workspaceId,
       details: { status, ...(startDate ? { startDate: osloDay(startDate) } : {}), ...(dueDate ? { dueDate: osloDay(dueDate) } : {}) },
       run: async (refs) => {
-        const parentId = parentArg?.startsWith('$') ? refs.get(parentArg.slice(1)) ?? null : parentArg;
-        if (parentArg && !parentId) throw new AgentError(`The task "${parentArg}" refers to was not created.`);
+        const parentId = parentArg ? fromRef(refs, parentArg) : null;
+        const realListId = fromRef(refs, listId);
         const created = await unwrap<{ id: string }>(
           await tasksPOST(
             internal('/api/tasks', {
               method: 'POST',
-              body: { listId, title, parentId, ...(status ? { status } : {}), startDate: startDate ?? null, dueDate: dueDate ?? null },
+              body: { listId: realListId, title, parentId, ...(status ? { status } : {}), startDate: startDate ?? null, dueDate: dueDate ?? null },
             })
           )
         );
@@ -282,6 +393,7 @@ const planners: Record<string, (args: Json, ctx: PlanCtx) => Promise<Planned>> =
         const extra: Json = {};
         if (description?.trim()) extra.description = description;
         if (assigneeIds?.length) extra.assigneeIds = assigneeIds;
+        if (customFields && Object.keys(customFields).length) extra.customFieldValues = JSON.stringify(customFields);
         if (Object.keys(extra).length > 0) {
           await unwrap(await taskPATCH(internal(`/api/tasks/${created.id}`, { method: 'PATCH', body: extra }), params(created.id)));
         }
@@ -325,11 +437,20 @@ const planners: Record<string, (args: Json, ctx: PlanCtx) => Promise<Planned>> =
     if (assigneeIds !== undefined) patch.assigneeIds = assigneeIds;
     const archived = bool(args, 'archived');
     if (archived !== undefined) patch.archived = archived;
+    const customFields = await resolveCustomFields(args.customFields, access.task.listId, call);
+    if (customFields && Object.keys(customFields).length) patch.customFields = customFields;
     if (Object.keys(patch).length === 0) throw new AgentError('Nothing to change: send at least one field besides taskId.');
 
     const current = await taskFields(taskId);
     const names = await memberNames([...(current?.fields.assigneeIds ?? []), ...(patch.assigneeIds ?? [])]);
     const changes = diff(readable(current?.fields ?? {}, names), readable(patch, names));
+    if (patch.customFields) {
+      const defs = (await fieldsByList(call)).get(access.task.listId) ?? [];
+      for (const [id, to] of Object.entries(patch.customFields)) {
+        const from = current?.fields.customFields[id] ?? '';
+        if (from !== to) changes[defs.find((d) => d.id === id)?.name ?? id] = { from: from || null, to: to || null };
+      }
+    }
     return {
       type: 'update_task',
       label: `Change "${access.task.title}": ${Object.keys(changes).join(', ') || 'no difference'}`,
@@ -337,15 +458,28 @@ const planners: Record<string, (args: Json, ctx: PlanCtx) => Promise<Planned>> =
       details: changes,
       run: async () => {
         const was = await taskFields(taskId);
-        await unwrap(await taskPATCH(internal(`/api/tasks/${taskId}`, { method: 'PATCH', body: patch }), params(taskId)));
+        // Custom fields are stored as one JSON object on the task, so the touched ones are merged
+        // into what is there now rather than replacing the lot.
+        const { customFields: touched, ...plainPatch } = patch;
+        const body: Json = { ...plainPatch };
+        if (touched) body.customFieldValues = JSON.stringify({ ...(was?.fields.customFields ?? {}), ...touched });
+        await unwrap(await taskPATCH(internal(`/api/tasks/${taskId}`, { method: 'PATCH', body }), params(taskId)));
         const now = await taskFields(taskId);
         // Only the fields that were sent, as they stood and as they stand — what the server kept,
         // which is not always what was asked (an assignee who is not a member is dropped).
         const before: TaskFields = {};
         const after: TaskFields = {};
-        for (const key of Object.keys(patch) as (keyof TaskFields)[]) {
+        for (const key of Object.keys(plainPatch) as (keyof TaskFields)[]) {
           (before as Json)[key] = was?.fields[key];
           (after as Json)[key] = now?.fields[key];
+        }
+        if (touched) {
+          before.customFields = {};
+          after.customFields = {};
+          for (const id of Object.keys(touched)) {
+            before.customFields[id] = was?.fields.customFields[id] ?? '';
+            after.customFields[id] = now?.fields.customFields[id] ?? '';
+          }
         }
         return { undo: { kind: 'task_updated', taskId, before, after }, result: await readTask(taskId, call) };
       },
@@ -485,9 +619,10 @@ const planners: Record<string, (args: Json, ctx: PlanCtx) => Promise<Planned>> =
     const description = str(args, 'description');
     const location = str(args, 'location');
     const assigneeIds = strList(args, 'attendeeIds');
+    const recurrence = repeatArg(args) ?? null;
     return {
       type: 'create_event',
-      label: `Create event "${title}" on ${osloMoment(range.startDate, range.allDay).replace('T', ' at ')}`,
+      label: `Create ${recurrence ? 'repeating ' : ''}event "${title}" on ${osloMoment(range.startDate, range.allDay).replace('T', ' at ')}`,
       workspaceId,
       details: { start: osloMoment(range.startDate, range.allDay), end: osloMoment(range.endDate, range.allDay), allDay: range.allDay },
       run: async () => {
@@ -495,7 +630,7 @@ const planners: Record<string, (args: Json, ctx: PlanCtx) => Promise<Planned>> =
           await eventsPOST(
             internal('/api/events', {
               method: 'POST',
-              body: { workspaceId, title, description: description ?? null, location: location ?? null, ...range, assigneeIds: assigneeIds ?? [] },
+              body: { workspaceId, title, description: description ?? null, location: location ?? null, ...range, assigneeIds: assigneeIds ?? [], recurrence },
             })
           )
         );
@@ -530,13 +665,31 @@ const planners: Record<string, (args: Json, ctx: PlanCtx) => Promise<Planned>> =
     }
     const assigneeIds = strList(args, 'attendeeIds');
     if (assigneeIds !== undefined) patch.assigneeIds = assigneeIds;
+    const recurrence = repeatArg(args);
+    if (recurrence !== undefined) patch.recurrence = recurrence;
+    // To another workspace — typically the personal one, which is how an event is made private.
+    const toWorkspace = str(args, 'workspaceId');
+    const moving = !!toWorkspace && toWorkspace !== current.workspaceId;
+    let movedTo: string | null = null;
+    if (moving) {
+      await requireOpen(toWorkspace, call);
+      patch.workspaceId = toWorkspace;
+      patch.spaceId = null;
+      movedTo = (await prisma.workspace.findUnique({ where: { id: toWorkspace }, select: { name: true, isPersonal: true } }).then((w) => (w?.isPersonal ? 'the personal workspace (private)' : w?.name))) ?? 'another workspace';
+    }
     if (Object.keys(patch).length === 0) throw new AgentError('Nothing to change: send at least one field besides eventId.');
 
     const names = await memberNames([...current.fields.assigneeIds, ...(patch.assigneeIds ?? [])]);
     const changes = diff(readable(current.fields, names, current.allDay), readable(patch, names, patch.allDay ?? current.allDay));
+    if (movedTo) {
+      delete changes.workspaceId;
+      changes.workspace = { to: movedTo, note: 'People who are not members there are taken off the event.' };
+    }
     return {
       type: 'update_event',
-      label: `Change event "${access.event.title}": ${Object.keys(changes).join(', ') || 'no difference'}`,
+      label: movedTo
+        ? `Move event "${access.event.title}" to ${movedTo}`
+        : `Change event "${access.event.title}": ${Object.keys(changes).join(', ') || 'no difference'}`,
       workspaceId: access.event.workspaceId,
       details: changes,
       run: async () => {
@@ -545,7 +698,9 @@ const planners: Record<string, (args: Json, ctx: PlanCtx) => Promise<Planned>> =
         const now = await eventFields(eventId);
         const before: EventFields = {};
         const after: EventFields = {};
-        for (const key of Object.keys(patch) as (keyof EventFields)[]) {
+        // A move also drops attendees who are not members of the new workspace, so they are
+        // remembered too — putting the event back puts them back.
+        for (const key of [...Object.keys(patch), ...(moving ? ['assigneeIds'] : [])] as (keyof EventFields)[]) {
           (before as Json)[key] = was?.fields[key];
           (after as Json)[key] = now?.fields[key];
         }
@@ -564,6 +719,143 @@ const planners: Record<string, (args: Json, ctx: PlanCtx) => Promise<Planned>> =
       run: async () => {
         await unwrap(await eventDELETE(internal(`/api/events/${eventId}`, { method: 'DELETE' }), params(eventId)));
         return { undo: { kind: 'event_trashed', eventId }, result: { id: eventId, trashed: true } };
+      },
+    };
+  },
+
+  async repeat_task(args, { call }) {
+    const taskId = requiredStr(args, 'taskId');
+    const access = await visibleTask(taskId, call);
+    const times = Math.floor(Number(args.times));
+    const everyDays = Math.round(Number(args.everyDays));
+    if (!Number.isFinite(times) || times < 1 || times > 60) throw new AgentError('"times" must be between 1 and 60 — how many more copies to make.');
+    if (!Number.isFinite(everyDays) || everyDays < 1 || everyDays > 3650) throw new AgentError('"everyDays" must be a whole number of days between the copies (7 for weekly).');
+    const children = await prisma.task.count({ where: { parentId: taskId, deletedAt: null } });
+    return {
+      type: 'repeat_task',
+      label: `Repeat "${access.task.title}" ${times} more time${times === 1 ? '' : 's'}, every ${everyDays === 1 ? 'day' : everyDays === 7 ? 'week' : `${everyDays} days`}${children ? ' (with its subtasks)' : ''}`,
+      workspaceId: access.space.workspaceId,
+      run: async () => {
+        // The app's own "repeat this task": copies of it (and its subtasks) with every date moved.
+        const made = await unwrap<{ ids: string[] }>(
+          await seriesPOST(internal(`/api/tasks/${taskId}/series`, { method: 'POST', body: { count: times, shiftDays: everyDays, timeZone: 'Europe/Oslo' } }), params(taskId))
+        );
+        call.memo.clear();
+        const all = await loadTasks(call);
+        const fields = await fieldsByList(call);
+        return {
+          undo: { kind: 'tasks_copied', taskId, taskIds: made.ids },
+          result: { repeated: taskId, copies: made.ids.map((id) => all.find((t) => t.id === id)).filter((t) => !!t).map((t) => shapeTask(t!, call, { fields })) },
+        };
+      },
+    };
+  },
+
+  async create_list(args, { call, pending }) {
+    const spaceId = requiredStr(args, 'spaceId');
+    const name = requiredStr(args, 'name');
+    if (name.length > 200) throw new AgentError('The name is too long (at most 200 characters).');
+    const folderArg = str(args, 'folderId') ?? null;
+    const space = await visibleSpace(spaceId, call);
+    let folderName: string | null = null;
+    if (folderArg?.startsWith('$')) {
+      const waiting = pending.get(folderArg.slice(1));
+      if (waiting?.kind !== 'folder') throw new AgentError(`folderId "${folderArg}" does not match the ref of an earlier create_folder in this call.`);
+      if (waiting.spaceId !== spaceId) throw new AgentError('The folder is in another Space.');
+      folderName = waiting.title;
+    } else if (folderArg) {
+      const folder = await visibleFolder(folderArg, call);
+      if (folder.space.id !== spaceId) throw new AgentError('The folder is in another Space.');
+      folderName = folder.folder.name;
+    }
+    claimRef(str(args, 'ref'), pending, { kind: 'list', spaceId, workspaceId: space.space.workspaceId, title: name });
+    const ref = str(args, 'ref');
+    return {
+      type: 'create_list',
+      label: `Create List "${name}" in ${space.space.name}${folderName ? ` / ${folderName}` : ''}`,
+      workspaceId: space.space.workspaceId,
+      run: async (refs) => {
+        const folderId = folderArg ? fromRef(refs, folderArg) : null;
+        const list = await unwrap<{ id: string; name: string }>(await listsPOST(internal('/api/lists', { method: 'POST', body: { spaceId, name, folderId } })));
+        if (ref) refs.set(ref, list.id);
+        return { undo: { kind: 'list_created', listId: list.id }, result: { id: list.id, name: list.name, spaceId, folderId } };
+      },
+    };
+  },
+
+  async create_folder(args, { call, pending }) {
+    const spaceId = requiredStr(args, 'spaceId');
+    const name = requiredStr(args, 'name');
+    if (name.length > 200) throw new AgentError('The name is too long (at most 200 characters).');
+    const parentArg = str(args, 'parentFolderId') ?? null;
+    const space = await visibleSpace(spaceId, call);
+    let parentName: string | null = null;
+    if (parentArg?.startsWith('$')) {
+      const waiting = pending.get(parentArg.slice(1));
+      if (waiting?.kind !== 'folder') throw new AgentError(`parentFolderId "${parentArg}" does not match the ref of an earlier create_folder in this call.`);
+      parentName = waiting.title;
+    } else if (parentArg) {
+      const parent = await visibleFolder(parentArg, call);
+      if (parent.space.id !== spaceId) throw new AgentError('The parent folder is in another Space.');
+      parentName = parent.folder.name;
+    }
+    const ref = str(args, 'ref');
+    claimRef(ref, pending, { kind: 'folder', spaceId, workspaceId: space.space.workspaceId, title: name });
+    return {
+      type: 'create_folder',
+      label: `Create folder "${name}" in ${space.space.name}${parentName ? ` / ${parentName}` : ''}`,
+      workspaceId: space.space.workspaceId,
+      run: async (refs) => {
+        const parentId = parentArg ? fromRef(refs, parentArg) : null;
+        const folder = await unwrap<{ id: string; name: string }>(await foldersPOST(internal('/api/folders', { method: 'POST', body: { spaceId, name, parentId } })));
+        if (ref) refs.set(ref, folder.id);
+        return { undo: { kind: 'folder_created', folderId: folder.id }, result: { id: folder.id, name: folder.name, spaceId, parentFolderId: parentId } };
+      },
+    };
+  },
+
+  async create_doc(args, { call, pending }) {
+    const title = requiredStr(args, 'title');
+    if (title.length > 300) throw new AgentError('The title is too long (at most 300 characters).');
+    const content = str(args, 'content') ?? '';
+    if (content.length > 200_000) throw new AgentError('The content is too long (at most 200 000 characters).');
+    const taskArg = str(args, 'taskId');
+    const spaceId = str(args, 'spaceId');
+    if (!!taskArg === !!spaceId) throw new AgentError('Say where the doc goes: taskId (a doc on that task) or spaceId (a doc in that Space\u2019s Docs) — one of them.');
+    let workspaceId: string;
+    let where: string;
+    if (taskArg?.startsWith('$')) {
+      const waiting = pending.get(taskArg.slice(1));
+      if (waiting?.kind !== 'task') throw new AgentError(`taskId "${taskArg}" does not match the ref of an earlier create_task in this call.`);
+      workspaceId = waiting.workspaceId;
+      where = `on the task "${waiting.title}"`;
+    } else if (taskArg) {
+      const task = await visibleTask(taskArg, call);
+      workspaceId = task.space.workspaceId;
+      where = `on the task "${task.task.title}"`;
+    } else {
+      const space = await visibleSpace(spaceId!, call);
+      workspaceId = space.space.workspaceId;
+      where = `in ${space.space.name}`;
+    }
+    return {
+      type: 'create_doc',
+      label: `Create doc "${title}" ${where}`,
+      workspaceId,
+      run: async (refs) => {
+        const taskId = taskArg ? fromRef(refs, taskArg) : null;
+        const doc = taskId
+          ? await unwrap<{ id: string }>(await taskDocsPOST(internal(`/api/tasks/${taskId}/docs`, { method: 'POST', body: { title } }), params(taskId)))
+          : await unwrap<{ id: string }>(await spaceDocsPOST(internal(`/api/spaces/${spaceId}/docs`, { method: 'POST', body: { title } }), params(spaceId!)));
+        // The text goes in as a real document (headings, lists…), not as a block of Markdown. Safe
+        // to write straight to the row here and only here: the doc is seconds old and nobody has it
+        // open, so there is no live editing session whose copy this could be overwritten by.
+        if (content.trim()) await prisma.doc.update({ where: { id: doc.id }, data: contentFromJSON(markdownToDocJSON(content)) });
+        return {
+          undo: { kind: 'doc_created', docId: doc.id },
+          result: { id: doc.id, title, ...(taskId ? { taskId, url: `${call.baseUrl}/?modal=${taskId}` } : { spaceId, url: `${call.baseUrl}/?doc=${doc.id}` }) },
+          mentions: taskId ? [taskId] : [],
+        };
       },
     };
   },
@@ -828,6 +1120,7 @@ async function undoOne(undo: UndoRecord): Promise<string> {
       const back: Json = {};
       const kept: string[] = [];
       for (const key of Object.keys(undo.after) as (keyof TaskFields)[]) {
+        if (key === 'customFields') continue;
         const current = now.fields[key];
         const left = undo.after[key];
         const untouched = Array.isArray(current) ? sameSet(current, left as string[]) : current === left;
@@ -836,14 +1129,59 @@ async function undoOne(undo: UndoRecord): Promise<string> {
         if (untouched) back[key] = was ?? null;
         else kept.push(key);
       }
+      if (undo.after.customFields) {
+        const values = { ...now.fields.customFields };
+        let any = false;
+        for (const [id, left] of Object.entries(undo.after.customFields)) {
+          const current = values[id] ?? '';
+          const was = undo.before.customFields?.[id] ?? '';
+          if (was === current) continue;
+          if (current === left) {
+            values[id] = was;
+            any = true;
+          } else if (!kept.includes('a custom field')) kept.push('a custom field');
+        }
+        if (any) back.customFieldValues = JSON.stringify(values);
+      }
       if (Object.keys(back).length > 0) await patchTask(undo.taskId, back);
-      const put = Object.keys(back);
+      const put = Object.keys(back).map((k) => (k === 'customFieldValues' ? 'custom fields' : k));
       return [
         put.length ? `Put back: ${put.join(', ')}.` : 'Nothing needed putting back.',
         kept.length ? `Left alone because someone changed it afterwards: ${kept.join(', ')}.` : '',
       ]
         .filter(Boolean)
         .join(' ');
+    }
+    case 'tasks_copied': {
+      let trashed = 0;
+      for (const id of undo.taskIds) {
+        const task = await prisma.task.findUnique({ where: { id }, select: { deletedAt: true } });
+        if (!task || task.deletedAt) continue;
+        await unwrap(await taskDELETE(internal(`/api/tasks/${id}`, { method: 'DELETE' }), params(id)));
+        trashed++;
+      }
+      return `${trashed} of the ${undo.taskIds.length} copies moved to the Trash.`;
+    }
+    case 'list_created': {
+      const list = await prisma.list.findUnique({ where: { id: undo.listId }, select: { deletedAt: true } });
+      if (!list) return 'Already gone.';
+      if (list.deletedAt) return 'Already in the Trash.';
+      await unwrap(await listDELETE(internal(`/api/lists/${undo.listId}`, { method: 'DELETE' }), params(undo.listId)));
+      return 'List moved to the Trash, with what is in it.';
+    }
+    case 'folder_created': {
+      const folder = await prisma.folder.findUnique({ where: { id: undo.folderId }, select: { deletedAt: true } });
+      if (!folder) return 'Already gone.';
+      if (folder.deletedAt) return 'Already in the Trash.';
+      await unwrap(await folderDELETE(internal(`/api/folders/${undo.folderId}`, { method: 'DELETE' }), params(undo.folderId)));
+      return 'Folder moved to the Trash, with what is in it.';
+    }
+    case 'doc_created': {
+      const doc = await prisma.doc.findUnique({ where: { id: undo.docId }, select: { deletedAt: true } });
+      if (!doc) return 'Already gone.';
+      if (doc.deletedAt) return 'Already in the Trash.';
+      await unwrap(await docDELETE(internal(`/api/docs/${undo.docId}`, { method: 'DELETE' }), params(undo.docId)));
+      return 'Doc moved to the Trash.';
     }
     case 'task_moved': {
       const task = await prisma.task.findUnique({ where: { id: undo.taskId }, select: { listId: true, parentId: true, deletedAt: true } });
