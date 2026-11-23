@@ -14408,3 +14408,7 @@ Larger test the same day: 10 "Videoforslag: …" tasks in My tasks, 6–7 subtas
 total, ~80 MCP calls in a row) through `create_task`. Every one came back with the right parent and
 nothing failed. "Møte med TV 2" (Mon 7 Dec 10–12 Oslo, Robin attending) was again made through the
 cookie route, because the agent API still has no events.
+**Correction, later the same day:** this was only true of the build serving the instance at the time
+of these tests. Round 2 on the branch added `create_event`/`update_event`/`trash_event`/
+`search_events`, and they have since been run with this key (see the branch's PLANNING). The TV 2
+meeting was re-made by the agent, and the cookie-made copy is in the Trash.
