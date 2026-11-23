@@ -14412,3 +14412,13 @@ cookie route, because the agent API still has no events.
 of these tests. Round 2 on the branch added `create_event`/`update_event`/`trash_event`/
 `search_events`, and they have since been run with this key (see the branch's PLANNING). The TV 2
 meeting was re-made by the agent, and the cookie-made copy is in the Trash.
+**These test tasks were in the wrong workspace.** Robin meant New Game Media (the test workspace),
+not Personal. "My tasks" only matches a List in Personal, and I took the name literally without
+asking. An agent cannot move a task to another workspace (`move_task` and `apply_changes` stay
+within one workspace), so the 90 tasks and both meetings were re-created through the agent in
+**New Game Media / Produksjon / Episoder** with the same titles, descriptions, statuses and due dates
+(`apply_changes`, 92 changes, action `da7632fb…`). The Personal copies went to the Trash in a second
+`apply_changes` (action `bfe4eb42…`). Both steps used a dry run first. NGM now holds **two** "Møte hos
+Gaagle": this one (30 Nov 10:00) and an older one (1 Dec 14:30) left over from round-2 testing.
+Open question, not decided: should an agent be able to move tasks between workspaces? Today the only
+way is to re-create them and trash the originals, which drops comments, activity and attachments.
