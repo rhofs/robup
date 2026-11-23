@@ -14275,3 +14275,34 @@ surface this was on. The pen only exists in chat, since that is the only place a
 somewhere to go. If the image was opened from a *task*, there is no pen there, and the collapsed card
 would have left the task's comment box showing behind it, which fits what was described. Asked rather
 than guessed at.
+
+## 2026-11-23 — [Bug] a task could not be dropped in among an expanded task's subtasks
+
+"vi klarer ikke å slippe tasks inn i subtask delen når en task er utvida."
+
+Read as: on the board (desktop — subtasks only fold out there), dragging a task over the folded-out
+subtasks of another task should put it in there, at that spot. It could not, by design of the
+2026-10-15 rewrite: the insertion line was only ever offered between the dragged task's **own**
+siblings, and a sibling's folded-out subtasks counted as part of its block, so aiming at them always
+put the line *after* the parent. The only way in was holding still over the parent's middle (nest
+dwell), which appends and is not what someone aiming between two subtasks expects.
+
+**Now the line follows the level of the row under the pointer** (`app/page.tsx`, the drop-target
+effect): pointing at a subtask of task P offers places among P's subtasks; pointing at a top-level
+row while dragging a subtask offers places among the top level — so a subtask can also be dragged
+*out* the same way. Rows inside the dragged task itself and rows from another List keep the old
+level. The nest-by-dwell gesture is unchanged.
+
+The drop (`moveTaskIntoLevel`) changes the parent **first and waits for the server**, then places it
+with the existing gesture reorder — the reorder route only positions a task among its own siblings
+and would refuse it otherwise. `optimisticSetParent` now returns its save promise for this. Both are
+one Undo step, which also restores the task's position among its old siblings.
+
+**Fixed on the way:** `reorderTaskByGesture`'s Undo snapshot was every task in the List, mixed
+parents included. The `{ ids }` reorder route rejects a mixed-parent sequence, so undoing a drag in
+any List that had subtasks silently failed on the server (the store showed the old order until the
+next refresh). It now snapshots the dragged task's own siblings.
+
+**Not verified in a browser** — typechecks and lints clean (no new lint problems); tested by Robin
+on the deployed site. An empty expanded task has no subtask rows to aim at, so that case still goes
+through the nest dwell.

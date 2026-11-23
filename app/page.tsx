@@ -4322,7 +4322,13 @@ function PageContent() {
   // this, a task drag could only ever nest — there was no manual order to move into, which is a
   // large part of why nesting kept happening by accident ("de havner alltid inni en annen task").
   // Null while hovering the middle, which is what makes "no line showing" mean "this will nest."
-  const [taskDropIndicator, setTaskDropIndicator] = useState<{ targetId: string; position: 'above' | 'below' } | null>(null);
+  // `parentId` is set only when the line sits among a DIFFERENT parent's subtasks (folded out under
+  // it) — dropping there moves the task in under that parent, at that place. null means up to the top.
+  const [taskDropIndicator, setTaskDropIndicator] = useState<{
+    targetId: string;
+    position: 'above' | 'below';
+    parentId?: string | null;
+  } | null>(null);
   const taskOverRef = useRef<{ targetId: string; top: number; height: number } | null>(null);
   const listOverRef = useRef<{ targetId: string; top: number; height: number; folder?: boolean } | null>(null);
 
@@ -4411,9 +4417,16 @@ function PageContent() {
 
     const allTasks = useTaskStore.getState().tasks;
     const byId = new Map(allTasks.map((t) => [t.id, t]));
-    const isSibling = (id: string) => {
+    const ownParent = activeDragTask.parentId ?? null;
+    // Which level the line is offered among: the parent whose children it sits between. Normally the
+    // dragged task's own, but pointing at a folded-out subtask of some other task means "in here" —
+    // reported as not being able to drop a task into an expanded task's subtasks (2026-11-23); they
+    // used to count as part of their parent's block, so the line always jumped to after it. Pointing
+    // at a top-level row while dragging a subtask likewise means "out to here".
+    let level: string | null = ownParent;
+    const isSibling = (id: string, parent: string | null = level) => {
       const t = byId.get(id);
-      return !!t && id !== draggedId && t.listId === activeDragTask.listId && (t.parentId ?? null) === (activeDragTask.parentId ?? null);
+      return !!t && id !== draggedId && t.listId === activeDragTask.listId && (t.parentId ?? null) === parent;
     };
     // Whether `id` sits somewhere under `ancestorId` — a task cannot be nested into its own subtree.
     const isUnder = (id: string, ancestorId: string) => {
@@ -4481,6 +4494,16 @@ function PageContent() {
       // Already nesting into this row: nothing else to work out until the pointer leaves its middle.
       if (lastKey === `nest:${hoveredId}` && inNestBand) return;
 
+      // The level follows the row under the pointer, as long as that row is one the dragged task can
+      // live beside: same List, and not inside the dragged task itself. In a gap between rows the
+      // last level holds.
+      if (hoveredId && hoveredId !== draggedId && !isUnder(hoveredId, draggedId)) {
+        const h = byId.get(hoveredId);
+        if (h && h.listId === activeDragTask.listId) level = h.parentId ?? null;
+      } else if (hoveredId) {
+        level = ownParent;
+      }
+
       // Reordering: between siblings only, by their middles.
       const siblings = rows.filter((r) => isSibling(r.dataset.taskRow ?? ''));
       if (siblings.length === 0) {
@@ -4492,7 +4515,7 @@ function PageContent() {
         const b = r.getBoundingClientRect();
         return b.top + b.height / 2 > y;
       });
-      let indicator: { targetId: string; position: 'above' | 'below' };
+      let indicator: { targetId: string; position: 'above' | 'below'; parentId?: string | null };
       let lineY: number;
       let lineRow: HTMLElement;
       if (next) {
@@ -4513,15 +4536,17 @@ function PageContent() {
         lineY = end.getBoundingClientRect().bottom;
         lineRow = last;
       }
+      if (level !== ownParent) indicator.parentId = level;
       // Where it already is: dropping there changes nothing, so no line — the empty slot it left
-      // is the answer.
+      // is the answer. Only possible on its own level.
       const ownIndex = rows.indexOf(draggedRow!);
       const siblingBefore = [...siblings].reverse().find((r) => rows.indexOf(r) < ownIndex);
       const siblingAfter = siblings.find((r) => rows.indexOf(r) > ownIndex);
       const noop =
-        (indicator.position === 'above' && siblingAfter?.dataset.taskRow === indicator.targetId) ||
-        (indicator.position === 'below' && !siblingAfter && siblingBefore?.dataset.taskRow === indicator.targetId);
-      const key = noop ? 'noop' : `${indicator.position}:${indicator.targetId}`;
+        level === ownParent &&
+        ((indicator.position === 'above' && siblingAfter?.dataset.taskRow === indicator.targetId) ||
+          (indicator.position === 'below' && !siblingAfter && siblingBefore?.dataset.taskRow === indicator.targetId));
+      const key = noop ? 'noop' : `${indicator.position}:${indicator.targetId}:${level ?? ''}`;
       if (key === lastKey) return;
       lastKey = key;
       setTaskNestTargetId(null);
@@ -4872,6 +4897,42 @@ function PageContent() {
     const moved = await reorderTaskByGesture(draggedId, targetId, position, baseline);
     if (moved && sorted) applySort('none', 'asc');
     return moved;
+  };
+
+  // A drop on the line among another parent's subtasks (or, for a subtask, among the top-level
+  // tasks): change the parent, then place it. In that order and waited on, because the server only
+  // positions a task among its own siblings and refuses one that is not yet among them. One Undo
+  // step for both, and Undo also puts it back where it was among its old siblings — changing the
+  // parent alone would return it with the position number it was given in the new place.
+  const moveTaskIntoLevel = async (
+    draggedId: string,
+    parentId: string | null,
+    targetId: string,
+    position: 'above' | 'below'
+  ) => {
+    const all = useTaskStore.getState().tasks;
+    const dragged = all.find((t) => t.id === draggedId);
+    if (!dragged) return;
+    const oldLevel = all
+      .filter((t) => t.listId === dragged.listId && (t.parentId ?? null) === (dragged.parentId ?? null) && !t.deletedAt)
+      .sort((a, b) => (a.order ?? 0) - (b.order ?? 0) || new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime())
+      .map((t) => t.id);
+    const parent = parentId ? all.find((t) => t.id === parentId) : null;
+    const moved = await useHistoryStore.getState().transaction(parentId ? 'Make subtask' : 'Move out of task', async () => {
+      // Pushed first so it is undone last, once the task is back under its old parent.
+      useHistoryStore.getState().push({
+        label: 'Restore order',
+        undo: async () => {
+          await useTaskStore.getState().reorderTaskSiblings(oldLevel);
+        },
+        redo: async () => {},
+      });
+      await optimisticSetParent(draggedId, parentId);
+      return reorderTaskByGesture(draggedId, targetId, position);
+    });
+    if (parentId && !expandedTaskIds.has(parentId)) toggleTaskExpanded(parentId);
+    if (moved) showUndoableToast(parent ? `Made a subtask of "${parent.title}"` : 'Moved out to the list');
+    else showUndoableToast(parent ? `Made a subtask of "${parent.title}" (couldn\u2019t place it exactly)` : 'Moved out to the list');
   };
 
   // Stops the browser scrolling while a task is actually being dragged.
@@ -5225,6 +5286,10 @@ function PageContent() {
       if (releasedAt) {
         setLandingTask({ id: draggedId, from: { left: releasedAt.left, top: releasedAt.top } });
         setTimeout(() => setLandingTask((l) => (l?.id === draggedId ? null : l)), 320);
+      }
+      if (droppedTaskIndicator.parentId !== undefined) {
+        void moveTaskIntoLevel(draggedId, droppedTaskIndicator.parentId, droppedTaskIndicator.targetId, droppedTaskIndicator.position);
+        return;
       }
       void reorderTaskRelativeTo(draggedId, droppedTaskIndicator.targetId, droppedTaskIndicator.position).then(
         (moved) => {

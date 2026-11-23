@@ -458,7 +458,9 @@ interface TaskStore {
   optimisticSetCalendarLane: (taskId: string, lane: number | null) => void;
   optimisticSetList: (taskId: string, listId: string) => void;
   setTaskPrivacy: (taskId: string, isPrivate: boolean, accessJson: string) => void;
-  optimisticSetParent: (taskId: string, parentId: string | null) => void;
+  // Resolves once the server has the new parent, for a caller that has to act on it next (placing a
+  // task among its new siblings is refused until it is one of them).
+  optimisticSetParent: (taskId: string, parentId: string | null) => Promise<void>;
   optimisticSetTitle: (taskId: string, title: string) => void;
   optimisticSetDescription: (taskId: string, description: string | null) => void;
   // Task.description following the task's description doc (components/TaskDescriptionDoc.tsx). No
@@ -1697,7 +1699,7 @@ export const useTaskStore = create<TaskStore>((set, get) => {
       set((state) => ({
         tasks: state.tasks.map((t) => (t.id === taskId ? { ...t, parentId } : t)),
       }));
-      fetch(`/api/tasks/${taskId}`, {
+      const saved = fetch(`/api/tasks/${taskId}`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ parentId, authorId: useSessionStore.getState().currentUserId }),
@@ -1715,6 +1717,7 @@ export const useTaskStore = create<TaskStore>((set, get) => {
           redo: () => get().optimisticSetParent(taskId, parentId),
         });
       }
+      return saved.catch(() => undefined);
     },
 
     applySpaceStatuses: async (spaceId, statuses, rename, target) => {
@@ -2905,8 +2908,14 @@ export const useTaskStore = create<TaskStore>((set, get) => {
             return index === -1 ? t : { ...t, order: index };
           }),
         }));
+      // The dragged task's own siblings — what Undo puts back. It used to be every task in the List,
+      // which mixes parents as soon as a List has subtasks, and the server refuses a sequence that
+      // mixes parents, so undoing a move in such a List quietly failed.
+      const draggedNow = get().tasks.find((x) => x.id === draggedId);
       const before = get()
-        .tasks.filter((t) => t.listId === get().tasks.find((x) => x.id === draggedId)?.listId)
+        .tasks.filter(
+          (t) => t.listId === draggedNow?.listId && (t.parentId ?? null) === (draggedNow?.parentId ?? null) && !t.deletedAt
+        )
         .map((t) => ({ id: t.id, order: t.order ?? 0 }));
 
       // The move shows at once, then the server's answer settles it. Waiting for the server first
