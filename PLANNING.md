@@ -14373,3 +14373,8 @@ API cannot do this: it has no event operations, only tasks.** Created it through
 10:00–11:00 Oslo time, stored as 09:00Z; the one-hour length was my choice. Not yet decided: adding
 `create_event` (and maybe `search_events`) to `lib/agent/operations.ts` on the branch. Asking for a
 meeting is an obvious thing to say to an agent, so it is the first gap a real user would hit.
+
+**Update 2026-11-23, later:** the `agent-api` branch got a second round — agent actions with undo and
+a workspace log, calendar events, moving/sorting, bulk changes with dry run, keys limited to chosen
+workspaces, a per-workspace off switch. It now holds **two** migrations. Decisions and test results
+are in PLANNING.md on the branch. Still not merged, still not deployed; the local instance serves it.
