@@ -14468,3 +14468,9 @@ for the order they were recommended in.
 `ptero.sh reinstall` (no argument) waited for the right commit and tagged it by itself this time.
 Whether the live updates actually work in production is **not confirmed** — waiting on Robin's
 two-window test.
+
+**Update 2026-11-23, round 3 on `agent-api`:** custom fields, repeating events / repeated tasks, reading
+Docs and wiki, creating Docs, Lists and folders, moving an event to the personal workspace. Decisions
+(incl. "my day" dropped, chat postponed, existing Docs not editable and why) and test results are in
+PLANNING.md on the branch. Robin also asked me to read the production List "Siqt - Bugs and features"
+in New Game Media — that needs the branch live plus a key from him; not done.
