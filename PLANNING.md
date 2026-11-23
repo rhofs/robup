@@ -14359,3 +14359,7 @@ An API key for testing the `agent-api` branch on the local instance (made by Rob
 `robin@local.test`, 2026-11-23) is in `/home/robin/siqt-local/api-key.txt` (0600), not in this file.
 Checked working the same day: `GET /api/v1/workspaces` and MCP `tools/list` on
 `http://100.64.30.23:3099` both answer with it. Test database only. It has no meaning on production.
+That key is also registered in Claude Code as the MCP server `siqt` (2026-11-23, local scope, i.e. in
+`~/.claude.json` for the `/home/robin/siqt` project only); `claude mcp get siqt` reported Connected.
+Remove it with `claude mcp remove siqt -s local`. It points at the local instance, so it stops working
+whenever that instance is not serving the `agent-api` build.
