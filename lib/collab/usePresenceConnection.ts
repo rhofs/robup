@@ -48,6 +48,35 @@ export function usePresenceConnection(workspaceId: string | null): void {
     provider.setAwarenessField('user', { userId: currentUser.id, name: currentUser.name, color: currentUser.color });
   }, [provider, currentUser]);
 
+  // The same room also carries "tasks or events here just changed" from the server
+  // (lib/collab/broadcastWorkspaceChange.ts) — fetch now rather than at the next 30-second poll.
+  // Gathered for a moment first: a run of signals becomes one fetch, and the fetch itself already
+  // steps aside for this tab's own writes still on their way (lib/pendingWrites.ts).
+  useEffect(() => {
+    if (!provider) return;
+    let timer: ReturnType<typeof setTimeout> | null = null;
+    const handler = ({ payload }: { payload: string }) => {
+      let type: unknown;
+      try {
+        type = JSON.parse(payload)?.type;
+      } catch {
+        return;
+      }
+      if (type !== 'data-changed' || timer) return;
+      timer = setTimeout(() => {
+        timer = null;
+        const store = useTaskStore.getState();
+        void store.refetchTasks();
+        void store.refetchEvents();
+      }, 600);
+    };
+    provider.on('stateless', handler);
+    return () => {
+      provider.off('stateless', handler);
+      if (timer) clearTimeout(timer);
+    };
+  }, [provider]);
+
   useEffect(() => {
     const awareness = provider?.awareness;
     if (!awareness) return;

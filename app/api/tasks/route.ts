@@ -4,6 +4,7 @@ import { getCurrentUserId } from '@/lib/auth/session';
 import { getTaskVisibilityContext } from '@/lib/auth/access';
 import { ensureListAccess } from '@/lib/auth/resourceAccess';
 import { includeArchivedSpaces, spaceArchiveFilter } from '@/lib/archivedSpaces';
+import { signalChangeIn } from '@/lib/collab/broadcastWorkspaceChange';
 
 export async function GET(req: Request) {
   const userId = await getCurrentUserId();
@@ -119,5 +120,6 @@ export async function POST(req: Request) {
     }
   }
 
+  signalChangeIn({ listId: task.listId });
   return NextResponse.json(task);
 }

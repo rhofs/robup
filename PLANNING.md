@@ -14422,3 +14422,44 @@ within one workspace), so the 90 tasks and both meetings were re-created through
 Gaagle": this one (30 Nov 10:00) and an older one (1 Dec 14:30) left over from round-2 testing.
 Open question, not decided: should an agent be able to move tasks between workspaces? Today the only
 way is to re-create them and trash the originals, which drops comments, activity and attachments.
+
+## 2026-11-23 (continued) — tasks and events now update live (built, deployed, NOT tested)
+
+Robin, watching an agent add tasks: "dette burde jo skje live og ikke kun ved refresh". Asked whether
+the agent goes through the code or MCP: through MCP → the agent API → the app's own routes. The delay
+was never the agent's: **tasks and events had no live updates for anyone**, only the 30-second poll
+(board/calendar views). The same wait applied to a colleague's change.
+
+(The full page reloads he also saw on the test instance were most likely `UpdateReloader` reacting to
+my rebuilding it several times that day — it reloads when the reported commit changes.)
+
+**Built on main:** after a task or event is created, changed, trashed or reordered, the route calls
+`signalWorkspaceChanged` (`lib/collab/broadcastWorkspaceChange.ts`), which sends `{type:
+'data-changed'}` into the workspace's **presence room** on the Hocuspocus sidecar — the room every
+open app already holds for "who is online". `usePresenceConnection` hears it and calls
+`refetchTasks` + `refetchEvents` (600 ms gather; the refetch already yields to this tab's own
+in-flight writes). The signal carries no data, so access rules stay where they are: in the API.
+Server side it waits for 400 ms of quiet (max 2 s), so an agent action touching fifty tasks sends
+once. `CHAT_BROADCAST_SECRET` now also opens presence rooms (`server/collabServer.ts`). The poll
+stays as the fallback.
+
+Considered and turned down: a separate SSE channel just for this. It would have worked on the local
+instance without the sidecar, but leaves the app with two live systems to keep alive.
+
+Not covered: comments (fetched per open task), duplicate/series/template routes, Lists/Spaces/Docs.
+They still arrive by poll or reload.
+
+**NOT TESTED AT ALL beyond typecheck/lint.** The local instance has no sidecar, and Robin said not to
+set one up: "om det går live når vi pusher og merger, så trenger vi ikke teste det nå". So the first
+real test is production: two windows on the same workspace, change a task in one, watch the other.
+If nothing happens within a second or two, the first things to check are that `CHAT_BROADCAST_SECRET`
+is set in the production environment (chat's live delivery depends on the same variable) and the
+sidecar's log for authentication failures on `__workspace-presence__:` rooms.
+
+### Also asked: what more should an agent be able to do?
+
+Suggested, nothing decided or built: custom fields (read and set), reading and writing task
+description Docs, creating Lists/Folders, recurring events and task series, attachments, chat
+messages, reading Docs/wiki, "my day" summaries (one call for what is due and what is assigned),
+moving an event to the personal workspace, and subtask status sets. See the chat reply of this date
+for the order they were recommended in.

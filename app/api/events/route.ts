@@ -5,6 +5,7 @@ import { prisma, publicUserSelect } from '@/lib/prisma';
 import { getCurrentUserId } from '@/lib/auth/session';
 import { getAccessContext, keepWorkspaceMembers } from '@/lib/auth/access';
 import { syncEventForAllRelevantUsers } from '@/lib/google/calendarSync';
+import { signalWorkspaceChanged } from '@/lib/collab/broadcastWorkspaceChange';
 
 // No isPrivate/accessJson concept on Event (unlike Task/Space/Folder/List) — not asked for, and
 // an Event has no natural "owning" hierarchy level to inherit privacy from the way a Task does
@@ -73,5 +74,6 @@ export async function POST(req: Request) {
   // client picks it up on the next refetch, same as every other async side effect here.
   syncEventForAllRelevantUsers(event.id).catch(() => {});
 
+  signalWorkspaceChanged(event.workspaceId);
   return NextResponse.json({ ...event, googleSyncedUserIds: [] });
 }
