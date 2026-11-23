@@ -14550,3 +14550,18 @@ the Trash, events "Møte hos Gaagle" and "Heldags", and backups `local.db.before
 a workspace log, calendar events, moving/sorting, bulk changes with dry run, keys limited to chosen
 workspaces, a per-workspace off switch. It now holds **two** migrations. Decisions and test results
 are in PLANNING.md on the branch. Still not merged, still not deployed; the local instance serves it.
+
+### 2026-11-23 (continued) — agent-api: a task moves between Lists with its subtasks; private events
+
+Robin on the two limits listed after round 2:
+
+- "Vi burde jo kunne flytte en task med subtasks (også agenten)." The limit was the app's, not the
+  agent's — fixed **on main** (see main's entry of the same date) and merged in here; the agent's
+  refusal is removed, and the move's log line says how many subtasks went along. Verified here: agent
+  move of a task with a child and a grandchild → all three in the new List; undo → all three back.
+- "Møter har en privat 'innstilling' ved at agenten kan velge 'Private' workspace, som alle har."
+  Right, and nothing needed building — but the agent was not told. `list_workspaces` now marks the
+  personal workspace (`personal: true` + a note), and `create_event` says that everyone in a
+  workspace sees its events and that private ones go in the personal workspace.
+  **Not built:** moving an existing event into the personal workspace through the agent
+  (`update_event` cannot change workspace). The app's own route can; say so if it is wanted.

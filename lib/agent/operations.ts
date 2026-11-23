@@ -98,7 +98,7 @@ const CHANGE_FIELDS: Record<string, { title: string; properties: Json; required:
       beforeTaskId: { type: 'string', description: 'Place it directly above this task.' },
       afterTaskId: { type: 'string', description: 'Place it directly below this task.' },
       parentId: { type: ['string', 'null'], description: 'Make it a subtask of this task; null moves it out to the top level.' },
-      listId: { type: 'string', description: 'Move it to this List (same workspace; not for a task that has subtasks).' },
+      listId: { type: 'string', description: 'Move it to this List (same workspace). Its subtasks go with it.' },
     },
     required: ['taskId'],
   },
@@ -114,7 +114,7 @@ const CHANGE_FIELDS: Record<string, { title: string; properties: Json; required:
   },
   create_event: {
     title:
-      'Creates a calendar event (a meeting, an appointment) in a workspace. With only a day it is all-day; with a time and no end it lasts one hour.',
+      'Creates a calendar event (a meeting, an appointment) in a workspace. With only a day it is all-day; with a time and no end it lasts one hour. Everyone in a workspace can see its events — for something private, create it in the user\u2019s personal workspace (marked personal in list_workspaces), which only they are in.',
     properties: {
       workspaceId: { type: 'string', description: 'From list_workspaces.' },
       title: { type: 'string' },
@@ -172,7 +172,7 @@ const TOOLS: ToolDef[] = [
   {
     name: 'list_workspaces',
     description:
-      'Start here. Lists the workspaces this key reaches, with their Spaces and Lists (each with its id, its path, and the statuses its tasks can have) and the members (id and name, for assigning tasks and inviting to events). Use the ids from this in the other tools.',
+      'Start here. Lists the workspaces this key reaches (one of them is the user\u2019s personal, private workspace), with their Spaces and Lists (each with its id, its path, and the statuses its tasks can have) and the members (id and name, for assigning tasks and inviting to events). Use the ids from this in the other tools.',
     inputSchema: { type: 'object', properties: {}, additionalProperties: false },
     write: false,
     run: async (_args, call) => {
@@ -180,6 +180,9 @@ const TOOLS: ToolDef[] = [
       return workspaces.map((ws) => ({
         id: ws.id,
         name: ws.name,
+        // The user's own private workspace: nobody else is in it. This is where something private
+        // goes — an event has no privacy setting of its own, the workspace is the setting.
+        ...(ws.isPersonal ? { personal: true, note: 'Private to the user. Put private events and tasks here.' } : {}),
         members: ws.members.map((m) => ({ id: m.id, name: m.name, ...(m.username ? { username: m.username } : {}), ...(m.id === call.token.userId ? { you: true } : {}) })),
         spaces: ws.spaces.map((space) => ({
           id: space.id,

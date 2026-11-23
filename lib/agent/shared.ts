@@ -186,6 +186,7 @@ export type RawStatus = { name: string; isDone: boolean; isClosed: boolean; orde
 export type RawWorkspace = {
   id: string;
   name: string;
+  isPersonal?: boolean;
   members: { id: string; name: string; username: string | null }[];
   spaces: {
     id: string;

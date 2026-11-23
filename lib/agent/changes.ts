@@ -386,10 +386,8 @@ const planners: Record<string, (args: Json, ctx: PlanCtx) => Promise<Planned>> =
       const list = await visibleList(target.listId, call);
       if (list.space.workspaceId !== workspaceId) throw new AgentError('A task cannot be moved to a List in another workspace.');
       workspaceId = list.space.workspaceId;
-      // The app moves one task between Lists, not its subtree — its subtasks would stay behind,
-      // children of a task in another List. Refused until there is a real way to do it.
-      const children = await prisma.task.count({ where: { parentId: taskId, deletedAt: null } });
-      if (children > 0) throw new AgentError(`"${task.title}" has subtasks, and a task with subtasks cannot be moved to another List from here.`);
+      // Its subtasks go with it: the task route moves the whole subtree (and undo, going through
+      // the same route, brings it back).
     }
     if (target.parentId && target.parentId !== task.parentId) {
       const parent = await visibleTask(target.parentId, call);
@@ -401,12 +399,13 @@ const planners: Record<string, (args: Json, ctx: PlanCtx) => Promise<Planned>> =
         cur = (await prisma.task.findUnique({ where: { id: cur }, select: { parentId: true } }))?.parentId ?? null;
       }
     }
+    const subtaskCount = target.listId !== task.listId ? await prisma.task.count({ where: { parentId: taskId, deletedAt: null } }) : 0;
     const where = anchorTitle
       ? `${beforeId ? 'above' : 'below'} "${anchorTitle}"`
       : target.parentId && target.parentId !== task.parentId
         ? 'in under another task'
         : target.listId !== task.listId
-          ? `to ${await listPath(target.listId, call)}`
+          ? `to ${await listPath(target.listId, call)}${subtaskCount ? ` (with its ${subtaskCount} subtask${subtaskCount === 1 ? '' : 's'})` : ''}`
           : 'out to the top level';
     return {
       type: 'move_task',
