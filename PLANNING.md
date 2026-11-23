@@ -14303,6 +14303,6 @@ parents included. The `{ ids }` reorder route rejects a mixed-parent sequence, s
 any List that had subtasks silently failed on the server (the store showed the old order until the
 next refresh). It now snapshots the dragged task's own siblings.
 
-**Not verified in a browser** — typechecks and lints clean (no new lint problems); tested by Robin
-on the deployed site. An empty expanded task has no subtask rows to aim at, so that case still goes
+Deployed as f156c72 (tag `deploy/2026-11-23_1151`). **Confirmed working by Robin** on the deployed
+site ("det funker!"). An empty expanded task has no subtask rows to aim at, so that case still goes
 through the nest dwell.
