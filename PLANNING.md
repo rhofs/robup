@@ -14546,3 +14546,7 @@ Left in the local test database: user `kari@local.test` (member of New Game Medi
 `Kari agent` whose value is not kept anywhere durable), the private task "Manus" and its siblings in
 the Trash, events "Møte hos Gaagle" and "Heldags", and backups `local.db.before-agent-api` /
 `local.db.before-agent-actions`.
+**Update 2026-11-23, later:** the `agent-api` branch got a second round — agent actions with undo and
+a workspace log, calendar events, moving/sorting, bulk changes with dry run, keys limited to chosen
+workspaces, a per-workspace off switch. It now holds **two** migrations. Decisions and test results
+are in PLANNING.md on the branch. Still not merged, still not deployed; the local instance serves it.

@@ -1,9 +1,9 @@
 import { NextResponse } from 'next/server';
 import { prisma, publicUserSelect } from '@/lib/prisma';
-import { cascadeTask } from '@/lib/trashCascade';
+import { cascadeTask, collectTaskSubtreeIds } from '@/lib/trashCascade';
 import { getCurrentUserId } from '@/lib/auth/session';
 import { getWorkspaceRole, canManageWorkspace, keepWorkspaceMembers, getTaskAudience } from '@/lib/auth/access';
-import { ensureTaskAccess } from '@/lib/auth/resourceAccess';
+import { ensureListAccess, ensureTaskAccess } from '@/lib/auth/resourceAccess';
 import { syncTaskForAllRelevantUsers, deleteTaskGoogleSyncs } from '@/lib/google/calendarSync';
 import { notify } from '@/lib/notifications';
 
@@ -37,7 +37,14 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
   if (body.showInPlanner !== undefined) data.showInPlanner = body.showInPlanner === null ? null : body.showInPlanner === true;
   if (body.order !== undefined) data.order = body.order;
   if (body.customFieldValues !== undefined) data.customFieldValues = body.customFieldValues;
-  if (body.listId !== undefined) data.listId = body.listId;
+  if (body.listId !== undefined) {
+    // Moving to another List needs access to that List too. This used to check only the task being
+    // moved, so any List id was accepted — including one the caller cannot see.
+    if (body.listId !== existing?.listId && !(await ensureListAccess(body.listId, userId))) {
+      return NextResponse.json({ error: 'Not authorized for that list' }, { status: 403 });
+    }
+    data.listId = body.listId;
+  }
   if (body.parentId !== undefined) data.parentId = body.parentId;
 
   if (body.archived !== undefined) {
@@ -78,6 +85,16 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
     data,
     include: { assignees: { select: publicUserSelect } },
   });
+
+  // A task moves to another List WITH its subtasks. It used to move alone: only this one row got
+  // the new listId, and its subtasks — still shown under it, because they are found by parentId —
+  // stayed registered in the List it had left. They were then counted there, took that List's
+  // statuses and privacy, and could not be reordered among themselves by the rules of the List they
+  // appeared in. Found when the agent API had to refuse such a move (2026-11-23).
+  if (existing && body.listId !== undefined && body.listId !== existing.listId) {
+    const subtree = (await collectTaskSubtreeIds(id)).filter((taskId) => taskId !== id);
+    if (subtree.length > 0) await prisma.task.updateMany({ where: { id: { in: subtree } }, data: { listId: body.listId } });
+  }
 
   const activities: { body: string; kind: string }[] = [];
   if (!body.skipActivityLog) {
