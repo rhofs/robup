@@ -14404,3 +14404,7 @@ any. A query for subtasks whose `list_id` differs from their parent's would answ
 correctly and then hung: it waited for a version literally named "HEAD". The argument is now resolved
 with `git rev-parse --short`, so a ref, a full hash or nothing all work. The site was up the whole
 time after its normal restart; only the script's wait and the tag were affected.
+Larger test the same day: 10 "Videoforslag: …" tasks in My tasks, 6–7 subtasks each (79 tasks in
+total, ~80 MCP calls in a row) through `create_task`. Every one came back with the right parent and
+nothing failed. "Møte med TV 2" (Mon 7 Dec 10–12 Oslo, Robin attending) was again made through the
+cookie route, because the agent API still has no events.
