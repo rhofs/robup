@@ -14565,3 +14565,13 @@ Robin on the two limits listed after round 2:
   workspace sees its events and that private ones go in the personal workspace.
   **Not built:** moving an existing event into the personal workspace through the agent
   (`update_event` cannot change workspace). The app's own route can; say so if it is wanted.
+
+### 2026-11-23 (continued) — event tools run with Robin's own key
+
+Robin asked for `create_event` to be added and run. It already existed from round 2, and the local
+instance was serving the latest build (`cc69d3d`, built 13:59), so nothing was built. Run with Robin's
+key (`/home/robin/siqt-local/api-key.txt`) over MCP: `create_event` "Møte med TV 2", 7 Dec
+`10:00`–`12:00` Norway time, Robin attending → stored as 09:00Z–11:00Z (checked in the DB). The same
+call again with the same `requestId` → the same event, no duplicate. `trash_event` on the copy made
+earlier through the cookie route → trashed, with an `actionId`. `search_events "TV 2"` → only the new
+one. Not checked: how it looks in the calendar UI.
