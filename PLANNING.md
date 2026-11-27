@@ -14549,3 +14549,38 @@ Both were `z-50`, and the task window is rendered later in app/page.tsx, so the 
 underneath it and the button looked dead; closing the task revealed it. StatusEditor's backdrop is now
 `z-[65]` (above the task window and the z-60 context menus). Lesson: any window that can be opened FROM
 the task window must sit above z-50. Not checked in a browser.
+
+## 2026-11-27 — Detailed task history + full-screen file preview (deployed b9707a3)
+
+Request: a task's description was rewritten, recoloured and given a file, and the activity log still
+showed only "Oppgave opprettet" — "kan vi få en mye mer detaljert historikk?". Also: the file preview
+should be resizable / full screen.
+
+**Description and Document edits** are now logged by the collab sidecar, which is the only place every
+edit lands and which (since this change) knows who made it: `onAuthenticate` returns `{ userId }`, which
+Hocuspocus merges into the connection context, and `onStoreDocument` reads `lastContext.userId`.
+`logTaskDocEdit` in server/collabServer.ts writes `Beskrivelse redigert – la til «…» · fjernet «…» ·
+endret formatering` (kind `descriptionEdited`) or `Dokument «X» redigert – …` (kind `docEdited`) on the
+task. The wording comes from the pure `lib/activity/describeDocChange.ts`: word-level LCS diff of the
+plain text (runs broken at line breaks, max 3 quoted runs of ≤60 chars), image count, and a formatting
+signature (characters per mark + non-paragraph blocks) so recolouring is reported even alongside typed
+text. One person's edits to one doc within 10 min are ONE line, rewritten against the state when they
+started (in-memory `editSessions`; a sidecar restart just starts a new line); if they net out to
+nothing the line is deleted. Previous state per doc is kept in memory (`lastStored`, filled at load and
+store, cleared in `afterUnloadDocument`), falling back to `Doc.content`. Standalone Docs are skipped.
+The client's own "Dokument redigert" log on blur (page.tsx commitDocEditActivity) was removed to avoid
+duplicates; its "Dokument omdøpt" stays.
+
+**Also logged now** (app/api/tasks/[id] and …/attachments): file uploaded/removed with name, custom
+field set/cleared with field name and value (same person + same field within 10 min rewrites the line —
+text fields save per keystroke), made private / not private, Planner shown/hidden/following list, and
+the target list's name on a move. New icons in ACTIVITY_ICONS. Priority is not logged (no UI sets it).
+
+**File preview** (components/AttachmentPreview.tsx): a Full screen toggle (Maximize2/Minimize2) for
+images and browser-rendered files; the choice is remembered per browser (`siqt.previewFullScreen`).
+PDFs/text now fill the card (definite height, iframe absolute inset-0) instead of a fixed 70vh.
+
+Tested: HTTP entries on the local test DB; the sidecar's store → log path end to end via a Hocuspocus
+direct connection with a userId context (two paragraphs typed, then a colour → one merged line). **Not
+tested:** a real browser session against the production sidecar (cookie-auth context), the activity
+panel rendering of the new lines, the full-screen preview in a browser.
