@@ -20,6 +20,8 @@ import { shiftDateText } from '../../lib/taskSeries';
 import { assignLanes, clipRangeToWeek, type ClippedSegment, type DragMode, type DragState, type TaskRange } from '../../lib/ganttLayout';
 import { useTaskStore, StatusDef, Task, Event, HierarchyWorkspace } from '../../store/useTaskStore';
 import { useIsMobile } from '../../hooks/useIsMobile';
+import { useResolvedTheme } from '../../hooks/useResolvedTheme';
+import { readableOn } from '../../lib/colorAlpha';
 import WeekRow, { BAR_GAP, BAR_H, DAY_NUM_H, GUTTER_WIDTH } from './WeekRow';
 import { contextMenuPosition, fitMenuElement } from '../../lib/contextMenuPosition';
 import DayTimeline from './DayTimeline';
@@ -171,12 +173,15 @@ export default function CalendarView({ tasks, events, statuses, workspaces, show
   }, [gridContainerNode]);
 
   const today = useMemo(() => startOfDay(new Date()), []);
+  // Colours below are lifted off the background when they would vanish into it (readableOn).
+  const theme = useResolvedTheme();
   const statusColorOf = (name: string) => statuses.find((s) => s.name === name)?.color || '#94a3b8';
 
   // Space > Folder (nested, most-specific-set wins) > List > Task color cascade — Task has no
   // color field of its own yet, so the chain bottoms out at List. Falls back to statusColorOf
   // only when the task's List can't be found at all (e.g. an orphaned/stale reference).
-  const taskColorOf = (task: Task): string => {
+  const taskColorOf = (task: Task): string => readableOn(theme, rawTaskColorOf(task));
+  const rawTaskColorOf = (task: Task): string => {
     for (const ws of workspaces) {
       for (const space of ws.spaces) {
         const list = space.lists.find((l) => l.id === task.listId);
@@ -205,7 +210,8 @@ export default function CalendarView({ tasks, events, statuses, workspaces, show
   //   3. its Space's colour;
   //   4. the default.
   // Never Status — events have none.
-  const eventColorOf = (event: Event): string => {
+  const eventColorOf = (event: Event): string => readableOn(theme, rawEventColorOf(event));
+  const rawEventColorOf = (event: Event): string => {
     if (event.color && !event.spaceId) return event.color;
     if (event.assignees.length === 1) {
       const only = event.assignees[0];
