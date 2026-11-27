@@ -14528,3 +14528,17 @@ touched until one of their subtasks changes (deliberately not retroactive).
 
 Merge note for `agent-api`: agent writes go through these same route handlers, so the rule applies to
 them after a merge; PLANNING.md will conflict as usual.
+
+## 2026-11-27 — GitHub repo is now `rhofs/Siqt` (was `rhofs/robup`)
+
+Robin wanted the Claude app's project group to say Siqt instead of "robup" (it is named after the repo).
+The repo had already been renamed on GitHub (canonical name `rhofs/Siqt`; the old URL redirects). Done:
+local remote → `git@github.com:rhofs/Siqt.git`; production checkout's `/.git/config` (edited through the
+Pterodactyl files API) → `https://github.com/rhofs/Siqt.git` — that is what every Reinstall fetches from,
+because the install script only uses its own hard-coded URL when `/mnt/server/.git` is missing. Verified
+with a real reinstall (deploy/2026-11-27_1324).
+
+**Still says robup (admin-only, Robin must change it in the panel):** the `else` branch of the egg's
+install script (`git remote add origin https://github.com/rhofs/robup.git`), used only for a fresh
+server without a checkout; and the egg-config artifact doc. Both work through GitHub's redirect until
+someone creates a new repo called `robup`.
