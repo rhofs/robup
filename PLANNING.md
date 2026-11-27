@@ -14474,3 +14474,18 @@ Docs and wiki, creating Docs, Lists and folders, moving an event to the personal
 (incl. "my day" dropped, chat postponed, existing Docs not editable and why) and test results are in
 PLANNING.md on the branch. Robin also asked me to read the production List "Siqt - Bugs and features"
 in New Game Media — that needs the branch live plus a key from him; not done.
+
+## 2026-11-27 — Black events unreadable in dark mode (deployed dad8bf3)
+
+Bug report: "Events i planner som har fargen sort går nesten ikke an å se i dark mode". Planner bars/chips
+draw the text in the item's own colour over an 18 % tint of it, so a black colour (typically a profile
+colour, which events with exactly one assignee inherit) vanished on the dark background.
+
+Fix: `readableOn(theme, hex)` in `lib/colorAlpha.ts` mixes a colour toward white in dark mode until its
+relative luminance is ≥ 0.18 (toward black in light mode until ≤ 0.6), and leaves every other colour
+unchanged (all EVENT_COLOR_CHOICES pass untouched; #000 → #7f7f7f on dark, #fff → #bfbfbf on light).
+Applied once in CalendarView's `taskColorOf`/`eventColorOf`, so it covers tasks and events in every
+Planner view. Theme comes from new `hooks/useResolvedTheme.ts` (reads `data-theme` on <html>, observes
+changes). Stored colours are not changed — this is display only.
+
+Not verified in a browser; checked by typecheck and by printing sample outputs.
