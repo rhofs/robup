@@ -14542,3 +14542,10 @@ with a real reinstall (deploy/2026-11-27_1324).
 install script (`git remote add origin https://github.com/rhofs/robup.git`), used only for a fresh
 server without a checkout; and the egg-config artifact doc. Both work through GitHub's redirect until
 someone creates a new repo called `robup`.
+
+## 2026-11-27 — Subtasks "Statuses" button opened Edit statuses behind the task window (deployed ea646f8)
+
+Both were `z-50`, and the task window is rendered later in app/page.tsx, so the StatusEditor opened
+underneath it and the button looked dead; closing the task revealed it. StatusEditor's backdrop is now
+`z-[65]` (above the task window and the z-60 context menus). Lesson: any window that can be opened FROM
+the task window must sit above z-50. Not checked in a browser.
