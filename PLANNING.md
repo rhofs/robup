@@ -14489,3 +14489,42 @@ Planner view. Theme comes from new `hooks/useResolvedTheme.ts` (reads `data-them
 changes). Stored colours are not changed — this is display only.
 
 Not verified in a browser; checked by typecheck and by printing sample outputs.
+
+## 2026-11-27 — Parent completes itself when all subtasks are done (deployed 6a1d904)
+
+Request (bug list): "Om alle subtasks er gjort, blir hovedtask automatisk markert som done … smart og
+intuitiv måte å velge dette i status innstillinger". Decided with Robin: **on by default**; when a subtask
+opens again the parent goes **back to the status it had** (option b), but only if the rule set it — a
+parent set to Done by hand is never touched; setting a parent to Done by hand with open subtasks stays
+allowed (the existing "complete the subtasks too?" offer, lib/completeSubtasks.ts, is unchanged).
+
+How it works (`lib/autoCompleteParent.ts`, server-side so it holds for every client, undo and agents):
+- `reconcileParent(parentId, actorId)` runs after a subtask's status/archived/parent changes (PATCH
+  /api/tasks/[id]), a subtask is created (POST), duplicated, trashed (DELETE) or restored.
+- Done = every non-trashed subtask archived or in a done/closed status (`isDoneStatus`, moved to the
+  browser-free `lib/doneStatus.ts`; `taskDoneDust.ts` re-exports it). Status sets resolved server-side in
+  the same order as the client: nearest ancestor's own subtask set → List's → Space's → built-in four.
+- Parent goes to its set's FIRST `isDone` status, never a closed one (that would archive it). No done
+  status in the set → nothing happens. Previous status kept in new `Task.autoCompletedFrom`; any status
+  or archived change by hand clears it, so the revert only ever undoes the rule's own change. Reverting
+  ignores the setting (turning it off must not strand a parent as Done). Walks up the chain.
+- Conditional `updateMany` (status + autoCompletedFrom unchanged) so simultaneous subtask writes don't
+  double-act. Activity comment on the parent: "Fullført automatisk …" / "Åpnet igjen automatisk …".
+- Setting: `Space.autoCompleteParent` (default true) / `List.autoCompleteParent` (null = Space's), toggle
+  "Complete parent when all subtasks are done" in Edit statuses under "Strike through done tasks".
+- The acting tab learns about the parent via response header `x-siqt-tasks-changed`; the fetch wrapper in
+  `lib/pendingWrites.ts` fires `siqt-tasks-changed` and the store refetches tasks. Other tabs get it from
+  the live signal.
+- Migration `20261127120000_auto_complete_parent` (three ADD COLUMNs, verified with migrate diff).
+  Backup `before-2026-11-27-auto-complete-parent` taken first — **that makes 10/10 Pterodactyl backups;
+  the next backup needs the oldest deleted first.**
+
+Tested over HTTP on a copy of the local DB (`~/siqt-local/autocomplete-test.db`, served by
+`~/siqt-local/start-test.sh`): complete/revert, closing via archive, new open subtask reopens, trash and
+restore, moving a subtask out, three-level chain, manual Done not reverted, manual status clears the
+memory, List switch off. **Not tested:** the toggle and the parent updating in a browser; custom status
+sets with closed statuses (logic only). Existing parents whose subtasks are all done already are not
+touched until one of their subtasks changes (deliberately not retroactive).
+
+Merge note for `agent-api`: agent writes go through these same route handlers, so the rule applies to
+them after a merge; PLANNING.md will conflict as usual.
