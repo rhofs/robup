@@ -398,7 +398,10 @@ export default function StatusEditor({
   const defaultName = tpl.defaultTemplate ? (allTemplates.find((t) => t.id === tpl.defaultTemplate)?.name ?? 'Standard') : 'Standard (To Do … Done)';
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-scrim/70 backdrop-blur-xs p-3" {...closeOnBackdrop(attemptClose)}>
+    // z-[65]: above the task window (z-50), which can open this from its Subtasks "Statuses" button. At
+    // z-50 like the task window it opened behind it, since the task window comes later in app/page.tsx
+    // — the button looked dead ("Ingenting skjer når jeg trykker statuses i subtask seksjonen").
+    <div className="fixed inset-0 z-[65] flex items-center justify-center bg-scrim/70 backdrop-blur-xs p-3" {...closeOnBackdrop(attemptClose)}>
       <div
         onClick={(e) => e.stopPropagation()}
         className="w-[760px] max-w-full max-h-[calc(100dvh-24px)] flex flex-col bg-neutral-900 border border-neutral-800 rounded-2xl shadow-2xl overflow-hidden"
