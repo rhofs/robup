@@ -129,7 +129,17 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
       );
     }
     if (existing && body.listId !== undefined && body.listId !== existing.listId) {
-      activities.push({ body: 'Flyttet til en annen liste', kind: 'movedList' });
+      const to = await prisma.list.findUnique({ where: { id: body.listId }, select: { name: true } });
+      activities.push({ body: to ? `Flyttet til listen «${to.name}»` : 'Flyttet til en annen liste', kind: 'movedList' });
+    }
+    if (existing && body.isPrivate !== undefined && body.isPrivate !== existing.isPrivate) {
+      activities.push({ body: body.isPrivate ? 'Gjort privat' : 'Ikke lenger privat', kind: 'privacy' });
+    }
+    if (existing && body.showInPlanner !== undefined && data.showInPlanner !== existing.showInPlanner) {
+      activities.push({
+        body: data.showInPlanner === null ? 'Planner: følger listen' : data.showInPlanner ? 'Vises i Planner' : 'Skjult fra Planner',
+        kind: 'planner',
+      });
     }
     // Was missing entirely before this session — dragging/resizing a Task's bar in Planner (or
     // editing its dates any other way) PATCHes startDate/dueDate but never logged it, same gap
@@ -178,6 +188,12 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
       }
     }
   }
+  // Custom fields: one line per field that changed. Typing in a text field saves as you type, so a
+  // person's changes to the same field within a few minutes rewrite their last line instead of adding one.
+  if (!body.skipActivityLog && existing && body.customFieldValues !== undefined && body.customFieldValues !== existing.customFieldValues) {
+    await logCustomFieldChanges(id, userId, existing.customFieldValues, body.customFieldValues);
+  }
+
   if (activities.length > 0) {
     // The real signed-in caller (verified above), not the client-supplied body.authorId this
     // used to trust directly — same spoofable-identity fix applied throughout this session.
@@ -269,4 +285,44 @@ export async function DELETE(req: Request, { params }: { params: Promise<{ id: s
   }
   signalWorkspaceChanged(access.space.workspaceId);
   return withChangedTasks(NextResponse.json({ ok: true }), parentsChanged);
+}
+
+const FIELD_MERGE_MS = 10 * 60 * 1000;
+
+function parseValues(raw: string | null | undefined): Record<string, unknown> {
+  try {
+    const v = JSON.parse(raw || '{}');
+    return v && typeof v === 'object' ? v : {};
+  } catch {
+    return {};
+  }
+}
+
+async function logCustomFieldChanges(taskId: string, userId: string, beforeRaw: string, afterRaw: string) {
+  const before = parseValues(beforeRaw);
+  const after = parseValues(afterRaw);
+  const changedIds = [...new Set([...Object.keys(before), ...Object.keys(after)])].filter(
+    (k) => String(before[k] ?? '') !== String(after[k] ?? '')
+  );
+  if (!changedIds.length) return;
+  const fields = await prisma.customField.findMany({ where: { id: { in: changedIds } }, select: { id: true, name: true } });
+  const nameOf = new Map(fields.map((f) => [f.id, f.name]));
+  for (const fieldId of changedIds) {
+    const name = nameOf.get(fieldId);
+    if (!name) continue;
+    const value = String(after[fieldId] ?? '').trim();
+    const shown = value.length > 80 ? `${value.slice(0, 79)}…` : value;
+    const text = value ? `«${name}» satt til «${shown}»` : `«${name}» tømt`;
+    const prefix = `«${name}» `;
+    const recent = await prisma.comment.findFirst({
+      where: { taskId, type: 'activity', activityKind: 'customField', authorId: userId, createdAt: { gt: new Date(Date.now() - FIELD_MERGE_MS) } },
+      orderBy: { createdAt: 'desc' },
+      select: { id: true, body: true },
+    });
+    if (recent && recent.body.startsWith(prefix)) {
+      await prisma.comment.update({ where: { id: recent.id }, data: { body: text, createdAt: new Date() } });
+    } else {
+      await prisma.comment.create({ data: { taskId, body: text, type: 'activity', activityKind: 'customField', authorId: userId } });
+    }
+  }
 }

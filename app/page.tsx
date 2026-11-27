@@ -86,6 +86,8 @@ import {
   Users,
   type LucideIcon,
   BookOpen,
+  AlignLeft,
+  SlidersHorizontal,
 } from 'lucide-react';
 import { useTaskStore, HierarchySpace, HierarchyFolder, HierarchyList, HierarchyDocFolder, HierarchyRoom, HierarchyWorkspace, StatusDef, CustomFieldDef, Task, TaskDoc, AppUser } from '../store/useTaskStore';
 import { useHistoryStore } from '../store/useHistoryStore';
@@ -448,6 +450,12 @@ const ACTIVITY_ICONS: Record<string, LucideIcon> = {
   docCreated: FileText,
   docDeleted: Trash2,
   docEdited: Pencil,
+  descriptionEdited: AlignLeft,
+  fileAdded: Paperclip,
+  fileRemoved: Paperclip,
+  customField: SlidersHorizontal,
+  privacy: Lock,
+  planner: CalendarIcon,
 };
 
 const listPathLabel = (space: HierarchySpace, listId: string): string => {
@@ -5589,9 +5597,9 @@ function PageContent() {
     if (!baseline || !doc || baseline.docId !== doc.id || !activeModalTaskId) return;
     if (doc.title !== baseline.title) {
       logActivity(activeModalTaskId, `Dokument omdøpt til «${doc.title}»`, 'docEdited');
-    } else if (liveText !== undefined && liveText !== baseline.content) {
-      logActivity(activeModalTaskId, `Dokument redigert: «${doc.title}»`, 'docEdited');
     }
+    // Edits to the text are logged by the collab server, with what changed and who changed it
+    // (server/collabServer.ts logTaskDocEdit) — logging them here too would say it twice.
     docEditBaselineRef.current = { docId: doc.id, title: doc.title, content: liveText ?? baseline.content };
   };
 

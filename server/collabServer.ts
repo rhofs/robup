@@ -10,6 +10,7 @@ import { isPresenceDocumentName, workspaceIdFromPresenceDocumentName } from '../
 import { isChatDocumentName, channelIdFromChatDocumentName } from '../lib/collab/chatRoom';
 import { canSee, type AccessContext } from '../lib/auth/access';
 import { canEditWikiWith } from '../lib/auth/wikiAccess';
+import { describeDocChange } from '../lib/activity/describeDocChange';
 
 // Standalone sidecar process (run via `npm run dev:collab` / bundled into `npm run dev` via
 // concurrently — see package.json) — deliberately NOT embedded into the Next server, so `next
@@ -215,6 +216,10 @@ const server = new Server({
         })
         .catch((err) => console.error('Failed to record doc contributor:', err));
     }
+
+    // Becomes this connection's context (Hocuspocus merges what onAuthenticate returns into it), so
+    // onStoreDocument knows who made the edit it is saving — for the task's activity log below.
+    return { userId };
   },
 
   // Stateless messages (used for chat's live-signal broadcast) do NOT auto-relay to other
@@ -239,6 +244,7 @@ const server = new Server({
 
     if (doc.ydoc) {
       Y.applyUpdate(document, doc.ydoc);
+      rememberLoaded(documentName, document);
       return;
     }
 
@@ -253,20 +259,92 @@ const server = new Server({
       where: { id: documentName },
       data: { ydoc: Buffer.from(Y.encodeStateAsUpdate(document)) },
     });
+    rememberLoaded(documentName, document);
   },
 
-  async onStoreDocument({ document, documentName }) {
+  async onStoreDocument({ document, documentName, lastContext }) {
     if (isPresenceDocumentName(documentName) || isChatDocumentName(documentName)) return;
 
     const json = yXmlFragmentToProsemirrorJSON(document.getXmlFragment(XML_FRAGMENT_FIELD));
+    const text = docJSONToPlainText(json);
+    // What it was before this save: the state this process last saved or loaded, else the saved text.
+    const saved = await prisma.doc.findUnique({ where: { id: documentName }, select: { content: true, title: true, taskId: true, descriptionTaskId: true } });
+    const before: DocState = lastStored.get(documentName) ?? { text: saved?.content ?? '' };
     await prisma.doc.update({
       where: { id: documentName },
-      data: {
-        ydoc: Buffer.from(Y.encodeStateAsUpdate(document)),
-        content: docJSONToPlainText(json),
-      },
+      data: { ydoc: Buffer.from(Y.encodeStateAsUpdate(document)), content: text },
     });
+    lastStored.set(documentName, { text, json });
+    if (saved) {
+      logTaskDocEdit(documentName, (lastContext as { userId?: string } | undefined)?.userId, saved, before, { text, json }).catch((err) =>
+        console.error('Failed to log doc edit:', err)
+      );
+    }
+  },
+
+  // Forget a document's last-saved state once nobody has it open; it is read again on next load.
+  async afterUnloadDocument({ documentName }) {
+    lastStored.delete(documentName);
   },
 });
+
+// ---- The task's activity log for edits to its description and its Documents ----
+// "kan vi få en mye mer detaljert historikk?" (2026-11-27). Every edit to a Doc lands here, with the
+// person who made it (the connection's context, set in onAuthenticate). A description or a Document
+// on a task gets a line in that task's activity log saying what changed (lib/activity/describeDocChange):
+//   Beskrivelse redigert – la til «…» · fjernet «…»
+// One person's edits to one doc within EDIT_SESSION_MS of each other are ONE line, rewritten as they go
+// (compared with the doc as it was when they started), rather than a line per save every few seconds.
+// If they end up undoing what they did, the line is removed again. Standalone Docs have no task and
+// no activity log, and are skipped.
+//
+// In memory only: a sidecar restart starts new lines, which is harmless.
+type DocState = { text: string; json?: unknown };
+const lastStored = new Map<string, DocState>();
+function rememberLoaded(documentName: string, document: Y.Doc) {
+  const json = yXmlFragmentToProsemirrorJSON(document.getXmlFragment(XML_FRAGMENT_FIELD));
+  lastStored.set(documentName, { text: docJSONToPlainText(json), json });
+}
+const EDIT_SESSION_MS = 10 * 60 * 1000;
+const editSessions = new Map<string, { commentId: string; base: DocState; at: number }>();
+
+async function logTaskDocEdit(
+  documentName: string,
+  userId: string | undefined,
+  doc: { title: string; taskId: string | null; descriptionTaskId: string | null },
+  before: DocState,
+  after: DocState
+) {
+  const taskId = doc.descriptionTaskId ?? doc.taskId;
+  if (!userId || !taskId) return;
+  const isDescription = !!doc.descriptionTaskId;
+  const label = isDescription ? 'Beskrivelse redigert' : `Dokument «${doc.title}» redigert`;
+  const key = `${documentName}:${userId}`;
+  const now = Date.now();
+
+  const session = editSessions.get(key);
+  if (session && now - session.at < EDIT_SESSION_MS) {
+    const line = await prisma.comment.findUnique({ where: { id: session.commentId }, select: { id: true } });
+    if (line) {
+      const what = describeDocChange(session.base, after);
+      session.at = now;
+      if (!what) {
+        await prisma.comment.delete({ where: { id: line.id } });
+        editSessions.delete(key);
+      } else {
+        await prisma.comment.update({ where: { id: line.id }, data: { body: `${label} – ${what}`, createdAt: new Date() } });
+      }
+      return;
+    }
+  }
+
+  const what = describeDocChange(before, after);
+  if (!what) return;
+  const line = await prisma.comment.create({
+    data: { taskId, body: `${label} – ${what}`, type: 'activity', activityKind: isDescription ? 'descriptionEdited' : 'docEdited', authorId: userId },
+    select: { id: true },
+  });
+  editSessions.set(key, { commentId: line.id, base: before, at: now });
+}
 
 server.listen();

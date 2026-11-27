@@ -36,6 +36,9 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
     },
     include: { uploadedBy: { select: publicUserSelect } },
   });
+  await prisma.comment.create({
+    data: { taskId: id, body: `Fil lastet opp: «${attachment.fileName ?? 'fil'}»`, type: 'activity', activityKind: 'fileAdded', authorId: userId },
+  });
 
   return NextResponse.json(attachment);
 }
@@ -54,7 +57,13 @@ export async function DELETE(req: Request, { params }: { params: Promise<{ id: s
 
   // taskId is in the where clause, not just the id: without it, anyone with access to ANY task could
   // delete an attachment belonging to a task they cannot see, by id alone.
+  const removed = await prisma.taskAttachment.findFirst({ where: { id: attachmentId, taskId: id }, select: { fileName: true } });
   await prisma.taskAttachment.deleteMany({ where: { id: attachmentId, taskId: id } });
+  if (removed) {
+    await prisma.comment.create({
+      data: { taskId: id, body: `Fil fjernet: «${removed.fileName ?? 'fil'}»`, type: 'activity', activityKind: 'fileRemoved', authorId: userId },
+    });
+  }
 
   // The file on disk is deliberately left alone. It may be referenced from a chat message or a doc,
   // and this route cannot know — the same reason chat attachments are never unlinked either.

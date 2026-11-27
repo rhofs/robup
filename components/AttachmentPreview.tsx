@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
-import { ChevronLeft, ChevronRight, Download, FileText, Minus, Pen, Plus, X } from 'lucide-react';
+import { ChevronLeft, ChevronRight, Download, FileText, Maximize2, Minimize2, Minus, Pen, Plus, X } from 'lucide-react';
 import { formatBytes } from '../lib/formatBytes';
 import { useBackLayer } from '../hooks/useBackLayer';
 
@@ -16,6 +16,8 @@ export type PreviewFile = {
 // Images and PDFs a browser can render itself. Everything else gets the download button and an
 // honest "nothing to show" — better than an empty frame that looks broken.
 const INLINE_EXTS = new Set(['png', 'jpg', 'jpeg', 'gif', 'webp', 'pdf', 'txt', 'csv']);
+
+const FULL_KEY = 'siqt.previewFullScreen';
 
 function extOf(url: string): string {
   return url.split('.').pop()?.toLowerCase() ?? '';
@@ -64,10 +66,30 @@ export default function AttachmentPreview({
     setScale(1);
   }
   const zoomStep = useRef<((factor: number) => void) | null>(null);
+  // Full screen: the card fills the whole window, edge to edge — "hadde vært fint å kunne gjøre det
+  // større/fullscreen også" (2026-11-27). Remembered in this browser, so someone who reads their PDFs
+  // full screen does not have to ask every time.
+  const [full, setFull] = useState(() => {
+    try {
+      return localStorage.getItem(FULL_KEY) === '1';
+    } catch {
+      return false;
+    }
+  });
+  const toggleFull = () =>
+    setFull((v) => {
+      try {
+        localStorage.setItem(FULL_KEY, v ? '0' : '1');
+      } catch {}
+      return !v;
+    });
+  // Something the browser draws itself (a PDF, text) gets a definite height too, so its frame fills
+  // the card instead of sitting at a fixed 70% of the screen.
+  const framed = inline && !isImage;
 
   return (
     <div
-      data-escape-closes="" className="fixed inset-0 z-[80] flex items-center justify-center bg-scrim/80 backdrop-blur-xs p-3"
+      data-escape-closes="" className={`fixed inset-0 z-[80] flex items-center justify-center bg-scrim/80 backdrop-blur-xs ${full ? 'p-0' : 'p-3'}`}
       onClick={onClose}
     >
       <div
@@ -88,8 +110,8 @@ export default function AttachmentPreview({
         //
         // Filling the screen is also the better answer for a picture — a lightbox that shrinks to a
         // small image leaves nowhere to zoom into.
-        className={`w-full max-w-4xl bg-neutral-900 border border-neutral-800 rounded-2xl shadow-2xl overflow-hidden flex flex-col ${
-          isImage ? 'h-[calc(100dvh-2rem)]' : 'max-h-[calc(100dvh-2rem)]'
+        className={`w-full bg-neutral-900 overflow-hidden flex flex-col ${
+          full ? 'h-dvh max-w-none' : `max-w-4xl border border-neutral-800 rounded-2xl shadow-2xl ${isImage || framed ? 'h-[calc(100dvh-2rem)]' : 'max-h-[calc(100dvh-2rem)]'}`
         }`}
       >
         <div className="px-4 py-3 flex items-center gap-2 border-b border-neutral-800 shrink-0">
@@ -139,6 +161,15 @@ export default function AttachmentPreview({
                 <Plus className="w-4 h-4" />
               </button>
             </>
+          )}
+          {inline && (
+            <button
+              onClick={toggleFull}
+              title={full ? 'Exit full screen' : 'Full screen'}
+              className="shrink-0 w-9 h-9 rounded-full flex items-center justify-center text-neutral-400 hover:text-app-strong hover:bg-neutral-800/60 active:scale-90 transition duration-100 cursor-pointer"
+            >
+              {full ? <Minimize2 className="w-4 h-4" /> : <Maximize2 className="w-4 h-4" />}
+            </button>
           )}
           <a
             href={file.url}
@@ -214,7 +245,7 @@ export default function AttachmentPreview({
           ) : inline ? (
             // A plain iframe rather than a PDF library: the browser already has a viewer, and
             // shipping one for a file type it renders natively is weight for nothing.
-            <iframe src={file.url} title={file.fileName || 'File'} className="w-full h-[70vh] bg-white" />
+            <iframe src={file.url} title={file.fileName || 'File'} className="absolute inset-0 w-full h-full bg-white" />
           ) : (
             <div className="flex flex-col items-center gap-3 py-16 px-6 text-center">
               <FileText className="w-8 h-8 text-neutral-600" />
