@@ -5,6 +5,7 @@ import { getTaskVisibilityContext } from '@/lib/auth/access';
 import { ensureListAccess } from '@/lib/auth/resourceAccess';
 import { includeArchivedSpaces, spaceArchiveFilter } from '@/lib/archivedSpaces';
 import { signalChangeIn } from '@/lib/collab/broadcastWorkspaceChange';
+import { reconcileParent, withChangedTasks } from '@/lib/autoCompleteParent';
 
 export async function GET(req: Request) {
   const userId = await getCurrentUserId();
@@ -120,6 +121,8 @@ export async function POST(req: Request) {
     }
   }
 
+  // A new open subtask reopens a parent that was completed because all its subtasks were done.
+  const parentsChanged = await reconcileParent(task.parentId, userId);
   signalChangeIn({ listId: task.listId });
-  return NextResponse.json(task);
+  return withChangedTasks(NextResponse.json(task), parentsChanged);
 }

@@ -35,9 +35,17 @@ export function installWriteTracking() {
     const resource = method === 'GET' ? null : resourceOf(url);
     if (!resource) return original(input, init);
     inFlight[resource]++;
-    return original(input, init).finally(() => {
-      inFlight[resource]--;
-      lastSettledAt[resource] = Date.now();
-    });
+    return original(input, init)
+      .then((res) => {
+        // The server changed other tasks than the one written — a parent completed or reopened because
+        // of its subtasks (lib/autoCompleteParent.ts). Refetch once this write has settled, so the
+        // parent updates in this tab at once instead of at the next poll or live signal.
+        if (res.headers.get('x-siqt-tasks-changed')) setTimeout(() => window.dispatchEvent(new Event('siqt-tasks-changed')), 50);
+        return res;
+      })
+      .finally(() => {
+        inFlight[resource]--;
+        lastSettledAt[resource] = Date.now();
+      });
   };
 }

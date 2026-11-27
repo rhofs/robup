@@ -218,6 +218,7 @@ export type HierarchyList = {
   // Space; null/absent = the Space's (lib/listStatuses.ts circleSettingsOfList).
   checkMode?: 'close' | 'menu' | null;
   strikeDone?: boolean | null;
+  autoCompleteParent?: boolean | null;
 };
 
 export type HierarchySpace = {
@@ -235,6 +236,9 @@ export type HierarchySpace = {
   statuses: StatusDef[];
   // checkMode: 'close' = the circle closes (archives) a task at once; anything else (incl. the legacy
   // 'archive' / 'status') = it opens the status menu. See Space.checkMode in the schema.
+  // autoCompleteParent: complete a task when all its subtasks are done (lib/autoCompleteParent.ts).
+  // Absent = on.
+  autoCompleteParent?: boolean;
   // strikeDone: whether done tasks are struck through. Optional for older payloads.
   checkMode?: 'close' | 'menu' | string;
   strikeDone?: boolean;
@@ -617,6 +621,7 @@ interface TaskStore {
       accessJson?: string;
       checkMode?: 'close' | 'menu';
       strikeDone?: boolean;
+      autoCompleteParent?: boolean;
       plannerDefault?: boolean;
     }
   ) => Promise<void>;
@@ -629,7 +634,7 @@ interface TaskStore {
   updateList: (
     spaceId: string,
     listId: string,
-    patch: { name?: string; color?: string | null; textColor?: string | null; icon?: string | null; isPrivate?: boolean; accessJson?: string; plannerDefault?: boolean | null; checkMode?: 'close' | 'menu' | null; strikeDone?: boolean | null }
+    patch: { name?: string; color?: string | null; textColor?: string | null; icon?: string | null; isPrivate?: boolean; accessJson?: string; plannerDefault?: boolean | null; checkMode?: 'close' | 'menu' | null; strikeDone?: boolean | null; autoCompleteParent?: boolean | null }
   ) => Promise<void>;
   // Which columns a List's board shows. Its own action rather than a field on updateList, because
   // it must NOT go on the undo stack: every other list edit is a change to the thing itself, and
@@ -2521,6 +2526,7 @@ export const useTaskStore = create<TaskStore>((set, get) => {
         if (patch.accessJson !== undefined) oldPatch.accessJson = oldSpace.accessJson;
         if (patch.checkMode !== undefined) oldPatch.checkMode = oldSpace.checkMode === 'close' ? 'close' : 'menu';
         if (patch.strikeDone !== undefined) oldPatch.strikeDone = !!oldSpace.strikeDone;
+        if (patch.autoCompleteParent !== undefined) oldPatch.autoCompleteParent = oldSpace.autoCompleteParent !== false;
         if (patch.plannerDefault !== undefined) oldPatch.plannerDefault = oldSpace.plannerDefault ?? true;
         useHistoryStore.getState().push({
           label: 'Update space',
@@ -2671,6 +2677,7 @@ export const useTaskStore = create<TaskStore>((set, get) => {
         if (patch.plannerDefault !== undefined) oldPatch.plannerDefault = oldList.plannerDefault ?? null;
         if (patch.checkMode !== undefined) oldPatch.checkMode = oldList.checkMode ?? null;
         if (patch.strikeDone !== undefined) oldPatch.strikeDone = oldList.strikeDone ?? null;
+        if (patch.autoCompleteParent !== undefined) oldPatch.autoCompleteParent = oldList.autoCompleteParent ?? null;
         useHistoryStore.getState().push({
           label: 'Update list',
           undo: () => get().updateList(spaceId, listId, oldPatch),
@@ -4012,3 +4019,8 @@ export const useTaskStore = create<TaskStore>((set, get) => {
     },
   };
 });
+
+// Tasks the server changed on its own after a write from this tab (lib/pendingWrites.ts).
+if (typeof window !== 'undefined') {
+  window.addEventListener('siqt-tasks-changed', () => void useTaskStore.getState().refetchTasks());
+}

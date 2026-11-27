@@ -143,12 +143,19 @@ export default function StatusEditor({
   // en list endres det på alle lists i samme space", 2026-10-21).
   const spaceCircle: 'menu' | 'close' = space.checkMode === 'close' ? 'close' : 'menu';
   const spaceStrike = !!space.strikeDone;
+  // "Complete parent when all subtasks are done" (lib/autoCompleteParent.ts) — on unless turned off.
+  const spaceAuto = space.autoCompleteParent !== false;
   const savedSettings = (t: 'space' | 'list') =>
     t === 'list' && list
-      ? { circle: (list.checkMode ?? spaceCircle) === 'close' ? ('close' as const) : ('menu' as const), strike: list.strikeDone ?? spaceStrike }
-      : { circle: spaceCircle, strike: spaceStrike };
+      ? {
+          circle: (list.checkMode ?? spaceCircle) === 'close' ? ('close' as const) : ('menu' as const),
+          strike: list.strikeDone ?? spaceStrike,
+          auto: list.autoCompleteParent ?? spaceAuto,
+        }
+      : { circle: spaceCircle, strike: spaceStrike, auto: spaceAuto };
   const [checkMode, setCheckMode] = useState<'menu' | 'close'>(() => savedSettings(list ? 'list' : 'space').circle);
   const [strikeDone, setStrikeDone] = useState(() => savedSettings(list ? 'list' : 'space').strike);
+  const [autoComplete, setAutoComplete] = useState(() => savedSettings(list ? 'list' : 'space').auto);
   const [step, setStep] = useState<'edit' | 'migrate'>('edit');
   const [targets, setTargets] = useState<Record<string, string>>({});
   const [error, setError] = useState<string | null>(null);
@@ -182,7 +189,8 @@ export default function StatusEditor({
   const shownRows = editing ? draft : spaceRows();
   const current = asTemplate(shownRows);
   const matching = allTemplates.find((t) => same(t.statuses, current));
-  const settingsDirty = checkMode !== savedSettings(target).circle || strikeDone !== savedSettings(target).strike;
+  const settingsDirty =
+    checkMode !== savedSettings(target).circle || strikeDone !== savedSettings(target).strike || autoComplete !== savedSettings(target).auto;
   // Content, or which saved status sits where (a removed status re-added under the same name is a new
   // status, not the old one).
   const initialKeys = ordered(initial).map((d) => d.key);
@@ -209,11 +217,13 @@ export default function StatusEditor({
     setDraft(rows);
     setCheckMode(savedSettings('space').circle);
     setStrikeDone(savedSettings('space').strike);
+    setAutoComplete(savedSettings('space').auto);
   };
   const backToList = () => {
     setTarget('list');
     setCheckMode(savedSettings('list').circle);
     setStrikeDone(savedSettings('list').strike);
+    setAutoComplete(savedSettings('list').auto);
     const rows = listHadOwn ? draftFrom(list!.statuses, fallback, true) : draftFrom(baseStatuses, fallback, false);
     setInitial(rows);
     setDraft(rows);
@@ -306,8 +316,9 @@ export default function StatusEditor({
         void updateList(space.id, list.id, {
           checkMode: checkMode === spaceCircle ? null : checkMode,
           strikeDone: strikeDone === spaceStrike ? null : strikeDone,
+          autoCompleteParent: autoComplete === spaceAuto ? null : autoComplete,
         });
-      } else void updateSpace(space.id, { checkMode, strikeDone });
+      } else void updateSpace(space.id, { checkMode, strikeDone, autoCompleteParent: autoComplete });
     }
     onClose();
   };
@@ -608,6 +619,18 @@ export default function StatusEditor({
                 </span>
                 <span className="text-[12px] text-neutral-300">
                   Strike through done tasks <span className="line-through text-neutral-500">like this</span>
+                </span>
+              </button>
+
+              <button onClick={() => setAutoComplete((v) => !v)} className="flex items-start gap-2.5 cursor-pointer text-left">
+                <span className={`mt-0.5 w-7 h-4 rounded-full p-0.5 transition-colors shrink-0 ${autoComplete ? 'bg-blue-500' : 'bg-neutral-700'}`}>
+                  <span className={`block w-3 h-3 rounded-full bg-white transition-transform ${autoComplete ? 'translate-x-3' : ''}`} />
+                </span>
+                <span>
+                  <span className="block text-[12px] text-neutral-300">Complete parent when all subtasks are done</span>
+                  <span className="block text-[10.5px] text-neutral-500 mt-0.5 leading-relaxed">
+                    When the last subtask lands in Done or Closed, the parent moves to the first Done status. If a subtask opens again, the parent goes back.
+                  </span>
                 </span>
               </button>
                 </>

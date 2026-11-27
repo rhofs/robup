@@ -58,6 +58,7 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
   // The List's own task circle / strike-through; null = the Space's (schema: List.checkMode).
   if (body.checkMode === null || body.checkMode === 'close' || body.checkMode === 'menu') data.checkMode = body.checkMode;
   if (body.strikeDone !== undefined) data.strikeDone = body.strikeDone === null ? null : body.strikeDone === true;
+  if (body.autoCompleteParent !== undefined) data.autoCompleteParent = body.autoCompleteParent === null ? null : body.autoCompleteParent === true;
   if (body.spaceId !== undefined) data.spaceId = body.spaceId;
   // A List that moves Space takes its own statuses along (Status.spaceId follows); without this they
   // would still hang off the old Space and go when it is deleted.

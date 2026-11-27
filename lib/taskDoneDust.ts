@@ -8,18 +8,8 @@ import { hapticTap } from './haptics';
 // The first version only hooked status changes and so never fired for the circle people actually
 // press. optimisticMoveTask also calls it when a task moves into a closed status (not a done one).
 //
-// Statuses here are free-form per Space, so "done" is: the Space's last status (the default set ends in
-// "Done"), or any status simply called done/complete/closed/finished/ferdig/fullført.
-const DONE_NAME = /^(done|complete|completed|closed|finished|ferdig|fullført)$/i;
-
-export function isDoneStatus(name: string, statuses: { name: string; order: number; isDone?: boolean; isClosed?: boolean }[]): boolean {
-  // A Space that marks its done and closed statuses (Manage statuses) is taken at its word.
-  if (statuses.some((st) => st.isDone || st.isClosed)) return statuses.some((st) => (st.isDone || st.isClosed) && st.name === name);
-  if (DONE_NAME.test(name.trim())) return true;
-  if (statuses.length < 2) return false;
-  const last = statuses.reduce((a, b) => (b.order > a.order ? b : a));
-  return last.name === name;
-}
+// The rule itself lives in lib/doneStatus.ts so the server can use it too (lib/autoCompleteParent.ts).
+export { isDoneStatus } from './doneStatus';
 
 // Only closing a task gets dust — archiving it, or moving it into a closed status. A done status keeps
 // the task in the list and completes quietly.

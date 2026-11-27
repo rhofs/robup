@@ -37,6 +37,7 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
   // "Manage statuses" by anyone who can edit the Space, like its statuses themselves.
   if (body.checkMode === 'close' || body.checkMode === 'menu') data.checkMode = body.checkMode;
   if (body.strikeDone !== undefined) data.strikeDone = body.strikeDone === true;
+  if (body.autoCompleteParent !== undefined) data.autoCompleteParent = body.autoCompleteParent === true;
   if (body.plannerDefault !== undefined) data.plannerDefault = body.plannerDefault === true;
 
   // Marking something private, or editing who it's shared with, is a stricter, separate

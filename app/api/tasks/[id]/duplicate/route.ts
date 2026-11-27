@@ -4,6 +4,7 @@ import { copyTaskStatuses } from '@/lib/statusSets';
 import { getCurrentUserId } from '@/lib/auth/session';
 import { ensureTaskAccess, ensureListAccess } from '@/lib/auth/resourceAccess';
 import { syncTaskForAllRelevantUsers } from '@/lib/google/calendarSync';
+import { reconcileParent, withChangedTasks } from '@/lib/autoCompleteParent';
 
 // Duplicate a Task — and, with `targetListId`, the paste half of copy/paste too. They're the same
 // operation with a different destination, so they share one route rather than drifting apart as
@@ -120,5 +121,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
   // The copy keeps the original's assignees and dates, so it belongs on their calendars too.
   syncTaskForAllRelevantUsers(created.id).catch(() => {});
 
-  return NextResponse.json(full);
+  // A copy of an open subtask is one more open subtask under the same parent.
+  const parentsChanged = await reconcileParent(full?.parentId, userId);
+  return withChangedTasks(NextResponse.json(full), parentsChanged);
 }

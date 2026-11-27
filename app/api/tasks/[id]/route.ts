@@ -7,6 +7,7 @@ import { ensureListAccess, ensureTaskAccess } from '@/lib/auth/resourceAccess';
 import { syncTaskForAllRelevantUsers, deleteTaskGoogleSyncs } from '@/lib/google/calendarSync';
 import { notify } from '@/lib/notifications';
 import { signalWorkspaceChanged } from '@/lib/collab/broadcastWorkspaceChange';
+import { reconcileParent, withChangedTasks } from '@/lib/autoCompleteParent';
 
 export async function PATCH(req: Request, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
@@ -20,9 +21,11 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
   if (body.restore === true) {
     await cascadeTask(id, null);
     const task = await prisma.task.findUniqueOrThrow({ where: { id }, include: { assignees: { select: publicUserSelect } } });
+    // A subtask back from the trash may be an open one under a parent completed without it.
+    const parentsChanged = await reconcileParent(task.parentId, userId);
     syncTaskForAllRelevantUsers(task.id).catch(() => {});
     signalWorkspaceChanged(access.space.workspaceId);
-    return NextResponse.json(task);
+    return withChangedTasks(NextResponse.json(task), parentsChanged);
   }
 
   const existing = await prisma.task.findUnique({ where: { id }, include: { assignees: { select: publicUserSelect } } });
@@ -52,6 +55,11 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
   if (body.archived !== undefined) {
     data.archived = body.archived;
     data.archivedAt = body.archived ? new Date() : null;
+  }
+  // A status chosen here is no longer the one "all subtasks done" set, so the rule will not undo it
+  // (lib/autoCompleteParent.ts). Undo of a subtask goes to the subtask, not here, so it still can.
+  if ((body.status !== undefined && body.status !== existing?.status) || (body.archived !== undefined && body.archived !== existing?.archived)) {
+    data.autoCompletedFrom = null;
   }
 
   if (body.assigneeIds !== undefined) {
@@ -224,8 +232,16 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
     syncTaskForAllRelevantUsers(task.id).catch(() => {});
   }
 
+  // The parent(s) of a subtask whose status, closed state or parent changed may now be complete, or
+  // not any more (lib/autoCompleteParent.ts).
+  const parentsChanged: string[] = [];
+  if (existing && (body.status !== undefined || body.archived !== undefined || body.parentId !== undefined)) {
+    parentsChanged.push(...(await reconcileParent(task.parentId, userId)));
+    if (existing.parentId && existing.parentId !== task.parentId) parentsChanged.push(...(await reconcileParent(existing.parentId, userId)));
+  }
+
   signalWorkspaceChanged(access.space.workspaceId);
-  return NextResponse.json(task);
+  return withChangedTasks(NextResponse.json(task), parentsChanged);
 }
 
 export async function DELETE(req: Request, { params }: { params: Promise<{ id: string }> }) {
@@ -236,6 +252,7 @@ export async function DELETE(req: Request, { params }: { params: Promise<{ id: s
   if (!access) return NextResponse.json({ error: 'Not authorized for this task' }, { status: 403 });
 
   const permanent = new URL(req.url).searchParams.get('permanent') === 'true';
+  let parentsChanged: string[] = [];
   if (permanent) {
     // Read the Google-side copies (and remove them) before the cascade delete wipes the rows
     // that would otherwise be the only record of their googleEventId.
@@ -243,10 +260,13 @@ export async function DELETE(req: Request, { params }: { params: Promise<{ id: s
     await prisma.task.delete({ where: { id } });
   } else {
     await cascadeTask(id, new Date());
+    // Trashing the last open subtask leaves only finished ones.
+    const trashed = await prisma.task.findUnique({ where: { id }, select: { parentId: true } });
+    parentsChanged = await reconcileParent(trashed?.parentId, userId);
     // Soft delete — task row (and its sync rows) still exist; syncTaskForAllRelevantUsers sees
     // deletedAt now set and removes every assignee's calendar copy the normal way.
     syncTaskForAllRelevantUsers(id).catch(() => {});
   }
   signalWorkspaceChanged(access.space.workspaceId);
-  return NextResponse.json({ ok: true });
+  return withChangedTasks(NextResponse.json({ ok: true }), parentsChanged);
 }

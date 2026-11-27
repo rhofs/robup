@@ -339,6 +339,9 @@ model Space {
   checkMode     String        @default("archive") @map("check_mode")
   // Strike through the title of a task whose status is a done one.
   strikeDone    Boolean       @default(false) @map("strike_done")
+  // When the last subtask of a task lands in a done or closed status, the task itself moves to its
+  // first done status (lib/autoCompleteParent.ts). On unless turned off in "Edit statuses".
+  autoCompleteParent Boolean  @default(true) @map("auto_complete_parent")
   // Whether this Space's tasks show in the Planner when neither the task nor its List says
   // otherwise (Task.showInPlanner, List.plannerDefault). "Edit Space" → Planner.
   plannerDefault Boolean      @default(true) @map("planner_default")
@@ -453,6 +456,8 @@ model List {
   // endrer på 'Edit statuses' på en list endres det på alle lists i samme space" (2026-10-21).
   checkMode  String?  @map("check_mode")
   strikeDone Boolean? @map("strike_done")
+  // This List's own choice for Space.autoCompleteParent; null = the Space's.
+  autoCompleteParent Boolean? @map("auto_complete_parent")
   tasks        Task[]
   customFields CustomField[]
   // See Space.isPrivate/accessJson above — same shape, independent at this level.
@@ -745,6 +750,10 @@ model Task {
   title       String
   description String?
   status      String
+  // The status this task had before it was completed automatically because all its subtasks were done
+  // (lib/autoCompleteParent.ts) — so it can go back to it if one of them opens again. Null when the
+  // current status was not set by that rule; any status change by hand clears it.
+  autoCompletedFrom String? @map("auto_completed_from")
   priority    Int?
 
   startDate DateTime? @map("start_date")
